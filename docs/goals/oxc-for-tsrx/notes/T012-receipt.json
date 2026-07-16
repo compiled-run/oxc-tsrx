@@ -1,0 +1,102 @@
+{
+  "result": "done",
+  "task_id": "T012",
+  "harness": "codex",
+  "full_outcome_complete": false,
+  "summary": "Removed the rejected Zig/Yuku and JavaScript/Prettier implementations from the product tree, including the 142 MB native prototype package directory, prebuilt Zig binding, all task-numbered T005/T007/T009 fixtures/tests/benchmarks, empty numbered T011 folders, obsolete adapter docs, and the obsolete JavaScript tsconfig. Regenerated a minimal npm lockfile containing only official Oxlint/Oxfmt current and Vite+ compatibility aliases, pruned local dependencies, corrected README/.gitignore, and reran the complete native correctness/performance gate without changing Rust behavior or budgets.",
+  "changed_files": [
+    ".gitignore",
+    "README.md",
+    "package.json",
+    "package-lock.json"
+  ],
+  "deleted_paths": [
+    "packages/",
+    "fixtures/t005/",
+    "fixtures/t007/",
+    "fixtures/t009/",
+    "fixtures/t011/",
+    "fixtures/",
+    "tests/t005/",
+    "tests/t007/",
+    "tests/t009/",
+    "tests/t011/",
+    "benchmarks/t005/",
+    "benchmarks/t007/",
+    "benchmarks/t009/",
+    "docs/architecture/lint-adapter.md",
+    "docs/architecture/formatter-adapter.md",
+    "tsconfig.json"
+  ],
+  "retained_evidence": [
+    "docs/goals/oxc-for-tsrx/state.yaml receipts for T005, T007, and T009",
+    "docs/goals/oxc-for-tsrx/notes/ historical decisions and measurements",
+    "benchmarks/native-lint/results-1784169297223.json",
+    "benchmarks/native-lint/results-1784169844123.json"
+  ],
+  "commands": [
+    {
+      "cmd": "npm install --package-lock-only --ignore-scripts --offline",
+      "status": "pass",
+      "evidence": "Fresh 575-line lockfile has no workspace/prototype/Markless/Prettier entries."
+    },
+    {
+      "cmd": "npm prune --ignore-scripts --offline",
+      "status": "pass",
+      "evidence": "Local dependency tree contains only official OXC compatibility controls and their dependencies."
+    },
+    {
+      "cmd": "npm test",
+      "status": "pass",
+      "evidence": "3/3 native black-box tests passed."
+    },
+    {
+      "cmd": "cargo fmt --all -- --check",
+      "status": "pass"
+    },
+    {
+      "cmd": "cargo clippy --workspace --all-targets --locked -- -D warnings",
+      "status": "pass"
+    },
+    {
+      "cmd": "cargo test --workspace --locked",
+      "status": "pass",
+      "evidence": "All 5 native unit tests and doc tests passed."
+    },
+    {
+      "cmd": "cargo build --release --locked -p oxc_tsrx_cli",
+      "status": "pass"
+    },
+    {
+      "cmd": "OXLINT_BIN=target/release/oxc-tsrx node --test tests/native-lint.test.mjs",
+      "status": "pass",
+      "evidence": "3/3 original-span/fix/direct-bypass tests passed."
+    },
+    {
+      "cmd": "cargo run --release --locked -p oxc_tsrx_benchmark -- --assert benchmarks/native-lint/budgets.json",
+      "status": "pass",
+      "evidence": "Fresh report results-1784169844123.json: 322.72 MiB/s P02 median, 105.68 MiB/s P03 CLI median, 1.088x TSX latency, 2.62 ms fresh-process p95; all assertions passed."
+    },
+    {
+      "cmd": "node -e rejected-artifact absence assertion from T012 verify",
+      "status": "pass"
+    },
+    {
+      "cmd": "node /Users/jacksm5pro/.codex/plugins/cache/goalbuddy/goalbuddy/0.4.0/skills/goal-prep/scripts/check-goal-state.mjs docs/goals/oxc-for-tsrx",
+      "status": "pass"
+    }
+  ],
+  "repository_shape": [
+    "crates/{oxc_adapter,tsrx_syntax,tsrx_lint,oxc_tsrx_cli,oxc_tsrx_benchmark}",
+    "tests/{native-lint.test.mjs,fixtures/lint}",
+    "benchmarks/native-lint",
+    "docs/{architecture/rust-oxc-core.md,goals/oxc-for-tsrx}",
+    "minimal official-OXC compatibility package.json/package-lock.json"
+  ],
+  "discovered_follow_up": "The two-rule no-debugger/no-unused-vars black-box process consistently spends roughly 0.38-0.47 seconds while no-debugger/no-var and the benchmark's no-debugger processes take 2-5 ms. This rule-specific latency is outside cleanup behavior and must be isolated before broader lint/config work so a hidden OXC/config setup cost is not normalized.",
+  "remaining_required_work": [
+    "Isolate and eliminate or honestly baseline the no-unused-vars cold-process latency without weakening OXC compatibility or performance gates.",
+    "Complete TSRX grammar/lint, native formatter, Vite/Vite+, editor, packaging, upgrade matrices, and read-only Markless acceptance."
+  ],
+  "external_writes": false
+}

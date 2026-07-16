@@ -1,0 +1,148 @@
+{
+  "schemaVersion": 1,
+  "timestamp": "2026-07-16T22:05:57.309Z",
+  "host": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "node": "v24.15.0",
+    "cpu": "Apple M5 Pro",
+    "osRelease": "25.5.0"
+  },
+  "build": {
+    "profile": "release",
+    "binary": "target/release/oxc-tsrx",
+    "oxcRevision": "8e0ed2ebb96137fb1611cdbd5742d5cb46037d40"
+  },
+  "corpus": {
+    "kind": "authored syntax-only, single-file type-aware, and explicit two-file TSRX project fixtures",
+    "files": [
+      "tests/fixtures/lint/native-lint.tsrx",
+      "tests/fixtures/type-aware/single/View.tsrx",
+      "tests/fixtures/type-aware/project/View.tsrx",
+      "tests/fixtures/type-aware/project/service.tsrx"
+    ],
+    "bytes": 576,
+    "sha256": "d9ca737d7481a8de368bdd23e3fced64756bd3bf3722d039aad5c0de52286b82"
+  },
+  "versions": {
+    "tsgolint": "0.24.0"
+  },
+  "samplePolicy": {
+    "coldSamples": 1,
+    "warmupsAfterCold": 5,
+    "measured": 20,
+    "freshProcessesPerLane": 26,
+    "statistic": "median and nearest-rank p95 over measured fresh native CLI processes; first process retained separately"
+  },
+  "defaultSyntax": {
+    "coldMs": 4.146082999999999,
+    "rawMs": [
+      2.3757909999999995,
+      2.4637499999999974,
+      2.3868749999999963,
+      2.3737080000000006,
+      2.2149160000000023,
+      2.210499999999996,
+      2.2902910000000034,
+      2.204290999999998,
+      2.2906660000000016,
+      2.2669580000000025,
+      2.416125000000001,
+      2.531374999999997,
+      2.8293329999999983,
+      2.5260000000000034,
+      2.4248329999999925,
+      2.6363330000000076,
+      2.3130000000000024,
+      2.5812500000000114,
+      2.5733749999999986,
+      2.2812920000000076
+    ],
+    "medianMs": 2.3757909999999995,
+    "p95Ms": 2.6363330000000076
+  },
+  "singleTypeAware": {
+    "coldMs": 25.695458000000002,
+    "rawMs": [
+      22.880791999999985,
+      22.409708000000023,
+      22.935040999999956,
+      22.796042,
+      23.311417000000006,
+      22.29766699999999,
+      22.566584000000034,
+      24.312125000000037,
+      29.13212500000003,
+      24.910874999999976,
+      23.035167,
+      22.612250000000017,
+      24.13662499999998,
+      23.344584000000054,
+      22.89995799999997,
+      22.9481669999999,
+      22.527333,
+      22.69120799999996,
+      23.386457999999948,
+      23.798583000000008
+    ],
+    "medianMs": 22.935040999999956,
+    "p95Ms": 24.910874999999976
+  },
+  "projectTypeAware": {
+    "coldMs": 25.539332999999942,
+    "rawMs": [
+      23.744125000000054,
+      23.907332999999994,
+      23.71516699999995,
+      23.11470900000006,
+      23.42870800000003,
+      22.462041,
+      23.71129200000007,
+      23.112249999999904,
+      23.22174999999993,
+      23.63604199999986,
+      23.545166999999992,
+      23.44291599999997,
+      23.264458999999988,
+      23.58720799999992,
+      22.679832999999917,
+      23.861040999999886,
+      23.09433399999989,
+      22.862375000000156,
+      22.94533300000012,
+      26.04449999999997
+    ],
+    "medianMs": 23.42870800000003,
+    "p95Ms": 23.907332999999994
+  },
+  "ratios": {
+    "singleTypeAwareVsDefaultP95": 9.449062390828436
+  },
+  "invariants": {
+    "defaultParseCount": 1,
+    "defaultTypeAwareProcesses": 0,
+    "singleTypeAwareProcesses": 1,
+    "projectTypeAwareProcesses": 1,
+    "projectParseCount": 2
+  },
+  "budgets": {
+    "defaultSyntaxP95MsMax": 10,
+    "singleTypeAwareP95MsMax": 60,
+    "projectTypeAwareP95MsMax": 70,
+    "singleTypeAwareColdMsMax": 100,
+    "projectTypeAwareColdMsMax": 120,
+    "singleTypeAwareVsDefaultP95RatioMax": 12,
+    "typeAwareProcessesPerBatch": 1,
+    "defaultParseCountPerFile": 1
+  },
+  "assertions": {
+    "defaultSyntaxP95": true,
+    "singleTypeAwareP95": true,
+    "projectTypeAwareP95": true,
+    "singleTypeAwareCold": true,
+    "projectTypeAwareCold": true,
+    "singleTypeAwareRatio": true,
+    "defaultPathUnchanged": true,
+    "oneTypeProcessPerBatch": true
+  }
+}

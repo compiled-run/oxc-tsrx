@@ -1,0 +1,1004 @@
+// End-to-end verification of the built docs site using system Chrome.
+// Prereqs: node docs/build.mjs && node docs/serve.mjs 4519
+// Run: node docs/verify.mjs [baseUrl] [--mode=native|static]
+import { readFile } from 'node:fs/promises'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { chromium } from 'playwright-core'
+
+const positional = process.argv.slice(2).filter((argument) => !argument.startsWith('--'))
+const mode =
+  process.argv.find((argument) => argument.startsWith('--mode='))?.slice('--mode='.length) ??
+  'native'
+if (!['native', 'static'].includes(mode)) throw new Error(`unsupported docs verification mode: ${mode}`)
+const baseUrl = (positional[0] ?? 'http://localhost:4519/oxc-tsrx').replace(/\/$/, '')
+const parsedBaseUrl = new URL(baseUrl)
+const loopback = ['127.0.0.1', 'localhost', '::1'].includes(parsedBaseUrl.hostname)
+if (mode === 'native' && (parsedBaseUrl.protocol !== 'http:' || !loopback)) {
+  throw new Error('native docs verification is restricted to a loopback HTTP origin')
+}
+const expectedCapabilities = await fetch(`${baseUrl}/demo-capabilities.json`)
+  .then((response) => response.json())
+  .catch(() => null)
+if (
+  !expectedCapabilities?.ok ||
+  expectedCapabilities.mode !== mode ||
+  (mode === 'native') !== Boolean(expectedCapabilities.native)
+) {
+  throw new Error(`docs capability mode mismatch: requested ${mode}`)
+}
+const docsDir = path.dirname(fileURLToPath(import.meta.url))
+const axeSource = await readFile(
+  path.join(docsDir, '..', 'node_modules', 'axe-core', 'axe.min.js'),
+  'utf8',
+)
+
+const failures = []
+const passes = []
+const check = (ok, label, detail = '') => {
+  ;(ok ? passes : failures).push(`${label}${detail ? ` — ${detail}` : ''}`)
+  console.log(`${ok ? 'ok  ' : 'FAIL'} ${label}${detail ? ` — ${detail}` : ''}`)
+}
+
+const browser = await chromium.launch({ channel: 'chrome', headless: true })
+try {
+const context = await browser.newContext({ viewport: { width: 1440, height: 900 } })
+await context.addInitScript(() => {
+  let clipboardText = ''
+  Object.defineProperty(navigator, 'clipboard', {
+    configurable: true,
+    value: {
+      readText: async () => clipboardText,
+      writeText: async (value) => {
+        clipboardText = String(value)
+      },
+    },
+  })
+})
+
+const consoleErrors = []
+const badResponses = []
+context.on('page', (page) => {
+  page.on('console', (message) => {
+    if (message.type() === 'error') consoleErrors.push(`${page.url()}: ${message.text()}`)
+  })
+  page.on('pageerror', (error) => consoleErrors.push(`${page.url()}: ${error.message}`))
+  page.on('response', (response) => {
+    if (response.status() >= 400) badResponses.push(`${response.status()} ${response.url()}`)
+  })
+})
+
+const page = await context.newPage()
+
+// ---------- home page ----------
+await page.goto(`${baseUrl}/`, { waitUntil: 'load' })
+check((await page.title()) === 'OXC for TSRX', 'home: title')
+check(
+  (await page.locator('.hero-name').textContent())?.trim() === 'OXC for TSRX',
+  'home: hero renders',
+)
+check((await page.locator('.feature').count()) === 6, 'home: six feature cards')
+const homeHorizontalOverflow = await page.evaluate(
+  () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+)
+check(!homeHorizontalOverflow, 'home: no horizontal page overflow')
+
+// ---------- walkthrough: hero action then every sidebar page ----------
+await page.getByRole('link', { name: 'Get Started' }).click()
+await page.waitForURL('**/guide/getting-started.html')
+check(true, 'walkthrough: hero action navigates to Getting Started')
+
+const sidebarLinks = await page
+  .locator('.sidebar nav a')
+  .evaluateAll((anchors) => anchors.map((a) => ({ href: a.href, text: a.textContent.trim() })))
+check(sidebarLinks.length === 12, 'walkthrough: sidebar lists 12 pages', String(sidebarLinks.length))
+
+for (const link of sidebarLinks) {
+  await page.goto(link.href, { waitUntil: 'load' })
+  const h1 = (await page.locator('article h1').first().textContent())?.trim()
+  const active = await page.locator('.sidebar a[aria-current="page"]').getAttribute('href')
+  const hasOutline = (await page.locator('.outline a').count()) > 0
+  const pagerOk = (await page.locator('.pager a').count()) > 0
+  check(
+    Boolean(h1) && link.href.endsWith(active) && hasOutline && pagerOk,
+    `walkthrough: ${link.text}`,
+    `h1="${h1}"`,
+  )
+}
+
+// ---------- prev/next ----------
+await page.goto(`${baseUrl}/guide/introduction.html`, { waitUntil: 'load' })
+await page.locator('.pager-link.next a').click()
+await page.waitForURL('**/guide/getting-started.html')
+await page.locator('.pager-link.prev a').click()
+await page.waitForURL('**/guide/introduction.html')
+check(true, 'pager: next and previous navigate correctly')
+
+// ---------- SPA routing (Navigation API) ----------
+await page.goto(`${baseUrl}/guide/introduction.html`, { waitUntil: 'load' })
+const marker = await page.evaluate(() => {
+  window.__spaMarker = true
+  document.querySelector('.sidebar a[href$="linting.html"]').focus()
+  return true
+})
+check(marker, 'spa: marker set')
+await page.keyboard.press('Enter')
+await page.waitForURL('**/guide/linting.html')
+await page.waitForFunction(
+  () => document.querySelector('article h1')?.textContent.trim() === 'Linting',
+)
+const spaState = await page.evaluate(() => ({
+  stillSpa: window.__spaMarker === true,
+  h1: document.querySelector('article h1')?.textContent.trim(),
+  focusHref: document.activeElement?.getAttribute('href') ?? null,
+  ariaCurrent: document.querySelector('.sidebar a[aria-current="page"]')?.getAttribute('href'),
+  title: document.title,
+  announced: document.getElementById('route-announcer')?.textContent,
+}))
+check(spaState.stillSpa, 'spa: navigation did not reload the page (JS state survives)')
+check(spaState.h1 === 'Linting', 'spa: content swapped in place', spaState.h1)
+check(
+  spaState.focusHref?.endsWith('linting.html'),
+  'spa: focus stays on the activated sidebar link',
+  String(spaState.focusHref),
+)
+check(
+  spaState.ariaCurrent?.endsWith('linting.html') && spaState.title.startsWith('Linting'),
+  'spa: aria-current and title updated',
+)
+check(Boolean(spaState.announced), 'spa: route change announced via aria-live', spaState.announced)
+
+// home -> doc structural swap without reload
+await page.goto(`${baseUrl}/`, { waitUntil: 'load' })
+await page.evaluate(() => {
+  window.__spaMarker = true
+})
+await page.getByRole('link', { name: 'Get Started' }).click()
+await page.waitForURL('**/guide/getting-started.html')
+await page.waitForFunction(
+  () => document.querySelector('article h1')?.textContent.trim() === 'Getting Started',
+)
+const crossState = await page.evaluate(() => ({
+  stillSpa: window.__spaMarker === true,
+  h1: document.querySelector('article h1')?.textContent.trim(),
+  hasSidebar: Boolean(document.getElementById('sidebar')),
+}))
+check(
+  crossState.stillSpa && crossState.h1 === 'Getting Started' && crossState.hasSidebar,
+  'spa: home to doc swaps layout without reload',
+)
+
+// ---------- outline scroll spy ----------
+await page.goto(`${baseUrl}/architecture/rust-oxc-core.html`, { waitUntil: 'load' })
+await page.evaluate(() => document.getElementById('performance-evidence').scrollIntoView())
+await page.waitForTimeout(400)
+const spied = await page.locator('.outline .active a').getAttribute('href')
+check(spied === '#performance-evidence', 'outline: scroll spy tracks section', String(spied))
+
+// ---------- theme toggle + persistence ----------
+await page.goto(`${baseUrl}/guide/introduction.html`, { waitUntil: 'load' })
+await page.emulateMedia({ colorScheme: 'light' })
+const isDark = () => page.evaluate(() => document.documentElement.classList.contains('dark'))
+const initialDark = await isDark()
+await page.locator('#theme-toggle').click()
+check((await isDark()) !== initialDark, 'theme: toggle flips theme')
+check(
+  (await page.locator('#theme-toggle').getAttribute('aria-pressed')) ===
+    String(!initialDark),
+  'theme: aria-pressed reflects state',
+)
+const bg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor)
+check(
+  !initialDark ? bg === 'rgb(27, 27, 31)' : bg === 'rgb(255, 255, 255)',
+  'theme: body background actually changes',
+  bg,
+)
+await page.reload({ waitUntil: 'load' })
+check((await isDark()) !== initialDark, 'theme: choice persists across reload')
+await page.locator('#theme-toggle').click() // restore
+
+// ---------- search ----------
+await page.locator('#search-button').click()
+await page.waitForSelector('#search-dialog[open]')
+check(true, 'search: button opens dialog')
+await page.fill('#search-input', 'formatter')
+await page.waitForFunction(() => document.querySelectorAll('#search-results li').length > 0)
+const resultCount = await page.locator('#search-results li').count()
+check(resultCount > 0, 'search: "formatter" returns results', `${resultCount} results`)
+const marks = await page.locator('#search-results mark').count()
+check(marks > 0, 'search: matched terms are highlighted')
+await page.keyboard.press('ArrowDown')
+const activeDescendant = await page.locator('#search-input').getAttribute('aria-activedescendant')
+check(activeDescendant === 'search-result-0', 'search: arrow keys drive aria-activedescendant')
+await page.keyboard.press('Enter')
+await page.waitForFunction(() => !document.getElementById('search-dialog').open)
+check(/#|\.html/.test(page.url()), 'search: Enter navigates to result', page.url())
+
+await page.keyboard.press(process.platform === 'darwin' ? 'Meta+k' : 'Control+k')
+await page.waitForSelector('#search-dialog[open]')
+check(true, 'search: Cmd/Ctrl+K opens dialog')
+await page.fill('#search-input', 'zzzzqqqq')
+await page.waitForFunction(() =>
+  document.getElementById('search-status').textContent.includes('No results'),
+)
+check(true, 'search: no-result state announced via role=status')
+await page.keyboard.press('Escape')
+await page.waitForFunction(() => !document.getElementById('search-dialog').open)
+check(true, 'search: Escape closes dialog')
+
+// ---------- copy button ----------
+await page.goto(`${baseUrl}/guide/getting-started.html`, { waitUntil: 'load' })
+const firstBlock = page.locator('.code-block').first()
+const firstBlockSource = (await firstBlock.locator('code').textContent()).trimEnd()
+await firstBlock.hover()
+await firstBlock.locator('.copy-button').click()
+const clipboard = await page.evaluate(() => navigator.clipboard.readText())
+check(clipboard === firstBlockSource, 'copy: code block copies exact source to clipboard')
+
+// ---------- keyboard navigation / skip link ----------
+await page.goto(`${baseUrl}/guide/introduction.html`, { waitUntil: 'load' })
+await page.keyboard.press('Tab')
+const skipFocused = await page.evaluate(
+  () => document.activeElement?.classList.contains('skip-link') ?? false,
+)
+check(skipFocused, 'a11y: skip link is first tab stop')
+await page.keyboard.press('Enter')
+const mainTarget = await page.evaluate(() => location.hash)
+check(mainTarget === '#main-content', 'a11y: skip link jumps to main content')
+
+// ---------- axe accessibility scans (light + dark, home + doc + dialog) ----------
+async function axeScan(url, { dark = false, openDialog = false } = {}) {
+  await page.goto(url, { waitUntil: 'load' })
+  await page.evaluate((wantDark) => {
+    document.documentElement.classList.toggle('dark', wantDark)
+  }, dark)
+  if (openDialog) {
+    await page.locator('#search-button').click()
+    await page.waitForSelector('#search-dialog[open]')
+    await page.fill('#search-input', 'lint')
+    await page.waitForFunction(() => document.querySelectorAll('#search-results li').length > 0)
+  }
+  await page.addScriptTag({ content: axeSource })
+  const result = await page.evaluate(() =>
+    axe.run(document, {
+      runOnly: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'best-practice'],
+    }),
+  )
+  const label = `${new URL(url).pathname}${dark ? ' [dark]' : ' [light]'}${openDialog ? ' [search open]' : ''}`
+  const violations = result.violations.map((violation) => {
+    const targets = violation.nodes
+      .slice(0, 3)
+      .map((node) => node.target.join(' '))
+      .join(', ')
+    return `${violation.id} (${violation.impact}): ${violation.nodes.length} nodes [${targets}]`
+  })
+  check(violations.length === 0, `a11y: axe clean on ${label}`, violations.join('; '))
+}
+
+await axeScan(`${baseUrl}/`)
+await axeScan(`${baseUrl}/`, { dark: true })
+await axeScan(`${baseUrl}/guide/getting-started.html`)
+await axeScan(`${baseUrl}/guide/getting-started.html`, { dark: true })
+await axeScan(`${baseUrl}/reference/benchmarks.html`, { dark: true })
+await axeScan(`${baseUrl}/guide/introduction.html`, { openDialog: true })
+await axeScan(`${baseUrl}/playground.html`)
+await axeScan(`${baseUrl}/reference/benchmarks.html`)
+
+// ---------- interactive demo (real oxlint/oxfmt through the docs server) ----------
+const health = expectedCapabilities
+if (mode === 'native' && health?.native) {
+  await page.goto(`${baseUrl}/`, { waitUntil: 'load' })
+  await page.waitForSelector('#demo-input', { timeout: 10000 })
+  await page.locator('#hero-demo').scrollIntoViewIfNeeded()
+  check(true, 'demo: playground activates when the demo API is present')
+  const before = await page.inputValue('#demo-input')
+  await page.fill('#demo-input', before.replace('const pending', 'debugger;\n  const pending'))
+  await page.waitForSelector('.demo-diag', { timeout: 8000 })
+  check(true, 'demo: typing debugger produces a real oxlint diagnostic underline')
+  const demoStatus = (await page.locator('#demo-status').textContent()).trim()
+  check(/oxlint/.test(demoStatus), 'demo: status reflects the oxlint result', demoStatus)
+  const segment = await page.locator('.demo-diag').first().boundingBox()
+  await page.mouse.move(segment.x + segment.width / 2, segment.y + segment.height / 2)
+  await page.waitForSelector('.demo-tooltip:not([hidden])', { timeout: 5000 })
+  const tip = (await page.locator('.demo-tooltip').textContent()).trim()
+  check(tip.includes('no-debugger'), 'demo: tooltip shows the rule and message', tip.slice(0, 80))
+  await page.locator('#pg-scenario-messy').click()
+  await page.waitForFunction(
+    () => document.getElementById('demo-input').value.includes('pending = tasks'),
+    { timeout: 15000 },
+  )
+  check(true, 'demo: "Messy → Format" chip auto-runs real oxfmt')
+  await page.locator('#pg-scenario-clean').click()
+  await page.waitForFunction(() => document.querySelectorAll('.demo-diag').length === 0)
+  check(true, 'demo: "Clean" chip restores the converged snippet')
+
+  // Tab indents inside the editor instead of moving focus; Escape releases it.
+  await page.click('#demo-input')
+  await page.evaluate(() => {
+    const input = document.getElementById('demo-input')
+    input.setSelectionRange(0, 0)
+  })
+  const beforeTab = await page.inputValue('#demo-input')
+  await page.keyboard.press('Tab')
+  const afterTab = await page.inputValue('#demo-input')
+  const stillFocused = await page.evaluate(() => document.activeElement?.id === 'demo-input')
+  check(
+    stillFocused && afterTab === `  ${beforeTab}`,
+    'demo: Tab indents code and keeps focus in the editor',
+  )
+  await page.keyboard.down('Shift')
+  await page.keyboard.press('Tab')
+  await page.keyboard.up('Shift')
+  check(
+    (await page.inputValue('#demo-input')) === beforeTab,
+    'demo: Shift+Tab outdents back to the original',
+  )
+  await page.keyboard.press('Escape')
+  const escaped = await page.evaluate(() => document.activeElement?.id !== 'demo-input')
+  check(escaped, 'demo: Escape releases focus from the editor')
+} else if (mode === 'native') {
+  check(
+    false,
+    'demo: API unavailable',
+    'build the release binaries and serve with docs/serve.mjs to enable the live demo',
+  )
+} else {
+  check(health?.mode === 'static' && health?.native === false, 'demo: static capability contract')
+  await page.goto(`${baseUrl}/`, { waitUntil: 'load' })
+  await page.waitForFunction(
+    () => document.getElementById('demo-hint')?.textContent === 'static preview',
+  )
+  check((await page.locator('#demo-input').count()) === 0, 'demo: static home stays read-only')
+  check(await page.locator('#demo-actions').isHidden(), 'demo: static actions stay hidden')
+  await page.goto(`${baseUrl}/playground.html`, { waitUntil: 'load' })
+  await page.waitForFunction(
+    () => document.getElementById('demo-hint')?.textContent === 'static preview',
+  )
+  check((await page.locator('#demo-input').count()) === 0, 'demo: static playground stays read-only')
+  check(await page.locator('#pg-side').isHidden(), 'demo: native-only controls stay hidden')
+  const staticStatus = (await page.locator('#demo-status').textContent()).trim()
+  const staticMeta = (await page.locator('#demo-meta').textContent()).trim()
+  check(
+    staticStatus.includes('pre-generated') && staticStatus.includes('static preview'),
+    'demo: static status does not claim a live lint or format run',
+    staticStatus,
+  )
+  check(
+    staticMeta.includes('local development server'),
+    'demo: static metadata names the localhost-only native boundary',
+    staticMeta,
+  )
+  const hostile = '<img src=x onerror="window.__shareXss=1">'
+  const bytes = new TextEncoder().encode(hostile)
+  let binary = ''
+  for (const byte of bytes) binary += String.fromCharCode(byte)
+  const encoded = Buffer.from(binary, 'binary').toString('base64url')
+  // Arrive as an actual shared-link navigation. A hash-only navigation on an
+  // already-open playground is same-document and intentionally does not rerun
+  // module initialization.
+  await page.goto(`${baseUrl}/guide/introduction.html`, { waitUntil: 'load' })
+  await page.goto(`${baseUrl}/playground.html#code=${encoded}`, { waitUntil: 'load' })
+  await page.waitForFunction(
+    () => document.getElementById('demo-hint')?.textContent === 'static preview',
+  )
+  check(
+    (await page.locator('#demo-editor').textContent()).includes(hostile) &&
+      (await page.evaluate(() => window.__shareXss)) === undefined,
+    'demo: hostile shared source stays literal in static preview',
+  )
+}
+
+// ---------- data-driven benchmarks page ----------
+await page.goto(`${baseUrl}/reference/benchmarks.html`, { waitUntil: 'load' })
+await page.waitForSelector('.bench-chart', { timeout: 10000 })
+const chartCount = await page.locator('.bench-chart').count()
+const passCells = await page.locator('td.bench-pass').count()
+check(chartCount === 6, 'benchmarks: six generated charts', String(chartCount))
+check(passCells > 25, 'benchmarks: generated status cells', `${passCells} pass cells`)
+const reportNamed = await page.locator('article').textContent()
+check(
+  /results-\d+\.json/.test(reportNamed),
+  'benchmarks: report filenames rendered from disk',
+)
+await page.locator('.bench-row').first().scrollIntoViewIfNeeded()
+await page.waitForTimeout(300) // let scroll events settle (scroll hides the tooltip)
+await page.locator('.bench-row').first().dispatchEvent('mouseover')
+await page.waitForSelector('.chart-tooltip:not([hidden])', { timeout: 5000 })
+const chartTip = (await page.locator('.chart-tooltip').textContent()).trim()
+check(
+  chartTip.includes('Budget:') && chartTip.includes('pass'),
+  'benchmarks: chart rows show interactive tooltips',
+  chartTip.slice(0, 60),
+)
+
+// ---------- llms.txt + copy as markdown + footer badge ----------
+const llms = await (await fetch(`${baseUrl}/llms.txt`)).text()
+check(llms.startsWith('# OXC for TSRX'), 'llms: llms.txt is served and well-formed')
+const llmsFull = await (await fetch(`${baseUrl}/llms-full.txt`)).text()
+check(llmsFull.includes('## '), 'llms: llms-full.txt contains page content')
+await page.goto(`${baseUrl}/guide/linting.html`, { waitUntil: 'load' })
+await page.locator('.copy-md-button').first().click()
+await page.waitForFunction(() =>
+  document.querySelector('.copy-md-button').textContent.includes('Copied'),
+)
+const copiedMd = await page.evaluate(() => navigator.clipboard.readText())
+check(copiedMd.includes('# Linting'), 'copy-md: page markdown lands on the clipboard')
+await page.goto(`${baseUrl}/`, { waitUntil: 'load' })
+const badge = (await page.locator('.footer-badge').textContent()).trim()
+check(
+  badge.includes('Pinned OXC 8e0ed2ebb961') && /\d{4}-\d{2}-\d{2}/.test(badge),
+  'badge: footer shows pinned OXC revision and report date',
+  badge,
+)
+const disclaimer = (await page.locator('.footer-disclaimer').textContent()).trim()
+check(disclaimer.includes('not affiliated'), 'footer: VoidZero non-affiliation disclaimer present')
+
+// ---------- projection explorer ----------
+await page.goto(`${baseUrl}/guide/linting.html`, { waitUntil: 'load' })
+const tabCount = await page
+  .locator('[aria-label="Projection stages"] [role="tab"]')
+  .count()
+check(tabCount === 3, 'explorer: three stage tabs', String(tabCount))
+const pipelineTabs = await page.locator('.pipeline [role="tab"]').count()
+check(pipelineTabs === 5, 'pipeline: five interactive stages replace the ASCII diagram', String(pipelineTabs))
+await page.locator('#explorer-tab-projected').click()
+const projectedVisible = await page.evaluate(() => {
+  const panel = document.getElementById('explorer-panel-projected')
+  return !panel.hidden && panel.textContent.includes('_t0_')
+})
+check(projectedVisible, 'explorer: projected tab shows real scaffold markers')
+await page.keyboard.press('ArrowRight')
+const mappedSelected = await page.evaluate(
+  () => document.getElementById('explorer-tab-mapped').getAttribute('aria-selected') === 'true',
+)
+check(mappedSelected, 'explorer: arrow keys move between tabs')
+
+// ---------- try-it buttons ----------
+await page.goto(`${baseUrl}/guide/tsrx-syntax.html`, { waitUntil: 'load' })
+const fenceCode = await page.evaluate(() => document.querySelector('.try-button').dataset.code)
+await page.locator('.try-button').first().click()
+await page.waitForURL('**/playground.html#code=*')
+if (mode === 'native') {
+  await page.waitForSelector('#demo-input', { timeout: 10000 })
+  const editorValue = await page.inputValue('#demo-input')
+  check(editorValue === fenceCode, 'try-it: fence code lands in the playground editor')
+} else {
+  await page.waitForFunction(
+    () => document.getElementById('demo-hint')?.textContent === 'static preview',
+  )
+  const previewValue = await page.locator('#demo-editor code').textContent()
+  check(previewValue === fenceCode, 'try-it: fence code lands in the static preview')
+  check((await page.locator('#demo-input').count()) === 0, 'try-it: static preview stays read-only')
+}
+
+// ---------- playground: filters, config, share, type-aware ----------
+if (health?.native) {
+  await page.goto(`${baseUrl}/playground.html`, { waitUntil: 'load' })
+  await page.waitForSelector('#demo-input', { timeout: 10000 })
+  // "Lint findings" then "Silence a rule": the -A flags run internally.
+  await page.locator('#pg-scenario-lint').click()
+  await page.waitForSelector('.demo-diag', { timeout: 8000 })
+  await page.locator('#pg-scenario-silence').click()
+  await page.waitForFunction(
+    () =>
+      document.querySelectorAll('.demo-diag').length === 0 &&
+      document.getElementById('demo-meta').textContent.includes('-A no-debugger'),
+    { timeout: 8000 },
+  )
+  check(true, 'playground: "Silence a rule" example runs real -A severity flags')
+  // "Custom config": no-console becomes an error via --config.
+  await page.locator('#pg-scenario-config').click()
+  await page.waitForFunction(
+    () =>
+      document.querySelectorAll('.demo-diag').length > 0 &&
+      document.getElementById('demo-meta').textContent.includes('--config'),
+    { timeout: 8000 },
+  )
+  const configStatus = await page.locator('#demo-status').textContent()
+  check(/error/.test(configStatus), 'playground: "Custom config" example feeds --config', configStatus.trim())
+  // Share link round-trip.
+  await page.locator('#demo-share').click()
+  await page.waitForFunction(() => location.hash.includes('code='))
+  const shareUrl = await page.evaluate(() => navigator.clipboard.readText())
+  check(shareUrl.includes('#code='), 'playground: share copies a snippet URL')
+  const sharedValue = await page.inputValue('#demo-input')
+  await page.goto(shareUrl, { waitUntil: 'load' })
+  await page.waitForSelector('#demo-input', { timeout: 10000 })
+  await page.waitForFunction(
+    (expected) => document.getElementById('demo-input').value === expected,
+    sharedValue,
+  )
+  check(true, 'playground: share URL restores the snippet')
+  if (health.typeAware) {
+    await page.goto(`${baseUrl}/playground.html`, { waitUntil: 'load' })
+    await page.waitForSelector('#demo-input', { timeout: 10000 })
+    await page.locator('#pg-scenario-types').click()
+    await page.waitForFunction(
+      () => document.getElementById('demo-meta').textContent.includes('type-aware'),
+      { timeout: 20000 },
+    )
+    check(true, 'playground: "Type error" example runs the TypeScript-Go lane')
+  } else {
+    check(true, 'playground: type-aware unavailable on this host (skipped)', 'tsgolint missing')
+  }
+  // Format-as-diff on deliberately misformatted code.
+  await page.goto(`${baseUrl}/playground.html`, { waitUntil: 'load' })
+  await page.waitForSelector('#demo-input', { timeout: 10000 })
+  await page.fill('#demo-input', 'export function T() @{\n  const x=1;\n  <b/>\n}')
+  await page.locator('#demo-format').click()
+  await page.waitForFunction(() =>
+    document.getElementById('demo-input').value.includes('const x = 1;'),
+  )
+  check(true, 'playground: Format applies real oxfmt output directly')
+
+  const maliciousRule = 'x" onpointerover="window.__shareXss=1" data-x="'
+  await page.goto(
+    `${baseUrl}/playground.html#filters=${encodeURIComponent(`${maliciousRule}:warn`)}`,
+    { waitUntil: 'load' },
+  )
+  await page.waitForSelector('#demo-input', { timeout: 10000 })
+  check(
+    (await page.locator('#pg-filters [onpointerover]').count()) === 0 &&
+      (await page.evaluate(() => window.__shareXss)) === undefined,
+    'playground: hostile shared filter cannot inject DOM attributes',
+  )
+
+  await page.goto(`${baseUrl}/playground.html`, { waitUntil: 'load' })
+  await page.waitForSelector('#demo-input', { timeout: 10000 })
+  const staleOriginal = 'export function T() @{\n  const value=1;\n  <b/>;\n}'
+  const newerSource = 'export function T() @{\n  const newer = 2;\n  <b/>;\n}'
+  await page.fill('#demo-input', staleOriginal)
+  let releaseFormat
+  let interceptedFormat
+  const formatIntercepted = new Promise((resolve) => {
+    interceptedFormat = resolve
+  })
+  const formatGate = new Promise((resolve) => {
+    releaseFormat = resolve
+  })
+  await page.route(
+    '**/api/format',
+    async (route) => {
+      interceptedFormat()
+      await formatGate
+      await route.continue()
+    },
+    { times: 1 },
+  )
+  await page.locator('#demo-format').click()
+  await formatIntercepted
+  await page.fill('#demo-input', newerSource)
+  releaseFormat()
+  await page.waitForTimeout(500)
+  check(
+    (await page.inputValue('#demo-input')) === newerSource,
+    'playground: stale format response cannot overwrite a newer edit',
+  )
+}
+
+// ---------- home benchmark chart + page menu + dual-pane output ----------
+await page.goto(`${baseUrl}/`, { waitUntil: 'load' })
+await page.waitForSelector('.home-bench .bench-row')
+const homeRows = await page.locator('.home-bench .bench-row').count()
+check(homeRows >= 5, 'home: headline benchmark chart rendered', `${homeRows} rows`)
+await page.locator('.home-bench').scrollIntoViewIfNeeded()
+await page.waitForTimeout(300) // let scroll events settle (scroll hides the tooltip)
+await page.locator('.home-bench .bench-row').first().dispatchEvent('mouseover')
+await page.waitForSelector('.chart-tooltip:not([hidden])', { timeout: 5000 })
+const homeTip = (await page.locator('.chart-tooltip').textContent()).trim()
+check(
+  homeTip.includes('Budget:') && /ESLint|Oxlint/.test(homeTip),
+  'home: chart rows explain their metric on hover',
+  homeTip.slice(0, 60),
+)
+await page.goto(`${baseUrl}/guide/linting.html`, { waitUntil: 'load' })
+await page.locator('.page-menu-toggle').click()
+await page.waitForSelector('.page-menu-list:not([hidden])')
+const menuItems = await page.locator('.page-menu-list [role="menuitem"]').count()
+const aiLinks = await page.evaluate(() =>
+  [...document.querySelectorAll('.page-menu-list a')].map((a) => a.href),
+)
+check(
+  menuItems === 4 && aiLinks.some((h) => h.includes('chatgpt.com')) && aiLinks.some((h) => h.includes('claude.ai')),
+  'page menu: markdown + ChatGPT + Claude items',
+  `${menuItems} items`,
+)
+await page.keyboard.press('Escape')
+if (health?.native) {
+  await page.goto(`${baseUrl}/playground.html`, { waitUntil: 'load' })
+  await page.waitForSelector('#demo-input', { timeout: 10000 })
+  await page.waitForFunction(
+    () => document.getElementById('pg-projected').textContent.includes('_t0_'),
+    { timeout: 15000 },
+  )
+  check(true, 'playground: Projected TSX pane shows the real projection')
+  await page.locator('#pg-tab-structure').click()
+  const structureText = await page.locator('#pg-structure').textContent()
+  check(
+    structureText.includes('FunctionBody') && structureText.includes('controls'),
+    'playground: Structure pane lists real overlay tokens',
+  )
+  await page.locator('#pg-tab-formatted').click()
+  await page.waitForFunction(
+    () => document.getElementById('pg-formatted').textContent.includes('TaskList'),
+  )
+  check(true, 'playground: Formatted pane shows real oxfmt output')
+  // Tooltip must sit above its trigger.
+  const pgSource = await page.inputValue('#demo-input')
+  await page.fill('#demo-input', pgSource.replace('const pending', 'debugger;\n  const pending'))
+  await page.waitForSelector('.demo-diag', { timeout: 8000 })
+  const trigger = await page.locator('.demo-diag').first().boundingBox()
+  await page.mouse.move(trigger.x + trigger.width / 2, trigger.y + trigger.height / 2)
+  await page.waitForSelector('.demo-tooltip:not([hidden])')
+  const tipBox = await page.locator('.demo-tooltip').boundingBox()
+  check(
+    tipBox.y + tipBox.height <= trigger.y + 1,
+    'tooltip: positioned directly above its trigger',
+    `tooltip bottom ${Math.round(tipBox.y + tipBox.height)} vs trigger top ${Math.round(trigger.y)}`,
+  )
+}
+
+// ---------- playground workbench + editor features + hover docs ----------
+if (health?.native) {
+  await page.goto(`${baseUrl}/playground.html`, { waitUntil: 'load' })
+  await page.waitForSelector('#demo-input', { timeout: 10000 })
+  await page.waitForTimeout(600)
+  const paneBox = () => page.locator('#pg-output').boundingBox()
+  const paneBefore = await paneBox()
+  await page.locator('#pg-tab-structure').click()
+  await page.locator('#pg-tab-diagnostics').click()
+  const paneAfter = await paneBox()
+  check(
+    JSON.stringify(paneBefore) === JSON.stringify(paneAfter),
+    'workbench: switching output tabs never resizes the panes',
+  )
+  check(
+    !(await page.evaluate(() => document.documentElement.scrollHeight > innerHeight + 1)),
+    'workbench: playground fills the viewport without page scroll',
+  )
+  await page.fill('#demo-input', '')
+  await page.click('#demo-input')
+  await page.keyboard.type('<div>')
+  check(
+    (await page.inputValue('#demo-input')) === '<div></div>',
+    'editor: typing > auto-closes the JSX tag (Markless autoClosingTags)',
+  )
+  await page.fill('#demo-input', '')
+  await page.keyboard.type('(')
+  check(
+    (await page.inputValue('#demo-input')) === '()',
+    'editor: brackets auto-close like the Markless language configuration',
+  )
+}
+await page.goto(`${baseUrl}/guide/tsrx-syntax.html`, { waitUntil: 'load' })
+const hoverSpans = await page.locator('.tsrx-hover').count()
+check(hoverSpans >= 8, 'hover docs: TSRX constructs annotated in code examples', String(hoverSpans))
+await page.locator('.tsrx-hover').first().scrollIntoViewIfNeeded()
+await page.waitForTimeout(250)
+await page.locator('.tsrx-hover').first().dispatchEvent('mouseover')
+await page.waitForSelector('.chart-tooltip:not([hidden])', { timeout: 4000 })
+const hoverText = (await page.locator('.chart-tooltip').textContent()).trim()
+check(
+  hoverText.includes('Function body') || hoverText.includes('Conditional'),
+  'hover docs: editor-style tooltip shows construct documentation',
+  hoverText.slice(0, 50),
+)
+
+// ---------- @-snippet completions (Markless catalog) ----------
+if (health?.native) {
+  await page.goto(`${baseUrl}/playground.html`, { waitUntil: 'load' })
+  await page.waitForSelector('#demo-input', { timeout: 10000 })
+  await page.fill('#demo-input', '')
+  await page.click('#demo-input')
+  await page.keyboard.type('@fo')
+  await page.waitForSelector('.demo-completions:not([hidden])', { timeout: 4000 })
+  const options = await page.locator('.demo-completions li').count()
+  check(options >= 3, 'intellisense: typing @ opens directive completions', `${options} options`)
+  const completionAria = await page.evaluate(() => {
+    const input = document.getElementById('demo-input')
+    const listbox = document.querySelector('.demo-completions')
+    const combobox = input.closest('[role="combobox"]')
+    const active = document.getElementById(input.getAttribute('aria-activedescendant'))
+    return {
+      role: combobox?.getAttribute('role'),
+      autocomplete: input.getAttribute('aria-autocomplete'),
+      expanded: combobox?.getAttribute('aria-expanded'),
+      controls: combobox?.getAttribute('aria-controls'),
+      inputControls: input.getAttribute('aria-controls'),
+      listbox: listbox.id,
+      activeIsSelectedOption:
+        active?.getAttribute('role') === 'option' && active.getAttribute('aria-selected') === 'true',
+    }
+  })
+  check(
+    completionAria.role === 'combobox' &&
+      completionAria.autocomplete === 'list' &&
+      completionAria.expanded === 'true' &&
+      completionAria.controls === completionAria.listbox &&
+      completionAria.inputControls === completionAria.listbox &&
+      completionAria.activeIsSelectedOption,
+    'intellisense: completion popup exposes the ARIA combobox relationship and active option',
+    JSON.stringify(completionAria),
+  )
+  const firstActive = await page.locator('#demo-input').getAttribute('aria-activedescendant')
+  await page.keyboard.press('ArrowDown')
+  const nextActive = await page.locator('#demo-input').getAttribute('aria-activedescendant')
+  check(
+    Boolean(nextActive) && nextActive !== firstActive,
+    'intellisense: arrow keys update the active descendant',
+    `${firstActive} -> ${nextActive}`,
+  )
+  await page.keyboard.press('Escape')
+  const closedAria = await page.evaluate(() => {
+    const input = document.getElementById('demo-input')
+    const combobox = input.closest('[role="combobox"]')
+    return {
+      expanded: combobox?.getAttribute('aria-expanded'),
+      active: input.getAttribute('aria-activedescendant'),
+      hidden: document.querySelector('.demo-completions').hidden,
+      focused: document.activeElement === input,
+    }
+  })
+  check(
+    closedAria.expanded === 'false' &&
+      closedAria.active === null &&
+      closedAria.hidden &&
+      closedAria.focused,
+    'intellisense: Escape closes the popup and clears ARIA active state without leaving the editor',
+    JSON.stringify(closedAria),
+  )
+  await page.fill('#demo-input', '')
+  await page.keyboard.type('@fo')
+  await page.waitForSelector('.demo-completions:not([hidden])', { timeout: 4000 })
+  await page.keyboard.press('Enter')
+  const inserted = await page.inputValue('#demo-input')
+  check(
+    inserted.startsWith('@for (const item of '),
+    'intellisense: Enter inserts the Markless snippet with caret placement',
+    JSON.stringify(inserted.split('\n')[0]),
+  )
+}
+
+// ---------- plain-language homepage metrics + glossary hovers ----------
+await page.goto(`${baseUrl}/`, { waitUntil: 'load' })
+const homeLabels = await page.evaluate(() =>
+  [...document.querySelectorAll('.home-bench .bench-row')].map((row) => row.dataset.label),
+)
+check(
+  homeLabels.length >= 5 && !homeLabels.some((label) => /p95|throughput|projection/i.test(label)),
+  'home: headline metric labels avoid jargon',
+  homeLabels.join(' | '),
+)
+const homeNotes = await page.evaluate(() =>
+  [...document.querySelectorAll('.home-bench .bench-row')].map((row) => row.dataset.note ?? ''),
+)
+check(
+  homeNotes.every((note) => note.length > 20),
+  'home: every metric has a plain-language explanation on hover',
+)
+await page.goto(`${baseUrl}/reference/benchmarks.html`, { waitUntil: 'load' })
+const glossaryTerms = await page.evaluate(() =>
+  [...document.querySelectorAll('article .tsrx-hover')].map((el) => el.dataset.docTitle),
+)
+check(
+  glossaryTerms.includes('p95') && glossaryTerms.includes('throughput'),
+  'glossary: p95 and throughput get hover definitions on the benchmarks page',
+  glossaryTerms.join(', '),
+)
+const glossaryHover = page.locator('article .tsrx-hover').first()
+await glossaryHover.scrollIntoViewIfNeeded()
+await page.waitForTimeout(150)
+await glossaryHover.hover()
+await page.waitForSelector('.chart-tooltip:not([hidden])', { timeout: 4000 })
+const projGlossary = (await page.locator('.chart-tooltip:not([hidden])').textContent()) ?? ''
+check(projGlossary.length > 10, 'glossary: hover shows the definition tooltip', projGlossary.slice(0, 40))
+
+// ---------- snippet caret + TypeScript completions ----------
+if (health?.native) {
+  await page.goto(`${baseUrl}/playground.html`, { waitUntil: 'load' })
+  await page.waitForSelector('#demo-input', { timeout: 10000 })
+  await page.fill('#demo-input', '')
+  await page.click('#demo-input')
+  await page.keyboard.type('@for')
+  await page.waitForSelector('.demo-completions:not([hidden])')
+  await page.keyboard.press('Enter')
+  const caretInfo = await page.evaluate(() => {
+    const input = document.getElementById('demo-input')
+    return { caret: input.selectionStart, expected: input.value.indexOf('of ') + 3 }
+  })
+  check(
+    caretInfo.caret === caretInfo.expected,
+    'intellisense: snippet caret lands inside the @for header',
+    `caret ${caretInfo.caret} expected ${caretInfo.expected}`,
+  )
+  const completionsReady = (await (await fetch(`${baseUrl}/api/health`)).json()).completions
+  if (completionsReady) {
+    await page.fill(
+      '#demo-input',
+      'export function V({items}:{items:string[]}) @{\n  const x = items\n  <b/>;\n}',
+    )
+    await page.evaluate(() => {
+      const input = document.getElementById('demo-input')
+      const position = input.value.indexOf('items\n') + 5
+      input.setSelectionRange(position, position)
+      input.focus()
+    })
+    await page.keyboard.type('.fil', { delay: 60 })
+    await page.waitForSelector('.demo-completions:not([hidden])', { timeout: 8000 })
+    const names = await page.evaluate(() =>
+      [...document.querySelectorAll('.demo-completions li')].map((li) => li.dataset.name),
+    )
+    check(
+      names.includes('filter') && names.includes('fill'),
+      'intellisense: real TypeScript member completions from the type projection',
+      names.join(','),
+    )
+    await page.keyboard.press('Enter')
+    check(
+      /items\.fil(l|ter)/.test(await page.inputValue('#demo-input')),
+      'intellisense: accepting a TS completion replaces the typed prefix',
+    )
+  } else {
+    check(true, 'intellisense: TS completions unavailable on this host (skipped)')
+  }
+}
+
+// ---------- comparative benchmark + hover type info ----------
+await page.goto(`${baseUrl}/`, { waitUntil: 'load' })
+const compLabels = await page.evaluate(() =>
+  [...document.querySelectorAll('.home-bench .bench-row')].map((row) => row.dataset.label),
+)
+check(
+  compLabels.some((l) => l.includes('ESLint')) &&
+    compLabels.some((l) => l.includes('Oxlint')) &&
+    compLabels.some((l) => l.includes('OXC for TSRX')),
+  'comparative: home shows the matched ESLint, Oxlint, and OXC for TSRX lanes',
+  compLabels.filter((l) => /ESLint|Oxlint|OXC for TSRX/.test(l)).join(' | '),
+)
+if (health?.native) {
+  const quick = await page.evaluate(async () => {
+    const source = 'export function V({items}:{items:string[]}) @{\n  const x = items\n  <b/>;\n}'
+    const response = await fetch(document.querySelector('.top-nav a[href$="playground.html"]').href.replace('playground.html', 'api/quickinfo'), {
+      method: 'POST',
+      body: JSON.stringify({ source, offset: source.indexOf('items\n') + 3 }),
+    })
+    return response.json()
+  })
+  check(
+    quick.info?.display?.includes('string[]'),
+    'hover types: quickinfo returns the real TypeScript type',
+    quick.info?.display ?? 'none',
+  )
+  await page.goto(`${baseUrl}/playground.html`, { waitUntil: 'load' })
+  await page.waitForSelector('#demo-input', { timeout: 10000 })
+  const hoverSource = 'export function V({items}:{items:string[]}) @{\n  const x = items\n  <b/>;\n}'
+  await page.fill('#demo-input', hoverSource)
+  await page.waitForTimeout(500)
+  const hoverPoint = await page.evaluate(() => {
+    const input = document.getElementById('demo-input')
+    const style = getComputedStyle(input)
+    const rect = input.getBoundingClientRect()
+    const canvas = document.createElement('canvas')
+    const context = canvas.getContext('2d')
+    context.font = style.font
+    const width = context.measureText('M').width
+    const column = input.value.indexOf('items') + 2
+    return {
+      x: rect.left + Number.parseFloat(style.paddingLeft) + column * width,
+      y: rect.top + Number.parseFloat(style.paddingTop) + Number.parseFloat(style.lineHeight) / 2,
+    }
+  })
+  await page.mouse.move(hoverPoint.x, hoverPoint.y)
+  await page.waitForFunction(
+    () => document.querySelector('.demo-tooltip:not([hidden])')?.textContent.includes('string[]'),
+    { timeout: 8000 },
+  )
+  check(true, 'hover types: middle-of-identifier UI hover shows TypeScript quick info')
+  await page.mouse.move(1, 1)
+  await page.waitForTimeout(400)
+  check(
+    await page.locator('.demo-tooltip').isHidden(),
+    'hover types: leaving the editor cancels an in-flight tooltip',
+  )
+}
+
+// ---------- guided scenarios + completion menu layout ----------
+if (health?.native) {
+  await page.goto(`${baseUrl}/playground.html`, { waitUntil: 'load' })
+  await page.waitForSelector('#demo-input', { timeout: 10000 })
+  await page.locator('#pg-scenario-lint').click()
+  await page.waitForSelector('.demo-diag', { timeout: 8000 })
+  check(true, 'scenarios: "Lint findings" loads a variant with real diagnostics')
+  await page.locator('#pg-scenario-messy').click()
+  await page.waitForFunction(
+    () => document.getElementById('demo-input').value.includes('pending = tasks'),
+    { timeout: 15000 },
+  )
+  check(true, 'scenarios: "Messy → Format" auto-normalizes via real oxfmt')
+  await page.fill('#demo-input', '')
+  await page.click('#demo-input')
+  await page.keyboard.type('@fo')
+  await page.waitForSelector('.demo-completions:not([hidden])')
+  await page.keyboard.press('Escape')
+  const menuFlex = await page.evaluate(() => {
+    const item = document.createElement('li')
+    document.querySelector('.demo-completions').appendChild(item)
+    return getComputedStyle(item).display
+  })
+  check(menuFlex === 'flex', 'completions: menu rows separate name and kind', menuFlex)
+}
+
+// ---------- mobile ----------
+const mobile = await context.newPage()
+await mobile.setViewportSize({ width: 390, height: 844 })
+await mobile.goto(`${baseUrl}/`, { waitUntil: 'load' })
+const mobileHomeOverflow = await mobile.evaluate(
+  () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+)
+check(!mobileHomeOverflow, 'mobile: home has no horizontal page overflow')
+if (mode === 'native') {
+  await mobile.waitForSelector('#demo-input', { timeout: 10000 })
+  const controlsFit = await mobile.evaluate(() => {
+    const panel = document.getElementById('hero-demo')?.getBoundingClientRect()
+    const controls = [...document.querySelectorAll('#demo-actions button')].map((button) =>
+      button.getBoundingClientRect(),
+    )
+    return Boolean(
+      panel &&
+        controls.length > 0 &&
+        controls.every(
+          (control) => control.left >= panel.left && control.right <= panel.right,
+        ),
+    )
+  })
+  check(controlsFit, 'mobile: native demo controls stay inside the code panel')
+}
+await mobile.goto(`${baseUrl}/guide/introduction.html`, { waitUntil: 'load' })
+const menuToggle = mobile.locator('#menu-toggle')
+check(await menuToggle.isVisible(), 'mobile: hamburger visible at 390px')
+await menuToggle.click()
+check(
+  (await menuToggle.getAttribute('aria-expanded')) === 'true' &&
+    (await mobile.locator('.sidebar').isVisible()),
+  'mobile: drawer opens with aria-expanded',
+)
+await mobile.locator('.sidebar a', { hasText: 'Linting' }).click()
+await mobile.waitForURL('**/guide/linting.html')
+check(true, 'mobile: drawer navigation works')
+const horizontalOverflow = await mobile.evaluate(
+  () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+)
+check(!horizontalOverflow, 'mobile: no horizontal page overflow')
+await mobile.close()
+
+// ---------- performance ----------
+for (const target of ['/', '/guide/getting-started.html', '/architecture/rust-oxc-core.html']) {
+  await page.goto(`${baseUrl}${target}`, { waitUntil: 'load' })
+  const metrics = await page.evaluate(() => {
+    const nav = performance.getEntriesByType('navigation')[0]
+    const resources = performance.getEntriesByType('resource')
+    return {
+      domContentLoaded: Math.round(nav.domContentLoadedEventEnd - nav.startTime),
+      load: Math.round(nav.loadEventEnd - nav.startTime),
+      bytes: Math.round(
+        (nav.transferSize + resources.reduce((sum, r) => sum + r.transferSize, 0)) / 1024,
+      ),
+      requests: 1 + resources.length,
+    }
+  })
+  check(
+    metrics.load < 1500 && metrics.bytes < 250,
+    `perf: ${target}`,
+    `DCL ${metrics.domContentLoaded}ms, load ${metrics.load}ms, ${metrics.bytes} KiB over ${metrics.requests} requests`,
+  )
+}
+
+// ---------- global hygiene ----------
+check(consoleErrors.length === 0, 'hygiene: no console errors', consoleErrors.join('; '))
+check(badResponses.length === 0, 'hygiene: no 4xx/5xx responses', badResponses.join('; '))
+
+console.log(`\n${passes.length} passed, ${failures.length} failed`)
+if (failures.length > 0) process.exitCode = 1
+} finally {
+  await browser.close()
+}

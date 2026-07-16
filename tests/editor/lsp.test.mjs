@@ -1,0 +1,188 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import { join, resolve } from "node:path";
+import test from "node:test";
+import { applyTextEdits, LspClient, pathToFileUri } from "./lsp-client.mjs";
+
+const root = resolve(import.meta.dirname, "../..");
+const workspace = join(root, "tests/fixtures/editor/workspace");
+const sourcePath = join(workspace, "View.tsrx");
+const server = resolve(
+  process.env.OXC_TSRX_LSP_BIN ?? join(root, "target/release/oxc-tsrx-lsp"),
+);
+const uri = pathToFileUri(sourcePath);
+
+test("native LSP activates TSRX formatting, live diagnostics, edits, and safe actions", async () => {
+  let source = await readFile(sourcePath, "utf8");
+  const client = new LspClient(server, { cwd: workspace });
+  try {
+    const initialized = await client.initialize(pathToFileUri(workspace));
+  assert.equal(initialized.serverInfo.name, "OXC for TSRX");
+  assert.equal(initialized.capabilities.documentFormattingProvider, true);
+  assert.deepEqual(initialized.capabilities.codeActionProvider.codeActionKinds, ["quickfix"]);
+  assert.equal(initialized.capabilities.textDocumentSync.change, 1);
+
+  client.notify("textDocument/didOpen", {
+    textDocument: { uri, languageId: "markless-tsrx", version: 1, text: source },
+  });
+  const opened = await client.waitFor(
+    (message) => message.method === "textDocument/publishDiagnostics",
+    5000,
+    "open diagnostics",
+  );
+  assert.equal(opened.params.uri, uri);
+  assert.equal(opened.params.version, 1);
+  assert.deepEqual(
+    opened.params.diagnostics.map((diagnostic) => diagnostic.code).sort(),
+    ["no-debugger", "no-var"],
+  );
+  const debuggerDiagnostic = opened.params.diagnostics.find(
+    (diagnostic) => diagnostic.code === "no-debugger",
+  );
+  assert.deepEqual(debuggerDiagnostic.range, {
+    start: { line: 4, character: 11 },
+    end: { line: 4, character: 20 },
+  });
+
+  const formatting = await client.request("textDocument/formatting", {
+    textDocument: { uri },
+    options: { tabSize: 2, insertSpaces: true },
+  });
+  assert.equal(formatting.length, 1);
+  const formatted = applyTextEdits(source, formatting);
+  assert.notEqual(formatted, source);
+  assert.match(formatted, /export function View\(\) @\{\n  var total = 0;/);
+  assert.match(formatted, /<button aria-label=\{label\}>\{total\}<\/button>;/);
+
+  const actions = await client.request("textDocument/codeAction", {
+    textDocument: { uri },
+    range: { start: { line: 1, character: 0 }, end: { line: 1, character: 3 } },
+    context: { diagnostics: opened.params.diagnostics },
+  });
+  assert.equal(actions.length, 1);
+  assert.equal(actions[0].kind, "quickfix");
+  assert.equal(actions[0].isPreferred, true);
+  const fixed = applyTextEdits(source, actions[0].edit.changes[uri]);
+  assert.doesNotMatch(fixed, /var total/);
+  assert.match(fixed, /(?:let|const) total/);
+
+  client.notify("workspace/didChangeConfiguration", {
+    settings: [
+      {
+        workspaceUri: pathToFileUri(workspace),
+        options: { lintConfigPath: "no-var-only.json" },
+      },
+    ],
+  });
+  const reconfigured = await client.waitFor(
+    (message) =>
+      message.method === "textDocument/publishDiagnostics" &&
+      message.params.diagnostics.some((diagnostic) => diagnostic.code === "no-var") &&
+      !message.params.diagnostics.some((diagnostic) => diagnostic.code === "no-debugger"),
+    5000,
+    "configuration-change diagnostics",
+  );
+  assert.deepEqual(
+    reconfigured.params.diagnostics.map((diagnostic) => diagnostic.code),
+    ["no-var"],
+  );
+
+  const debuggerStart = source.indexOf("debugger");
+  source = source.slice(0, debuggerStart) + "total++;" + source.slice(debuggerStart + 9);
+  client.notify("textDocument/didChange", {
+    textDocument: { uri, version: 2 },
+    contentChanges: [{ text: source }],
+  });
+  const changed = await client.waitFor(
+    (message) =>
+      message.method === "textDocument/publishDiagnostics" && message.params.version === 2,
+    5000,
+    "change diagnostics",
+  );
+  assert.deepEqual(
+    changed.params.diagnostics.map((diagnostic) => diagnostic.code),
+    ["no-var"],
+  );
+
+  client.notify("textDocument/didChange", {
+    textDocument: { uri, version: 3 },
+    contentChanges: [{ text: "export function View() @{ @if (" }],
+  });
+  const malformed = await client.waitFor(
+    (message) =>
+      message.method === "textDocument/publishDiagnostics" && message.params.version === 3,
+    2000,
+    "malformed edit diagnostics",
+  );
+  assert.deepEqual(
+    malformed.params.diagnostics.map((diagnostic) => diagnostic.code),
+    ["parse-error"],
+  );
+  await assert.rejects(
+    client.request("textDocument/formatting", {
+      textDocument: { uri },
+      options: { tabSize: 2, insertSpaces: true },
+    }),
+    /formatting|unterminated|expected|syntax/i,
+  );
+
+  client.notify("textDocument/didChange", {
+    textDocument: { uri, version: 4 },
+    contentChanges: [{ text: source }],
+  });
+  const recovered = await client.waitFor(
+    (message) =>
+      message.method === "textDocument/publishDiagnostics" && message.params.version === 4,
+    2000,
+    "recovered edit diagnostics",
+  );
+  assert.deepEqual(
+    recovered.params.diagnostics.map((diagnostic) => diagnostic.code),
+    ["no-var"],
+  );
+
+  client.notify("textDocument/didClose", { textDocument: { uri } });
+    await client.close();
+  } finally {
+    client.terminate();
+  }
+});
+
+test("native LSP keeps type-aware lint opt-in and authored TSRX diagnostics", async () => {
+  const typeRoot = join(root, "tests/fixtures/type-aware/single");
+  const typePath = join(typeRoot, "View.tsrx");
+  const typeUri = pathToFileUri(typePath);
+  const rootUri = pathToFileUri(typeRoot);
+  const source = await readFile(typePath, "utf8");
+  const client = new LspClient(server, { cwd: typeRoot });
+  try {
+    await client.initialize(rootUri, [
+      { workspaceUri: rootUri, options: { typeAware: true, typeCheck: false } },
+    ]);
+    client.notify("textDocument/didOpen", {
+      textDocument: {
+        uri: typeUri,
+        languageId: "markless-tsrx",
+        version: 1,
+        text: source,
+      },
+    });
+    const published = await client.waitFor(
+      (message) => message.method === "textDocument/publishDiagnostics",
+      5000,
+      "type-aware diagnostics",
+    );
+    const diagnostic = published.params.diagnostics.find(
+      (item) => item.code === "no-floating-promises",
+    );
+    assert.ok(diagnostic, JSON.stringify(published));
+    assert.equal(diagnostic.source, "oxlint-tsrx");
+    assert.deepEqual(diagnostic.range, {
+      start: { line: 3, character: 2 },
+      end: { line: 3, character: 9 },
+    });
+    await client.close();
+  } finally {
+    client.terminate();
+  }
+});

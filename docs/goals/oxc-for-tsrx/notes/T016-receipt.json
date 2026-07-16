@@ -1,0 +1,134 @@
+{
+  "result": "blocked",
+  "task_id": "T016",
+  "board_path": "docs/goals/oxc-for-tsrx/state.yaml",
+  "harness": "codex",
+  "full_outcome_complete": false,
+  "blocked_reason": "T016's required full lint regression command generated benchmarks/native-lint/results-1784173318434.json, but the T016 allowed_files list omitted benchmarks/native-lint/results-*.json. The implementation and every verification passed, but the GoalBuddy write-scope contract requires a recovery Worker to explicitly own and adopt that evidence.",
+  "summary": "Implemented and verified the complete T016 Rust-native formatter vertical, including a 198x quadratic-to-linear lift correction and all green correctness/performance gates. The task cannot be recorded done because its own required lint benchmark generated one timestamped report outside the declared allowed_files. T018 is a bounded recovery/adoption task; no external repository was touched.",
+  "changed_files": [
+    "Cargo.toml",
+    "Cargo.lock",
+    "README.md",
+    "THIRD_PARTY_NOTICES.md",
+    "package.json",
+    "crates/oxc_adapter/Cargo.toml",
+    "crates/oxc_adapter/src/lib.rs",
+    "crates/tsrx_syntax/src/lib.rs",
+    "crates/tsrx_format/Cargo.toml",
+    "crates/tsrx_format/src/lib.rs",
+    "crates/oxc_tsrx_cli/Cargo.toml",
+    "crates/oxc_tsrx_cli/src/bin/oxc-tsrx-fmt.rs",
+    "crates/oxc_tsrx_format_benchmark/Cargo.toml",
+    "crates/oxc_tsrx_format_benchmark/src/main.rs",
+    "tests/native-format.test.mjs",
+    "tests/fixtures/format/README.md",
+    "tests/fixtures/format/markless-counter.unformatted.tsrx",
+    "tests/fixtures/format/markless-counter.formatted.tsrx",
+    "tests/fixtures/format/conditional.unformatted.tsrx",
+    "tests/fixtures/format/conditional.formatted.tsrx",
+    "benchmarks/native-format/README.md",
+    "benchmarks/native-format/budgets.json",
+    "benchmarks/native-format/results-1784172609777.json",
+    "benchmarks/native-format/results-1784173236029.json",
+    "docs/architecture/rust-oxc-core.md"
+  ],
+  "red_evidence": [
+    {
+      "cmd": "OXFMT_BIN=node_modules/oxfmt-current/bin/oxfmt node --test tests/native-format.test.mjs",
+      "outcome": "Expected red: official Oxfmt passed ordinary TSX but failed all five .tsrx behaviors because .tsrx is unsupported."
+    },
+    {
+      "cmd": "cargo run --release --offline -p oxc_tsrx_format_benchmark -- --assert benchmarks/native-format/budgets.json",
+      "outcome": "Expected performance red retained as results-1784172609777.json: the first lift was quadratic, 0.534 MiB/s sequential and 23.34 MiB/s batch; P04 failed while P05/P07 passed."
+    }
+  ],
+  "commands": [
+    {
+      "cmd": "cargo fmt --all -- --check",
+      "status": "pass"
+    },
+    {
+      "cmd": "cargo clippy --workspace --all-targets --locked -- -D warnings",
+      "status": "pass"
+    },
+    {
+      "cmd": "cargo test --workspace --locked",
+      "status": "pass",
+      "evidence": "15 unit tests and all doc tests passed."
+    },
+    {
+      "cmd": "cargo build --release --locked -p oxc_tsrx_cli --bins",
+      "status": "pass"
+    },
+    {
+      "cmd": "OXFMT_BIN=target/release/oxc-tsrx-fmt node --test tests/native-format.test.mjs",
+      "status": "pass",
+      "evidence": "6/6 black-box formatter tests passed."
+    },
+    {
+      "cmd": "OXLINT_BIN=target/release/oxc-tsrx node --test tests/native-lint.test.mjs",
+      "status": "pass",
+      "evidence": "3/3 original lint/fix/direct-bypass tests passed."
+    },
+    {
+      "cmd": "npm test",
+      "status": "pass",
+      "evidence": "9/9 combined native black-box tests passed."
+    },
+    {
+      "cmd": "cargo run --release --locked -p oxc_tsrx_format_benchmark -- --assert benchmarks/native-format/budgets.json",
+      "status": "pass",
+      "evidence": "results-1784173236029.json: 105.93 MiB/s sequential, 712.44 MiB/s default-thread, 2.93 ms stdin p95, 1.095x RSS, 14/14 assertions."
+    },
+    {
+      "cmd": "cargo run --release --locked -p oxc_tsrx_benchmark -- --assert benchmarks/native-lint/budgets.json",
+      "status": "pass",
+      "evidence": "results-1784173318434.json: 337.15 MiB/s scan+copy+parse, 106.15 MiB/s CLI, 1.056x TSX, all 16 assertions."
+    },
+    {
+      "cmd": "cargo tree -p oxc_tsrx_cli --locked plus OXC-import rg audit",
+      "status": "pass",
+      "evidence": "memory-stats is absent from the distributed CLI tree; exact-revision OXC dependencies and formatter APIs remain isolated to oxc_adapter."
+    },
+    {
+      "cmd": "node /Users/jacksm5pro/.codex/plugins/cache/goalbuddy/goalbuddy/0.4.0/skills/goal-prep/scripts/check-goal-state.mjs docs/goals/oxc-for-tsrx",
+      "status": "pass"
+    }
+  ],
+  "performance": {
+    "failed_report": "benchmarks/native-format/results-1784172609777.json",
+    "passing_format_report": "benchmarks/native-format/results-1784173236029.json",
+    "passing_lint_report": "benchmarks/native-lint/results-1784173318434.json",
+    "quadratic_to_linear_speedup": 198.37,
+    "sequential_mib_s": 105.93,
+    "default_thread_mib_s": 712.44,
+    "prettier_speedup": 63.81,
+    "fresh_stdin_p95_ms": 2.93,
+    "rss_ratio": 1.095
+  },
+  "deviations": [
+    "The current CLI accepts explicit files rather than globs/directories and uses default Oxfmt options; full config/discovery compatibility is intentionally later work.",
+    "The supported grammar is deliberately limited and every other known TSRX custom form errors before output/write."
+  ],
+  "scope_violation": {
+    "path": "benchmarks/native-lint/results-1784173318434.json",
+    "cause": "The required lint benchmark writes a timestamped report by default, but its output glob was absent from T016 allowed_files.",
+    "external": false,
+    "product_behavior_changed": false
+  },
+  "spawned_tasks": [
+    "T018"
+  ],
+  "remaining_blockers": [
+    "Complete authoritative TSRX grammar for lint and format",
+    "Oxfmt/Oxlint config and plugin compatibility",
+    "Vite/Vite+ command and plugin-chain integration",
+    "Editor activation, format-on-save, diagnostics, and code actions",
+    "Platform npm packaging and deliberate OXC upgrade lanes",
+    "Full temporary-copy Markless acceptance"
+  ],
+  "verification_attempts": 2,
+  "stopped_because": "GoalBuddy write-scope validation rejected the done transition until the fresh lint report is adopted by an explicitly scoped recovery Worker.",
+  "external_writes": false
+}

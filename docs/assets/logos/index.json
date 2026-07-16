@@ -1,0 +1,52 @@
+[
+  {
+    "id": 1,
+    "slug": "classic-text",
+    "name": "Classic (current) — monospace @{"
+  },
+  {
+    "id": 2,
+    "slug": "at-mark",
+    "name": "At mark — path-drawn @ on gradient"
+  },
+  {
+    "id": 3,
+    "slug": "at-brace",
+    "name": "At + brace — @ with a closing brace"
+  },
+  {
+    "id": 4,
+    "slug": "braces-bolt",
+    "name": "Braces + bolt — control flow between braces"
+  },
+  {
+    "id": 5,
+    "slug": "hex-at",
+    "name": "Hex crate — Rust hexagon with @"
+  },
+  {
+    "id": 6,
+    "slug": "diamond-brace",
+    "name": "Diamond — rotated square with brace"
+  },
+  {
+    "id": 7,
+    "slug": "one-parse-ring",
+    "name": "One-parse ring — open ring, single pass"
+  },
+  {
+    "id": 8,
+    "slug": "projection-stack",
+    "name": "Projection — lifted layer over outline"
+  },
+  {
+    "id": 9,
+    "slug": "dyn-tag",
+    "name": "Dynamic tag — angle brackets around braces"
+  },
+  {
+    "id": 10,
+    "slug": "prompt",
+    "name": "Prompt — @ with a cursor"
+  }
+]

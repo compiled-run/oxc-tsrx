@@ -1,0 +1,15 @@
+[package]
+name = "tsrx_lint"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+oxc_adapter = { path = "../oxc_adapter" }
+serde = { version = "1.0.228", features = ["derive"] }
+tsrx_syntax = { path = "../tsrx_syntax" }
+
+[lints]
+workspace = true

@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="OXC for TSRX logo candidate dyn-tag">
+  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+  <stop offset="0" stop-color="#a855f7"/>
+  <stop offset="0.55" stop-color="#7c3aed"/>
+  <stop offset="1" stop-color="#5b21b6"/>
+</linearGradient></defs>
+  <rect width="64" height="64" rx="15" fill="url(#g)"/>
+  <g fill="none" stroke="#fff" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M19 21 8.5 32 19 43"/>
+    <path d="M45 21 55.5 32 45 43"/>
+  </g>
+  <g opacity="0.95"><path fill="none" stroke="#fff" stroke-width="2.604" stroke-linecap="round" stroke-linejoin="round"
+     d="M27.72 22.7 c-2.79 0 -3.7199999999999998 1.55 -3.7199999999999998 3.7199999999999998 v3.1 c0 1.736 -1.116 2.48 -2.48 2.48 c1.364 0 2.48 0.744 2.48 2.48 v3.1 c0 2.17 0.9299999999999999 3.7199999999999998 3.7199999999999998 3.7199999999999998"/><path fill="none" stroke="#fff" stroke-width="2.604" stroke-linecap="round" stroke-linejoin="round"
+     d="M36.28 22.7 c2.79 0 3.7199999999999998 1.55 3.7199999999999998 3.7199999999999998 v3.1 c0 1.736 1.116 2.48 2.48 2.48 c-1.364 0 -2.48 0.744 -2.48 2.48 v3.1 c0 2.17 -0.9299999999999999 3.7199999999999998 -3.7199999999999998 3.7199999999999998"/></g>
+</svg>

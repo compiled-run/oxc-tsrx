@@ -1,0 +1,6 @@
+{
+  "rules": {
+    "no-debugger": "off",
+    "no-var": "error"
+  }
+}

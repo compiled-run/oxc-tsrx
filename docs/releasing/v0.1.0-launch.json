@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "version": "0.1.0",
+  "repository": "https://github.com/thejackshelton/oxc-tsrx",
+  "site": {
+    "url": "https://thejackshelton.github.io/oxc-tsrx/",
+    "artifact": "docs/dist",
+    "workflow": ".github/workflows/pages.yml",
+    "trigger": "workflow_dispatch",
+    "approvalInput": "DEPLOY WEBSITE 0.1.0"
+  },
+  "npm": {
+    "distTag": "next",
+    "publishOrder": [
+      "@oxc-tsrx/native-darwin-arm64",
+      "@oxc-tsrx/native-darwin-x64",
+      "@oxc-tsrx/native-linux-arm64-gnu",
+      "@oxc-tsrx/native-linux-x64-gnu",
+      "@oxc-tsrx/native-linux-arm64-musl",
+      "@oxc-tsrx/native-linux-x64-musl",
+      "@oxc-tsrx/native-win32-arm64-msvc",
+      "@oxc-tsrx/native-win32-x64-msvc",
+      "@oxc-tsrx/runtime",
+      "oxlint-tsrx",
+      "oxfmt-tsrx"
+    ],
+    "installPreview": "npm install -D oxlint-tsrx oxfmt-tsrx"
+  },
+  "vscode": {
+    "extensionId": "thejackshelton.oxc-tsrx-vscode",
+    "targets": [
+      "darwin-arm64",
+      "darwin-x64",
+      "linux-arm64",
+      "linux-x64",
+      "alpine-arm64",
+      "alpine-x64",
+      "win32-arm64",
+      "win32-x64"
+    ]
+  },
+  "social": {
+    "channel": "X",
+    "image": "docs/assets/social-card.png",
+    "text": "OXC for TSRX 0.1.0 is out: native Oxlint + Oxfmt for .tsrx, Vite/Vite+ commands, and format-on-save plus lint diagnostics in VS Code—without forking OXC. Install oxlint-tsrx + oxfmt-tsrx: https://thejackshelton.github.io/oxc-tsrx/"
+  },
+  "requiredApprovals": [
+    "repository-push",
+    "npm-publication",
+    "vscode-marketplace-publication",
+    "website-deployment",
+    "social-announcement"
+  ]
+}

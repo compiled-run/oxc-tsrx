@@ -1,0 +1,64 @@
+{
+  "goalbuddy_receipt_v1": {
+    "result": "done",
+    "task_id": "T034",
+    "harness": "codex",
+    "board_path": "/Users/jacksm5pro/dev/open-source/oxc-tsrx/docs/goals/oxc-for-tsrx/state.yaml",
+    "summary": "Regenerated the deterministic VS Code bundle legal inventory after the root lock stabilized, proved that exactly the two generated inventory summaries changed while all underlying legal texts remained byte-identical, verified all 12 bundled dependencies under the existing approved policy, and completed the full isolated owner clean-room oracle. The fresh workflow passed locked install, formatting, strict Clippy, 44 Rust tests, release build, 61 product/config/Vite/editor tests, 23 packaging/non-fork/legal tests, untouched-tarball installation, supported Vite+ minimum/current build and dev retransform, all 179 parser-valid Markless files, and an installed-VSIX format-on-save/diagnostics/code-action walkthrough. Markless fingerprints were identical before and after.",
+    "changed_files": [
+      "packages/vscode/licenses/BUNDLE_DEPENDENCIES.md",
+      "packages/vscode/licenses/bundle-dependencies.json",
+      "docs/acceptance/clean-room-report.json",
+      "docs/goals/oxc-for-tsrx/notes/T034-receipt.json"
+    ],
+    "commands": [
+      {
+        "cmd": "npm run licenses:vscode:generate",
+        "status": "pass",
+        "evidence": "Generated inventory for 12 bundled VS Code dependencies. Hash comparison found changes only in the Markdown and JSON generated summaries; every dependency legal text remained byte-identical."
+      },
+      {
+        "cmd": "npm run licenses:vscode:check",
+        "status": "pass",
+        "evidence": "Verified all 12 bundled VS Code dependency licenses against the stabilized package lock and extension bundle."
+      },
+      {
+        "cmd": "MARKLESS_ROOT=/Users/jacksm5pro/dev/open-source/markless node tests/acceptance/run.mjs",
+        "status": "pass",
+        "evidence": "Fresh isolated owner oracle passed from 2026-07-16T22:25:17.805Z through 2026-07-16T22:29:29.698Z; retained at docs/acceptance/clean-room-report.json."
+      },
+      {
+        "cmd": "node --test tests/acceptance/performance-contract.test.mjs tests/acceptance/ecosystem-contract.test.mjs",
+        "status": "pass",
+        "evidence": "3/3 aggregate performance identity/confidence and literal supported-Vite+ build/dev assertions passed."
+      }
+    ],
+    "artifacts": [
+      "packages/vscode/licenses/BUNDLE_DEPENDENCIES.md",
+      "packages/vscode/licenses/bundle-dependencies.json",
+      "docs/acceptance/clean-room-report.json"
+    ],
+    "evidence": [
+      "Clean-room source copy hash matched exactly, used fresh npm and Cargo state, and removed its disposable root after completion.",
+      "The owner workflow verified 205 locked Rust shipping licenses and 12 bundled VS Code dependency licenses.",
+      "The installed package workflow used untouched tarballs, no install scripts, no source-tree binary override, the exact native package, and reported zero audit findings.",
+      "Vite+ 0.1.24 and 0.2.4 each passed clean install, mixed lint/format, convergent check --fix, literal framework build, dev serving, and edit retransform.",
+      "The pinned Markless corpus recorded 191 tracked TSRX files: 179 parser-valid files formatted, reparsed, and converged; 12 parser-invalid files were rejected; raw style payloads remained byte-exact.",
+      "The packaged darwin-arm64 VSIX activated automatically, used its embedded native server, published exact authored diagnostics, performed real format-on-save, and applied an identity-safe code action.",
+      "Markless HEAD, tracked diff, staged diff, untracked-file count, and complete status fingerprint were identical before and after; external.unchanged is true."
+    ],
+    "deviations": [
+      "The workspace contains no Git metadata, so this receipt describes the current stabilized package lock rather than claiming a committed-worktree comparison.",
+      "The product suite currently reports 61 Node tests despite the clean-room label retaining its older '60-test' wording; all 61 passed."
+    ],
+    "remaining_blockers": [
+      "T999 must perform the final independent read-only requirement-by-requirement completion audit.",
+      "Repository creation/push, hosted eight-runner candidate production, npm publication, Marketplace publication, Pages deployment, and social posting remain separate approval-gated external actions."
+    ],
+    "external_writes": false,
+    "full_outcome_complete": false,
+    "verification_attempts": 1,
+    "stopped_because": null,
+    "recommended_next": "Activate T999 for the final read-only Judge audit against the complete fresh correctness, ecosystem, editor, Markless, legal, site, packaging, and performance evidence."
+  }
+}

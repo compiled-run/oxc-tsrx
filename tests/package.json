@@ -1,0 +1,19 @@
+{
+  "name": "@oxc-tsrx/test-fixtures",
+  "private": true,
+  "description": "Exact-pinned third-party fixtures for the black-box test, benchmark, and editor proof suites. Not published.",
+  "devDependencies": {
+    "@tsrx/vite-plugin-react": "0.0.72",
+    "@vscode/test-electron": "^3.0.0",
+    "@vscode/vsce": "^3.7.1",
+    "eslint": "^10.7.0",
+    "oxfmt-current": "npm:oxfmt@0.59.0",
+    "oxlint-current": "npm:oxlint@1.74.0",
+    "oxlint-tsgolint": "0.24.0",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "typescript-eslint": "^8.64.0",
+    "vite": "8.1.5",
+    "vite-plus-current": "npm:vite-plus@0.2.4"
+  }
+}

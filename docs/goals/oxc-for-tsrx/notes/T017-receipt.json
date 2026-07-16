@@ -1,0 +1,74 @@
+{
+  "result": "done",
+  "harness": "codex",
+  "decision": "approved",
+  "full_outcome_complete": false,
+  "rationale": "Current one-byte masking cannot support real Markless because 124 of 125 valid control nodes are direct JSX children. The largest safe next vertical is a flat Rust structural overlay plus checked expanded formatter projection and separate affine lint map for @if/@else and @for/@empty. It adds 39 valid tracked files and proves both reusable mapping/lift mechanisms before the materially different @try clause scaffold.",
+  "note": "docs/goals/oxc-for-tsrx/notes/T017-control-flow-overlay-decision.md",
+  "evidence": [
+    "Markless 76d0e6a07fa728b9343cc0d342fbe03813c43703: 191 tracked .tsrx; Markless-pinned and current Ripple parsers agree on 179 valid and 12 intentional/incomplete invalid fixtures",
+    "Pinned Markless HEAD bytes: target/release/oxc-tsrx-fmt accepts 104/179 valid files; all 75 valid feature-bearing files and all 12 parser-invalid files fail closed",
+    "Valid AST audit: @if 24/23 files, @for 47/34, @switch 3/3, @try 51/28, style 5/5, dynamic tag 1/1; 124/125 control nodes are direct JSX children",
+    "T018 retained correctness and performance receipt",
+    "Canonical OXC public parser/linter/formatter adapter at 8e0ed2ebb96137fb1611cdbd5742d5cb46037d40"
+  ],
+  "worker_package": {
+    "objective": "Implement the generalized compact Rust overlay and complete end-to-end @if/@else plus @for/@empty vertical across direct JSX-child, nested, and general expression positions. Deliver one-parse Oxfmt formatting with checked lift, mapped native OXC descendant lint diagnostics and identity-only fixes, the JSX-closing-tag scanner regression, provenance-recorded Markless/Ripple fixtures, read-only committed-HEAD corpus acceptance at exactly 143/179 valid files, and all existing correctness/performance gates without weakening thresholds.",
+    "allowed_files": [
+      "Cargo.toml",
+      "Cargo.lock",
+      "README.md",
+      "THIRD_PARTY_NOTICES.md",
+      "package.json",
+      "crates/oxc_adapter/**",
+      "crates/tsrx_syntax/**",
+      "crates/tsrx_format/**",
+      "crates/tsrx_lint/**",
+      "crates/oxc_tsrx_cli/**",
+      "crates/oxc_tsrx_benchmark/**",
+      "crates/oxc_tsrx_format_benchmark/**",
+      "tests/native-format.test.mjs",
+      "tests/native-lint.test.mjs",
+      "tests/native-control-format.test.mjs",
+      "tests/native-control-lint.test.mjs",
+      "tests/markless-control-corpus.test.mjs",
+      "tests/fixtures/control/**",
+      "tests/fixtures/format/**",
+      "tests/fixtures/lint/**",
+      "benchmarks/native-format/**",
+      "benchmarks/native-lint/**",
+      "docs/architecture/rust-oxc-core.md"
+    ],
+    "verify": [
+      "RED: OXFMT_BIN=node_modules/oxfmt-current/bin/oxfmt node --test tests/native-control-format.test.mjs",
+      "RED: OXLINT_BIN=node_modules/oxlint-current/bin/oxlint node --test tests/native-control-lint.test.mjs",
+      "cargo fmt --all -- --check",
+      "cargo clippy --workspace --all-targets --locked -- -D warnings",
+      "cargo test --workspace --locked",
+      "cargo build --release --locked -p oxc_tsrx_cli --bins",
+      "OXFMT_BIN=target/release/oxc-tsrx-fmt node --test tests/native-format.test.mjs tests/native-control-format.test.mjs",
+      "OXLINT_BIN=target/release/oxc-tsrx node --test tests/native-lint.test.mjs tests/native-control-lint.test.mjs",
+      "MARKLESS_ROOT=/Users/jacksm5pro/dev/open-source/markless OXFMT_BIN=target/release/oxc-tsrx-fmt node --test tests/markless-control-corpus.test.mjs",
+      "npm test",
+      "cargo run --release --locked -p oxc_tsrx_format_benchmark -- --assert benchmarks/native-format/budgets.json",
+      "cargo run --release --locked -p oxc_tsrx_benchmark -- --assert benchmarks/native-lint/budgets.json",
+      "cargo tree -p oxc_tsrx_cli --locked",
+      "node /Users/jacksm5pro/.codex/plugins/cache/goalbuddy/goalbuddy/0.4.0/skills/goal-prep/scripts/check-goal-state.mjs docs/goals/oxc-for-tsrx"
+    ],
+    "stop_if": [
+      "A legal projection requires source payload reordering, a second normal OXC parse, full AST conversion, per-node owned strings or boxes, a JavaScript hot-path AST, approximate diagnostic/fix mapping, or heuristic raw-text edits.",
+      "Lift cannot prove marker identity/order/nesting/scaffold adjacency and exact indentation removal after two evidence-based corrections.",
+      "Descendant diagnostic labels or safe fixes cannot be mapped exactly.",
+      "An OXC private API, source patch, fork, vendor snapshot, local checkout, or adapter leak is required.",
+      "Existing performance gates remain red after two evidence-based optimizations or a threshold would need weakening.",
+      "Work requires an external-repository write or a path outside allowed_files."
+    ]
+  },
+  "blocked_tasks": [],
+  "missing_evidence": [
+    "Expanded projection/lift indentation fidelity has not yet been proven",
+    "Affine lint mapping and synthetic-diagnostic suppression have not yet been proven",
+    "@switch, @try, dynamic tag, raw style, config/plugin/type-aware, Vite+, editor, packaging, upgrade, and final Markless proof remain required"
+  ],
+  "external_writes": false
+}

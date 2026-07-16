@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="OXC for TSRX logo candidate one-parse-ring">
+  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+  <stop offset="0" stop-color="#a855f7"/>
+  <stop offset="0.55" stop-color="#7c3aed"/>
+  <stop offset="1" stop-color="#5b21b6"/>
+</linearGradient></defs>
+  <path fill="none" stroke="url(#g)" stroke-width="9" stroke-linecap="round" d="M51.5 40.5 A21.5 21.5 0 1 1 49.5 19"/>
+  <circle cx="32" cy="32" r="6.5" fill="url(#g)"/>
+  <circle cx="53.5" cy="24.5" r="4.5" fill="#a855f7"/>
+</svg>

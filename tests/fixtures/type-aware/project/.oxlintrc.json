@@ -1,0 +1,17 @@
+{
+  "plugins": ["typescript"],
+  "rules": {
+    "typescript/no-floating-promises": "off"
+  },
+  "overrides": [
+    {
+      "files": ["**/*.tsrx"],
+      "rules": {
+        "typescript/no-floating-promises": "error"
+      }
+    }
+  ],
+  "options": {
+    "typeAware": true
+  }
+}

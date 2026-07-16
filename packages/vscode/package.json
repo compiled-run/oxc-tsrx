@@ -1,0 +1,107 @@
+{
+  "name": "oxc-tsrx-vscode",
+  "displayName": "OXC for TSRX",
+  "version": "0.1.0",
+  "description": "Native Oxlint and Oxfmt editor support for TSRX",
+  "homepage": "https://thejackshelton.github.io/oxc-tsrx/",
+  "publisher": "thejackshelton",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/thejackshelton/oxc-tsrx.git",
+    "directory": "packages/vscode"
+  },
+  "bugs": {
+    "url": "https://github.com/thejackshelton/oxc-tsrx/issues"
+  },
+  "keywords": [
+    "oxc",
+    "oxfmt",
+    "oxlint",
+    "tsrx",
+    "formatter",
+    "linter"
+  ],
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "categories": [
+    "Formatters",
+    "Linters",
+    "Programming Languages"
+  ],
+  "extensionKind": [
+    "workspace"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "Native project configuration and binaries run only in a trusted workspace."
+    }
+  },
+  "main": "./dist/extension.bundle.cjs",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "vsce": {
+    "dependencies": false
+  },
+  "activationEvents": [
+    "onLanguage:markless-tsrx",
+    "onLanguage:ripple",
+    "onLanguage:tsrx",
+    "workspaceContains:**/*.tsrx"
+  ],
+  "files": [
+    "dist",
+    "licenses",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "dependencies": {
+    "@oxc-tsrx/runtime": "0.1.0",
+    "vscode-languageclient": "10.1.0"
+  },
+  "contributes": {
+    "configuration": {
+      "title": "OXC for TSRX",
+      "properties": {
+        "oxcTsrx.enable": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable native OXC formatting and lint diagnostics for .tsrx files."
+        },
+        "oxcTsrx.server.path": {
+          "type": "string",
+          "default": "",
+          "scope": "machine-overridable",
+          "description": "Trusted absolute path to oxc-tsrx-lsp. Empty uses the installed platform-native package."
+        },
+        "oxcTsrx.typeAware": {
+          "type": "boolean",
+          "default": false,
+          "scope": "resource",
+          "description": "Enable opt-in TypeScript-Go lint rules in live diagnostics."
+        },
+        "oxcTsrx.typeCheck": {
+          "type": "boolean",
+          "default": false,
+          "scope": "resource",
+          "description": "Also publish TypeScript syntactic and semantic diagnostics. Implies type-aware linting."
+        },
+        "oxcTsrx.lint.configPath": {
+          "type": "string",
+          "default": "",
+          "scope": "resource",
+          "description": "Optional Oxlint JSON/JSONC config path, resolved from each workspace root."
+        },
+        "oxcTsrx.format.configPath": {
+          "type": "string",
+          "default": "",
+          "scope": "resource",
+          "description": "Optional Oxfmt JSON/JSONC config path, resolved from each workspace root."
+        }
+      }
+    }
+  }
+}

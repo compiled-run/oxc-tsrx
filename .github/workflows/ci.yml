@@ -1,0 +1,130 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "1"
+  npm_config_audit: "false"
+  npm_config_fund: "false"
+
+jobs:
+  correctness:
+    name: Node ${{ matrix.node }} / Rust ${{ matrix.rust }} (${{ matrix.lane }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - lane: node-20-floor
+            node: 20.19.0
+            rust: 1.95.0
+          - lane: node-22-floor
+            node: 22.12.0
+            rust: 1.95.0
+          - lane: current
+            node: 24.15.0
+            rust: 1.97.0
+    steps:
+      - name: Check out the exact source revision
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Install the pinned Node.js lane
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - name: Install the pinned Rust lane
+        shell: bash
+        run: |
+          rustup toolchain install "${{ matrix.rust }}" --profile minimal --component clippy,rustfmt
+          rustup default "${{ matrix.rust }}"
+          rustc -Vv
+          cargo -V
+
+      - name: Install the locked JavaScript graph without lifecycle scripts
+        run: npm ci --ignore-scripts
+
+      - name: Verify lockfiles, source boundaries, licenses, and formatting
+        shell: bash
+        run: |
+          cargo metadata --locked --format-version 1 > /dev/null
+          cargo fmt --all -- --check
+          npm run licenses:check
+          node --test tests/packaging/boundary.test.mjs
+
+      - name: Lint and test the Rust workspace
+        shell: bash
+        run: |
+          cargo clippy --workspace --all-targets --locked -- -D warnings
+          cargo test --workspace --all-targets --locked
+
+      - name: Build the three distributable native executables
+        run: cargo build --release --locked -p oxc_tsrx_cli --bins
+
+      - name: Test the product and package contracts
+        shell: bash
+        run: |
+          npm test
+          npm run test:packaging:unit
+
+  supported-vite-plus:
+    name: Clean install / Vite+ 0.1.24 and 0.2.4
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - name: Check out the exact source revision
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Install Node.js 24.15.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.15.0
+          cache: npm
+
+      - name: Install Rust 1.95.0
+        shell: bash
+        run: |
+          rustup toolchain install 1.95.0 --profile minimal
+          rustup default 1.95.0
+
+      - name: Install locked development dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Build release binaries
+        run: cargo build --release --locked -p oxc_tsrx_cli --bins
+
+      - name: Exercise untouched tarballs in an empty consumer
+        env:
+          OXC_TSRX_RETAIN_CLEAN_INSTALL_REPORT: "1"
+        run: node --test tests/packaging/clean-install.test.mjs
+
+      - name: Exercise the supported Vite+ minimum and current lanes
+        env:
+          OXC_TSRX_RETAIN_MATRIX_REPORT: "1"
+        run: node --test tests/packaging/vite-plus-matrix.test.mjs
+
+      - name: Retain consumer evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: supported-consumer-reports
+          path: |
+            tests/packaging/clean-install-report.json
+            tests/packaging/vite-plus-matrix-report.json
+          if-no-files-found: error
+          retention-days: 14

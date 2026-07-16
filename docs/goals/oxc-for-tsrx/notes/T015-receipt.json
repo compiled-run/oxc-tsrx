@@ -1,0 +1,67 @@
+{
+  "result": "done",
+  "task_id": "T015",
+  "board_path": "docs/goals/oxc-for-tsrx/state.yaml",
+  "harness": "codex",
+  "decision": "approved",
+  "full_outcome_complete": false,
+  "rationale": "The Rust lint foundation and canonical Oxfmt AST-in seam are proven, while the current lexical overlay is too fragile for an honest formatter claim. T016 therefore combines bounded scanner hardening with a user-visible native formatter for the real Markless-shaped @{ plus statement @if/@else subset. Collision-checked markers, one canonical Oxfmt parse, verified lift, atomic writes, ordinary-file bypass, and performance gates make this a coherent vertical. Complete TSRX grammar, Vite+, editor, packaging, config/plugins, upgrade lanes, and full Markless acceptance remain required.",
+  "worker_package": {
+    "objective": "Deliver the first production native formatter vertical: canonical Oxfmt formatting for ordinary JS/TS/JSX/TSX and for Markless-derived .tsrx containing @{ plus statement-position @if/@else, exposed through a Rust in-memory API and an oxfmt-like stdin/check/write/multi-file CLI. Harden lexical recognition for regex, template interpolation, JSX text/attributes, comments, decorators, Unicode, and marker collisions; reject all unsupported or ambiguous TSRX forms before writing; prove idempotence, source preservation, ordinary Oxfmt parity, fail-atomic behavior, and frozen P04/P05/P07 performance with red-first tests.",
+    "allowed_files": [
+      "Cargo.toml",
+      "Cargo.lock",
+      "README.md",
+      "THIRD_PARTY_NOTICES.md",
+      "package.json",
+      "crates/oxc_adapter/**",
+      "crates/tsrx_syntax/**",
+      "crates/tsrx_format/**",
+      "crates/oxc_tsrx_cli/**",
+      "crates/oxc_tsrx_format_benchmark/**",
+      "tests/native-format.test.mjs",
+      "tests/fixtures/format/**",
+      "benchmarks/native-format/**",
+      "docs/architecture/rust-oxc-core.md"
+    ],
+    "verify": [
+      "RED: OXFMT_BIN=node_modules/oxfmt-current/bin/oxfmt node --test tests/native-format.test.mjs",
+      "cargo fmt --all -- --check",
+      "cargo clippy --workspace --all-targets --locked -- -D warnings",
+      "cargo test --workspace --locked",
+      "cargo build --release --locked -p oxc_tsrx_cli --bins",
+      "OXFMT_BIN=target/release/oxc-tsrx-fmt node --test tests/native-format.test.mjs",
+      "OXLINT_BIN=target/release/oxc-tsrx node --test tests/native-lint.test.mjs",
+      "cargo run --release --locked -p oxc_tsrx_format_benchmark -- --assert benchmarks/native-format/budgets.json",
+      "cargo run --release --locked -p oxc_tsrx_benchmark -- --assert benchmarks/native-lint/budgets.json",
+      "node /Users/jacksm5pro/.codex/plugins/cache/goalbuddy/goalbuddy/0.4.0/skills/goal-prep/scripts/check-goal-state.mjs docs/goals/oxc-for-tsrx"
+    ],
+    "stop_if": [
+      "Canonical Oxfmt drops, duplicates, reorders, or mutates collision-free markers such that checked lifting cannot preserve the supported syntax without private OXC APIs or a custom formatter fork.",
+      "Any supported fixture loses, duplicates, or reorders syntax, comments, Unicode, JSX text, or template content, or remains non-idempotent after two evidence-based corrections.",
+      "The supported path requires a second OXC parse, full AST conversion, whole-AST JS materialization, an OXC source patch/fork/copy, or a production JavaScript/Zig language core.",
+      "Release P04/P05/P07 exceeds a frozen threshold after two evidence-based native optimizations, or an ordinary standard-file path performs a TSRX scan/projection.",
+      "A required write is outside allowed_files or outside this repository."
+    ]
+  },
+  "evidence": [
+    "docs/goals/oxc-for-tsrx/notes/T015-formatter-slice-decision.md",
+    "crates/tsrx_syntax/src/lib.rs",
+    "crates/oxc_adapter/src/lib.rs",
+    "/tmp/oxc-tsrx-t010/src/main.rs",
+    "/Users/jacksm5pro/.cargo/git/checkouts/oxc-2492aa67f5b41d4f/8e0ed2e/crates/oxc_formatter/src/lib.rs",
+    "/Users/jacksm5pro/dev/open-source/markless/poc/fixtures/proofs/ios-native-rendering-target/src/App.tsrx",
+    "/Users/jacksm5pro/dev/open-source/ripple/packages/tsrx/src/plugin.js"
+  ],
+  "blocked_tasks": [],
+  "missing_evidence": [
+    "Complete TSRX grammar format/lint behavior",
+    "Vite/Vite+ integration",
+    "Editor format-on-save/live diagnostics",
+    "Installable platform packages and OXC upgrade lanes",
+    "Full temporary-copy Markless acceptance"
+  ],
+  "required_board_updates": [
+    "Create and activate T016 from worker_package; keep T999 queued."
+  ]
+}

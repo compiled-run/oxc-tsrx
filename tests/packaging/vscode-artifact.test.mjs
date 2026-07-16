@@ -1,0 +1,124 @@
+import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
+import { createRequire } from "node:module";
+import { mkdtemp, readFile, stat } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import test from "node:test";
+
+const require = createRequire(import.meta.url);
+const yauzl = require("yauzl");
+const root = resolve(import.meta.dirname, "../..");
+
+function hostTarget() {
+  if (process.platform === "darwin") {
+    return `${process.arch === "arm64" ? "aarch64" : "x86_64"}-apple-darwin`;
+  }
+  if (process.platform === "win32") {
+    return `${process.arch === "arm64" ? "aarch64" : "x86_64"}-pc-windows-msvc`;
+  }
+  if (process.platform === "linux" && ["arm64", "x64"].includes(process.arch)) {
+    const architecture = process.arch === "arm64" ? "aarch64" : "x86_64";
+    const libc = process.report?.getReport?.().header?.glibcVersionRuntime ? "gnu" : "musl";
+    return `${architecture}-unknown-linux-${libc}`;
+  }
+  throw new Error(`unsupported VSIX-test host ${process.platform}-${process.arch}`);
+}
+
+function run(executable, args, options = {}) {
+  return new Promise((resolveRun, rejectRun) => {
+    execFile(executable, args, { cwd: options.cwd ?? root }, (error, stdout, stderr) => {
+      if (error) rejectRun(new Error(stderr || stdout, { cause: error }));
+      else resolveRun({ stdout, stderr });
+    });
+  });
+}
+
+function readZip(path) {
+  return new Promise((resolveZip, rejectZip) => {
+    yauzl.open(path, { lazyEntries: true }, (openError, zip) => {
+      if (openError) return rejectZip(openError);
+      const entries = new Map();
+      zip.on("error", rejectZip);
+      zip.on("end", () => resolveZip(entries));
+      zip.on("entry", (entry) => {
+        if (entry.fileName.endsWith("/")) {
+          zip.readEntry();
+          return;
+        }
+        zip.openReadStream(entry, (streamError, stream) => {
+          if (streamError) return rejectZip(streamError);
+          const chunks = [];
+          stream.on("data", (chunk) => chunks.push(chunk));
+          stream.on("error", rejectZip);
+          stream.on("end", () => {
+            entries.set(entry.fileName, Buffer.concat(chunks));
+            zip.readEntry();
+          });
+        });
+      });
+      zip.readEntry();
+    });
+  });
+}
+
+test("platform VSIX embeds exactly the matching native language server and notices", async () => {
+  const output = await mkdtemp(join(tmpdir(), "oxc-tsrx-vsix-artifacts-"));
+  const executable = join(
+    root,
+    "target/release",
+    process.platform === "win32" ? "oxc-tsrx-lsp.exe" : "oxc-tsrx-lsp",
+  );
+  const result = await run(process.execPath, [
+    "scripts/package-vscode.mjs",
+    "--target",
+    hostTarget(),
+    "--lsp-bin",
+    executable,
+    "--out-dir",
+    output,
+  ]);
+  const packaged = JSON.parse(result.stdout);
+  assert.equal(packaged.target, hostTarget());
+  assert.equal(packaged.extensionId, "thejackshelton.oxc-tsrx-vscode");
+  assert.ok((await stat(packaged.vsix)).size <= 12 * 1024 * 1024);
+
+  const entries = await readZip(packaged.vsix);
+  const suffix = process.platform === "win32" ? ".exe" : "";
+  const nativePath = `extension/dist/native/oxc-tsrx-lsp${suffix}`;
+  assert.ok(entries.has(nativePath));
+  assert.ok(entries.has("extension/dist/native/manifest.json"));
+  assert.ok(entries.has("extension/dist/native/LICENSE"));
+  assert.ok(entries.has("extension/dist/native/THIRD_PARTY_NOTICES.md"));
+  assert.ok(entries.has("extension/THIRD_PARTY_NOTICES.md"));
+  assert.equal([...entries.keys()].some((name) => name.includes("node_modules/")), false);
+  assert.equal([...entries.keys()].some((name) => /dist\/native\/oxc-tsrx-fmt/.test(name)), false);
+  assert.equal(
+    [...entries.keys()].some((name) => /dist\/native\/oxc-tsrx(?:\.exe)?$/.test(name)),
+    false,
+  );
+  assert.match(
+    entries.get("extension.vsixmanifest").toString("utf8"),
+    new RegExp(`TargetPlatform="${packaged.vscodeTarget}"`),
+  );
+
+  const packageManifest = JSON.parse(entries.get("extension/package.json"));
+  for (const setting of [
+    "oxcTsrx.typeAware",
+    "oxcTsrx.typeCheck",
+    "oxcTsrx.lint.configPath",
+    "oxcTsrx.format.configPath",
+  ]) {
+    assert.equal(packageManifest.contributes.configuration.properties[setting].scope, "resource");
+  }
+
+  const manifest = JSON.parse(entries.get("extension/dist/native/manifest.json"));
+  assert.equal(manifest.target, hostTarget());
+  assert.equal(manifest.oxcRevision, "8e0ed2ebb96137fb1611cdbd5742d5cb46037d40");
+  assert.equal(manifest.binary, `oxc-tsrx-lsp${suffix}`);
+  const sourceHash = createHash("sha256").update(await readFile(executable)).digest("hex");
+  const packagedHash = createHash("sha256").update(entries.get(nativePath)).digest("hex");
+  assert.equal(manifest.sha256, sourceHash);
+  assert.equal(packagedHash, sourceHash);
+});

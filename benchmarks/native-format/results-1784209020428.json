@@ -1,0 +1,582 @@
+{
+  "schemaVersion": 2,
+  "generatedAtUnixMs": 1784209020428,
+  "host": {
+    "os": "macos",
+    "architecture": "aarch64",
+    "rustc": "rustc 1.95.0 (59807616e 2026-04-14)",
+    "system": "Darwin Jacks-MacBook-Pro.local 25.5.0 Darwin Kernel Version 25.5.0: Mon Apr 27 20:41:12 PDT 2026; root:xnu-12377.121.6~2/RELEASE_ARM64_T6050 arm64",
+    "buildProfile": "release (codegen-units=1, thin LTO, panic=abort, stripped)",
+    "oxcRevision": "8e0ed2ebb96137fb1611cdbd5742d5cb46037d40",
+    "stockOxfmtVersion": "Version: 0.59.0"
+  },
+  "budgets": {
+    "schemaVersion": 2,
+    "warmups": 5,
+    "samples": 30,
+    "generalizedControlWarmups": 2,
+    "generalizedControlSamples": 10,
+    "batchWarmups": 2,
+    "batchSamples": 10,
+    "coldProcessSamples": 20,
+    "rssProcessSamples": 5,
+    "corpusTargetBytes": 1048576,
+    "generalizedControlTargetBytes": 262144,
+    "batchCorpusTargetBytes": 16777216,
+    "memoryCorpusTargetBytes": 8388608,
+    "candidateBinary": "target/release/oxc-tsrx-fmt",
+    "stockOxfmtBinary": "node_modules/oxfmt-current/bin/oxfmt",
+    "p04": {
+      "directMedianLatencyRatioMax": 1.05,
+      "directP95LatencyRatioMax": 1.08,
+      "sequentialMedianMibPerSecondMin": 15.0,
+      "sequentialP95MibPerSecondMin": 12.0,
+      "prettierSpeedupMin": 10.0,
+      "defaultThreadMibPerSecondMin": 100.0,
+      "generalizedControlMedianMibPerSecondMin": 15.0,
+      "generalizedControlP95MibPerSecondMin": 12.0,
+      "generalizedControlScalingRatioMax": 1.35
+    },
+    "p05": {
+      "stdinP95MsMax": 110.0,
+      "upstreamLatencyRatioMax": 1.25
+    },
+    "p07": {
+      "upstreamRatioMax": 1.15
+    }
+  },
+  "corpus": {
+    "bytes": 1049086,
+    "equivalentTsxBytes": 1049086,
+    "fnv1a64": "1986613a3c555b65",
+    "structuralForms": [
+      "@{",
+      "@if",
+      "@else"
+    ],
+    "note": "Retained statement-control corpus for comparison with earlier formatter reports."
+  },
+  "generalizedControlCorpus": {
+    "bytes": 262339,
+    "halfBytes": 131516,
+    "fnv1a64": "ee30862dabc592f4",
+    "structuralForms": [
+      "@{",
+      "@if",
+      "@else",
+      "@for",
+      "@empty",
+      "index/key",
+      "@switch/@case/@default",
+      "@try/@pending/@catch",
+      "<{dynamic}>",
+      "<style>"
+    ],
+    "dynamicTagCount": 394,
+    "stylePayloadCount": 197,
+    "note": "Repeated direct JSX-child, nested, expression, annotated loop, switch, source-order try, nested dynamic-tag, and raw-style forms."
+  },
+  "p04": {
+    "canonicalDirectControl": {
+      "samples": 60,
+      "p50Ns": 4827375,
+      "p95Ns": 5177333,
+      "p99Ns": 5387791,
+      "p50Ms": 4.827375,
+      "p95Ms": 5.177333,
+      "p99Ms": 5.387791,
+      "medianMibPerSecond": 207.25267332688412,
+      "p95MibPerSecond": 193.24358195645658
+    },
+    "candidateStandardDirect": {
+      "samples": 30,
+      "p50Ns": 4760709,
+      "p95Ns": 4900000,
+      "p99Ns": 4908875,
+      "p50Ms": 4.760709,
+      "p95Ms": 4.9,
+      "p99Ms": 4.908875,
+      "medianMibPerSecond": 210.1549105188675,
+      "p95MibPerSecond": 204.18089263293209
+    },
+    "directMedianLatencyRatio": 0.9861900100986561,
+    "directP95LatencyRatio": 0.9464332311636127,
+    "directOutputParity": true,
+    "directBypass": true,
+    "candidateTsrxSequential": {
+      "samples": 30,
+      "p50Ns": 7405792,
+      "p95Ns": 7709333,
+      "p99Ns": 7818917,
+      "p50Ms": 7.405792,
+      "p95Ms": 7.709333,
+      "p99Ms": 7.818917,
+      "medianMibPerSecond": 135.0951220208949,
+      "p95MibPerSecond": 129.7759966914605
+    },
+    "prettierBaselineMibPerSecond": 1.66,
+    "prettierSpeedup": 81.38260362704513,
+    "candidateDefaultThreadBatch": {
+      "samples": 10,
+      "p50Ns": 17695041,
+      "p95Ns": 18532958,
+      "p99Ns": 18532958,
+      "p50Ms": 17.695041,
+      "p95Ms": 18.532958,
+      "p99Ms": 18.532958,
+      "medianMibPerSecond": 906.4846587880186,
+      "p95MibPerSecond": 865.5004345838911
+    },
+    "generalizedControl": {
+      "candidateGeneralizedControl": {
+        "samples": 10,
+        "p50Ns": 11663667,
+        "p95Ns": 11940708,
+        "p99Ns": 11940708,
+        "p50Ms": 11.663667,
+        "p95Ms": 11.940708,
+        "p99Ms": 11.940708,
+        "medianMibPerSecond": 21.45002652182193,
+        "p95MibPerSecond": 20.952356132626242
+      },
+      "candidateGeneralizedControlHalf": {
+        "samples": 10,
+        "p50Ns": 5831334,
+        "p95Ns": 5981250,
+        "p99Ns": 5981250,
+        "p50Ms": 5.831334,
+        "p95Ms": 5.98125,
+        "p99Ms": 5.98125,
+        "medianMibPerSecond": 21.508531563529782,
+        "p95MibPerSecond": 20.969434716235632
+      },
+      "generalizedControlScalingRatio": 1.002727504399509,
+      "generalizedControlIdempotent": true,
+      "generalizedControlParseCount": 1,
+      "generalizedControlEmbeddedParseCount": 0,
+      "generalizedControlEmbeddedFormatNs": 0,
+      "generalizedControlStyleCount": 197
+    },
+    "idempotent": true,
+    "parseCount": 1
+  },
+  "p05": {
+    "candidateTsrxStdin": {
+      "samples": 20,
+      "p50Ns": 2811750,
+      "p95Ns": 3033750,
+      "p99Ns": 3044875,
+      "p50Ms": 2.81175,
+      "p95Ms": 3.03375,
+      "p99Ms": 3.044875,
+      "medianMibPerSecond": 355.82337473152563,
+      "p95MibPerSecond": 329.7853725262026
+    },
+    "stockOxfmtTsxStdin": {
+      "samples": 20,
+      "p50Ns": 86824792,
+      "p95Ns": 87928042,
+      "p99Ns": 88996291,
+      "p50Ms": 86.824792,
+      "p95Ms": 87.928042,
+      "p99Ms": 88.996291,
+      "medianMibPerSecond": 11.523049475331506,
+      "p95MibPerSecond": 11.37846756443601
+    },
+    "p95LatencyRatio": 0.034502644787654885,
+    "freshProcesses": true,
+    "completeOutputProduced": true
+  },
+  "p07": {
+    "candidateTsrxRssBytes": [
+      207405056,
+      207405056,
+      208814080,
+      207405056,
+      207388672
+    ],
+    "canonicalTsxRssBytes": [
+      181469184,
+      181485568,
+      181485568,
+      181469184,
+      181485568
+    ],
+    "candidateTsrxMedianRssBytes": 207405056,
+    "canonicalTsxMedianRssBytes": 181485568,
+    "rssRatio": 1.1428184526496343,
+    "measurement": "fresh benchmark child after complete in-memory formatted output production"
+  },
+  "rawSamples": {
+    "directControlBeforeNs": [
+      4692208,
+      4766084,
+      4662250,
+      4899500,
+      4901917,
+      4739000,
+      4769875,
+      5018750,
+      4817125,
+      4816208,
+      4930875,
+      4789459,
+      4832875,
+      4820000,
+      4828000,
+      4778500,
+      4758166,
+      4670542,
+      4684458,
+      4615958,
+      4676625,
+      4877291,
+      4741125,
+      4753542,
+      5032791,
+      4904625,
+      4902125,
+      4759292,
+      4816709,
+      4775041
+    ],
+    "directControlAfterNs": [
+      5003041,
+      4634958,
+      4874958,
+      4839042,
+      4663208,
+      4941292,
+      5041209,
+      4623417,
+      5278625,
+      4980250,
+      5109666,
+      5387791,
+      5062666,
+      4827375,
+      4889500,
+      4848917,
+      4574750,
+      4962542,
+      4741167,
+      4651875,
+      4836791,
+      4718208,
+      4991916,
+      4870250,
+      4780209,
+      5039250,
+      4739459,
+      5112500,
+      5177333,
+      5279416
+    ],
+    "candidateStandardNs": [
+      4599875,
+      4631708,
+      4620125,
+      4809958,
+      4688000,
+      4746041,
+      4668625,
+      4819083,
+      4900000,
+      4648959,
+      4793834,
+      4853625,
+      4695208,
+      4860458,
+      4861250,
+      4779750,
+      4831958,
+      4605209,
+      4705542,
+      4650208,
+      4831708,
+      4835000,
+      4908875,
+      4713125,
+      4783500,
+      4760709,
+      4708583,
+      4860083,
+      4769625,
+      4671750
+    ],
+    "candidateTsrxSequentialNs": [
+      7310917,
+      7469166,
+      7500375,
+      7430584,
+      7205500,
+      7664250,
+      7338416,
+      7193417,
+      7482708,
+      7115667,
+      7421167,
+      7709333,
+      7690458,
+      7307375,
+      7818917,
+      7288375,
+      7405792,
+      7398125,
+      7588542,
+      7370250,
+      7517541,
+      7397667,
+      7406000,
+      7428083,
+      7251792,
+      7432333,
+      7328125,
+      7257666,
+      7280958,
+      7564084
+    ],
+    "candidateGeneralizedControlNs": [
+      11928833,
+      11663667,
+      11718375,
+      11782375,
+      11837875,
+      11623500,
+      11356750,
+      11940708,
+      11443542,
+      11593958
+    ],
+    "candidateGeneralizedControlHalfNs": [
+      5949833,
+      5831334,
+      5832458,
+      5981250,
+      5693417,
+      5851833,
+      5744209,
+      5934875,
+      5658459,
+      5823708
+    ],
+    "candidateBatchNs": [
+      17430834,
+      17635125,
+      17513500,
+      17997417,
+      18052500,
+      17760292,
+      17828791,
+      17566000,
+      18532958,
+      17695041
+    ],
+    "candidateStdinNs": [
+      2331209,
+      2591708,
+      2686375,
+      2857458,
+      3025000,
+      3044875,
+      3005459,
+      2910250,
+      2865958,
+      2841333,
+      2835834,
+      2767792,
+      2779416,
+      2895833,
+      2769708,
+      2811750,
+      3033750,
+      2152167,
+      2690708,
+      2623458
+    ],
+    "stockStdinNs": [
+      81890333,
+      87334000,
+      86606542,
+      86850250,
+      87537584,
+      85991916,
+      86632625,
+      86891875,
+      86949500,
+      86335500,
+      88996291,
+      86921417,
+      87303833,
+      86951000,
+      87928042,
+      86779291,
+      86824792,
+      83277917,
+      84861083,
+      86439500
+    ]
+  },
+  "assertions": [
+    {
+      "name": "p04_direct_median_ratio",
+      "comparison": "candidate standard median / canonical formatter median",
+      "observed": 0.9861900100986561,
+      "threshold": 1.05,
+      "pass": true
+    },
+    {
+      "name": "p04_direct_p95_ratio",
+      "comparison": "candidate standard p95 / canonical formatter p95",
+      "observed": 0.9464332311636127,
+      "threshold": 1.08,
+      "pass": true
+    },
+    {
+      "name": "p04_direct_output_parity",
+      "comparison": "required boolean invariant",
+      "observed": 1.0,
+      "threshold": 1.0,
+      "pass": true
+    },
+    {
+      "name": "p04_direct_bypass",
+      "comparison": "required boolean invariant",
+      "observed": 1.0,
+      "threshold": 1.0,
+      "pass": true
+    },
+    {
+      "name": "p04_sequential_median_mib_s",
+      "comparison": "complete TSRX format median throughput",
+      "observed": 135.0951220208949,
+      "threshold": 15.0,
+      "pass": true
+    },
+    {
+      "name": "p04_sequential_p95_mib_s",
+      "comparison": "complete TSRX format throughput at p95 latency",
+      "observed": 129.7759966914605,
+      "threshold": 12.0,
+      "pass": true
+    },
+    {
+      "name": "p04_prettier_speedup",
+      "comparison": "candidate median / retained Prettier 1.66 MiB/s",
+      "observed": 81.38260362704513,
+      "threshold": 10.0,
+      "pass": true
+    },
+    {
+      "name": "p04_default_thread_mib_s",
+      "comparison": "complete multi-file --check throughput at p95 latency",
+      "observed": 865.5004345838911,
+      "threshold": 100.0,
+      "pass": true
+    },
+    {
+      "name": "p04_generalized_control_median_mib_s",
+      "comparison": "complete nested/control/dynamic/style format median throughput",
+      "observed": 21.45002652182193,
+      "threshold": 15.0,
+      "pass": true
+    },
+    {
+      "name": "p04_generalized_control_p95_mib_s",
+      "comparison": "complete nested/control/dynamic/style format throughput at p95 latency",
+      "observed": 20.952356132626242,
+      "threshold": 12.0,
+      "pass": true
+    },
+    {
+      "name": "p04_generalized_control_linear_scaling",
+      "comparison": "full/half median latency normalized by corpus byte ratio",
+      "observed": 1.002727504399509,
+      "threshold": 1.35,
+      "pass": true
+    },
+    {
+      "name": "p04_generalized_control_idempotent",
+      "comparison": "required boolean invariant",
+      "observed": 1.0,
+      "threshold": 1.0,
+      "pass": true
+    },
+    {
+      "name": "p04_generalized_control_one_parse",
+      "comparison": "required boolean invariant",
+      "observed": 1.0,
+      "threshold": 1.0,
+      "pass": true
+    },
+    {
+      "name": "p04_generalized_dynamic_style_coverage",
+      "comparison": "required boolean invariant",
+      "observed": 1.0,
+      "threshold": 1.0,
+      "pass": true
+    },
+    {
+      "name": "p04_generalized_style_metadata",
+      "comparison": "required boolean invariant",
+      "observed": 1.0,
+      "threshold": 1.0,
+      "pass": true
+    },
+    {
+      "name": "p04_generalized_no_hidden_embedded_parse",
+      "comparison": "required boolean invariant",
+      "observed": 1.0,
+      "threshold": 1.0,
+      "pass": true
+    },
+    {
+      "name": "p04_idempotent",
+      "comparison": "required boolean invariant",
+      "observed": 1.0,
+      "threshold": 1.0,
+      "pass": true
+    },
+    {
+      "name": "p04_one_parse",
+      "comparison": "required boolean invariant",
+      "observed": 1.0,
+      "threshold": 1.0,
+      "pass": true
+    },
+    {
+      "name": "p05_stdin_p95_ms",
+      "comparison": "fresh candidate TSRX stdin p95 milliseconds",
+      "observed": 3.03375,
+      "threshold": 110.0,
+      "pass": true
+    },
+    {
+      "name": "p05_upstream_ratio",
+      "comparison": "candidate TSRX stdin p95 / stock Oxfmt TSX stdin p95",
+      "observed": 0.034502644787654885,
+      "threshold": 1.25,
+      "pass": true
+    },
+    {
+      "name": "p05_complete_output",
+      "comparison": "required boolean invariant",
+      "observed": 1.0,
+      "threshold": 1.0,
+      "pass": true
+    },
+    {
+      "name": "p07_rss_ratio",
+      "comparison": "candidate TSRX RSS / canonical TSX RSS",
+      "observed": 1.1428184526496343,
+      "threshold": 1.15,
+      "pass": true
+    }
+  ],
+  "passed": true,
+  "limitations": [
+    "The generalized corpus covers every supported control family plus repeated nested dynamic tags and byte-preserved raw style; CSS payload formatting and validation are intentionally outside this lane.",
+    "Fresh stdin compares project TSRX behavior with stock Oxfmt on equivalent TSX, not stock .tsrx support.",
+    "RSS uses same-binary canonical TSX as the engine control so Node launcher memory cannot distort P07."
+  ]
+}

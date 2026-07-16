@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="OXC for TSRX logo candidate projection-stack">
+  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+  <stop offset="0" stop-color="#a855f7"/>
+  <stop offset="0.55" stop-color="#7c3aed"/>
+  <stop offset="1" stop-color="#5b21b6"/>
+</linearGradient></defs>
+  <rect x="17" y="7" width="40" height="40" rx="11" fill="none" stroke="url(#g)" stroke-width="3.5"/>
+  <rect x="7" y="17" width="40" height="40" rx="11" fill="url(#g)"/>
+  <g transform="translate(-5 5)"><path fill="none" stroke="#fff" stroke-width="3.3600000000000003" stroke-linecap="round" stroke-linejoin="round"
+     d="M28.8 20 c-3.6 0 -4.800000000000001 2 -4.800000000000001 4.800000000000001 v4 c0 2.2399999999999998 -1.4400000000000002 3.2 -3.2 3.2 c1.7600000000000002 0 3.2 0.96 3.2 3.2 v4 c0 2.8000000000000003 1.2000000000000002 4.800000000000001 4.800000000000001 4.800000000000001"/><path fill="none" stroke="#fff" stroke-width="3.3600000000000003" stroke-linecap="round" stroke-linejoin="round"
+     d="M35.2 20 c3.6 0 4.800000000000001 2 4.800000000000001 4.800000000000001 v4 c0 2.2399999999999998 1.4400000000000002 3.2 3.2 3.2 c-1.7600000000000002 0 -3.2 0.96 -3.2 3.2 v4 c0 2.8000000000000003 -1.2000000000000002 4.800000000000001 -4.800000000000001 4.800000000000001"/></g>
+</svg>

@@ -1,0 +1,337 @@
+import assert from "node:assert/strict";
+import { execFile, spawn } from "node:child_process";
+import http from "node:http";
+import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, relative, resolve, sep } from "node:path";
+import test from "node:test";
+
+const root = resolve(import.meta.dirname, "../..");
+const origin = "https://thejackshelton.github.io";
+const base = "/oxc-tsrx/";
+const siteUrl = `${origin}${base}`;
+
+function run(executable, args, options = {}) {
+  return new Promise((resolveRun, rejectRun) => {
+    execFile(
+      executable,
+      args,
+      {
+        cwd: root,
+        env: options.env ?? process.env,
+        maxBuffer: 32 * 1024 * 1024,
+      },
+      (error, stdout, stderr) => {
+        if (error) rejectRun(new Error(stderr || stdout, { cause: error }));
+        else resolveRun({ stdout, stderr });
+      },
+    );
+  });
+}
+
+async function filesUnder(directory) {
+  const files = [];
+  async function visit(current) {
+    for (const entry of await readdir(current, { withFileTypes: true })) {
+      const path = join(current, entry.name);
+      if (entry.isDirectory()) await visit(path);
+      else files.push(path);
+    }
+  }
+  await visit(directory);
+  return files.sort();
+}
+
+async function buildTemporarySite() {
+  const outDir = await mkdtemp(join(tmpdir(), "oxc-tsrx-site-"));
+  const result = await run(process.execPath, ["docs/build.mjs"], {
+    env: { ...process.env, OXC_TSRX_DOCS_OUT_DIR: outDir },
+  });
+  return { outDir, result };
+}
+
+function request(port, { path = "/oxc-tsrx/demo-capabilities.json", method = "GET", headers = {}, body = "" } = {}) {
+  return new Promise((resolveRequest, rejectRequest) => {
+    const call = http.request(
+      {
+        host: "127.0.0.1",
+        port,
+        path,
+        method,
+        headers: { Host: `127.0.0.1:${port}`, ...headers },
+      },
+      (response) => {
+        const chunks = [];
+        response.on("data", (chunk) => chunks.push(chunk));
+        response.on("end", () =>
+          resolveRequest({ status: response.statusCode, body: Buffer.concat(chunks).toString("utf8") }),
+        );
+      },
+    );
+    call.on("error", rejectRequest);
+    if (body) call.write(body);
+    call.end();
+  });
+}
+
+async function startDocsServer(environment = {}) {
+  const child = spawn(process.execPath, ["docs/serve.mjs", "0"], {
+    cwd: root,
+    env: { ...process.env, ...environment },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  child.stdout.setEncoding("utf8");
+  child.stderr.setEncoding("utf8");
+  let stdout = "";
+  let stderr = "";
+  child.stdout.on("data", (chunk) => {
+    stdout += chunk;
+  });
+  child.stderr.on("data", (chunk) => {
+    stderr += chunk;
+  });
+  const port = await new Promise((resolvePort, rejectPort) => {
+    const timeout = setTimeout(() => rejectPort(new Error(`docs server did not start\n${stderr}`)), 10_000);
+    const inspect = () => {
+      const match = stdout.match(/127\.0\.0\.1:(\d+)/u);
+      if (!match) return;
+      clearTimeout(timeout);
+      resolvePort(Number(match[1]));
+    };
+    child.stdout.on("data", inspect);
+    child.once("exit", (code) => {
+      clearTimeout(timeout);
+      rejectPort(new Error(`docs server exited ${code}\n${stderr}`));
+    });
+  });
+  return {
+    child,
+    port,
+    async close() {
+      if (child.exitCode !== null) return;
+      child.kill("SIGTERM");
+      await new Promise((resolveClose) => child.once("exit", resolveClose));
+    },
+  };
+}
+
+test("static launch build has canonical and social metadata on every public page", async () => {
+  const { outDir, result } = await buildTemporarySite();
+  assert.match(result.stdout, new RegExp(`-> ${outDir.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\n$`, "u"));
+
+  const htmlFiles = (await filesUnder(outDir)).filter((path) => path.endsWith(".html"));
+  assert.equal(htmlFiles.length, 14);
+  assert.equal(htmlFiles.some((path) => path.endsWith(`${sep}logos.html`)), false);
+
+  for (const path of htmlFiles) {
+    const html = await readFile(path, "utf8");
+    const pagePath = relative(outDir, path).split(sep).join("/");
+    const canonical = pagePath === "index.html" ? siteUrl : `${siteUrl}${pagePath}`;
+    assert.match(html, new RegExp(`<link rel="canonical" href="${canonical}"`), pagePath);
+    assert.match(html, /<meta property="og:type" content="website" \/>/u, pagePath);
+    assert.match(html, new RegExp(`<meta property="og:url" content="${canonical}"`), pagePath);
+    assert.match(html, /<meta property="og:title" content="[^"]+" \/>/u, pagePath);
+    assert.match(html, /<meta property="og:description" content="[^"]+" \/>/u, pagePath);
+    assert.match(
+      html,
+      new RegExp(`<meta property="og:image" content="${origin}${base}assets/social-card.png"`),
+      pagePath,
+    );
+    assert.match(html, /<meta name="twitter:card" content="summary_large_image" \/>/u, pagePath);
+    assert.match(html, /<meta name="twitter:image:alt" content="OXC for TSRX" \/>/u, pagePath);
+  }
+});
+
+test("static launch build has a scoped base, crawl metadata, and no internal design gallery", async () => {
+  const { outDir } = await buildTemporarySite();
+  const [home, robots, sitemap, playground, capabilities] = await Promise.all([
+    readFile(join(outDir, "index.html"), "utf8"),
+    readFile(join(outDir, "robots.txt"), "utf8"),
+    readFile(join(outDir, "sitemap.xml"), "utf8"),
+    readFile(join(outDir, "playground.html"), "utf8"),
+    readFile(join(outDir, "demo-capabilities.json"), "utf8").then(JSON.parse),
+  ]);
+
+  assert.match(home, /href="\/oxc-tsrx\/guide\/getting-started\.html"/u);
+  assert.match(home, /href="https:\/\/github\.com\/thejackshelton\/oxc-tsrx"/u);
+  assert.match(home, /href="https:\/\/www\.npmjs\.com\/package\/oxlint-tsrx"/u);
+  assert.match(home, /href="https:\/\/www\.npmjs\.com\/package\/oxfmt-tsrx"/u);
+  assert.equal(home.includes('href="/assets/'), false);
+  assert.equal(home.includes('src="/assets/'), false);
+  assert.equal(playground.includes("Everything on this page runs the real"), false);
+  assert.match(playground, /static preview/u);
+  assert.match(playground, /local development server/u);
+  assert.match(home, /pre-generated example · static preview/u);
+  assert.match(home, /native lint and format run only on the local development server/u);
+  assert.doesNotMatch(home, /lint clean · format converged/u);
+  assert.equal((await stat(join(outDir, "assets", "social-card.png"))).isFile(), true);
+  await assert.rejects(stat(join(outDir, "assets", "logos")), /ENOENT/u);
+
+  assert.equal(
+    robots,
+    `User-agent: *\nAllow: /oxc-tsrx/\nSitemap: ${siteUrl}sitemap.xml\n`,
+  );
+  assert.match(sitemap, /^<\?xml version="1\.0" encoding="UTF-8"\?>/u);
+  assert.equal([...sitemap.matchAll(/<loc>/gu)].length, 14);
+  assert.match(sitemap, new RegExp(`<loc>${siteUrl}</loc>`));
+  assert.equal(sitemap.includes("logos.html"), false);
+  assert.deepEqual(capabilities, {
+    ok: true,
+    mode: "static",
+    native: false,
+    typeAware: false,
+    projection: false,
+  });
+});
+
+test("social preview is a 1200 by 630 PNG", async () => {
+  const image = await readFile(join(root, "docs", "assets", "social-card.png"));
+  assert.deepEqual([...image.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
+  assert.equal(image.readUInt32BE(16), 1200);
+  assert.equal(image.readUInt32BE(20), 630);
+});
+
+test("docs output refuses nonempty, protected, and symlink destinations", async () => {
+  const parent = await mkdtemp(join(tmpdir(), "oxc-tsrx-output-guard-"));
+  const nonempty = join(parent, "oxc-tsrx-nonempty");
+  const sentinel = join(nonempty, "sentinel.txt");
+  await mkdir(nonempty);
+  await writeFile(sentinel, "keep me");
+  await assert.rejects(
+    run(process.execPath, ["docs/build.mjs"], {
+      env: { ...process.env, OXC_TSRX_DOCS_OUT_DIR: nonempty },
+    }),
+    /refusing nonempty custom docs output directory/u,
+  );
+  assert.equal(await readFile(sentinel, "utf8"), "keep me");
+
+  const target = join(parent, "target");
+  const link = join(parent, "oxc-tsrx-link");
+  await writeFile(join(parent, "target-sentinel.txt"), "outside");
+  await writeFile(target, "not a directory");
+  await symlink(target, link);
+  await assert.rejects(
+    run(process.execPath, ["docs/build.mjs"], {
+      env: { ...process.env, OXC_TSRX_DOCS_OUT_DIR: link },
+    }),
+    /refusing symlink docs output directory/u,
+  );
+  assert.equal(await readFile(target, "utf8"), "not a directory");
+
+  const outside = await mkdtemp(join(root, ".docs-output-outside-"));
+  const outsideLeaf = join(outside, "oxc-tsrx-victim");
+  const outsideSentinel = join(outsideLeaf, "sentinel.txt");
+  const ancestorLink = join(parent, "ancestor-link");
+  try {
+    await mkdir(outsideLeaf);
+    await writeFile(outsideSentinel, "keep me too");
+    await symlink(outside, ancestorLink, "dir");
+    await assert.rejects(
+      run(process.execPath, ["docs/build.mjs"], {
+        env: {
+          ...process.env,
+          OXC_TSRX_DOCS_OUT_DIR: join(ancestorLink, "oxc-tsrx-victim"),
+        },
+      }),
+      /resolves outside the trusted temporary directory/u,
+    );
+    assert.equal(await readFile(outsideSentinel, "utf8"), "keep me too");
+  } finally {
+    await rm(outside, { recursive: true, force: true });
+    await rm(parent, { recursive: true, force: true });
+  }
+});
+
+test("loopback demo server rejects rebinding and cross-site work before spawning tools", async () => {
+  await run(process.execPath, ["docs/build.mjs"]);
+  const temp = await mkdtemp(join(tmpdir(), "oxc-tsrx-docs-server-"));
+  const stub = join(temp, "tool-stub.mjs");
+  const log = join(temp, "invocations.log");
+  await writeFile(
+    stub,
+    `#!/usr/bin/env node
+import { appendFileSync } from 'node:fs'
+appendFileSync(process.env.DOCS_STUB_LOG, process.argv.slice(2).join(' ') + '\\n')
+let input = ''
+const respond = () => setTimeout(() => {
+  if (process.argv.some((arg) => arg.includes('stdin-filepath'))) process.stdout.write(input)
+  else process.stdout.write(JSON.stringify({ diagnostics: [], number_of_rules: 1, oxcTsrx: { parseCount: 1 } }))
+}, 250)
+if (process.argv.some((arg) => arg.includes('stdin-filepath'))) {
+  process.stdin.setEncoding('utf8')
+  process.stdin.on('data', (chunk) => { input += chunk })
+  process.stdin.on('end', respond)
+} else respond()
+`,
+  );
+  await chmod(stub, 0o755);
+  const server = await startDocsServer({
+    OXC_TSRX_LINT_BIN: stub,
+    OXC_TSRX_FORMAT_BIN: stub,
+    DOCS_STUB_LOG: log,
+  });
+  const sameOrigin = {
+    Origin: `http://127.0.0.1:${server.port}`,
+    "Sec-Fetch-Site": "same-origin",
+  };
+  try {
+    assert.equal((await request(server.port, { headers: { Host: "attacker.invalid" } })).status, 421);
+    assert.equal(
+      (
+        await request(server.port, {
+          path: "/oxc-tsrx/api/lint",
+          method: "POST",
+          body: "export const value = 1",
+        })
+      ).status,
+      403,
+    );
+    assert.equal(
+      (
+        await request(server.port, {
+          path: "/oxc-tsrx/api/lint",
+          method: "POST",
+          headers: { Origin: "https://attacker.invalid", "Sec-Fetch-Site": "cross-site" },
+          body: "export const value = 1",
+        })
+      ).status,
+      403,
+    );
+    await assert.rejects(readFile(log, "utf8"), /ENOENT/u);
+
+    const firstFour = Array.from({ length: 4 }, () =>
+      request(server.port, {
+        path: "/oxc-tsrx/api/format",
+        method: "POST",
+        headers: sameOrigin,
+        body: "export const value=1",
+      }),
+    );
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 40));
+    const busy = await request(server.port, {
+      path: "/oxc-tsrx/api/format",
+      method: "POST",
+      headers: sameOrigin,
+      body: "export const later=2",
+    });
+    assert.equal(busy.status, 429);
+    assert.ok((await Promise.all(firstFour)).every((response) => response.status === 200));
+
+    const linted = await request(server.port, {
+      path: "/oxc-tsrx/api/lint",
+      method: "POST",
+      headers: sameOrigin,
+      body: "export const value = 1",
+    });
+    assert.equal(linted.status, 200);
+    const requestDirectories = (await readdir(join(root, ".docs-demo-tmp"), { withFileTypes: true }))
+      .filter((entry) => entry.isDirectory() && entry.name.startsWith("request-"));
+    assert.equal(requestDirectories.length, 0);
+
+    assert.equal((await request(server.port, { path: "/oxc-tsrx/%ZZ" })).status, 400);
+    assert.equal((await request(server.port)).status, 200);
+  } finally {
+    await server.close();
+    await rm(temp, { recursive: true, force: true });
+  }
+});

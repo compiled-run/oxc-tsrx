@@ -1,0 +1,14 @@
+{
+  "name": "oxc-tsrx-package-test-harness",
+  "displayName": "OXC for TSRX package test harness",
+  "version": "0.0.0",
+  "publisher": "oxc-tsrx-tests",
+  "private": true,
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "main": "./extension.cjs",
+  "activationEvents": [
+    "*"
+  ]
+}

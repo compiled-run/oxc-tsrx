@@ -1,0 +1,507 @@
+{
+  "schemaVersion": 1,
+  "status": "failed",
+  "startedAt": "2026-07-16T23:44:40.093Z",
+  "completedAt": "2026-07-16T23:48:56.637Z",
+  "isolation": {
+    "disposableSource": true,
+    "freshNpmCi": true,
+    "freshCargoTargets": true,
+    "sourceTreeBinaryOverrides": false,
+    "sourceTreeNodeModulesUsed": false,
+    "cleanRootRemoved": false
+  },
+  "external": {
+    "marklessRoot": "/Users/jacksm5pro/dev/open-source/markless",
+    "before": {
+      "head": "b7f834b878847767c14fcac9544e7a7da13a1e17",
+      "sha256": "d8751fdb20a52715c9fe2006613760609b09d87b7b5ed5a964cdd49d26f5852d",
+      "statusSha256": "fc6030e362e15faea48fd3acc2992f2c1d8004949e5f6c6ed8a1d997fcfd6e0e",
+      "untrackedFiles": 4
+    },
+    "after": {
+      "head": "b7f834b878847767c14fcac9544e7a7da13a1e17",
+      "sha256": "d8751fdb20a52715c9fe2006613760609b09d87b7b5ed5a964cdd49d26f5852d",
+      "statusSha256": "fc6030e362e15faea48fd3acc2992f2c1d8004949e5f6c6ed8a1d997fcfd6e0e",
+      "untrackedFiles": 4
+    },
+    "unchanged": true
+  },
+  "commands": [
+    {
+      "label": "read-only Markless: git rev-parse HEAD",
+      "command": "git -C /Users/jacksm5pro/dev/open-source/markless rev-parse HEAD",
+      "status": 0,
+      "signal": null,
+      "durationMs": 9.2
+    },
+    {
+      "label": "read-only Markless: git diff --cached --binary",
+      "command": "git -C /Users/jacksm5pro/dev/open-source/markless diff --cached --binary",
+      "status": 0,
+      "signal": null,
+      "durationMs": 8.3
+    },
+    {
+      "label": "read-only Markless: git diff --binary",
+      "command": "git -C /Users/jacksm5pro/dev/open-source/markless diff --binary",
+      "status": 0,
+      "signal": null,
+      "durationMs": 11.1
+    },
+    {
+      "label": "read-only Markless: git ls-files --others --exclude-standard -z",
+      "command": "git -C /Users/jacksm5pro/dev/open-source/markless ls-files --others --exclude-standard -z",
+      "status": 0,
+      "signal": null,
+      "durationMs": 17.7
+    },
+    {
+      "label": "read-only Markless: git status --porcelain=v1 -z --untracked-files=all",
+      "command": "git -C /Users/jacksm5pro/dev/open-source/markless status --porcelain=v1 -z --untracked-files=all",
+      "status": 0,
+      "signal": null,
+      "durationMs": 19.8
+    },
+    {
+      "label": "npm version",
+      "command": "npm --version",
+      "status": 0,
+      "signal": null,
+      "durationMs": 53.1
+    },
+    {
+      "label": "Rust version",
+      "command": "rustc --version",
+      "status": 0,
+      "signal": null,
+      "durationMs": 19
+    },
+    {
+      "label": "fresh locked npm install",
+      "command": "npm ci --ignore-scripts --no-audit --no-fund",
+      "status": 0,
+      "signal": null,
+      "durationMs": 6008.1
+    },
+    {
+      "label": "Rust formatting gate",
+      "command": "cargo fmt --all -- --check",
+      "status": 0,
+      "signal": null,
+      "durationMs": 104
+    },
+    {
+      "label": "fresh clean-room clippy",
+      "command": "cargo clippy --workspace --all-targets --locked -- -D warnings",
+      "status": 0,
+      "signal": null,
+      "durationMs": 18377.7
+    },
+    {
+      "label": "fresh clean-room Rust tests",
+      "command": "cargo test --workspace --all-targets --locked",
+      "status": 0,
+      "signal": null,
+      "durationMs": 26130.6
+    },
+    {
+      "label": "fresh release native binaries",
+      "command": "cargo build --release --locked -p oxc_tsrx_cli --bins",
+      "status": 0,
+      "signal": null,
+      "durationMs": 128242.9
+    },
+    {
+      "label": "fresh editor bundle",
+      "command": "npm run build:editor",
+      "status": 0,
+      "signal": null,
+      "durationMs": 725.4
+    },
+    {
+      "label": "locked legal inventories",
+      "command": "npm run licenses:check",
+      "status": 0,
+      "signal": null,
+      "durationMs": 492.6
+    },
+    {
+      "label": "authored-span diagnostic sample",
+      "command": "/var/folders/pt/xbq_fv915rx9wtnmww8npc0w0000gn/T/oxc-tsrx-owner-oracle-k4FEZH/source/target/release/oxc-tsrx --format=json --warn no-debugger --deny no-var /var/folders/pt/xbq_fv915rx9wtnmww8npc0w0000gn/T/oxc-tsrx-owner-oracle-k4FEZH/source/tests/fixtures/acceptance/owner-workflow.tsrx",
+      "status": 1,
+      "signal": null,
+      "durationMs": 332.9
+    },
+    {
+      "label": "identity-safe fix sample",
+      "command": "/var/folders/pt/xbq_fv915rx9wtnmww8npc0w0000gn/T/oxc-tsrx-owner-oracle-k4FEZH/source/target/release/oxc-tsrx --fix --deny no-var --allow no-debugger /var/folders/pt/xbq_fv915rx9wtnmww8npc0w0000gn/T/oxc-tsrx-owner-oracle-k4FEZH/source/tests/fixtures/acceptance/owner-workflow-fixed.tsrx",
+      "status": 0,
+      "signal": null,
+      "durationMs": 29.7
+    },
+    {
+      "label": "fixed TSRX validation reparse",
+      "command": "/var/folders/pt/xbq_fv915rx9wtnmww8npc0w0000gn/T/oxc-tsrx-owner-oracle-k4FEZH/source/target/release/oxc-tsrx --allow no-debugger /var/folders/pt/xbq_fv915rx9wtnmww8npc0w0000gn/T/oxc-tsrx-owner-oracle-k4FEZH/source/tests/fixtures/acceptance/owner-workflow-fixed.tsrx",
+      "status": 0,
+      "signal": null,
+      "durationMs": 26.6
+    },
+    {
+      "label": "60-test product/config/Vite/editor matrix",
+      "command": "npm test",
+      "status": 0,
+      "signal": null,
+      "durationMs": 6555.7
+    },
+    {
+      "label": "package/non-fork/legal artifact matrix",
+      "command": "npm run test:packaging:unit",
+      "status": 0,
+      "signal": null,
+      "durationMs": 3105.9
+    },
+    {
+      "label": "untouched-tarball empty-consumer workflow",
+      "command": "npm run test:packaging:clean",
+      "status": 0,
+      "signal": null,
+      "durationMs": 16305
+    },
+    {
+      "label": "minimum/current Vite+ installed-package matrix",
+      "command": "npm run test:packaging:matrix",
+      "status": 0,
+      "signal": null,
+      "durationMs": 33706.2
+    },
+    {
+      "label": "read-only 179-file Markless format/reparse/convergence corpus",
+      "command": "/Users/jacksm5pro/.local/share/fnm/node-versions/v24.15.0/installation/bin/node --test tests/markless-control-corpus.test.mjs",
+      "status": 0,
+      "signal": null,
+      "durationMs": 11951.2
+    },
+    {
+      "label": "installed VSIX Markless format-on-save/diagnostics/action walkthrough",
+      "command": "npm run test:packaging:vscode",
+      "status": 0,
+      "signal": null,
+      "durationMs": 4092.8
+    },
+    {
+      "label": "read-only Markless: git rev-parse HEAD",
+      "command": "git -C /Users/jacksm5pro/dev/open-source/markless rev-parse HEAD",
+      "status": 0,
+      "signal": null,
+      "durationMs": 10.3
+    },
+    {
+      "label": "read-only Markless: git diff --cached --binary",
+      "command": "git -C /Users/jacksm5pro/dev/open-source/markless diff --cached --binary",
+      "status": 0,
+      "signal": null,
+      "durationMs": 10.9
+    },
+    {
+      "label": "read-only Markless: git diff --binary",
+      "command": "git -C /Users/jacksm5pro/dev/open-source/markless diff --binary",
+      "status": 0,
+      "signal": null,
+      "durationMs": 14.8
+    },
+    {
+      "label": "read-only Markless: git ls-files --others --exclude-standard -z",
+      "command": "git -C /Users/jacksm5pro/dev/open-source/markless ls-files --others --exclude-standard -z",
+      "status": 0,
+      "signal": null,
+      "durationMs": 19
+    },
+    {
+      "label": "read-only Markless: git status --porcelain=v1 -z --untracked-files=all",
+      "command": "git -C /Users/jacksm5pro/dev/open-source/markless status --porcelain=v1 -z --untracked-files=all",
+      "status": 0,
+      "signal": null,
+      "durationMs": 22.5
+    }
+  ],
+  "matrix": {
+    "cleanSource": {
+      "sourceHash": "87e3e7c2e11893ffccde12c7aa8aadada857d30b5cd84c60c77ba5253b162586",
+      "initialSourceHash": "87e3e7c2e11893ffccde12c7aa8aadada857d30b5cd84c60c77ba5253b162586",
+      "cleanHash": "87e3e7c2e11893ffccde12c7aa8aadada857d30b5cd84c60c77ba5253b162586",
+      "exactCopy": true,
+      "excluded": [
+        "node_modules",
+        "target",
+        ".docs-demo-tmp",
+        "nested target/node_modules",
+        ".corpus-*",
+        "benchmarks/**/latest.json",
+        "docs/dist"
+      ],
+      "finalSourceHash": "02f6e04efddfe0de22900de719b25ffec08778c95fa9099de39351b0fc904a36",
+      "ownerUnchanged": false
+    },
+    "authoredSpanAndFix": {
+      "parseCount": 1,
+      "diagnostics": [
+        {
+          "rule": "no-debugger",
+          "code": "eslint(no-debugger)",
+          "severity": "warning",
+          "message": "`debugger` statement is not allowed",
+          "labels": [
+            {
+              "span": {
+                "offset": 37,
+                "length": 9
+              },
+              "authoredText": "debugger;"
+            }
+          ]
+        },
+        {
+          "rule": "no-var",
+          "code": "eslint(no-var)",
+          "severity": "error",
+          "message": "Unexpected var, use let or const instead.",
+          "labels": [
+            {
+              "span": {
+                "offset": 49,
+                "length": 3
+              },
+              "authoredText": "var"
+            }
+          ]
+        }
+      ],
+      "fix": {
+        "beforeSha256": "c84abb5cd5336490ff865a78cb207a4e91ac901b9ba7e393171400529da31c53",
+        "afterSha256": "57c1f2fe9ddc58a912f698d3746cd01771d51bf13d077417fe604db3a33467f1",
+        "before": "export function OwnerWorkflow() @{\n  debugger;\n  var count = 0;\n  <button>{count}</button>;\n}\n",
+        "after": "export function OwnerWorkflow() @{\n  debugger;\n  const count = 0;\n  <button>{count}</button>;\n}\n",
+        "reparsed": true
+      }
+    },
+    "packagedConsumer": {
+      "schemaVersion": 1,
+      "startedAt": "2026-07-16T23:47:50.600Z",
+      "completedAt": "2026-07-16T23:48:06.773Z",
+      "host": {
+        "platform": "darwin",
+        "arch": "arm64",
+        "rustTarget": "aarch64-apple-darwin"
+      },
+      "install": {
+        "packageManager": "npm 11.12.1",
+        "ignoreScripts": true,
+        "environmentOverrides": false,
+        "localResolutionOnly": true
+      },
+      "packages": {
+        "runtime": {
+          "name": "@oxc-tsrx/runtime",
+          "version": "0.1.0",
+          "integrity": "sha512-B3O8XvDSGNM7Sgc6PZCSc6243eZrfEYsUj9c641mH7j+/8M61rO2Lu3uoG3rZdfx9FtPzjzt7n+hXyCxAV/glw=="
+        },
+        "native": {
+          "name": "@oxc-tsrx/native-darwin-arm64",
+          "version": "0.1.0",
+          "target": "aarch64-apple-darwin",
+          "integrity": "sha512-QRsvZQaNe1mRYCQN3fBmA9XfzSEF1m2FDOKPm74u8DUESZIXCR8l8eJEjbwyr6nAC6c2vqURKNjunYDsJ3I0jw=="
+        },
+        "oxlint": {
+          "name": "oxlint-tsrx",
+          "version": "0.1.0",
+          "integrity": "sha512-9wngEELhFg2WsgbMB6iW2mrtsIaysAN9X+PkBjz2uZLZBMltENF5RVERJchi9dxrlqmAlS9VqRrYPS2XtHBPiA=="
+        },
+        "oxfmt": {
+          "name": "oxfmt-tsrx",
+          "version": "0.1.0",
+          "integrity": "sha512-/v01Ra+hOdHd0mMFrDFMIxWhRofh8kjQlP0ZKhMU3z3GHwFzXm13aWN4RNwrBg449jmxupgBmLSpUeQi7hDw/A=="
+        },
+        "vitePlus": "0.2.4"
+      },
+      "resolutions": {
+        "lint": "node_modules/@oxc-tsrx/native-darwin-arm64/bin/oxc-tsrx",
+        "format": "node_modules/@oxc-tsrx/native-darwin-arm64/bin/oxc-tsrx-fmt",
+        "server": "node_modules/@oxc-tsrx/native-darwin-arm64/bin/oxc-tsrx-lsp"
+      },
+      "audit": {
+        "info": 0,
+        "low": 0,
+        "moderate": 0,
+        "high": 0,
+        "critical": 0,
+        "total": 0
+      },
+      "assertions": {
+        "mixedLintAuthoredDiagnostics": true,
+        "mixedFormatCheckWriteCheck": true,
+        "formatterApi": true,
+        "typeAwareTsgolint": true,
+        "vitePlusLint": true,
+        "vitePlusCheckFix": true,
+        "missingNativeMixedWritesFailClosed": true,
+        "noSourceTreeBinaryOverride": true,
+        "noInstallScripts": true
+      }
+    },
+    "vitePlus": {
+      "schemaVersion": 1,
+      "generatedAt": "2026-07-16T23:48:35.616Z",
+      "host": {
+        "platform": "darwin",
+        "architecture": "arm64",
+        "node": "v24.15.0",
+        "nativeTarget": "aarch64-apple-darwin"
+      },
+      "native": {
+        "packageName": "@oxc-tsrx/native-darwin-arm64",
+        "version": "0.1.0",
+        "target": "aarch64-apple-darwin",
+        "oxcRevision": "8e0ed2ebb96137fb1611cdbd5742d5cb46037d40",
+        "integrity": "sha512-QRsvZQaNe1mRYCQN3fBmA9XfzSEF1m2FDOKPm74u8DUESZIXCR8l8eJEjbwyr6nAC6c2vqURKNjunYDsJ3I0jw==",
+        "shasum": "27386c1b363ab16fb994c0a32b5b7c8083388783"
+      },
+      "policy": {
+        "legacy": "0.1.20 isolated opt-in control; not supported for new installs",
+        "minimum": "0.1.24",
+        "current": "0.2.4",
+        "next": "advisory only until published and separately qualified"
+      },
+      "lanes": [
+        {
+          "lane": "minimum",
+          "vitePlus": {
+            "version": "0.1.24",
+            "core": "0.1.24",
+            "bundledOxlint": "=1.67.0",
+            "bundledOxfmt": "=0.52.0",
+            "bundledTsgolint": "=0.23.0"
+          },
+          "companions": {
+            "oxlintTsrx": "0.1.0",
+            "oxfmtTsrx": "0.1.0",
+            "delegatedOxlint": "1.74.0",
+            "delegatedOxfmt": "0.59.0"
+          },
+          "proof": {
+            "supported": true,
+            "cleanInstall": true,
+            "mixedLint": true,
+            "mixedFormatCheck": true,
+            "convergentCheckFix": true,
+            "viteBuild": true,
+            "viteDev": true,
+            "viteDevRetransform": true,
+            "audit": {
+              "info": 0,
+              "low": 0,
+              "moderate": 0,
+              "high": 0,
+              "critical": 0,
+              "total": 0
+            },
+            "environmentOverrides": false
+          }
+        },
+        {
+          "lane": "current",
+          "vitePlus": {
+            "version": "0.2.4",
+            "core": "0.2.4",
+            "bundledOxlint": "=1.72.0",
+            "bundledOxfmt": "=0.57.0",
+            "bundledTsgolint": "=0.24.0"
+          },
+          "companions": {
+            "oxlintTsrx": "0.1.0",
+            "oxfmtTsrx": "0.1.0",
+            "delegatedOxlint": "1.74.0",
+            "delegatedOxfmt": "0.59.0"
+          },
+          "proof": {
+            "supported": true,
+            "cleanInstall": true,
+            "mixedLint": true,
+            "mixedFormatCheck": true,
+            "convergentCheckFix": true,
+            "viteBuild": true,
+            "viteDev": true,
+            "viteDevRetransform": true,
+            "audit": {
+              "info": 0,
+              "low": 0,
+              "moderate": 0,
+              "high": 0,
+              "critical": 0,
+              "total": 0
+            },
+            "environmentOverrides": false
+          }
+        }
+      ]
+    },
+    "editor": {
+      "schemaVersion": 1,
+      "recordedAt": "2026-07-16T23:48:56.510Z",
+      "target": "aarch64-apple-darwin",
+      "vscodeTarget": "darwin-arm64",
+      "extensionId": "thejackshelton.oxc-tsrx-vscode",
+      "installedDirectory": "thejackshelton.oxc-tsrx-vscode-0.1.0",
+      "embeddedLspSha256": "0d5634624c2cbec2c76cfa6fb64e095fea8b9f395e1055b0f1e8af9c71d87773",
+      "environmentOverrides": false,
+      "markless": {
+        "source": "packages/vitest-browser/browser/fixtures/arm-try-events.tsrx",
+        "beforeFingerprint": "9dea888de18b32e8cad6272076aadcd9771c219bb68e124f59f1497dc2f2cd71",
+        "afterFingerprint": "9dea888de18b32e8cad6272076aadcd9771c219bb68e124f59f1497dc2f2cd71",
+        "externalWrites": false
+      },
+      "assertions": {
+        "installedFromVsix": true,
+        "embeddedServer": true,
+        "automaticActivation": true,
+        "exactAuthoredDiagnostics": true,
+        "realFormatOnSave": true,
+        "safeCodeAction": true
+      }
+    },
+    "marklessCorpus": {
+      "revision": "76d0e6a07fa728b9343cc0d342fbe03813c43703",
+      "trackedTsrx": 191,
+      "parserValidFormattedReparsedConverged": 179,
+      "parserInvalidRejected": 12,
+      "rawStylePayloadsByteExact": true,
+      "externalWrites": false
+    },
+    "versions": {
+      "project": "0.1.0",
+      "oxcRevision": "8e0ed2ebb96137fb1611cdbd5742d5cb46037d40",
+      "npm": "11.12.1",
+      "rustc": "rustc 1.95.0 (59807616e 2026-04-14)"
+    },
+    "claims": {
+      "formatCheckWriteConverges": true,
+      "lintAuthoredDiagnostics": true,
+      "safeFixes": true,
+      "jsonJsoncAndViteConfig": true,
+      "builtinPluginAndTypeAware": true,
+      "javascriptPluginUnsupportedLoudly": true,
+      "ordinaryJsJsxTsTsxDelegated": true,
+      "viteFrameworkBuildDevHmr": true,
+      "vitePlusBuildDevRetransform": true,
+      "vitePlusMinimumCurrent": true,
+      "installedVsix": true,
+      "noSourceTreeOverrides": true,
+      "noInstallScripts": true
+    }
+  },
+  "failure": {
+    "name": "Error",
+    "message": "owner source changed during clean-room verification (87e3e7c2e11893ffccde12c7aa8aadada857d30b5cd84c60c77ba5253b162586 -> 02f6e04efddfe0de22900de719b25ffec08778c95fa9099de39351b0fc904a36)",
+    "stack": "Error: owner source changed during clean-room verification (87e3e7c2e11893ffccde12c7aa8aadada857d30b5cd84c60c77ba5253b162586 -> 02f6e04efddfe0de22900de719b25ffec08778c95fa9099de39351b0fc904a36)\n    at assertOwnerSourceUnchanged (file:///Users/jacksm5pro/dev/open-source/oxc-tsrx/tests/acceptance/clean-room-utils.mjs:26:11)\n    at file:///Users/jacksm5pro/dev/open-source/oxc-tsrx/tests/acceptance/run.mjs:419:7"
+  }
+}

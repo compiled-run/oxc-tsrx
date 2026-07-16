@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "startedAt": "2026-07-16T19:59:52.043Z",
+  "completedAt": "2026-07-16T20:00:11.036Z",
+  "host": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "rustTarget": "aarch64-apple-darwin"
+  },
+  "install": {
+    "packageManager": "npm 11.12.1",
+    "ignoreScripts": true,
+    "environmentOverrides": false,
+    "localResolutionOnly": true
+  },
+  "packages": {
+    "runtime": {
+      "name": "@oxc-tsrx/runtime",
+      "version": "0.1.0",
+      "integrity": "sha512-tHyaR2KzBLwCBBjqMrrjM9SOgk79K7Vix0Ljl5XQdzu8BVTKf9ZQ0SArJwZ77+lLyS6jQ/zXDy0J/NVbI/LCPg=="
+    },
+    "native": {
+      "name": "@oxc-tsrx/native-darwin-arm64",
+      "version": "0.1.0",
+      "target": "aarch64-apple-darwin",
+      "integrity": "sha512-yyOJmoHZzLTYU/1ifbpEcOqVtPC+RmBf8R1OsCweRGJkBPE9N0Stqwoegul7+KKOoFJTfLVALJ93yQiLm1vxvA=="
+    },
+    "oxlint": {
+      "name": "oxlint-tsrx",
+      "version": "0.1.0",
+      "integrity": "sha512-ttQhpz3SFASnLVSUPaEcijo8ff//ENQdiPh9h5kLg7ZIpnnq8Q3EPDatsDVG6Ms3v2j/lDlf5nUJrzQcn2mjnQ=="
+    },
+    "oxfmt": {
+      "name": "oxfmt-tsrx",
+      "version": "0.1.0",
+      "integrity": "sha512-BccpQuWX+P/ZEmoqfBMrpEyVqWGusSNzNmn57kI7QTXGREnmzLnxcBuXqOvrF9dQii+Xf6oq43wyuZUzoQHaVQ=="
+    },
+    "vitePlus": "0.2.4"
+  },
+  "resolutions": {
+    "lint": "node_modules/@oxc-tsrx/native-darwin-arm64/bin/oxc-tsrx",
+    "format": "node_modules/@oxc-tsrx/native-darwin-arm64/bin/oxc-tsrx-fmt",
+    "server": "node_modules/@oxc-tsrx/native-darwin-arm64/bin/oxc-tsrx-lsp"
+  },
+  "audit": {
+    "info": 0,
+    "low": 0,
+    "moderate": 0,
+    "high": 0,
+    "critical": 0,
+    "total": 0
+  },
+  "assertions": {
+    "mixedLintAuthoredDiagnostics": true,
+    "mixedFormatCheckWriteCheck": true,
+    "formatterApi": true,
+    "typeAwareTsgolint": true,
+    "vitePlusLint": true,
+    "vitePlusCheckFix": true,
+    "missingNativeMixedWritesFailClosed": true,
+    "noSourceTreeBinaryOverride": true,
+    "noInstallScripts": true
+  }
+}

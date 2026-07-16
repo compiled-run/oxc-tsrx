@@ -1,0 +1,65 @@
+{
+  "goalbuddy_receipt_v1": {
+    "result": "blocked",
+    "task_id": "T039",
+    "harness": "codex",
+    "blocked_reason": "T039 completed and verified the runtime Unicode location repair, and its first exact-source clean-room replay passed. After the T039 receipt was added, a receipt-inclusive replay correctly failed its final owner hash because an independent user-owned site redesign changed docs/build.mjs, docs/assets/playground.js, docs/assets/style.css, and docs/verify.mjs during the run. Those files are outside T039 allowed_files and may not be overwritten or silently absorbed; T040 must integrate and prove their settled final state.",
+    "summary": "Corrected oxlint-tsrx's npm human/JSON location decoration to canonical Oxlint semantics without touching Rust or the native hot path. Undecorated native labels are grouped by file and unique UTF-8 byte offset, each source is read once, and every requested position is resolved in one forward byte scan with CR, LF, and CRLF handling. The converter preserves raw byte spans, matches official Oxlint controls after BMP/astral Unicode on prior and current lines, keeps ASCII unchanged, and fails closed on non-safe, out-of-range, or multibyte-splitting offsets. The separate Rust LSP UTF-16 mapping remains untouched and green. A new scenario-button site UX arrived concurrently after this runtime work and is intentionally delegated to T040 for scoped integration.",
+    "changed_files": [
+      "packages/oxlint/dist/cli.js",
+      "tests/config/native-lint-config.test.mjs",
+      "docs/acceptance/clean-room-report.json",
+      "docs/goals/oxc-for-tsrx/notes/T039-receipt.json"
+    ],
+    "commands": [
+      {
+        "cmd": "RED: OXC_TSRX_LINT_BIN=target/release/oxc-tsrx node --test --test-name-pattern=\"npm wrapper matches\" tests/config/native-lint-config.test.mjs",
+        "status": "fail",
+        "evidence": "The intermediate UTF-16 decorator returned Unicode no-var at 4:14 while canonical Oxlint's matched TSX control returned one-based byte column 4:16."
+      },
+      {
+        "cmd": "OXC_TSRX_LINT_BIN=target/release/oxc-tsrx node --test tests/config/native-lint-config.test.mjs",
+        "status": "pass",
+        "evidence": "9/9 including direct offset edge cases, matched Unicode/ASCII human and JSON controls, and CR/LF/CRLF canonical parity."
+      },
+      {
+        "cmd": "npm test (with localhost permission)",
+        "status": "pass",
+        "evidence": "64/64 product, configuration, native lint/format, type-aware, editor, Vite, Vite+, and real HMR tests."
+      },
+      {
+        "cmd": "node --test tests/acceptance/performance-contract.test.mjs tests/acceptance/ecosystem-contract.test.mjs tests/site/benchmark-sections.test.mjs tests/packaging/boundary.test.mjs",
+        "status": "pass",
+        "evidence": "16/16 performance identity, aggregate generation, frozen budget, public-copy freshness, ecosystem, and non-fork contracts."
+      },
+      {
+        "cmd": "npm run docs:check && npm run test:site:unit && npm run test:release && npm run licenses:check",
+        "status": "pass",
+        "evidence": "46 generated docs files fresh; 12/12 site/security tests; 3/3 launch contracts; 205 Rust and 12 VS Code dependency licenses verified."
+      },
+      {
+        "cmd": "MARKLESS_ROOT=/Users/jacksm5pro/dev/open-source/markless node tests/acceptance/run.mjs",
+        "status": "pass",
+        "evidence": "Fresh npm install, clippy, 44 Rust tests, release build, 64 product tests, 23 package/non-fork/legal tests, untouched tarball consumer, Vite+ 0.1.24/0.2.4 matrix, 179 valid Markless files, 12 invalid rejections, and installed VSIX walkthrough all passed; initial/final owner and Markless hashes matched."
+      },
+      {
+        "cmd": "Receipt-inclusive exact-source clean-room replay",
+        "status": "fail",
+        "evidence": "Every behavioral gate passed again, but the strengthened final hash rejected a concurrent change to the separately owned site source; no T039 file changed during the replay."
+      }
+    ],
+    "evidence": [
+      "Canonical Oxlint CLI/JSON positions are one-based lines and one-based UTF-8 byte columns; only the Rust LSP/editor boundary uses zero-based UTF-16.",
+      "Unicode human and JSON wrapper diagnostics match semantically paired official Oxlint TSX controls while retaining original TSRX byte offset/length fields.",
+      "The location pass is O(total inspected source bytes + labels) expected time with one file read and one forward scan; it performs no AST work and cannot affect native parser/linter/formatter throughput.",
+      "One complete clean-room replay passed before the receipt; the receipt-inclusive replay passed all behavior but correctly rejected concurrent site-source mutation. The external Markless fingerprint remained byte-identical in both.",
+      "No external repository was written, no package/site was published or deployed, and no OXC/Vite+ source was forked, vendored, patched, or copied."
+    ],
+    "spawned_tasks": [
+      "T040"
+    ],
+    "external_writes": false,
+    "full_outcome_complete": false,
+    "recommended_next": "Activate T040 to preserve and integrate the settled user-owned scenario-button site redesign, run site/static/native verification, and produce one receipt-inclusive exact-source clean-room report before T036."
+  }
+}

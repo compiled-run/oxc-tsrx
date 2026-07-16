@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "policy": "Every license expression in the generated Rolldown bundle requires review before release.",
+  "allowedExpressions": [
+    "BlueOak-1.0.0",
+    "ISC",
+    "MIT"
+  ]
+}

@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GoalBuddy Board</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-primary">
+      <div class="brand" aria-label="Goal Buddy">
+        <img class="brand-mark" src="./goalbuddy-mark.png" alt="GoalBuddy">
+        <span class="brand-name">Goal Buddy</span>
+        <span class="live-dot" id="live-dot" aria-hidden="true"></span>
+      </div>
+      <nav class="board-switcher is-empty" aria-label="Local GoalBuddy boards">
+        <label for="board-switcher">Board</label>
+        <select id="board-switcher" aria-label="Switch local board"></select>
+      </nav>
+    </div>
+    <div class="header-tools">
+      <a class="github-stars" href="https://github.com/tolibear/goalbuddy" target="_blank" rel="noreferrer" aria-label="Open GoalBuddy on GitHub">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2.8 2.84 5.76 6.36.92-4.6 4.48 1.08 6.34L12 17.32 6.32 20.3l1.08-6.34-4.6-4.48 6.36-.92L12 2.8Z"></path></svg>
+        <span id="github-stars">Stars</span>
+      </a>
+      <div class="settings-wrap">
+        <button class="settings-button" id="settings-button" type="button" aria-expanded="false" aria-controls="settings-popover">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12.2 2.75h-.4a1.6 1.6 0 0 0-1.58 1.36l-.18 1.18c-.46.16-.9.34-1.31.56l-1.02-.64a1.6 1.6 0 0 0-2.08.31l-.28.28a1.6 1.6 0 0 0-.31 2.08l.64 1.02c-.22.42-.4.86-.56 1.31l-1.18.18A1.6 1.6 0 0 0 2.58 12v.4A1.6 1.6 0 0 0 3.94 14l1.18.18c.16.46.34.9.56 1.31l-.64 1.02a1.6 1.6 0 0 0 .31 2.08l.28.28a1.6 1.6 0 0 0 2.08.31l1.02-.64c.42.22.86.4 1.31.56l.18 1.18a1.6 1.6 0 0 0 1.58 1.36h.4a1.6 1.6 0 0 0 1.58-1.36l.18-1.18c.46-.16.9-.34 1.31-.56l1.02.64a1.6 1.6 0 0 0 2.08-.31l.28-.28a1.6 1.6 0 0 0 .31-2.08l-.64-1.02c.22-.42.4-.86.56-1.31l1.18-.18a1.6 1.6 0 0 0 1.36-1.58V12a1.6 1.6 0 0 0-1.36-1.58l-1.18-.18a7.2 7.2 0 0 0-.56-1.31l.64-1.02a1.6 1.6 0 0 0-.31-2.08l-.28-.28a1.6 1.6 0 0 0-2.08-.31l-1.02.64c-.42-.22-.86-.4-1.31-.56l-.18-1.18a1.6 1.6 0 0 0-1.58-1.39Z"></path>
+            <circle cx="12" cy="12.2" r="3.15"></circle>
+          </svg>
+          <span class="visually-hidden" id="live-state">Connecting</span>
+        </button>
+        <section class="settings-popover" id="settings-popover" aria-label="Local board settings" hidden>
+          <div class="settings-heading">
+            <p class="eyebrow">Board settings</p>
+            <h2>Local preferences</h2>
+          </div>
+          <div class="setting-row">
+            <label for="setting-theme">Theme</label>
+            <select id="setting-theme" data-setting="theme">
+              <option value="system">System</option>
+              <option value="light">Light</option>
+              <option value="dark">Dark</option>
+            </select>
+          </div>
+          <div class="setting-row">
+            <label for="setting-density">Density</label>
+            <select id="setting-density" data-setting="density">
+              <option value="comfortable">Comfortable</option>
+              <option value="compact">Compact</option>
+            </select>
+          </div>
+          <div class="setting-row">
+            <label for="setting-completed">Completed</label>
+            <select id="setting-completed" data-setting="completedVisibility">
+              <option value="show">Show</option>
+              <option value="collapse">Collapse</option>
+            </select>
+          </div>
+          <div class="setting-row">
+            <label for="setting-board-open">Open boards</label>
+            <select id="setting-board-open" data-setting="boardOpenBehavior">
+              <option value="last">Last viewed</option>
+              <option value="newest">Newest active</option>
+            </select>
+          </div>
+          <div class="setting-row">
+            <label for="setting-motion">Motion</label>
+            <select id="setting-motion" data-setting="motion">
+              <option value="system">System</option>
+              <option value="reduce">Reduce</option>
+              <option value="allow">Allow</option>
+            </select>
+          </div>
+        </section>
+      </div>
+    </div>
+  </header>
+  <main class="shell">
+    <section class="goal-header" aria-labelledby="goal-title">
+      <div>
+        <p class="eyebrow">Local board</p>
+        <h1 id="goal-title">GoalBuddy Board</h1>
+        <p id="goal-tranche" class="goal-tranche"></p>
+      </div>
+      <dl class="goal-meta">
+        <div><dt>Status</dt><dd id="goal-status">Unknown</dd></div>
+        <div><dt>Active</dt><dd id="goal-active">None</dd></div>
+        <div><dt>Updated</dt><dd id="goal-updated">Waiting</dd></div>
+      </dl>
+    </section>
+    <section class="board" id="board" aria-label="Goal task board"></section>
+  </main>
+  <div class="modal" id="task-modal" hidden>
+    <button class="modal-scrim" type="button" data-close-modal aria-label="Close task detail"></button>
+    <article class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <header class="modal-header">
+        <div>
+          <p class="eyebrow" id="modal-kicker">Task</p>
+          <h2 id="modal-title">Task detail</h2>
+        </div>
+        <button class="icon-button" type="button" data-close-modal aria-label="Close task detail">x</button>
+      </header>
+      <div class="modal-body" id="modal-body"></div>
+    </article>
+  </div>
+  <script src="./app.js" type="module"></script>
+</body>
+</html>

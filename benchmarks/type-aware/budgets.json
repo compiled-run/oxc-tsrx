@@ -1,0 +1,10 @@
+{
+  "defaultSyntaxP95MsMax": 10,
+  "singleTypeAwareP95MsMax": 60,
+  "projectTypeAwareP95MsMax": 70,
+  "singleTypeAwareColdMsMax": 100,
+  "projectTypeAwareColdMsMax": 120,
+  "singleTypeAwareVsDefaultP95RatioMax": 12,
+  "typeAwareProcessesPerBatch": 1,
+  "defaultParseCountPerFile": 1
+}

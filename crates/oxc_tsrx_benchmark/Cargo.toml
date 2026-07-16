@@ -1,0 +1,18 @@
+[package]
+name = "oxc_tsrx_benchmark"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+memory-stats = "1.2.0"
+oxc_adapter = { path = "../oxc_adapter" }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.150"
+tsrx_lint = { path = "../tsrx_lint" }
+tsrx_syntax = { path = "../tsrx_syntax" }
+
+[lints]
+workspace = true

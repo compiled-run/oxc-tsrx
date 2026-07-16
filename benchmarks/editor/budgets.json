@@ -1,0 +1,9 @@
+{
+  "initialOpenMsMax": 50,
+  "editDiagnosticsP95MsMax": 25,
+  "formatP95MsMax": 15,
+  "codeActionP95MsMax": 25,
+  "residentMemoryMiBMax": 96,
+  "editSoakGrowthMiBMax": 8,
+  "minimumSourceBytes": 1000
+}

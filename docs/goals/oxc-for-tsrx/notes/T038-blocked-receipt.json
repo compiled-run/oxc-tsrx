@@ -1,0 +1,43 @@
+{
+  "goalbuddy_receipt_v1": {
+    "result": "blocked",
+    "task_id": "T038",
+    "harness": "codex",
+    "blocked_reason": "The retained red test initially followed T038's stated UTF-16 CLI-column contract, but a new canonical Oxlint 1.74 TSX control proved that contract is wrong for a drop-in wrapper: Oxlint human/JSON columns are one-based UTF-8 byte columns, while only LSP/editor positions are zero-based UTF-16. Completing T038 as written would make mixed .tsx/.tsrx results internally inconsistent. GoalBuddy forbids silently rewriting an active Worker's semantics after implementation begins, so T038 is blocked and T039 is the bounded evidence-corrected Worker.",
+    "summary": "Reproduced the cross-line Unicode drift, retained a wrapper-level human/JSON test, and implemented an intermediate per-file byte index that fixes the originally reported 5:15 to UTF-16 5:12. The canonical TSX control then demonstrated that the compatible CLI answer is actually byte-column 5:14, not UTF-16 5:12. Independent source audit confirmed OXC/miette counts raw bytes for CLI/JSON and the existing Rust LSP correctly performs UTF-8-byte to UTF-16 conversion. The intermediate UTF-16 CLI implementation must therefore be replaced, not released.",
+    "changed_files": [
+      "packages/oxlint/dist/cli.js",
+      "tests/config/native-lint-config.test.mjs",
+      "docs/goals/oxc-for-tsrx/notes/T038-blocked-receipt.json"
+    ],
+    "commands": [
+      {
+        "cmd": "RED: OXC_TSRX_LINT_BIN=target/release/oxc-tsrx node --test --test-name-pattern=\"npm wrapper decorates\" tests/config/native-lint-config.test.mjs",
+        "status": "fail",
+        "evidence": "The original wrapper returned Unicode no-var column 18 while the intentionally proposed UTF-16 expectation was 15."
+      },
+      {
+        "cmd": "Focused wrapper test after intermediate UTF-16 conversion",
+        "status": "pass",
+        "evidence": "Human and JSON output preserved byte spans and produced UTF-16 columns, proving the bug location and conversion seam."
+      },
+      {
+        "cmd": "Canonical Oxlint 1.74 matched TSX Unicode control",
+        "status": "fail",
+        "evidence": "Stock Oxlint returned no-var column 18 rather than UTF-16 column 15, proving T038's desired CLI encoding was incompatible with the upstream output being composed."
+      }
+    ],
+    "evidence": [
+      "Canonical OXC derives CLI columns from oxc-miette raw-byte iteration and adds one in its reporter/JSON handler.",
+      "The existing Rust editor adapter maps authored UTF-8 byte spans to zero-based UTF-16 LSP positions and already covers astral Unicode and CRLF.",
+      "The browser helper correctly maps byte offsets to JavaScript UTF-16 indices only for DOM slicing.",
+      "The original wrapper's global source.slice(0, byteOffset) accidentally leaks byte surplus from earlier lines; the correct CLI repair is line-local byte counting with CR/LF/CRLF handling."
+    ],
+    "spawned_tasks": [
+      "T039"
+    ],
+    "external_writes": false,
+    "full_outcome_complete": false,
+    "recommended_next": "Activate T039 to match canonical Oxlint one-based UTF-8 byte columns in O(total source bytes + labels), retain matched TSX/TSRX Unicode and line-ending controls, preserve UTF-16 exclusively in the already-correct LSP, then run the exact-source clean-room oracle."
+  }
+}

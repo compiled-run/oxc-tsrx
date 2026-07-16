@@ -1,0 +1,1 @@
+type Status=0|1;export function SwitchView({status}:{status:Status})@{<main>@switch(status){@case 0:{var legacy=1;debugger;<p>{legacy}</p>}@default:{<strong>Other</strong>}@case 1:{<em>Ready</em>}}</main>}

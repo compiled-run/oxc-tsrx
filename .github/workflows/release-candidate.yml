@@ -1,0 +1,399 @@
+name: Build release candidate
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-candidate-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "1"
+  npm_config_audit: "false"
+  npm_config_fund: "false"
+
+jobs:
+  build-native:
+    name: ${{ matrix.package_suffix }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            package_suffix: darwin-arm64
+            runner: macos-14
+            expected_platform: darwin
+            expected_arch: arm64
+            macos_deployment_target: "11.0"
+          - target: x86_64-apple-darwin
+            package_suffix: darwin-x64
+            runner: macos-15-intel
+            expected_platform: darwin
+            expected_arch: x64
+            macos_deployment_target: "10.15"
+          - target: aarch64-unknown-linux-gnu
+            package_suffix: linux-arm64-gnu
+            runner: ubuntu-22.04-arm
+            expected_platform: linux
+            expected_arch: arm64
+            libc: gnu
+          - target: x86_64-unknown-linux-gnu
+            package_suffix: linux-x64-gnu
+            runner: ubuntu-22.04
+            expected_platform: linux
+            expected_arch: x64
+            libc: gnu
+          - target: aarch64-unknown-linux-musl
+            package_suffix: linux-arm64-musl
+            runner: ubuntu-22.04-arm
+            expected_platform: linux
+            expected_arch: arm64
+            libc: musl
+          - target: x86_64-unknown-linux-musl
+            package_suffix: linux-x64-musl
+            runner: ubuntu-22.04
+            expected_platform: linux
+            expected_arch: x64
+            libc: musl
+          - target: aarch64-pc-windows-msvc
+            package_suffix: win32-arm64-msvc
+            runner: windows-11-arm
+            expected_platform: win32
+            expected_arch: arm64
+          - target: x86_64-pc-windows-msvc
+            package_suffix: win32-x64-msvc
+            runner: windows-2025
+            expected_platform: win32
+            expected_arch: x64
+    env:
+      TARGET: ${{ matrix.target }}
+      PACKAGE_SUFFIX: ${{ matrix.package_suffix }}
+      EXPECTED_PLATFORM: ${{ matrix.expected_platform }}
+      EXPECTED_ARCH: ${{ matrix.expected_arch }}
+      MACOSX_DEPLOYMENT_TARGET: ${{ matrix.macos_deployment_target }}
+    steps:
+      - name: Check out the exact source revision
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Install Node.js 24.15.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.15.0
+          cache: npm
+
+      - name: Prove the runner matches the package ABI
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+          assert.equal(process.platform, process.env.EXPECTED_PLATFORM);
+          assert.equal(process.arch, process.env.EXPECTED_ARCH);
+          NODE
+
+      - name: Install the musl linker
+        if: matrix.libc == 'musl'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes musl-tools
+
+      - name: Install the pinned release Rust toolchain and target
+        shell: bash
+        run: |
+          rustup toolchain install 1.95.0 --profile minimal
+          rustup default 1.95.0
+          rustup target add "$TARGET"
+          rustc -Vv
+
+      - name: Install the locked JavaScript graph without lifecycle scripts
+        run: npm ci --ignore-scripts
+
+      - name: Build the editor bundle and native executables
+        shell: bash
+        run: |
+          npm run build:editor
+          cargo build --release --locked --target "$TARGET" -p oxc_tsrx_cli --bins
+
+      - name: Verify Linux ABI policy
+        if: matrix.libc == 'gnu' || matrix.libc == 'musl'
+        shell: bash
+        run: |
+          bins=(oxc-tsrx oxc-tsrx-fmt oxc-tsrx-lsp)
+          if [[ "${{ matrix.libc }}" == "musl" ]]; then
+            for name in "${bins[@]}"; do
+              bin="target/$TARGET/release/$name"
+              file "$bin"
+              ldd_output="$(ldd "$bin" 2>&1 || true)"
+              printf '%s\n' "$ldd_output"
+              grep -Eq 'statically linked|not a dynamic executable' <<< "$ldd_output"
+              "$bin" --version
+            done
+          else
+            for name in "${bins[@]}"; do
+              bin="target/$TARGET/release/$name"
+              file "$bin"
+              required="$(objdump -T "$bin" | grep -Eo 'GLIBC_[0-9]+\.[0-9]+' | sort -Vu | tail -n 1)"
+              printf '%s highest required glibc symbol: %s\n' "$name" "$required"
+              [[ "$required" =~ ^GLIBC_[0-9]+\.[0-9]+$ ]]
+              [[ "$(printf '%s\n' "$required" GLIBC_2.35 | sort -V | tail -n 1)" == GLIBC_2.35 ]]
+              "$bin" --version
+            done
+          fi
+
+      - name: Package the native npm artifact and target VSIX
+        shell: bash
+        run: |
+          mkdir -p "release/$PACKAGE_SUFFIX"
+          suffix=""
+          if [[ "$EXPECTED_PLATFORM" == "win32" ]]; then suffix=".exe"; fi
+          node scripts/package-native.mjs \
+            --target "$TARGET" \
+            --bin-dir "target/$TARGET/release" \
+            --out-dir "release/$PACKAGE_SUFFIX" \
+            | tee "release/$PACKAGE_SUFFIX/native-package-$PACKAGE_SUFFIX.json"
+          node scripts/package-vscode.mjs \
+            --target "$TARGET" \
+            --lsp-bin "target/$TARGET/release/oxc-tsrx-lsp$suffix" \
+            --out-dir "release/$PACKAGE_SUFFIX" \
+            | tee "release/$PACKAGE_SUFFIX/vscode-package-$PACKAGE_SUFFIX.json"
+
+      - name: Upload the target candidate
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-${{ matrix.package_suffix }}
+          path: release/${{ matrix.package_suffix }}
+          if-no-files-found: error
+          retention-days: 14
+
+  assemble:
+    name: Checksums, SBOMs, and staged provenance
+    needs:
+      - build-native
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out the exact source revision
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Install Node.js 24.15.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.15.0
+          cache: npm
+
+      - name: Install Rust 1.97.0 for SBOM tooling
+        shell: bash
+        run: |
+          rustup toolchain install 1.97.0 --profile minimal
+          rustup default 1.97.0
+
+      - name: Install locked JavaScript dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Download all target artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: release-*
+          path: release
+          merge-multiple: true
+
+      - name: Pack the platform-independent npm packages
+        shell: bash
+        run: |
+          npm pack --pack-destination release ./packages/runtime
+          npm pack --pack-destination release ./packages/oxlint
+          npm pack --pack-destination release ./packages/oxfmt
+
+      - name: Verify the complete package and VSIX matrix
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+          import { readdir, readFile } from "node:fs/promises";
+          import { NATIVE_TARGETS } from "./packages/runtime/dist/targets.js";
+
+          const files = (await readdir("release")).sort();
+          const version = JSON.parse(await readFile("package.json", "utf8")).version;
+          const expectedNative = NATIVE_TARGETS.map(
+            ({ packageSuffix }) => `oxc-tsrx-native-${packageSuffix}-${version}.tgz`,
+          );
+          const expectedVsix = NATIVE_TARGETS.map(
+            ({ vscodeTarget }) => `oxc-tsrx-vscode-${version}-${vscodeTarget}.vsix`,
+          );
+          for (const name of [...expectedNative, ...expectedVsix]) {
+            assert.ok(files.includes(name), `missing release artifact: ${name}`);
+          }
+          assert.equal(files.filter((name) => name.endsWith(".tgz")).length, 11);
+          assert.equal(files.filter((name) => name.endsWith(".vsix")).length, 8);
+          NODE
+
+      - name: Stage legal texts and locked dependency inventory
+        shell: bash
+        run: |
+          npm run licenses:check
+          mkdir -p release/legal
+          cp LICENSE THIRD_PARTY_NOTICES.md release/legal/
+          cp -R licenses release/legal/licenses
+          cp -R packages/vscode/licenses release/legal/vscode-licenses
+
+      - name: Generate JavaScript and Rust CycloneDX SBOMs
+        shell: bash
+        run: |
+          mkdir -p release/sbom
+          npm_sbom_root="$RUNNER_TEMP/oxc-tsrx-release-sbom"
+          mkdir -p "$npm_sbom_root"
+          NPM_SBOM_ROOT="$npm_sbom_root" node --input-type=module <<'NODE'
+          import { readFile, writeFile } from "node:fs/promises";
+          import { resolve } from "node:path";
+          import {
+            NATIVE_TARGETS,
+            nativePackageName,
+          } from "./packages/runtime/dist/targets.js";
+
+          const version = JSON.parse(await readFile("package.json", "utf8")).version;
+          const artifact = (name) => `file:${resolve("release", name)}`;
+          const dependencies = {
+            "@oxc-tsrx/runtime": artifact(`oxc-tsrx-runtime-${version}.tgz`),
+            "oxlint-tsrx": artifact(`oxlint-tsrx-${version}.tgz`),
+            "oxfmt-tsrx": artifact(`oxfmt-tsrx-${version}.tgz`),
+          };
+          for (const target of NATIVE_TARGETS) {
+            dependencies[nativePackageName(target)] = artifact(
+              `oxc-tsrx-native-${target.packageSuffix}-${version}.tgz`,
+            );
+          }
+          await writeFile(
+            resolve(process.env.NPM_SBOM_ROOT, "package.json"),
+            `${JSON.stringify(
+              {
+                name: "oxc-tsrx-release-candidate",
+                version,
+                private: true,
+                dependencies,
+              },
+              null,
+              2,
+            )}\n`,
+          );
+          NODE
+          npm install \
+            --prefix "$npm_sbom_root" \
+            --package-lock-only \
+            --ignore-scripts \
+            --force \
+            --no-audit \
+            --no-fund
+          npm sbom \
+            --prefix "$npm_sbom_root" \
+            --package-lock-only \
+            --force \
+            --sbom-format=cyclonedx \
+            --sbom-type=application \
+            > release/sbom/npm.cdx.json
+          node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+          import { readFile } from "node:fs/promises";
+          import {
+            NATIVE_TARGETS,
+            nativePackageName,
+          } from "./packages/runtime/dist/targets.js";
+
+          const sbom = JSON.parse(await readFile("release/sbom/npm.cdx.json", "utf8"));
+          assert.equal(sbom.bomFormat, "CycloneDX");
+          const names = new Set((sbom.components ?? []).map(({ name }) => name));
+          for (const name of [
+            "@oxc-tsrx/runtime",
+            "oxlint-tsrx",
+            "oxfmt-tsrx",
+            ...NATIVE_TARGETS.map(nativePackageName),
+          ]) {
+            assert.ok(names.has(name), `npm SBOM is missing ${name}`);
+          }
+          NODE
+          cargo install cargo-cyclonedx --version 0.5.9 --locked
+          cargo cyclonedx \
+            --manifest-path crates/oxc_tsrx_cli/Cargo.toml \
+            --format json \
+            --describe binaries \
+            --spec-version 1.5
+          find crates/oxc_tsrx_cli -maxdepth 1 -name '*.cdx.json' \
+            -exec cp {} release/sbom/ \;
+          test "$(find release/sbom -name '*.cdx.json' | wc -l | tr -d ' ')" -ge 4
+
+      - name: Write the unsigned provenance staging statement
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+          SOURCE_REF: ${{ github.ref }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { createHash } from "node:crypto";
+          import { readdir, readFile, writeFile } from "node:fs/promises";
+
+          const artifacts = (await readdir("release"))
+            .filter((name) => name.endsWith(".tgz") || name.endsWith(".vsix"))
+            .sort();
+          const subject = [];
+          for (const name of artifacts) {
+            const sha256 = createHash("sha256")
+              .update(await readFile(`release/${name}`))
+              .digest("hex");
+            subject.push({ name, digest: { sha256 } });
+          }
+          const statement = {
+            _type: "https://in-toto.io/Statement/v1",
+            subject,
+            predicateType: "https://slsa.dev/provenance/v1",
+            predicate: {
+              buildDefinition: {
+                buildType: `https://github.com/${process.env.REPOSITORY}/actions/workflows/release-candidate.yml`,
+                externalParameters: { ref: process.env.SOURCE_REF },
+                internalParameters: { attestationStatus: "unsigned-staging-only" },
+                resolvedDependencies: [
+                  {
+                    uri: `git+https://github.com/${process.env.REPOSITORY}.git@${process.env.SOURCE_SHA}`,
+                    digest: { sha1: process.env.SOURCE_SHA },
+                  },
+                ],
+              },
+              runDetails: {
+                builder: { id: process.env.WORKFLOW_REF },
+                metadata: {
+                  invocationId: `https://github.com/${process.env.REPOSITORY}/actions/runs/${process.env.RUN_ID}/attempts/${process.env.RUN_ATTEMPT}`,
+                },
+              },
+            },
+          };
+          await writeFile(
+            "release/provenance.unsigned.intoto.json",
+            `${JSON.stringify(statement, null, 2)}\n`,
+          );
+          NODE
+
+      - name: Generate final SHA-256 checksums
+        shell: bash
+        run: |
+          cd release
+          find . -type f ! -name SHA256SUMS -print0 \
+            | sort -z \
+            | xargs -0 sha256sum \
+            > SHA256SUMS
+          sha256sum --check SHA256SUMS
+
+      - name: Upload the complete release candidate
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-candidate-${{ github.sha }}
+          path: release
+          if-no-files-found: error
+          retention-days: 14

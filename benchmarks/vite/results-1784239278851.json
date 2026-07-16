@@ -1,0 +1,173 @@
+{
+  "schemaVersion": 1,
+  "timestamp": "2026-07-16T22:01:18.849Z",
+  "host": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "node": "v24.15.0",
+    "cpu": "Apple M5 Pro",
+    "osRelease": "25.5.0"
+  },
+  "build": {
+    "profile": "release",
+    "lintBinary": "target/release/oxc-tsrx",
+    "formatBinary": "target/release/oxc-tsrx-fmt",
+    "oxcRevision": "8e0ed2ebb96137fb1611cdbd5742d5cb46037d40"
+  },
+  "corpus": {
+    "kind": "mixed authored TSX/TSRX command-boundary fixture with equivalent TSX control",
+    "files": [
+      "tests/fixtures/vite/toolchain/diagnostics/.oxfmtrc.json",
+      "tests/fixtures/vite/toolchain/diagnostics/.oxlintrc.json",
+      "tests/fixtures/vite/toolchain/diagnostics/package.json",
+      "tests/fixtures/vite/toolchain/diagnostics/vite.config.mjs",
+      "tests/fixtures/vite/toolchain/diagnostics/src/ordinary.tsx",
+      "tests/fixtures/vite/toolchain/diagnostics/src/view-equivalent.tsx",
+      "tests/fixtures/vite/toolchain/diagnostics/src/view.tsrx"
+    ],
+    "bytes": 587,
+    "sha256": "2fa1790e83647c4b5bbe878a69d90283ebf2e8abe38bc3bdb025684e3f30a4c1"
+  },
+  "versions": {
+    "vite": "8.1.5",
+    "vitePlusCurrent": "0.2.4",
+    "oxlint": "1.74.0",
+    "oxfmt": "0.59.0"
+  },
+  "samplePolicy": {
+    "warmups": 5,
+    "measured": 15,
+    "statistic": "median and nearest-rank p95 over fresh companion processes"
+  },
+  "canonicalLint": {
+    "rawMs": [
+      31.381417,
+      33.634333,
+      31.11958400000003,
+      29.07462499999997,
+      29.003874999999994,
+      28.795457999999996,
+      32.44862499999999,
+      29.520916,
+      30.146541000000013,
+      30.322000000000003,
+      30.262541999999996,
+      28.599749999999972,
+      29.866667000000007,
+      28.753625000000056,
+      29.075083000000063
+    ],
+    "medianMs": 29.866667000000007,
+    "p95Ms": 33.634333
+  },
+  "directMixedLint": {
+    "rawMs": [
+      55.504583000000025,
+      55.67033300000003,
+      59.945207999999866,
+      57.614250000000084,
+      55.50020900000004,
+      56.35141700000008,
+      55.29975000000013,
+      56.3873329999999,
+      60.13195900000005,
+      56.99274999999989,
+      55.62016700000004,
+      59.672207999999955,
+      58.662708000000066,
+      56.73845800000004,
+      58.363333999999895
+    ],
+    "medianMs": 56.73845800000004,
+    "p95Ms": 60.13195900000005
+  },
+  "canonicalFormat": {
+    "rawMs": [
+      97.14837500000021,
+      94.95570799999996,
+      100.75904200000014,
+      97.87595899999997,
+      100.54174999999987,
+      97.06904199999963,
+      100.65095799999972,
+      102.28445899999997,
+      98.53454099999999,
+      100.64270800000031,
+      98.93820800000003,
+      100.59249999999975,
+      104.13720799999965,
+      95.33270799999991,
+      99.5585000000001
+    ],
+    "medianMs": 99.5585000000001,
+    "p95Ms": 104.13720799999965
+  },
+  "directMixedFormat": {
+    "rawMs": [
+      126.71087499999976,
+      126.02275000000009,
+      124.15741600000001,
+      126.29166600000008,
+      130.06424999999945,
+      142.64400000000023,
+      127.7099589999998,
+      126.95808299999953,
+      128.4784580000005,
+      124.92733399999997,
+      128.6850830000003,
+      121.77879200000007,
+      125.23533399999997,
+      124.917958,
+      125.88004100000035
+    ],
+    "medianMs": 126.29166600000008,
+    "p95Ms": 142.64400000000023
+  },
+  "vitePlusCurrentMixedLint": {
+    "rawMs": [
+      259.815834,
+      258.73320800000056,
+      260.17983300000014,
+      258.8194999999996,
+      258.08608300000014,
+      260.0900409999995,
+      260.1566249999996,
+      267.7634999999991,
+      272.6330829999988,
+      258.3172080000004,
+      260.32995800000026,
+      260.49575000000004,
+      272.34379199999967,
+      261.3392499999991,
+      274.755000000001
+    ],
+    "medianMs": 260.17983300000014,
+    "p95Ms": 274.755000000001
+  },
+  "ratios": {
+    "directLintVsCanonicalP95": 1.7878148200530706,
+    "directFormatVsCanonicalP95": 1.369769775275718
+  },
+  "invariants": {
+    "nativeTsrxParseCount": 1,
+    "nativeTsrxFiles": 1,
+    "ordinaryFilesInNativeLane": 0
+  },
+  "budgets": {
+    "schemaVersion": 1,
+    "directLintP95MsMax": 150,
+    "directLintVsCanonicalP95RatioMax": 2.5,
+    "directFormatP95MsMax": 220,
+    "directFormatVsCanonicalP95RatioMax": 2,
+    "vitePlusCurrentLintP95MsMax": 750,
+    "nativeTsrxParseCountPerFile": 1
+  },
+  "assertions": {
+    "directLintP95": true,
+    "directLintRatio": true,
+    "directFormatP95": true,
+    "directFormatRatio": true,
+    "vitePlusLintP95": true,
+    "oneNativeParse": true
+  }
+}

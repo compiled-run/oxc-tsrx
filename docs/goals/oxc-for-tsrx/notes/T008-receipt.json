@@ -1,0 +1,109 @@
+{
+  "result": "done",
+  "task_id": "T008",
+  "board_path": "docs/goals/oxc-for-tsrx/state.yaml",
+  "decision": "approved_with_conditions",
+  "full_outcome_complete": false,
+  "rationale": "A direct public Yuku TSRX parse-to-output control reaches 129.73 MiB/s on the read-only Markless corpus, about 10.45x the previously measured full JavaScript AST decode/re-encode path and 8.65x the final 15 MiB/s gate. It reparses, preserves normalized semantics and comments, is idempotent, and handles the retained BigInt source. However, the unmodified Yuku code generator is not a configuration-compatible formatter: 119/178 outputs retain leading tabs under useTabs:false and 57/178 exceed printWidth 100, including a breakable 288-column line. The approved architecture therefore pins the public MIT TSRX parser revision as a build dependency, keeps its indexed tree entirely native, adds a repository-owned format-oriented layout layer behind one N-API call, and preserves the T007 fallback plus direct official Oxfmt standard-file path. No OXC source, private API, or downstream patch queue is introduced.",
+  "worker_package": {
+    "task": "T009",
+    "objective": "Deliver an installable native-first TSRX formatter vertical slice behind the T007 backend contract: consume exact public Yuku revision bf03e146d97ae2f0c2d4c4ec90456e1e544d2760 through its exported Zig parser module, cross N-API once, implement project-owned native format layout, retain capability/platform fallback, clear >=15 MiB/s end-to-end on Markless, preserve direct official Oxfmt for standard files, and prove a no-Zig current-platform tarball consumer.",
+    "performance_gates": {
+      "raw_native_median_mibs_min": 50,
+      "end_to_end_native_median_mibs_min": 15,
+      "warm_small_document_p95_ms_max": 2,
+      "cold_import_plus_format_p95_ms_max": 50,
+      "node_host_rss_delta_mib_max": 32,
+      "standard_oxfmt_p95_ratio_max": 1.1,
+      "parse_semantic_comment_idempotence_failures_max": 0
+    },
+    "allowed_files": [
+      "package.json",
+      "package-lock.json",
+      "tsconfig.json",
+      "README.md",
+      "LICENSE",
+      "THIRD_PARTY_NOTICES.md",
+      ".gitignore",
+      "packages/formatter-native/**",
+      "packages/formatter-native-*/**",
+      "packages/formatter/**",
+      "packages/cli/**",
+      "tests/t007/**",
+      "tests/t009/**",
+      "fixtures/t007/**",
+      "fixtures/t009/**",
+      "benchmarks/t009/**",
+      "docs/architecture/**"
+    ],
+    "red_first": [
+      "node --test tests/t009/*.test.mjs before native packages/build artifacts exist",
+      "npm run benchmark:t009 before the native backend is selected"
+    ],
+    "stop_if": [
+      "Needs OXC source, a copied/patched Yuku tree, a patch queue, a local checkout, or private/file-relative dependency APIs.",
+      "Needs complete AST/document materialization in JavaScript, JSON serialization, or a second parse on the ordinary successful path.",
+      "Correctness or style cannot pass after two evidence-based native layout approaches.",
+      "End-to-end remains below 15 MiB/s or other frozen performance gates fail after two measured boundary optimizations.",
+      "A clean consumer needs Zig/source, or any write/publication is required outside this repository."
+    ]
+  },
+  "evidence": [
+    "docs/goals/oxc-for-tsrx/notes/T008-native-formatter-decision.md",
+    "docs/goals/oxc-for-tsrx/notes/T008-yuku-results.json",
+    "docs/goals/oxc-for-tsrx/notes/T008-yuku-control/build.zig",
+    "docs/goals/oxc-for-tsrx/notes/T008-yuku-control/t008_yuku_control.zig",
+    "docs/goals/oxc-for-tsrx/notes/T008-yuku-control/run.mjs",
+    "docs/goals/oxc-for-tsrx/notes/T008-yuku-control/qualify.mjs",
+    "Public Zig fetch succeeded for bf03e146d97ae2f0c2d4c4ec90456e1e544d2760 with content hash yuku-0.3.0-m6ransbeEgBItlR3ktj6CNCkRREbMIaaXIzLLrvI6T5u.",
+    "Direct ReleaseFast control: 191 files, 178 valid, 181454 input bytes, 1.333959 ms median, 129.725141 MiB/s, zero non-idempotent outputs.",
+    "Qualification: 179 authoritative-valid, 178 native-valid, zero output parse/semantic/comment/idempotence failures, one explicit grammar fallback fixture.",
+    "Layout audit: zero fallback-exact outputs, 119 leading-tab outputs, 57 over-width outputs, widest breakable line 288 columns.",
+    "Fresh-process representative formatting: 20 samples, 1.676333 ms median, 2.09925 ms p95.",
+    "RSS sampling: 5408 KiB single corpus and 23328 KiB eight-corpus stress control process."
+  ],
+  "commands": [
+    {
+      "cmd": "zig fetch --global-cache-dir /tmp/oxc-tsrx-zig-fetch git+https://github.com/thejackshelton/yuku.git#bf03e146d97ae2f0c2d4c4ec90456e1e544d2760",
+      "status": "pass"
+    },
+    {
+      "cmd": "env ZIG_GLOBAL_CACHE_DIR=/tmp/oxc-tsrx-zig-global ZIG_LOCAL_CACHE_DIR=.zig-cache zig build --release=fast",
+      "status": "pass"
+    },
+    {
+      "cmd": "node docs/goals/oxc-for-tsrx/notes/T008-yuku-control/run.mjs zig-out/bin/t008-yuku-control /Users/jacksm5pro/dev/open-source/markless",
+      "status": "pass"
+    },
+    {
+      "cmd": "node docs/goals/oxc-for-tsrx/notes/T008-yuku-control/qualify.mjs /Users/jacksm5pro/dev/open-source/markless /Users/jacksm5pro/dev/open-source/yuku",
+      "status": "pass"
+    },
+    {
+      "cmd": "20 fresh native binary process spawns for representative format",
+      "status": "pass"
+    },
+    {
+      "cmd": "single-corpus and eight-corpus native process RSS sampling",
+      "status": "pass"
+    },
+    {
+      "cmd": "node /Users/jacksm5pro/.codex/plugins/cache/goalbuddy/goalbuddy/0.4.0/skills/goal-prep/scripts/check-goal-state.mjs docs/goals/oxc-for-tsrx",
+      "status": "pass"
+    }
+  ],
+  "parallel_safety": "One T009 write Worker only. External repositories remain read-only; no parallel agent may edit product, board, or dependency source while the native build/layout boundary is established.",
+  "missing_evidence": [
+    "A production N-API binding and direct Node-host boundary benchmark do not exist yet.",
+    "The repository-owned format layout has not yet passed shared config, width, semantic, or idempotence tests.",
+    "Only the local darwin-arm64 control was compiled; current-platform tarball and other platform build artifacts are not yet proved.",
+    "The public TSRX dependency branch is unreleased, 38 upstream commits behind, and does not rebase cleanly; pinning protects consumers, but upstream merge or deliberate maintenance remains necessary.",
+    "Vite+, editor, and final clean-room acceptance remain later required slices."
+  ],
+  "required_board_updates": [
+    "Mark T008 done with the approved-with-conditions decision and attach this receipt.",
+    "Activate T009 exactly as specified in state.yaml.",
+    "Do not activate T999 until native formatting, remaining toolchain/editor slices, packaging, and full acceptance are complete."
+  ],
+  "external_writes": false
+}

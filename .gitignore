@@ -1,0 +1,8 @@
+node_modules/
+/target/
+benchmarks/**/latest.json
+*.log
+docs/dist/
+.docs-demo-tmp/
+docs/tools/projection-dump/target/
+benchmarks/comparative/.corpus-*/

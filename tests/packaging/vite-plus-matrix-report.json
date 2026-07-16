@@ -1,0 +1,96 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-07-16T21:42:08.585Z",
+  "host": {
+    "platform": "darwin",
+    "architecture": "arm64",
+    "node": "v24.15.0",
+    "nativeTarget": "aarch64-apple-darwin"
+  },
+  "native": {
+    "packageName": "@oxc-tsrx/native-darwin-arm64",
+    "version": "0.1.0",
+    "target": "aarch64-apple-darwin",
+    "oxcRevision": "8e0ed2ebb96137fb1611cdbd5742d5cb46037d40",
+    "integrity": "sha512-yyOJmoHZzLTYU/1ifbpEcOqVtPC+RmBf8R1OsCweRGJkBPE9N0Stqwoegul7+KKOoFJTfLVALJ93yQiLm1vxvA==",
+    "shasum": "6819e734b8344083c787327771582b5b53a78b49"
+  },
+  "policy": {
+    "legacy": "0.1.20 isolated opt-in control; not supported for new installs",
+    "minimum": "0.1.24",
+    "current": "0.2.4",
+    "next": "advisory only until published and separately qualified"
+  },
+  "lanes": [
+    {
+      "lane": "minimum",
+      "vitePlus": {
+        "version": "0.1.24",
+        "core": "0.1.24",
+        "bundledOxlint": "=1.67.0",
+        "bundledOxfmt": "=0.52.0",
+        "bundledTsgolint": "=0.23.0"
+      },
+      "companions": {
+        "oxlintTsrx": "0.1.0",
+        "oxfmtTsrx": "0.1.0",
+        "delegatedOxlint": "1.74.0",
+        "delegatedOxfmt": "0.59.0"
+      },
+      "proof": {
+        "supported": true,
+        "cleanInstall": true,
+        "mixedLint": true,
+        "mixedFormatCheck": true,
+        "convergentCheckFix": true,
+        "viteBuild": true,
+        "viteDev": true,
+        "viteDevRetransform": true,
+        "audit": {
+          "info": 0,
+          "low": 0,
+          "moderate": 0,
+          "high": 0,
+          "critical": 0,
+          "total": 0
+        },
+        "environmentOverrides": false
+      }
+    },
+    {
+      "lane": "current",
+      "vitePlus": {
+        "version": "0.2.4",
+        "core": "0.2.4",
+        "bundledOxlint": "=1.72.0",
+        "bundledOxfmt": "=0.57.0",
+        "bundledTsgolint": "=0.24.0"
+      },
+      "companions": {
+        "oxlintTsrx": "0.1.0",
+        "oxfmtTsrx": "0.1.0",
+        "delegatedOxlint": "1.74.0",
+        "delegatedOxfmt": "0.59.0"
+      },
+      "proof": {
+        "supported": true,
+        "cleanInstall": true,
+        "mixedLint": true,
+        "mixedFormatCheck": true,
+        "convergentCheckFix": true,
+        "viteBuild": true,
+        "viteDev": true,
+        "viteDevRetransform": true,
+        "audit": {
+          "info": 0,
+          "low": 0,
+          "moderate": 0,
+          "high": 0,
+          "critical": 0,
+          "total": 0
+        },
+        "environmentOverrides": false
+      }
+    }
+  ]
+}

@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 1,
+  "timestamp": "2026-07-16T17:13:53.477Z",
+  "host": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "node": "v24.15.0"
+  },
+  "versions": {
+    "tsgolint": "0.24.0"
+  },
+  "samplePolicy": {
+    "coldSamples": 1,
+    "warmupsAfterCold": 1,
+    "measured": 11,
+    "statistic": "median and nearest-rank p95 over fresh native CLI processes"
+  },
+  "defaultSyntax": {
+    "coldMs": 5.973458000000001,
+    "rawMs": [
+      2.437000000000001,
+      2.566458000000001,
+      2.46575,
+      2.5020409999999984,
+      2.457499999999996,
+      2.546749999999996,
+      2.296999999999997,
+      2.433166,
+      2.2529169999999965,
+      2.334291999999998,
+      2.198625
+    ],
+    "medianMs": 2.437000000000001,
+    "p95Ms": 2.566458000000001
+  },
+  "singleTypeAware": {
+    "coldMs": 22.069458000000004,
+    "rawMs": [
+      22.346791999999994,
+      24.40912499999999,
+      22.557583000000022,
+      22.39100000000002,
+      21.85179099999999,
+      22.483791999999994,
+      22.525959,
+      22.001709000000005,
+      22.888625000000047,
+      22.44874999999996,
+      22.07679200000001
+    ],
+    "medianMs": 22.44874999999996,
+    "p95Ms": 24.40912499999999
+  },
+  "projectTypeAware": {
+    "coldMs": 22.88466699999998,
+    "rawMs": [
+      22.751499999999965,
+      22.474166999999966,
+      22.408249999999953,
+      22.577957999999967,
+      22.836332999999968,
+      23.00833300000005,
+      23.02595800000006,
+      21.906749999999988,
+      22.375166000000036,
+      23.149917000000073,
+      22.515040999999997
+    ],
+    "medianMs": 22.577957999999967,
+    "p95Ms": 23.149917000000073
+  },
+  "ratios": {
+    "singleTypeAwareVsDefaultP95": 9.510821918768974
+  },
+  "invariants": {
+    "defaultParseCount": 1,
+    "defaultTypeAwareProcesses": 0,
+    "singleTypeAwareProcesses": 1,
+    "projectTypeAwareProcesses": 1,
+    "projectParseCount": 2
+  },
+  "budgets": {
+    "defaultSyntaxP95MsMax": 60,
+    "singleTypeAwareP95MsMax": 250,
+    "projectTypeAwareP95MsMax": 300,
+    "singleTypeAwareColdMsMax": 1200,
+    "projectTypeAwareColdMsMax": 600,
+    "singleTypeAwareVsDefaultP95RatioMax": 12,
+    "typeAwareProcessesPerBatch": 1,
+    "defaultParseCountPerFile": 1
+  },
+  "assertions": {
+    "defaultSyntaxP95": true,
+    "singleTypeAwareP95": true,
+    "projectTypeAwareP95": true,
+    "singleTypeAwareCold": true,
+    "projectTypeAwareCold": true,
+    "singleTypeAwareRatio": true,
+    "defaultPathUnchanged": true,
+    "oneTypeProcessPerBatch": true
+  }
+}

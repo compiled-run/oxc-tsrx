@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="OXC for TSRX logo candidate at-brace">
+  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+  <stop offset="0" stop-color="#a855f7"/>
+  <stop offset="0.55" stop-color="#7c3aed"/>
+  <stop offset="1" stop-color="#5b21b6"/>
+</linearGradient></defs>
+  <rect width="64" height="64" rx="15" fill="url(#g)"/>
+  <g transform="translate(-6 0)"><g fill="none" stroke="#fff" stroke-width="4.2" stroke-linecap="round">
+    <circle cx="30" cy="30" r="7"/>
+    <path d="M39 30 v4 a4.5 4.5 0 0 0 9 0 v-4 a16 16 0 1 0 -6 12.5"/>
+  </g></g>
+  <path fill="none" stroke="#fff" stroke-width="3.444" stroke-linecap="round" stroke-linejoin="round"
+     d="M47.08 19.700000000000003 c3.69 0 4.92 2.05 4.92 4.92 v4.1 c0 2.296 1.476 3.28 3.28 3.28 c-1.804 0 -3.28 0.9839999999999999 -3.28 3.28 v4.1 c0 2.8699999999999997 -1.23 4.92 -4.92 4.92"/>
+</svg>

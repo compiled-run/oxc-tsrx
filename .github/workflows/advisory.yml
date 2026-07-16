@@ -1,0 +1,171 @@
+name: Non-blocking dependency advisories
+
+on:
+  schedule:
+    - cron: "17 13 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependency-advisories
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "1"
+  npm_config_audit: "false"
+  npm_config_fund: "false"
+
+jobs:
+  oxc-main:
+    name: Canonical OXC main adapter probe
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    continue-on-error: true
+    env:
+      ADVISORY_DIR: /tmp/oxc-tsrx-oxc-main
+    steps:
+      - name: Check out the exact source revision
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Install Node.js 24.15.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.15.0
+          cache: npm
+
+      - name: Install current Rust 1.97.0
+        shell: bash
+        run: |
+          rustup toolchain install 1.97.0 --profile minimal
+          rustup default 1.97.0
+
+      - name: Resolve canonical OXC main without changing the checkout
+        id: candidate
+        shell: bash
+        run: |
+          candidate="$(git ls-remote https://github.com/oxc-project/oxc.git refs/heads/main | awk '{print $1}')"
+          [[ "$candidate" =~ ^[0-9a-f]{40}$ ]]
+          printf 'revision=%s\n' "$candidate" >> "$GITHUB_OUTPUT"
+          printf 'OXC main candidate: %s\n' "$candidate"
+
+      - name: Create an isolated upgrade copy
+        shell: bash
+        env:
+          CANDIDATE: ${{ steps.candidate.outputs.revision }}
+        run: |
+          mkdir -p "$ADVISORY_DIR"
+          git archive --format=tar HEAD | tar -xf - -C "$ADVISORY_DIR"
+          cd "$ADVISORY_DIR"
+          node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+          import { readFile, writeFile } from "node:fs/promises";
+
+          const files = [
+            "crates/oxc_adapter/Cargo.toml",
+            "crates/oxc_adapter/src/lib.rs",
+            "packages/runtime/dist/index.js",
+            "scripts/package-native.mjs",
+            "scripts/package-vscode.mjs",
+          ];
+          const manifest = await readFile(files[0], "utf8");
+          const current = manifest.match(/rev = "([0-9a-f]{40})"/)?.[1];
+          assert.match(current ?? "", /^[0-9a-f]{40}$/);
+          assert.match(process.env.CANDIDATE ?? "", /^[0-9a-f]{40}$/);
+          assert.notEqual(current, process.env.CANDIDATE, "OXC main still equals the release pin");
+          for (const path of files) {
+            const before = await readFile(path, "utf8");
+            const after = before.replaceAll(current, process.env.CANDIDATE);
+            assert.notEqual(after, before, `${path} did not contain the release pin`);
+            await writeFile(path, after);
+          }
+          NODE
+
+      - name: Conservatively update the canonical OXC lock entries
+        id: lock
+        working-directory: ${{ env.ADVISORY_DIR }}
+        shell: bash
+        env:
+          CANDIDATE: ${{ steps.candidate.outputs.revision }}
+        run: |
+          cargo update oxc_allocator --precise "$CANDIDATE"
+          cargo metadata --locked --format-version 1 > /dev/null
+
+      - name: Compile and exercise the candidate adapter
+        id: qualify
+        working-directory: ${{ env.ADVISORY_DIR }}
+        shell: bash
+        run: |
+          npm ci --ignore-scripts
+          cargo check --workspace --all-targets --locked
+          cargo test --workspace --all-targets --locked
+          cargo build --release --locked -p oxc_tsrx_cli --bins
+          npm test
+          node --test tests/packaging/boundary.test.mjs
+
+      - name: Summarize the advisory result
+        if: always()
+        shell: bash
+        run: |
+          {
+            printf '## Canonical OXC main advisory\n\n'
+            printf -- '- Candidate: `%s`\n' '${{ steps.candidate.outputs.revision }}'
+            printf -- '- Lock update: `%s`\n' '${{ steps.lock.outcome }}'
+            printf -- '- Compile/behavior probe: `%s`\n' '${{ steps.qualify.outcome }}'
+            printf -- '- Policy: advisory only; never release from this mutated temporary copy.\n'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  vite-plus-legacy:
+    name: Vite+ 0.1.20 legacy control
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    continue-on-error: true
+    steps:
+      - name: Check out the exact source revision
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Install Node.js 24.15.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.15.0
+          cache: npm
+
+      - name: Install Rust 1.95.0
+        shell: bash
+        run: |
+          rustup toolchain install 1.95.0 --profile minimal
+          rustup default 1.95.0
+
+      - name: Install the locked graph and build release binaries
+        shell: bash
+        run: |
+          npm ci --ignore-scripts
+          cargo build --release --locked -p oxc_tsrx_cli --bins
+
+      - name: Run the isolated legacy control
+        id: legacy
+        env:
+          OXC_TSRX_VITE_PLUS_LEGACY: "only"
+          OXC_TSRX_RETAIN_MATRIX_REPORT: "1"
+        run: node --test tests/packaging/vite-plus-matrix.test.mjs
+
+      - name: Retain the legacy report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: vite-plus-0.1.20-legacy-report
+          path: tests/packaging/vite-plus-matrix-report.json
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Mark the lane as advisory
+        if: always()
+        shell: bash
+        run: |
+          {
+            printf '## Vite+ 0.1.20 legacy control\n\n'
+            printf -- '- Result: `%s`\n' '${{ steps.legacy.outcome }}'
+            printf -- '- Policy: non-blocking and unsupported for new installs; 0.1.24 is the minimum supported release.\n'
+          } >> "$GITHUB_STEP_SUMMARY"

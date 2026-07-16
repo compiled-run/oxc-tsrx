@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "warmups": 5,
+  "samples": 30,
+  "warm10kSamples": 100,
+  "coldProcessSamples": 20,
+  "rssProcessSamples": 5,
+  "corpusTargetBytes": 1048576,
+  "memoryCorpusTargetBytes": 8388608,
+  "candidateBinary": "target/release/oxc-tsrx",
+  "stockOxlintBinary": "node_modules/oxlint-current/bin/oxlint",
+  "p01": {
+    "medianLatencyRatioMax": 1.05,
+    "p95LatencyRatioMax": 1.08
+  },
+  "p02": {
+    "medianMibPerSecondMin": 75.0,
+    "p95MibPerSecondMin": 60.0,
+    "equivalentTsxRatioMin": 0.5,
+    "warm10kP95MsMax": 1.0
+  },
+  "p03": {
+    "oneThreadMedianMibPerSecondMin": 35.0,
+    "endToEndLatencyRatioMax": 1.35
+  },
+  "p05": {
+    "coldP95MsMax": 50.0,
+    "upstreamLatencyRatioMax": 1.25
+  },
+  "p07": {
+    "upstreamRatioMax": 1.25,
+    "additiveBytesMax": 33554432
+  }
+}

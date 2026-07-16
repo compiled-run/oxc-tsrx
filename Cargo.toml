@@ -1,0 +1,31 @@
+[workspace]
+members = [
+  "crates/oxc_adapter",
+  "crates/oxc_tsrx_benchmark",
+  "crates/oxc_tsrx_cli",
+  "crates/oxc_tsrx_format_benchmark",
+  "crates/tsrx_format",
+  "crates/tsrx_lint",
+  "crates/tsrx_syntax",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/thejackshelton/oxc-tsrx"
+rust-version = "1.95"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = { level = "deny", priority = -1 }
+pedantic = { level = "deny", priority = -1 }
+
+[profile.release]
+codegen-units = 1
+lto = "thin"
+panic = "abort"
+strip = "symbols"

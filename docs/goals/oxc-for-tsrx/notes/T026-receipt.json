@@ -1,0 +1,184 @@
+{
+  "goalbuddy_receipt_v1": {
+    "result": "done",
+    "task_id": "T026",
+    "board_path": "/Users/jacksm5pro/dev/open-source/oxc-tsrx/docs/goals/oxc-for-tsrx/state.yaml",
+    "summary": "Completed the non-fork release-candidate packaging tranche: exact-pin native packages for eight targets, public oxlint-tsrx/oxfmt-tsrx/runtime packages, platform VSIX production, clean consumer and Vite+ version matrices, fail-closed native discovery, complete legal inventories, read-only CI/release workflows, isolated OXC upgrade policy, and a byte-preserving embedded-CSS decision. Fresh local evidence covers the current platform, installed VSIX behavior, Markless, security audits, and every frozen performance gate. No package, site, repository, or announcement was published.",
+    "changed_files": [
+      "package.json",
+      "package-lock.json",
+      "README.md",
+      "LICENSE",
+      "THIRD_PARTY_NOTICES.md",
+      ".github/workflows/advisory.yml",
+      ".github/workflows/ci.yml",
+      ".github/workflows/release-candidate.yml",
+      "compliance/css-boundary.json",
+      "licenses/**",
+      "crates/oxc_adapter/**",
+      "crates/oxc_tsrx_cli/**",
+      "crates/tsrx_format/**",
+      "packages/native/README.md",
+      "packages/runtime/**",
+      "packages/oxlint/**",
+      "packages/oxfmt/**",
+      "packages/vscode/**",
+      "scripts/package-native.mjs",
+      "scripts/package-vscode.mjs",
+      "scripts/generate-rust-license-inventory.mjs",
+      "scripts/generate-vscode-license-inventory.mjs",
+      "tests/packaging/**",
+      "docs/releasing/**",
+      "docs/integrations/configuration.md",
+      "docs/integrations/editor.md",
+      "docs/integrations/vite-plus.md",
+      "docs/architecture/embedded-css-boundary.md",
+      "benchmarks/native-lint/results-1784232197979.json",
+      "benchmarks/native-format/results-1784232232700.json",
+      "benchmarks/type-aware/results-1784232238152.json",
+      "benchmarks/editor/results-1784232251049.json",
+      "benchmarks/vite/results-1784232269680.json"
+    ],
+    "commands": [
+      {
+        "cmd": "cargo fmt --all -- --check",
+        "status": "pass"
+      },
+      {
+        "cmd": "cargo clippy --workspace --all-targets --locked -- -D warnings",
+        "status": "pass"
+      },
+      {
+        "cmd": "cargo test --workspace --all-targets --locked",
+        "status": "pass",
+        "evidence": "44 Rust tests passed."
+      },
+      {
+        "cmd": "cargo build --release --locked -p oxc_tsrx_cli --bins",
+        "status": "pass"
+      },
+      {
+        "cmd": "npm test",
+        "status": "pass",
+        "evidence": "60/60 product, config, Vite/Vite+, type-aware, and editor tests passed with real localhost build/dev/HMR enabled."
+      },
+      {
+        "cmd": "npm run test:packaging:unit",
+        "status": "pass",
+        "evidence": "23/23 package, boundary, legal, CSS, platform-object, and VSIX artifact tests passed."
+      },
+      {
+        "cmd": "npm run licenses:check",
+        "status": "pass",
+        "evidence": "205 locked Rust shipping dependencies and 12 bundled VS Code dependencies verified."
+      },
+      {
+        "cmd": "npm run test:packaging:clean",
+        "status": "pass",
+        "evidence": "Untouched tarballs completed the supported workflow from an empty consumer; audit reported zero vulnerabilities."
+      },
+      {
+        "cmd": "npm run test:packaging:matrix",
+        "status": "pass",
+        "evidence": "Supported Vite+ 0.1.24 and 0.2.4 clean-install lanes passed with zero advisories."
+      },
+      {
+        "cmd": "OXC_TSRX_VITE_PLUS_LEGACY=only npm run test:packaging:matrix",
+        "status": "pass",
+        "evidence": "Vite+ 0.1.20 passed only as the documented isolated unsupported legacy control."
+      },
+      {
+        "cmd": "npm audit --audit-level=high --json",
+        "status": "pass",
+        "evidence": "Root graph reported zero vulnerabilities at every severity."
+      },
+      {
+        "cmd": "npm run build:editor",
+        "status": "pass"
+      },
+      {
+        "cmd": "npm run test:packaging:vscode",
+        "status": "pass",
+        "evidence": "VS Code 1.128 installed the generated platform VSIX and proved activation, authored diagnostics, format-on-save, and a safe action without binary overrides."
+      },
+      {
+        "cmd": "MARKLESS_ROOT=/Users/jacksm5pro/dev/open-source/markless OXFMT_BIN=target/release/oxc-tsrx-fmt node --test tests/markless-control-corpus.test.mjs",
+        "status": "pass",
+        "evidence": "Exactly 179/179 parser-valid committed Markless files formatted, reparsed, and converged without modifying Markless."
+      },
+      {
+        "cmd": "npm run benchmark:native-lint",
+        "status": "pass",
+        "evidence": "results-1784232197979.json: 257.66 MiB/s scan/projection/parse median, 77.51 MiB/s complete CLI, 1.140x TSRX/TSX CLI ratio, 3.33 ms cold p95; all assertions passed."
+      },
+      {
+        "cmd": "npm run benchmark:native-format",
+        "status": "pass",
+        "evidence": "results-1784232232700.json: 127.40 MiB/s sequential, 827.93 MiB/s default batch, 20.94 MiB/s generalized control, 3.25 ms stdin p95; all assertions passed."
+      },
+      {
+        "cmd": "npm run benchmark:type-aware",
+        "status": "pass",
+        "evidence": "results-1784232238152.json: 3.03 ms default p95, 26.90 ms single-file and 24.79 ms project type-aware p95, one type process per batch; all assertions passed."
+      },
+      {
+        "cmd": "npm run benchmark:editor",
+        "status": "pass",
+        "evidence": "results-1784232251049.json: 3.06 ms initial open, 0.161 ms edit p95, 0.164 ms format p95, 0.120 ms action p95, 10.92 MiB RSS and zero soak growth."
+      },
+      {
+        "cmd": "node benchmarks/vite/run.mjs",
+        "status": "pass",
+        "evidence": "results-1784232269680.json: mixed lint 64.29 ms p95, mixed format 132.11 ms p95, Vite+ lint 276.13 ms p95, exactly one native TSRX parse; all assertions passed."
+      },
+      {
+        "cmd": "/private/tmp/actionlint-1.7.12/actionlint .github/workflows/*.yml",
+        "status": "pass"
+      },
+      {
+        "cmd": "node --test tests/packaging/boundary.test.mjs",
+        "status": "pass",
+        "evidence": "The upstream-hook documentation contract failed first, then passed after distinguishing OXC's public compiled ToolBuilder seam from missing runtime hooks."
+      }
+    ],
+    "artifacts": [
+      "tests/packaging/clean-install-report.json",
+      "tests/packaging/vite-plus-matrix-report.json",
+      "tests/packaging/installed-vsix-report.json",
+      "compliance/css-boundary.json",
+      "licenses/rust-dependencies.json",
+      "packages/vscode/licenses/bundle-dependencies.json",
+      ".github/workflows/release-candidate.yml",
+      ".github/workflows/advisory.yml",
+      "docs/releasing/README.md",
+      "docs/releasing/upgrades.md",
+      "docs/releasing/platform-abi-policy.md",
+      "docs/integrations/editor.md"
+    ],
+    "evidence": [
+      "Clean install selected @oxc-tsrx/native-darwin-arm64 0.1.0, the exact OXC revision 8e0ed2ebb96137fb1611cdbd5742d5cb46037d40, and no source-tree or environment override.",
+      "The retained VSIX report records identical before/after Markless fingerprints and externalWrites=false.",
+      "The supported Vite+ report records 0.1.24 and 0.2.4 with mixed lint, format-check, convergent check --fix, local companion resolution, and zero vulnerabilities.",
+      "The release-candidate workflow defines eight 64-bit npm targets and eight matching VSIX targets, pinned read-only Actions, Linux ABI gates, legal staging, checksums, CycloneDX SBOMs, and unsigned provenance staging without any publish/deploy step.",
+      "KEEP_RAW remains the shipping CSS decision: payloads are byte-exact, embedded parse count and format time are zero, and the pinned canonical OXC CSS graph still requires the forbidden allocator patch.",
+      "The editor guide now records the landed public OXC ToolBuilder embedding seam, the missing stock runtime/client hook, and capability-probed migration targets for language plugins, custom parsers, and Oxfmt plugins."
+    ],
+    "deviations": [
+      "Actual eight-runner hosted artifacts remain first-run evidence after an authorized repository push. T026 proves the current host artifact, portable Mach-O/ELF/PE identity checks, the complete matrix, action syntax, and the approval-gated build plan without performing that external write.",
+      "Embedded CSS was not enabled because the pinned canonical dependency graph still requires a downstream Cargo patch and duplicate allocator types. Raw byte preservation is retained and directly tested.",
+      "The first sandboxed editor benchmark attempt could not invoke ps for RSS measurement; the approved unsandboxed rerun passed every memory and latency budget.",
+      "A disposable docs build exposed a benchmark-row dispatch defect in docs/benchmarks-data.mjs. That file is outside T026 and inside the already-queued T030 site task; generated site output was not changed or falsely claimed here.",
+      "The workspace has no Git metadata, so scope was audited through the T026 allowed-file inventory, deterministic package/legal reports, and the no-fork/no-patch source-boundary tests rather than a Git diff."
+    ],
+    "remaining_blockers": [
+      "T030 must repair and prove the static docs build, complete public metadata, release notes, social previews, and approval-gated launch payloads.",
+      "T027 must run the final all-surface clean-room oracle after T030, followed by the T999 final Judge audit.",
+      "Publishing packages, deploying the site, pushing a repository, Marketplace upload, and posting announcements remain external actions requiring exact user approval."
+    ],
+    "external_writes": false,
+    "full_outcome_complete": false,
+    "verification_attempts": 2,
+    "stopped_because": null,
+    "recommended_next": "Activate T030 and make the static site plus release payloads launch-ready, beginning with the newly reproduced docs benchmark-row dispatch failure."
+  }
+}

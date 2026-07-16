@@ -1,0 +1,79 @@
+{
+  "result": "done",
+  "task_id": "T014",
+  "harness": "codex",
+  "full_outcome_complete": false,
+  "summary": "Restored the retained fixture's accidental const mutation to the exact T011 `var legacy = 2;` source, re-proved the safe no-var fix, and strengthened P05 to run the real no-debugger+no-unused-vars pair in 20 fresh candidate TSRX processes against the same rule arguments in official Oxlint on equal-purpose TSX. Diagnostic parity is required and the unchanged frozen latency/ratio thresholds pass. The new raw report contains 16 passing P01/P02/P03/P05/P07 assertions.",
+  "changed_files": [
+    "tests/fixtures/lint/native-lint.tsrx",
+    "crates/oxc_tsrx_benchmark/src/main.rs",
+    "benchmarks/native-lint/README.md",
+    "benchmarks/native-lint/results-1784170286503.json",
+    "docs/architecture/rust-oxc-core.md",
+    "README.md"
+  ],
+  "recovery": {
+    "scope_mistake": "T013 accidentally ran --fix on the retained fixture during a read-only probe.",
+    "restoration": "Changed only `const legacy = 2;` back to the recorded `var legacy = 2;` line before all other Worker changes.",
+    "proof": "The safe-fix black-box test copies the restored fixture, applies one OXC no-var edit, preserves all TSRX markers, and passes validation reparse."
+  },
+  "performance": {
+    "report": "benchmarks/native-lint/results-1784170286503.json",
+    "startup_rules": [
+      "no-debugger",
+      "no-unused-vars"
+    ],
+    "fresh_process_samples": 20,
+    "candidate_tsrx_p50_ms": 2.56,
+    "candidate_tsrx_p95_ms": 2.63,
+    "official_oxlint_tsx_p95_ms": 51.63,
+    "candidate_control_p95_ratio": 0.051,
+    "diagnostic_parity": true,
+    "p02_median_mib_s": 315.01,
+    "p03_cli_median_mib_s": 106.66,
+    "p03_cli_tsx_ratio": 1.075,
+    "assertions_passed": 16
+  },
+  "commands": [
+    {
+      "cmd": "rg -n '^  var legacy = 2;$' tests/fixtures/lint/native-lint.tsrx",
+      "status": "pass"
+    },
+    {
+      "cmd": "cargo fmt --all -- --check",
+      "status": "pass"
+    },
+    {
+      "cmd": "cargo clippy --workspace --all-targets --locked -- -D warnings",
+      "status": "pass"
+    },
+    {
+      "cmd": "cargo test --workspace --locked",
+      "status": "pass"
+    },
+    {
+      "cmd": "cargo build --release --locked -p oxc_tsrx_cli",
+      "status": "pass"
+    },
+    {
+      "cmd": "OXLINT_BIN=target/release/oxc-tsrx node --test tests/native-lint.test.mjs",
+      "status": "pass",
+      "evidence": "3/3 tests passed, including restored var -> safe no-var fix/reparse."
+    },
+    {
+      "cmd": "cargo run --release --locked -p oxc_tsrx_benchmark -- --assert benchmarks/native-lint/budgets.json",
+      "status": "pass",
+      "evidence": "results-1784170286503.json; all 16 assertions pass."
+    },
+    {
+      "cmd": "node /Users/jacksm5pro/.codex/plugins/cache/goalbuddy/goalbuddy/0.4.0/skills/goal-prep/scripts/check-goal-state.mjs docs/goals/oxc-for-tsrx",
+      "status": "pass"
+    }
+  ],
+  "remaining_required_work": [
+    "Complete the full TSRX grammar and lint/config/plugin/type-aware matrix.",
+    "Implement native OXC-based formatting and clear P04.",
+    "Implement Vite/Vite+, editor, platform packaging, OXC upgrade lanes, and temporary-copy Markless acceptance."
+  ],
+  "external_writes": false
+}

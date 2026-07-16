@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 2,
+  "warmups": 5,
+  "samples": 20,
+  "files": 1000,
+  "tsrxShare": 0.2,
+  "oxcTsrxVsOxlintMax": 1.5,
+  "eslintVsOxcTsrxMin": 2,
+  "mixedVsTsxMax": 1.5
+}

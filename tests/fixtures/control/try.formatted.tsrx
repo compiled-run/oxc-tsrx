@@ -1,0 +1,15 @@
+type Props = { ready: boolean };
+export function AsyncPanel({ ready }: Props) @{
+  <section>
+    @try {
+      var legacy = 1;
+      debugger;
+      <p>{ready ? legacy : 0}</p>;
+    } @pending {
+      <span>Loading</span>;
+    } @catch (error: Error, reset: () => void) {
+      const unused = error;
+      <button onClick={reset}>Retry</button>;
+    }
+  </section>;
+}

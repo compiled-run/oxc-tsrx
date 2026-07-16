@@ -1,0 +1,9 @@
+{
+  "plugins": ["typescript"],
+  "rules": {
+    "typescript/no-unnecessary-type-arguments": "error"
+  },
+  "options": {
+    "typeAware": true
+  }
+}

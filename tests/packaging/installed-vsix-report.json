@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-07-16T20:02:16.800Z",
+  "target": "aarch64-apple-darwin",
+  "vscodeTarget": "darwin-arm64",
+  "extensionId": "thejackshelton.oxc-tsrx-vscode",
+  "installedDirectory": "thejackshelton.oxc-tsrx-vscode-0.1.0",
+  "embeddedLspSha256": "8dc74fe6f5319ea8c76e5cdcb11981231500a596f3110cf58b8d431343ec4998",
+  "environmentOverrides": false,
+  "markless": {
+    "source": "packages/vitest-browser/browser/fixtures/arm-try-events.tsrx",
+    "beforeFingerprint": "9dea888de18b32e8cad6272076aadcd9771c219bb68e124f59f1497dc2f2cd71",
+    "afterFingerprint": "9dea888de18b32e8cad6272076aadcd9771c219bb68e124f59f1497dc2f2cd71",
+    "externalWrites": false
+  },
+  "assertions": {
+    "installedFromVsix": true,
+    "embeddedServer": true,
+    "automaticActivation": true,
+    "exactAuthoredDiagnostics": true,
+    "realFormatOnSave": true,
+    "safeCodeAction": true
+  }
+}

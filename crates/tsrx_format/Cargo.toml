@@ -1,0 +1,19 @@
+[package]
+name = "tsrx_format"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+globset = "0.4.16"
+ignore = "0.4.25"
+json-strip-comments = "3.1.1"
+oxc_adapter = { path = "../oxc_adapter" }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+tsrx_syntax = { path = "../tsrx_syntax" }
+
+[lints]
+workspace = true

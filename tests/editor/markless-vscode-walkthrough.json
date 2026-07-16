@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-07-16T18:41:23.776Z",
+  "vscodeVersion": "1.128.0",
+  "markless": {
+    "head": "b7f834b878847767c14fcac9544e7a7da13a1e17",
+    "source": "packages/vitest-browser/browser/fixtures/arm-try-events.tsrx",
+    "sourceSha256": "d2c4df5fe7aa471ab4762ff0879d6af09b26545e4733d7e1ff393c25e9a0203c",
+    "beforeFingerprint": "9dea888de18b32e8cad6272076aadcd9771c219bb68e124f59f1497dc2f2cd71",
+    "afterFingerprint": "9dea888de18b32e8cad6272076aadcd9771c219bb68e124f59f1497dc2f2cd71",
+    "externalWrites": false
+  },
+  "extension": {
+    "id": "thejackshelton.oxc-tsrx-vscode",
+    "frameworkLanguageId": "markless-tsrx",
+    "nativeServer": "target/release/oxc-tsrx-lsp",
+    "bundledClient": true
+  },
+  "assertions": {
+    "automaticActivation": true,
+    "liveAuthoredDiagnostics": true,
+    "configurationLifecycle": true,
+    "realFormatOnSave": true,
+    "safeCodeAction": true,
+    "diagnosticsUpdatedAfterAction": true
+  }
+}

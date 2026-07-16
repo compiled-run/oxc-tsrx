@@ -1,0 +1,13 @@
+[package]
+name = "projection-dump"
+version = "0.0.0"
+edition = "2024"
+publish = false
+description = "Docs-only helper: prints the real lint projection for TSRX read from stdin."
+
+[dependencies]
+tsrx_syntax = { path = "../../../crates/tsrx_syntax" }
+serde_json = "1"
+
+# Deliberately not a member of the product workspace.
+[workspace]

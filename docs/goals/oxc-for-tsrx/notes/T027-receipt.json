@@ -1,0 +1,84 @@
+{
+  "goalbuddy_receipt_v1": {
+    "result": "done",
+    "task_id": "T027",
+    "harness": "codex",
+    "board_path": "/Users/jacksm5pro/dev/open-source/oxc-tsrx/docs/goals/oxc-for-tsrx/state.yaml",
+    "summary": "Completed the fresh clean-room owner oracle and every frozen performance lane against the launch-ready OXC for TSRX 0.1.0 state. A byte-exact disposable source copy passed fresh npm/Rust builds, all product and packaging tests, empty-consumer tarball installs, minimum/current Vite+ workflows, the 179-file read-only Markless corpus, and a real installed VSIX walkthrough. Markless's complete before/after fingerprint was identical. Five new same-machine benchmark reports pass all 66 frozen assertions, and a human-readable clause-by-clause release matrix now indexes the machine receipts. No repository, package, extension, website, or social payload was published.",
+    "changed_files": [
+      "README.md",
+      "tests/fixtures/acceptance/owner-workflow.tsrx",
+      "tests/acceptance/run.mjs",
+      "tests/acceptance/run-performance.mjs",
+      "docs/acceptance/README.md",
+      "docs/acceptance/matrix.md",
+      "docs/acceptance/clean-room-report.json",
+      "docs/acceptance/performance-report.json",
+      "docs/integrations/configuration.md",
+      "docs/integrations/editor.md",
+      "docs/integrations/vite-plus.md",
+      "benchmarks/native-lint/results-1784235750670.json",
+      "benchmarks/native-format/results-1784235754991.json",
+      "benchmarks/type-aware/results-1784235755835.json",
+      "benchmarks/vite/results-1784235761957.json",
+      "benchmarks/editor/results-1784235762107.json"
+    ],
+    "commands": [
+      {
+        "cmd": "MARKLESS_ROOT=/Users/jacksm5pro/dev/open-source/markless node tests/acceptance/run.mjs",
+        "status": "pass",
+        "evidence": "Fresh lifecycle-script-free npm install, Cargo formatting/Clippy/44 tests/release build, editor build, 205 Rust and 12 VS Code license checks, authored diagnostic plus identity-safe fix/reparse, 60/60 product tests, 23/23 package/non-fork/legal tests, untouched tarballs in an empty consumer, Vite+ 0.1.24 and 0.2.4, 179/179 parser-valid Markless files, 12/12 invalid fixtures rejected, and a real installed VSIX walkthrough all passed. docs/acceptance/clean-room-report.json has status passed and failure null."
+      },
+      {
+        "cmd": "node tests/acceptance/run-performance.mjs",
+        "status": "pass",
+        "evidence": "All five fresh lanes passed: native lint 19/19 assertions, native format 25/25, type-aware 8/8, Vite/Vite+ 6/6, and incremental editor 8/8. docs/acceptance/performance-report.json has status passed and failure null."
+      },
+      {
+        "cmd": "node --check tests/acceptance/run.mjs && node --check tests/acceptance/run-performance.mjs",
+        "status": "pass"
+      },
+      {
+        "cmd": "Independent clean-room report audit",
+        "status": "pass",
+        "evidence": "Confirmed status/failure, exact source copy, all 12 aggregate claims, all six editor assertions, all nine installed-consumer assertions, both supported Vite+ lanes, installed-only native resolution, and identical external fingerprints."
+      }
+    ],
+    "artifacts": [
+      "docs/acceptance/clean-room-report.json",
+      "docs/acceptance/performance-report.json",
+      "docs/acceptance/matrix.md",
+      "benchmarks/native-lint/results-1784235750670.json",
+      "benchmarks/native-format/results-1784235754991.json",
+      "benchmarks/type-aware/results-1784235755835.json",
+      "benchmarks/vite/results-1784235761957.json",
+      "benchmarks/editor/results-1784235762107.json"
+    ],
+    "evidence": [
+      "The clean copy's source hash matched the owner tree before execution; fresh npm and Cargo dependency/build outputs lived only in the disposable workspace, which was removed after success.",
+      "Authored lint evidence records debugger; at UTF-8 byte 37 and var at byte 49 with exactly one OXC parse. The safe fix changed var to const, produced a new SHA-256, reparsed, and returned no diagnostics.",
+      "The installed-package report has ignoreScripts true, environmentOverrides false, localResolutionOnly true, zero audit findings, and native lint/format/server paths wholly inside the empty consumer's node_modules.",
+      "Vite+ 0.1.24 and 0.2.4 both passed clean install, mixed lint, mixed format-check, convergent check --fix, rooted config behavior, zero audit findings, and no environment overrides.",
+      "The installed VSIX activated automatically beside the real Markless extension, loaded its checksummed embedded native server, published exact authored diagnostics, performed format-on-save, and applied an identity-safe action.",
+      "Markless HEAD, status, tracked diff, staged diff, untracked paths, and untracked bytes produced the same combined fingerprint before and after. The repository was never written.",
+      "Fresh performance highlights are 80.68 MiB/s complete native CLI lint, 128.52 MiB/s sequential and 859.86 MiB/s default-thread formatting, 24.23 ms single-file type-aware p95, 262.09 ms current Vite+ mixed-lint p95, 0.142 ms editor diagnostic p95, and zero RSS growth after 100 edits."
+    ],
+    "deviations": [
+      "The first clean-room attempt exposed an acceptance-harness error: it demanded let after no-var even though canonical OXC safely selected const for an immutable binding. The retained source showed only var-to-const changed and relinted cleanly; the assertion was corrected to accept either modern declaration, then the complete clean-room run was repeated from scratch and passed.",
+      "Several aggregate clean-room booleans summarize successful named suites rather than importing per-test JSON. docs/acceptance/matrix.md maps each summary to its direct command, test surface, and detailed retained artifact.",
+      "The dynamic latest-report site test correctly rejected the previous benchmark link in docs/architecture/rust-oxc-core.md. That architecture file and generated docs artifact are outside T027's allowed scope, so T031 owns the bounded evidence-sync repair before final audit.",
+      "The workspace has no Git metadata, so byte-exact copy hashes, external fingerprints, deterministic package inventories, raw reports, and GoalBuddy receipts replace Git cleanliness claims.",
+      "The GoalBuddy-specific goal_worker spawn type is unavailable in the active collaboration interface; PM fallback executed the bounded task and used an independent audit agent for the retained report."
+    ],
+    "remaining_blockers": [
+      "T031 must update docs/architecture/rust-oxc-core.md and the generated static artifact to the new benchmark receipts, then rerun the launch-facing freshness/browser gates.",
+      "T999 must perform the final read-only requirement-by-requirement completion audit.",
+      "Repository push/creation, hosted eight-runner candidate production, npm publication, Marketplace publication, Pages deployment, and social posting remain separate external actions requiring exact user approval."
+    ],
+    "external_writes": false,
+    "full_outcome_complete": false,
+    "verification_attempts": 3,
+    "stopped_because": null,
+    "recommended_next": "Activate T031 for the bounded architecture/generated-site evidence synchronization, then run T999's final Judge audit."
+  }
+}

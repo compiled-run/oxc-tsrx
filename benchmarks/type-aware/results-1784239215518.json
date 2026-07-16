@@ -1,0 +1,148 @@
+{
+  "schemaVersion": 1,
+  "timestamp": "2026-07-16T22:00:15.518Z",
+  "host": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "node": "v24.15.0",
+    "cpu": "Apple M5 Pro",
+    "osRelease": "25.5.0"
+  },
+  "build": {
+    "profile": "release",
+    "binary": "target/release/oxc-tsrx",
+    "oxcRevision": "8e0ed2ebb96137fb1611cdbd5742d5cb46037d40"
+  },
+  "corpus": {
+    "kind": "authored syntax-only, single-file type-aware, and explicit two-file TSRX project fixtures",
+    "files": [
+      "tests/fixtures/lint/native-lint.tsrx",
+      "tests/fixtures/type-aware/single/View.tsrx",
+      "tests/fixtures/type-aware/project/View.tsrx",
+      "tests/fixtures/type-aware/project/service.tsrx"
+    ],
+    "bytes": 576,
+    "sha256": "d9ca737d7481a8de368bdd23e3fced64756bd3bf3722d039aad5c0de52286b82"
+  },
+  "versions": {
+    "tsgolint": "0.24.0"
+  },
+  "samplePolicy": {
+    "coldSamples": 1,
+    "warmupsAfterCold": 5,
+    "measured": 20,
+    "freshProcessesPerLane": 26,
+    "statistic": "median and nearest-rank p95 over measured fresh native CLI processes; first process retained separately"
+  },
+  "defaultSyntax": {
+    "coldMs": 4.139499999999998,
+    "rawMs": [
+      2.447625000000002,
+      2.4027500000000046,
+      2.5521670000000043,
+      2.457957999999998,
+      2.328832999999996,
+      2.2390829999999937,
+      2.2317080000000047,
+      2.2562500000000014,
+      2.256417000000006,
+      2.2099159999999998,
+      2.2684169999999995,
+      2.236666999999997,
+      2.2229170000000025,
+      2.533791000000008,
+      2.264209000000008,
+      2.2554170000000084,
+      2.227917000000005,
+      2.139375000000001,
+      2.241917000000001,
+      2.364417000000003
+    ],
+    "medianMs": 2.2562500000000014,
+    "p95Ms": 2.533791000000008
+  },
+  "singleTypeAware": {
+    "coldMs": 22.03641599999999,
+    "rawMs": [
+      23.239000000000004,
+      25.140417000000014,
+      23.675624999999968,
+      23.18708300000003,
+      22.733749999999986,
+      22.66308399999997,
+      23.585999999999956,
+      23.717832999999985,
+      22.964625000000012,
+      24.008541999999977,
+      23.651459000000045,
+      23.616750000000025,
+      23.803416999999968,
+      24.664125000000013,
+      23.50400000000002,
+      22.805582999999956,
+      23.067332999999962,
+      25.444958000000042,
+      22.949707999999987,
+      23.058457999999973
+    ],
+    "medianMs": 23.50400000000002,
+    "p95Ms": 25.140417000000014
+  },
+  "projectTypeAware": {
+    "coldMs": 24.064959000000044,
+    "rawMs": [
+      23.385582999999997,
+      23.404791000000046,
+      23.162249999999972,
+      23.164875000000052,
+      22.87283400000001,
+      22.957167000000027,
+      24.172124999999937,
+      26.25704200000007,
+      23.35358300000007,
+      23.348999999999933,
+      22.76062499999989,
+      22.614249999999856,
+      23.248540999999932,
+      23.487666999999874,
+      23.658083999999917,
+      26.64087500000005,
+      24.008374999999887,
+      23.239499999999907,
+      22.57620800000018,
+      23.81795800000009
+    ],
+    "medianMs": 23.348999999999933,
+    "p95Ms": 26.25704200000007
+  },
+  "ratios": {
+    "singleTypeAwareVsDefaultP95": 9.92205631798358
+  },
+  "invariants": {
+    "defaultParseCount": 1,
+    "defaultTypeAwareProcesses": 0,
+    "singleTypeAwareProcesses": 1,
+    "projectTypeAwareProcesses": 1,
+    "projectParseCount": 2
+  },
+  "budgets": {
+    "defaultSyntaxP95MsMax": 10,
+    "singleTypeAwareP95MsMax": 60,
+    "projectTypeAwareP95MsMax": 70,
+    "singleTypeAwareColdMsMax": 100,
+    "projectTypeAwareColdMsMax": 120,
+    "singleTypeAwareVsDefaultP95RatioMax": 12,
+    "typeAwareProcessesPerBatch": 1,
+    "defaultParseCountPerFile": 1
+  },
+  "assertions": {
+    "defaultSyntaxP95": true,
+    "singleTypeAwareP95": true,
+    "projectTypeAwareP95": true,
+    "singleTypeAwareCold": true,
+    "projectTypeAwareCold": true,
+    "singleTypeAwareRatio": true,
+    "defaultPathUnchanged": true,
+    "oneTypeProcessPerBatch": true
+  }
+}

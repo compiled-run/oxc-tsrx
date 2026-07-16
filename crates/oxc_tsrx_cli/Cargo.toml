@@ -1,0 +1,29 @@
+[package]
+name = "oxc_tsrx_cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "oxc-tsrx"
+path = "src/main.rs"
+
+[[bin]]
+name = "oxc-tsrx-fmt"
+path = "src/bin/oxc-tsrx-fmt.rs"
+
+[[bin]]
+name = "oxc-tsrx-lsp"
+path = "src/bin/oxc-tsrx-lsp.rs"
+
+[dependencies]
+oxc_adapter = { path = "../oxc_adapter" }
+rayon = "1.11.0"
+serde_json = "1.0.150"
+tsrx_format = { path = "../tsrx_format" }
+tsrx_lint = { path = "../tsrx_lint" }
+
+[lints]
+workspace = true

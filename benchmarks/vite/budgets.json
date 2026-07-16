@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "directLintP95MsMax": 150,
+  "directLintVsCanonicalP95RatioMax": 2.5,
+  "directFormatP95MsMax": 220,
+  "directFormatVsCanonicalP95RatioMax": 2,
+  "vitePlusCurrentLintP95MsMax": 750,
+  "nativeTsrxParseCountPerFile": 1
+}
