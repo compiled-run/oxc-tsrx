@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Marked } from 'marked'
+import { build as rolldownBuild } from 'rolldown'
 import {
   benchmarkHeadings,
   benchmarksSectionsHtml,
@@ -917,6 +918,15 @@ async function build() {
   await writeFile(path.join(outDir, 'playground.html'), renderPlaygroundPage())
 
   await cp(path.join(docsDir, 'assets'), path.join(outDir, 'assets'), { recursive: true })
+  await rolldownBuild({
+    input: path.join(docsDir, 'demo-highlighter-entry.mjs'),
+    platform: 'browser',
+    output: {
+      format: 'esm',
+      file: path.join(outDir, 'assets', 'demo-highlighter.js'),
+      minify: true,
+    },
+  })
   await rm(path.join(outDir, 'assets', 'logos'), { recursive: true, force: true })
   await cp(
     path.join(docsDir, '..', 'node_modules', 'minisearch', 'dist', 'es'),

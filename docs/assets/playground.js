@@ -97,6 +97,10 @@ export async function initDemo(panel) {
     return
   }
 
+  const clientHighlighterPromise = import(new URL('./demo-highlighter.js', import.meta.url))
+    .then((module) => module.createDemoHighlighter())
+    .catch(() => null)
+
   const actions = panel.querySelector('#demo-actions')
   const formatButton = panel.querySelector('#demo-format')
   const resetButton = panel.querySelector('#demo-reset')
@@ -116,6 +120,25 @@ export async function initDemo(panel) {
   if (sidePanel) sidePanel.hidden = false
   const modeNote = document.getElementById('pg-mode-note')
   if (modeNote) modeNote.textContent = 'Connected to the loopback native development server.'
+
+  const timesEl = document.createElement('span')
+  timesEl.id = 'demo-times'
+  timesEl.className = 'demo-times'
+  timesEl.hidden = true
+  panel.querySelector('.code-panel-status').append(timesEl)
+  let highlightMs = null
+  let compileMs = null
+  const updateTimes = (hideHighlight = false) => {
+    const parts = []
+    if (highlightMs !== null && !hideHighlight) {
+      parts.push(
+        `highlighted in ${highlightMs < 10 ? highlightMs.toFixed(1) : Math.round(highlightMs)} ms`,
+      )
+    }
+    if (compileMs !== null) parts.push(`compiled in ${Math.round(compileMs)} ms`)
+    timesEl.textContent = parts.join(' · ')
+    timesEl.hidden = parts.length === 0
+  }
 
   // ---- measurements ----
   const preStyle = getComputedStyle(pre)
@@ -202,7 +225,7 @@ export async function initDemo(panel) {
     hideTooltip()
   })
 
-  // ---- rendering: per-line mirror sync, debounced server re-highlight ----
+  // ---- rendering: synchronous client Shiki with the server path as fallback ----
   let mirrorLineHtml = [...codeEl.querySelectorAll(':scope > .line')].map((el) => el.outerHTML)
   let mirrorLines = original.split('\n')
 
@@ -286,6 +309,72 @@ export async function initDemo(panel) {
       syncSize()
     }, 200)
   }
+
+  const CLIENT_HIGHLIGHT_CUTOFF = 32768
+  let clientHighlighter = null
+  let highlightFrame = null
+  let latestHighlightText = original
+  let composing = false
+
+  const renderLegacy = (text) => {
+    syncMirror(text)
+    syncSize()
+    rehighlight(text)
+    updateTimes(text.length > CLIENT_HIGHLIGHT_CUTOFF)
+  }
+
+  const renderEditor = (text) => {
+    latestHighlightText = text
+    if (!clientHighlighter) {
+      renderLegacy(text)
+      return
+    }
+    if (composing) return
+    if (text.length > CLIENT_HIGHLIGHT_CUTOFF) {
+      if (highlightFrame !== null) cancelAnimationFrame(highlightFrame)
+      highlightFrame = null
+      renderLegacy(text)
+      return
+    }
+    clearTimeout(highlightTimer)
+    highlightGeneration += 1
+    if (highlightFrame !== null) return
+    highlightFrame = requestAnimationFrame(() => {
+      highlightFrame = null
+      const currentText = latestHighlightText
+      if (!clientHighlighter || composing) return
+      if (currentText.length > CLIENT_HIGHLIGHT_CUTOFF) {
+        renderLegacy(currentText)
+        return
+      }
+      try {
+        const startedAt = performance.now()
+        const html = clientHighlighter.highlight(currentText, 'tsrx')
+        const doc = new DOMParser().parseFromString(html, 'text/html')
+        const fresh = doc.querySelector('code')
+        if (!fresh) throw new Error('client highlighter returned no code element')
+        codeEl.innerHTML = fresh.innerHTML
+        adoptMirror(currentText)
+        syncSize()
+        highlightMs = performance.now() - startedAt
+        updateTimes()
+      } catch {
+        clientHighlighter = null
+        editor.dataset.highlighter = 'server'
+        highlightMs = null
+        renderLegacy(currentText)
+      }
+    })
+  }
+
+  void clientHighlighterPromise.then((highlighter) => {
+    if (!highlighter) return
+    clearTimeout(highlightTimer)
+    highlightGeneration += 1
+    clientHighlighter = highlighter
+    editor.dataset.highlighter = 'client'
+    renderEditor(textarea.value)
+  })
 
   // ---- diagnostics ----
   let segments = []
@@ -438,6 +527,10 @@ export async function initDemo(panel) {
             renderDiagnostics(text, [])
             setStatus(`✗ ${escapeHtml(result.error)}`, 'error')
             return
+          }
+          if (typeof result.elapsedMs === 'number') {
+            compileMs = result.elapsedMs
+            updateTimes(text.length > CLIENT_HIGHLIGHT_CUTOFF)
           }
           // Don't flag the word the caret is still inside: mid-typing
           // identifiers produce transient findings that read as noise.
@@ -865,11 +958,9 @@ export async function initDemo(panel) {
   const applySource = (text) => {
     sourceGeneration += 1
     textarea.value = text
-    syncMirror(text)
     clearDiagnostics()
-    syncSize()
     hideTooltip()
-    rehighlight(text)
+    renderEditor(text)
     lint(text, true)
   }
 
@@ -915,12 +1006,17 @@ export async function initDemo(panel) {
       renderTsMenu()
     }
     const text = textarea.value
-    syncMirror(text)
     clearDiagnostics()
-    syncSize()
     hideTooltip()
-    rehighlight(text)
+    renderEditor(text)
     lint(text)
+  })
+  textarea.addEventListener('compositionstart', () => {
+    composing = true
+  })
+  textarea.addEventListener('compositionend', () => {
+    composing = false
+    renderEditor(textarea.value)
   })
   textarea.addEventListener('blur', closeCompletions)
 

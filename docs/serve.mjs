@@ -174,7 +174,9 @@ async function apiLint(body) {
       }
     }
     args.push(file)
+    const startedAt = performance.now()
     const { code, stdout, stderr } = await run(lintBin, args)
+    const elapsedMs = Math.round((performance.now() - startedAt) * 10) / 10
     if (code === 2 || !stdout.trim()) {
       return { error: (stderr.trim() || 'lint failed').split('\n')[0] }
     }
@@ -198,6 +200,7 @@ async function apiLint(body) {
       suppressed: report.oxcTsrx?.diagnosticsSuppressed ?? 0,
       ruleCount: report.number_of_rules ?? null,
       typeAware: Boolean(report.oxcTsrx?.typeAware),
+      elapsedMs,
     }
   } finally {
     await rm(requestDir, { recursive: true, force: true })
@@ -343,9 +346,11 @@ async function apiComplete(body) {
 }
 
 async function apiFormat(source) {
+  const startedAt = performance.now()
   const { code, stdout, stderr } = await run(fmtBin, ['--stdin-filepath=demo.tsrx'], source)
+  const elapsedMs = Math.round((performance.now() - startedAt) * 10) / 10
   if (code !== 0) return { error: (stderr.trim() || 'format failed').split('\n')[0] }
-  return { formatted: stdout }
+  return { formatted: stdout, elapsedMs }
 }
 
 let highlightModule = null

@@ -3,7 +3,7 @@
 // Run: node docs/verify.mjs [baseUrl] [--mode=native|static]
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { chromium } from 'playwright-core'
 
 const positional = process.argv.slice(2).filter((argument) => !argument.startsWith('--'))
@@ -38,6 +38,81 @@ const passes = []
 const check = (ok, label, detail = '') => {
   ;(ok ? passes : failures).push(`${label}${detail ? ` — ${detail}` : ''}`)
   console.log(`${ok ? 'ok  ' : 'FAIL'} ${label}${detail ? ` — ${detail}` : ''}`)
+}
+
+if (mode === 'native') {
+  const [{ createDemoHighlighter }, { getDocsHighlighter, highlightWith }] = await Promise.all([
+    import(pathToFileURL(path.join(docsDir, 'dist', 'assets', 'demo-highlighter.js'))),
+    import('./highlight.mjs'),
+  ])
+  const clientHighlighter = createDemoHighlighter()
+  const serverHighlighter = await getDocsHighlighter()
+  const paritySamples = [
+    `export function TaskList({ tasks }: Props) @{
+  const pending = tasks.filter((task) => !task.done);
+
+  <section class="tasks">
+    @if (pending.length > 0) {
+      @for (const task of pending; key task.id) {
+        <TaskRow task={task} />;
+      } @empty {
+        <AllDone />;
+      }
+    } @else {
+      <SignIn />;
+    }
+    <style>
+      .tasks { display: grid; gap: 0.5rem; }
+    </style>
+  </section>;
+}`,
+    `type Task = { id: string; label: string; done: boolean };
+
+function TaskRow({ task }: { task: Task }) @{
+  <li>{task.label}</li>;
+}
+
+export function TaskList({ tasks }: { tasks: Task[] }) @{
+  const pending = tasks.filter((task) => !task.done);
+
+  <section class="tasks">
+    @if (pending.length > 0) {
+      <ul>
+        @for (const task of pending; key task.id) {
+          <TaskRow task={task} />;
+        }
+      </ul>;
+    } @else {
+      <p>All done!</p>;
+    }
+  </section>;
+}`,
+    `export const Card = ({ name }: { name: string }) => (
+  <section className="card">{\`Hello \${name}!\`}</section>
+)`,
+  ]
+  for (const [index, sample] of paritySamples.entries()) {
+    const lang = index === paritySamples.length - 1 ? 'tsx' : 'tsrx'
+    const clientHtml = clientHighlighter.highlight(sample, lang)
+    const serverHtml = highlightWith(serverHighlighter, sample, lang)
+    let firstDifference = 0
+    while (
+      firstDifference < clientHtml.length &&
+      firstDifference < serverHtml.length &&
+      clientHtml[firstDifference] === serverHtml[firstDifference]
+    ) {
+      firstDifference++
+    }
+    if (clientHtml === serverHtml) firstDifference = -1
+    const contextStart = Math.max(0, firstDifference - 40)
+    check(
+      clientHtml === serverHtml,
+      `demo highlighter: sample ${index + 1} matches server byte-for-byte`,
+      firstDifference === -1
+        ? ''
+        : `first difference ${firstDifference}; client=${JSON.stringify(clientHtml.slice(contextStart, contextStart + 80))}; server=${JSON.stringify(serverHtml.slice(contextStart, contextStart + 80))}`,
+    )
+  }
 }
 
 const browser = await chromium.launch({ channel: 'chrome', headless: true })
@@ -289,6 +364,58 @@ const health = expectedCapabilities
 if (mode === 'native' && health?.native) {
   await page.goto(`${baseUrl}/`, { waitUntil: 'load' })
   await page.waitForSelector('#demo-input', { timeout: 10000 })
+  let demoHighlightRequests = 0
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname.endsWith('/api/highlight')) demoHighlightRequests++
+  })
+  await page.waitForSelector('#demo-editor[data-highlighter="client"]', { timeout: 15000 })
+  const originalDemoInput = await page.inputValue('#demo-input')
+  demoHighlightRequests = 0
+  await page.locator('#demo-input').focus()
+  await page.evaluate(() => {
+    const input = document.getElementById('demo-input')
+    input.setSelectionRange(input.value.length, input.value.length)
+  })
+  await page.keyboard.type("\nconst zz = 'q';")
+  await page.evaluate(() =>
+    new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+  )
+  const clientHighlight = await page.evaluate(() => {
+    const lines = [...document.querySelectorAll('#demo-editor pre code > .line')]
+    const line = lines.at(-1)
+    return {
+      text: line?.textContent ?? '',
+      styledTokens: line
+        ? [...line.querySelectorAll('span[style]')].filter((token) =>
+            token.getAttribute('style').includes('--shiki-light'),
+          ).length
+        : 0,
+    }
+  })
+  check(
+    clientHighlight.text === "const zz = 'q';" && clientHighlight.styledTokens > 0,
+    'demo: client highlighter renders exact Shiki tokens on the next frame',
+    JSON.stringify(clientHighlight),
+  )
+  check(
+    demoHighlightRequests === 0,
+    'demo: client editor typing makes no server highlight requests',
+    `${demoHighlightRequests} requests`,
+  )
+  const immediateTimes = (await page.locator('#demo-times').textContent()).trim()
+  check(
+    /highlighted in \d+(\.\d+)? ms/.test(immediateTimes),
+    'demo: client highlight timing appears immediately',
+    immediateTimes,
+  )
+  await page.waitForFunction(
+    () => /compiled in \d+ ms/.test(document.getElementById('demo-times')?.textContent ?? ''),
+    null,
+    { timeout: 8000 },
+  )
+  check(true, 'demo: native compile timing appears after lint settles')
+  await page.fill('#demo-input', originalDemoInput)
+  await page.waitForFunction(() => document.querySelectorAll('.demo-diag').length === 0)
   await page.locator('#hero-demo').scrollIntoViewIfNeeded()
   check(true, 'demo: playground activates when the demo API is present')
   const before = await page.inputValue('#demo-input')
@@ -350,12 +477,22 @@ if (mode === 'native' && health?.native) {
   )
   check((await page.locator('#demo-input').count()) === 0, 'demo: static home stays read-only')
   check(await page.locator('#demo-actions').isHidden(), 'demo: static actions stay hidden')
+  check(
+    (await page.locator('#demo-times').count()) === 0 ||
+      (await page.locator('#demo-times').textContent()).trim() === '',
+    'demo: static home has no timing readout',
+  )
   await page.goto(`${baseUrl}/playground.html`, { waitUntil: 'load' })
   await page.waitForFunction(
     () => document.getElementById('demo-hint')?.textContent === 'static preview',
   )
   check((await page.locator('#demo-input').count()) === 0, 'demo: static playground stays read-only')
   check(await page.locator('#pg-side').isHidden(), 'demo: native-only controls stay hidden')
+  check(
+    (await page.locator('#demo-times').count()) === 0 ||
+      (await page.locator('#demo-times').textContent()).trim() === '',
+    'demo: static playground has no timing readout',
+  )
   const staticStatus = (await page.locator('#demo-status').textContent()).trim()
   const staticMeta = (await page.locator('#demo-meta').textContent()).trim()
   check(
