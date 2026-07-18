@@ -402,6 +402,73 @@ tasks:
           evidence: "Compared the revised contracts with pinned OXC 8e0ed2e, exact installed @tsrx/core@0.1.32 source/declarations, @noble/hashes TextEncoder delegation, and the current CSS compliance record. No unresolved T005 rejection remains."
       open_questions: []
       external_writes: false
+  - id: T007
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: default
+    objective: "Revise docs/architecture/tsrx-parser-api.md in one bounded pass to resolve the first T999 audit: exact compatibility declarations, independent canonical/compatibility native package families, and a literal source-verified recovery fixture. Synchronize all affected sections, matrices, stages, T005 dispositions, and UF trace rows without implementation or scope drift."
+    inputs:
+      - "notes/T999-audit-1.md"
+      - ".fable-codex/runs/parser-upstream-t999-detail/units/T999-detail/result.json"
+      - "Exact installed @tsrx/core@0.1.32 and Volar 2.4.28 declarations/runtime sources"
+      - "compliance/css-boundary.json and existing eight-target package sources"
+    allowed_files:
+      - docs/architecture/tsrx-parser-api.md
+    verify:
+      - "node /private/tmp/parser-upstream-t004-scope.mjs"
+      - "git diff --check -- docs/architecture/tsrx-parser-api.md"
+      - "node /private/tmp/parser-upstream-t004-structure.mjs docs/architecture/tsrx-parser-api.md"
+      - "node /private/tmp/parser-upstream-t004-links.mjs docs/architecture/tsrx-parser-api.md"
+      - "node /private/tmp/parser-upstream-t007-semantics.mjs docs/architecture/tsrx-parser-api.md"
+    stop_if:
+      - "Any product file outside docs/architecture/tsrx-parser-api.md is needed or changed."
+      - "An exact source contradicts the corrective contract or a fixed field/outcome cannot be proven."
+      - "Resolution requires implementation, Markless edits, OXC contact, publication, or an acceptance claim."
+      - "Canonical parser consumers cannot avoid installing/loading compatibility CSS/recovery code."
+      - "Any verification fails twice after bounded correction."
+    receipt:
+      result: done
+      decision: approved
+      full_outcome_complete: false
+      summary: "Resolved the three first-terminal-audit findings in one coherent design revision: exact bounded compatibility declarations with honest Markless-root divergence, independent eight-target canonical and compatibility native package families, and executable literal recovery fixtures with exact reference offsets, errors, comments, topology, and array identity."
+      changed_files:
+        - docs/architecture/tsrx-parser-api.md
+      resolved_findings:
+        - "Compatibility root now has only three consumed functions, mutable ParseOptions, no invented CommentWithLocation export, exact consumed Volar/plugin/mapping fields, legal Omit-based JSX widening, explicit reduced subpath scope, facade-owned declaration dependencies, and strict isolated type gates."
+        - "Existing canonical packages contain three executables plus parser.node only; a separate compatibility-native family contains tsrx_core_compat.node only. Loaders, manifests, ABIs, size totals, oracle receipts, stages, and all-eight release gates are independent."
+        - "The 16-mode recovery matrix now names exact V/R/M/U filename/source fixtures. View.tsrx freezes strict 48/55 SyntaxError, collected 48..49 usage Error, marker 30..40, closed outer/unclosed inner topology, loose suppression, private sinks, and caller identity/order/timing."
+      performance_evidence:
+        - "Parser users install and load zero compatibility/CSS/recovery bytes; parser-only and facade installed totals are independently budgeted."
+        - "Canonical Stages 2-4 require only Stage 1C, so CSS approval cannot block the direct OXC parser path."
+        - "A compatibility failure withholds only the compatibility family; a canonical failure blocks both products."
+        - "All prior ordinary-path zero-TSRX instrumentation, destructive tape, allocator-lifetime, compile/dependency/cold-start, and binary-size gates remain intact."
+      commands:
+        - cmd: "CREW_CODEX_BIN=<Codex 0.144.4> crew run /private/tmp/parser-upstream-t007-packets.json --run-id parser-upstream-t007"
+          status: pass
+          evidence: "gpt-5.6-sol changed only docs/architecture/tsrx-parser-api.md and reported all five gates green."
+        - cmd: "node /private/tmp/parser-upstream-t004-scope.mjs"
+          status: pass
+          evidence: "The only non-control/crew worktree change is docs/architecture/tsrx-parser-api.md."
+        - cmd: "git diff --check -- docs/architecture/tsrx-parser-api.md"
+          status: pass
+        - cmd: "node /private/tmp/parser-upstream-t004-structure.mjs docs/architecture/tsrx-parser-api.md"
+          status: pass
+          evidence: "One H1, 21 ordered H2 sections, 14 UF trace rows, and all T005 disposition rows remain valid."
+        - cmd: "node /private/tmp/parser-upstream-t004-links.mjs docs/architecture/tsrx-parser-api.md"
+          status: pass
+          evidence: "All 24 unique Markdown targets resolve."
+        - cmd: "node /private/tmp/parser-upstream-t007-semantics.mjs docs/architecture/tsrx-parser-api.md"
+          status: pass
+          evidence: "Exact type, split-family, ABI, and literal-recovery requirements are present and stale contradictions absent."
+        - cmd: "node /private/tmp/probe-view-recovery.mjs"
+          status: pass
+          evidence: "Exact @tsrx/core@0.1.32 runtime independently matched every documented View.tsrx strict/collect/loose constructor, field, offset, comment, topology, and identity outcome."
+        - cmd: "PM semantic diff and pinned-source review"
+          status: pass
+          evidence: "Reviewed all 674 changed design lines against exact @tsrx/core/Volar declarations, CSS compliance, target/package sources, the detailed terminal critique, and two independent specialist audits."
+      open_questions: []
+      external_writes: false
   - id: T999
     type: judge
     assignee: Judge
