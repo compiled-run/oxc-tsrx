@@ -1,0 +1,65 @@
+{
+  "goalbuddy_receipt_v1": {
+    "result": "done",
+    "decision": "approved",
+    "full_outcome_complete": false,
+    "summary": "Revised docs/architecture/tsrx-parser-api.md as one whole-document package. The revision resolves every T005 blocker and high/medium finding with source-verified OXC and @tsrx/core contracts, an acyclic and destructively consumed TSRX tape, an ordinary-language direct OXC binding path, exact UTF-16/WTF-8 and TextEncoder hash semantics, a native compatibility-only CSS boundary, deterministic cyclic graph qualification, and concrete eight-target packaging.",
+    "changed_files": [
+      "docs/architecture/tsrx-parser-api.md"
+    ],
+    "resolved_findings": [
+      "T005-R01 exact compatibility AST, CSS, types, discriminants, fields, and graph topology",
+      "T005-R02 exact strict, collect, loose, comment, error, and recovery behavior",
+      "T005-R03 pinned OXC dts/commonjs/module/diagnostic/lazy-getter API fidelity",
+      "T005-R04 exact CSS source, selector offsets, TextEncoder hash bytes, and in-process native handoff",
+      "T005-R05 acyclic crate ownership, allocator-contained serialization, destructive tape consumption, and getter transfer",
+      "T005-R06 lossless JavaScript UTF-16 handling with a fail-closed rare-surrogate lane and hash-only U+FFFD conversion",
+      "T005-R07 versioned deterministic cyclic object-graph capture plus mutation and ordinary-route qualification",
+      "T005-R08 two role-bound addons beside three executables across all eight native packages"
+    ],
+    "performance_evidence": [
+      "Ordinary JS, JSX, TS, TSX, and DTS dispatch before every TSRX source bridge and call the pinned-shape OXC binding directly.",
+      "Ordinary-route instrumentation requires zero TSRX scan, projection, UTF-16 copy, boundary-map, surrogate, tape, CSS, or recovery work.",
+      "TSRX projected records are destructively consumed; native getter tables are mem-taken and cannot coexist permanently with cached JavaScript graphs.",
+      "Stage 1 freezes numeric ordinary, TSRX, memory, compile-time, dependency, cold-start, and binary-size budgets before implementation."
+    ],
+    "commands": [
+      {
+        "cmd": "CREW_CODEX_BIN=<Codex 0.144.4> crew run /private/tmp/parser-upstream-t006-packets.json --run-id parser-upstream-t006",
+        "status": "pass",
+        "evidence": "gpt-5.6-sol revised the complete design within the single-file contract."
+      },
+      {
+        "cmd": "CREW_CODEX_BIN=<Codex 0.144.4> crew run /private/tmp/parser-upstream-t006-correction-packets.json --run-id parser-upstream-t006-correction",
+        "status": "pass",
+        "evidence": "Bounded correction made the direct ordinary fast path and byte-exact TextEncoder CSS hash behavior explicit."
+      },
+      {
+        "cmd": "node /private/tmp/parser-upstream-t004-scope.mjs",
+        "status": "pass",
+        "evidence": "The sole non-control/crew worktree change is docs/architecture/tsrx-parser-api.md."
+      },
+      {
+        "cmd": "git diff --check -- docs/architecture/tsrx-parser-api.md",
+        "status": "pass"
+      },
+      {
+        "cmd": "node /private/tmp/parser-upstream-t004-structure.mjs docs/architecture/tsrx-parser-api.md",
+        "status": "pass",
+        "evidence": "One H1, 21 ordered H2 sections, 14 unique UF trace rows, and all eight T005 disposition rows passed."
+      },
+      {
+        "cmd": "node /private/tmp/parser-upstream-t004-links.mjs docs/architecture/tsrx-parser-api.md",
+        "status": "pass",
+        "evidence": "All 23 unique Markdown targets resolve; no absolute local link is present."
+      },
+      {
+        "cmd": "PM whole-document and pinned-source audit",
+        "status": "pass",
+        "evidence": "Compared the revised contracts with pinned OXC 8e0ed2e, exact installed @tsrx/core@0.1.32 source/declarations, @noble/hashes TextEncoder delegation, and the current CSS compliance record. No unresolved T005 rejection remains."
+      }
+    ],
+    "open_questions": [],
+    "external_writes": false
+  }
+}
