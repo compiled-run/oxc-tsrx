@@ -8,7 +8,7 @@ goal:
   slug: "parser-upstream-design"
   kind: specific
   tranche: "Design tranche: evidence -> tenets/rubric -> draft -> adversarial critique -> revision -> final audit. No Rust implementation, no markless edits, no upstream contact."
-  status: active
+  status: done
   oracle:
     signal: "Design doc on design/upstream-parser whose adversarial critique receipt maps every T003 rubric criterion (OXC convention alignment, oxc-tsrx philosophy, markless replacement bar, explicit CSS/loose-mode rulings) to concrete design sections with no unresolved rejection."
     cadence: "after T004 draft, at T005 critique, and at final audit"
@@ -67,7 +67,7 @@ visual_board:
     url: "http://goalbuddy.localhost:41737/parser-upstream-design/"
     command: "npx goalbuddy board docs/goals/parser-upstream-design"
 
-active_task: T999
+active_task: null
 
 tasks:
   - id: T001
@@ -472,7 +472,7 @@ tasks:
   - id: T999
     type: judge
     assignee: Judge
-    status: active
+    status: done
     reasoning_hint: high
     objective: "Audit whether the tranche satisfies the original outcome: an upstream-grade, philosophy-preserving, replacement-bar-covering parser design, critiqued and revised, committed on the worktree branch."
     inputs:
@@ -488,11 +488,27 @@ tasks:
       - "full_outcome_complete: true | false"
       - "missing evidence"
       - "next task if not complete"
-    receipt: null
+    receipt:
+      result: done
+      harness: crew:gpt-5.6-sol
+      decision: complete
+      full_outcome_complete: true
+      note: notes/T999-receipt.json
+      summary: "Commit c70bf63 passes UF-01 through UF-14 and T005-R01 through T005-R08; all prior terminal findings are resolved and the design tranche is fully complete."
+      commit: c70bf632ba7827b03375b06d16006b9213b76ba2
+      evidence:
+        - .fable-codex/runs/parser-upstream-t999-v3/units/T999/result.json
+        - docs/architecture/tsrx-parser-api.md
+        - notes/T007-receipt.json
+        - notes/T999-receipt.json
+      missing_evidence: []
+      external_writes: false
 
 checks:
-  dirty_fingerprint: unknown
+  dirty_fingerprint: "terminal control receipt pending commit; product design clean at c70bf63; only .fable-codex bookkeeping otherwise untracked"
   last_verification:
-    result: unknown
-    task: null
-    commands: []
+    result: pass
+    task: T999
+    commands:
+      - "terminal Judge: complete / full_outcome_complete true"
+      - "scope, diff, structure, links, semantics, exact recovery probe, board, and commit checks passed"
