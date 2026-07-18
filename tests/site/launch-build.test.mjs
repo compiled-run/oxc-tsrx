@@ -8,7 +8,7 @@ import test from "node:test";
 
 const root = resolve(import.meta.dirname, "../..");
 const origin = "https://thejackshelton.github.io";
-const base = "/oxc-tsrx/";
+const base = "/";
 const siteUrl = `${origin}${base}`;
 
 function run(executable, args, options = {}) {
@@ -50,7 +50,7 @@ async function buildTemporarySite() {
   return { outDir, result };
 }
 
-function request(port, { path = "/oxc-tsrx/demo-capabilities.json", method = "GET", headers = {}, body = "" } = {}) {
+function request(port, { path = "/demo-capabilities.json", method = "GET", headers = {}, body = "" } = {}) {
   return new Promise((resolveRequest, rejectRequest) => {
     const call = http.request(
       {
@@ -120,13 +120,14 @@ test("static launch build has canonical and social metadata on every public page
   assert.match(result.stdout, new RegExp(`-> ${outDir.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\n$`, "u"));
 
   const htmlFiles = (await filesUnder(outDir)).filter((path) => path.endsWith(".html"));
-  assert.equal(htmlFiles.length, 14);
+  assert.equal(htmlFiles.length, 16);
   assert.equal(htmlFiles.some((path) => path.endsWith(`${sep}logos.html`)), false);
 
   for (const path of htmlFiles) {
     const html = await readFile(path, "utf8");
     const pagePath = relative(outDir, path).split(sep).join("/");
-    const canonical = pagePath === "index.html" ? siteUrl : `${siteUrl}${pagePath}`;
+    const canonical =
+      pagePath === "index.html" ? siteUrl : `${siteUrl}${pagePath.replace(/\.html$/u, "")}`;
     assert.match(html, new RegExp(`<link rel="canonical" href="${canonical}"`), pagePath);
     assert.match(html, /<meta property="og:type" content="website" \/>/u, pagePath);
     assert.match(html, new RegExp(`<meta property="og:url" content="${canonical}"`), pagePath);
@@ -152,12 +153,13 @@ test("static launch build has a scoped base, crawl metadata, and no internal des
     readFile(join(outDir, "demo-capabilities.json"), "utf8").then(JSON.parse),
   ]);
 
-  assert.match(home, /href="\/oxc-tsrx\/guide\/getting-started\.html"/u);
+  assert.match(home, /href="\/guide\/getting-started"/u);
   assert.match(home, /href="https:\/\/github\.com\/thejackshelton\/oxc-tsrx"/u);
   assert.match(home, /href="https:\/\/www\.npmjs\.com\/package\/oxlint-tsrx"/u);
   assert.match(home, /href="https:\/\/www\.npmjs\.com\/package\/oxfmt-tsrx"/u);
-  assert.equal(home.includes('href="/assets/'), false);
-  assert.equal(home.includes('src="/assets/'), false);
+  assert.match(home, /href="\/assets\//u);
+  assert.match(home, /src="\/assets\//u);
+  assert.equal(/(?:href|src)="\/oxc-tsrx\//u.test(home), false);
   assert.equal(playground.includes("Everything on this page runs the real"), false);
   assert.match(playground, /static preview/u);
   assert.match(playground, /local development server/u);
@@ -169,12 +171,13 @@ test("static launch build has a scoped base, crawl metadata, and no internal des
 
   assert.equal(
     robots,
-    `User-agent: *\nAllow: /oxc-tsrx/\nSitemap: ${siteUrl}sitemap.xml\n`,
+    `User-agent: *\nAllow: /\nSitemap: ${siteUrl}sitemap.xml\n`,
   );
   assert.match(sitemap, /^<\?xml version="1\.0" encoding="UTF-8"\?>/u);
-  assert.equal([...sitemap.matchAll(/<loc>/gu)].length, 14);
+  assert.equal([...sitemap.matchAll(/<loc>/gu)].length, 16);
   assert.match(sitemap, new RegExp(`<loc>${siteUrl}</loc>`));
   assert.equal(sitemap.includes("logos.html"), false);
+  assert.equal(sitemap.includes(".html"), false);
   assert.deepEqual(capabilities, {
     ok: true,
     mode: "static",
@@ -189,6 +192,54 @@ test("social preview is a 1200 by 630 PNG", async () => {
   assert.deepEqual([...image.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
   assert.equal(image.readUInt32BE(16), 1200);
   assert.equal(image.readUInt32BE(20), 630);
+});
+
+test("the generated terminal transcript stays discoverable outside the interactive HTML", async () => {
+  const { outDir } = await buildTemporarySite();
+  const [html, markdown, llmsFull, searchIndex] = await Promise.all([
+    readFile(join(outDir, "guide", "getting-started.html"), "utf8"),
+    readFile(join(outDir, "guide", "getting-started.md"), "utf8"),
+    readFile(join(outDir, "llms-full.txt"), "utf8"),
+    readFile(join(outDir, "search-index.json"), "utf8").then(JSON.parse),
+  ]);
+  const command = "npx oxlint src/Cart.tsrx";
+  const diagnostic = "Variable 'total' is declared but never used.";
+
+  assert.ok(html.includes(command));
+  assert.ok(html.includes("Variable &#39;total&#39; is declared but never used."));
+  for (const artifact of [markdown, llmsFull]) {
+    assert.ok(artifact.includes(command));
+    assert.ok(artifact.includes(diagnostic));
+  }
+  for (const artifact of [html, markdown, llmsFull]) {
+    assert.doesNotMatch(artifact, /<!-- terminal-demo -->/u);
+  }
+  assert.match(JSON.stringify(searchIndex), /npx oxlint src\/Cart\.tsrx/u);
+  assert.match(JSON.stringify(searchIndex), /Variable 'total' is declared but never used\./u);
+});
+
+test("aggregate-selected benchmark evidence survives Markdown, LLM, and search exports", async () => {
+  const { outDir } = await buildTemporarySite();
+  const aggregate = JSON.parse(
+    await readFile(join(root, "docs", "acceptance", "performance-report.json"), "utf8"),
+  );
+  const selected = [
+    aggregate.results["native-format"].path,
+    aggregate.results.comparative.path,
+  ];
+  const [markdown, llmsFull, searchIndex] = await Promise.all([
+    readFile(join(outDir, "reference", "benchmarks.md"), "utf8"),
+    readFile(join(outDir, "llms-full.txt"), "utf8"),
+    readFile(join(outDir, "search-index.json"), "utf8"),
+  ]);
+
+  for (const artifact of [markdown, llmsFull]) {
+    assert.doesNotMatch(artifact, /<!-- benchmarks:auto -->/u);
+    assert.match(artifact, /Near-threshold adjudication/u);
+    assert.match(artifact, /median normalized budget pressure/u);
+    for (const report of selected) assert.ok(artifact.includes(report), report);
+  }
+  for (const report of selected) assert.ok(searchIndex.includes(report), report);
 });
 
 test("docs output refuses nonempty, protected, and symlink destinations", async () => {
@@ -279,7 +330,7 @@ if (process.argv.some((arg) => arg.includes('stdin-filepath'))) {
     assert.equal(
       (
         await request(server.port, {
-          path: "/oxc-tsrx/api/lint",
+          path: "/api/lint",
           method: "POST",
           body: "export const value = 1",
         })
@@ -289,7 +340,7 @@ if (process.argv.some((arg) => arg.includes('stdin-filepath'))) {
     assert.equal(
       (
         await request(server.port, {
-          path: "/oxc-tsrx/api/lint",
+          path: "/api/lint",
           method: "POST",
           headers: { Origin: "https://attacker.invalid", "Sec-Fetch-Site": "cross-site" },
           body: "export const value = 1",
@@ -301,7 +352,7 @@ if (process.argv.some((arg) => arg.includes('stdin-filepath'))) {
 
     const firstFour = Array.from({ length: 4 }, () =>
       request(server.port, {
-        path: "/oxc-tsrx/api/format",
+        path: "/api/format",
         method: "POST",
         headers: sameOrigin,
         body: "export const value=1",
@@ -309,7 +360,7 @@ if (process.argv.some((arg) => arg.includes('stdin-filepath'))) {
     );
     await new Promise((resolveDelay) => setTimeout(resolveDelay, 40));
     const busy = await request(server.port, {
-      path: "/oxc-tsrx/api/format",
+      path: "/api/format",
       method: "POST",
       headers: sameOrigin,
       body: "export const later=2",
@@ -318,7 +369,7 @@ if (process.argv.some((arg) => arg.includes('stdin-filepath'))) {
     assert.ok((await Promise.all(firstFour)).every((response) => response.status === 200));
 
     const linted = await request(server.port, {
-      path: "/oxc-tsrx/api/lint",
+      path: "/api/lint",
       method: "POST",
       headers: sameOrigin,
       body: "export const value = 1",
@@ -328,7 +379,7 @@ if (process.argv.some((arg) => arg.includes('stdin-filepath'))) {
       .filter((entry) => entry.isDirectory() && entry.name.startsWith("request-"));
     assert.equal(requestDirectories.length, 0);
 
-    assert.equal((await request(server.port, { path: "/oxc-tsrx/%ZZ" })).status, 400);
+    assert.equal((await request(server.port, { path: "/%ZZ" })).status, 400);
     assert.equal((await request(server.port)).status, 200);
   } finally {
     await server.close();

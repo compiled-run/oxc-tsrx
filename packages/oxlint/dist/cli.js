@@ -7,36 +7,31 @@ import {
   ensureSupportedOutput,
   isViteConfigPath,
   prepareVitePlusConfig,
-  positionalIndices,
   removeExplicitTsrx,
   replaceConfigArgument,
-  replaceOutputFormat,
   requestedOutputFormat,
   resolveNativeBinary,
   resolvePackageBinary,
   runCaptured,
+  runPassthrough,
 } from "@oxc-tsrx/runtime";
+import {
+  DELEGATE_ONLY,
+  VALUE_OPTIONS,
+  parseOxlintInvocation,
+  parseOxlintOption,
+  withOxlintOutputFormat,
+} from "./invocation.js";
 
-const VALUE_OPTIONS = new Set([
-  "-c",
-  "--config",
-  "--tsconfig",
-  "-A",
-  "--allow",
-  "-W",
-  "--warn",
-  "-D",
-  "--deny",
-  "--ignore-path",
-  "--ignore-pattern",
-  "--max-warnings",
-  "-f",
-  "--format",
-  "--threads",
-  "--report-unused-disable-directives-severity",
-]);
+// Mixed invocations need captured JSON so the canonical and TSRX diagnostics
+// can be combined. Run the public, manifest-declared JavaScript launcher via
+// Node: this is stable across package layout changes and Windows does not have
+// to execute a POSIX shebang. Ordinary-only executable invocations never reach
+// this path; the lightweight front router imports the launcher in-process.
+async function runUpstreamOxlint(binary, args, options) {
+  return runCaptured(process.execPath, [binary, ...args], options);
+}
 
-const DELEGATE_ONLY = new Set(["--help", "-h", "--version", "-V", "--rules", "--lsp", "--init"]);
 const NATIVE_VALUE_OPTIONS = new Map([
   ["-c", "--config"],
   ["--config", "--config"],
@@ -51,15 +46,9 @@ const WRAPPER_OPTIONS = new Set([
   "--quiet",
   "--silent",
   "--deny-warnings",
+  "--no-ignore",
   "--no-error-on-unmatched-pattern",
 ]);
-
-function parseOption(argument) {
-  const equals = argument.indexOf("=");
-  return equals === -1
-    ? { name: argument, value: null }
-    : { name: argument.slice(0, equals), value: argument.slice(equals + 1) };
-}
 
 function nativeArguments(args, files, resolvedConfig) {
   const output = [];
@@ -72,7 +61,7 @@ function nativeArguments(args, files, resolvedConfig) {
       continue;
     }
     if (!argument.startsWith("-") || argument === "-") continue;
-    const { name, value: inlineValue } = parseOption(argument);
+    const { name, value: inlineValue } = parseOxlintOption(argument);
     if (NATIVE_VALUE_OPTIONS.has(name)) {
       const value = inlineValue ?? args[++index];
       if (!value) throw new Error(`${name} requires a value`);
@@ -110,20 +99,6 @@ function nativeArguments(args, files, resolvedConfig) {
     }
   }
   return [...output, "--format=json", ...files];
-}
-
-function stripFormat(args) {
-  const output = [];
-  for (let index = 0; index < args.length; index += 1) {
-    const argument = args[index];
-    if (argument === "--format" || argument === "-f") {
-      index += 1;
-      continue;
-    }
-    if (argument.startsWith("--format=") || argument.startsWith("-f=")) continue;
-    output.push(argument);
-  }
-  return output;
 }
 
 export function resolveOxlintBytePositions(bytes, byteOffsets, filename = "<source>") {
@@ -249,7 +224,14 @@ function renderDefault(result, cwd) {
 
 async function delegate(args, cwd) {
   const upstream = resolvePackageBinary("oxlint-current", "oxlint", import.meta.url);
-  const result = await runCaptured(upstream, args, { cwd });
+  const upstreamArgs = [upstream, ...args];
+  // --lsp starts a long-lived stdio LSP server, so the session must stream
+  // through the wrapper instead of being captured and replayed on exit.
+  if (args.some((argument) => argument.split("=")[0] === "--lsp")) {
+    const result = await runPassthrough(process.execPath, upstreamArgs, { cwd });
+    return result.status;
+  }
+  const result = await runCaptured(process.execPath, upstreamArgs, { cwd });
   process.stdout.write(result.stdout);
   process.stderr.write(result.stderr);
   return result.status;
@@ -261,7 +243,7 @@ export async function runCli(args, options = {}) {
     return delegate(args, cwd);
   }
 
-  const positions = positionalIndices(args, VALUE_OPTIONS).map((index) => args[index]);
+  const positions = parseOxlintInvocation(args).positionals;
   const files = await discoverTsrxFiles(positions, cwd);
   const format = requestedOutputFormat(args);
   ensureSupportedOutput(format, files);
@@ -281,23 +263,34 @@ export async function runCli(args, options = {}) {
     const shouldRunUpstream = !stripped.hadPositionals || stripped.remainingPositionals > 0;
     const upstreamBinary = resolvePackageBinary("oxlint-current", "oxlint", import.meta.url);
     const useMaterializedUpstreamConfig = Boolean(viteConfig && !viteConfig.requiresAuthoredBase);
-    let upstreamArgs = replaceOutputFormat(stripped.args, VALUE_OPTIONS, "json");
+    let upstreamArgs = withOxlintOutputFormat(stripped.args, "json");
     if (useMaterializedUpstreamConfig) {
       upstreamArgs = replaceConfigArgument(upstreamArgs, viteConfig.path);
     }
     const nativeArgs = files.length > 0 ? nativeArguments(args, files, viteConfig) : null;
-    // Preflight the native lane before canonical Oxlint can apply fixes to the
-    // ordinary half of a mixed batch. Missing or mismatched artifacts therefore
-    // fail atomically instead of leaving a partially fixed project.
+    // Mutating invocations never prestart. Preflight their native lane before
+    // canonical Oxlint can apply fixes to the ordinary half of a mixed batch.
+    // Missing or mismatched artifacts therefore fail atomically instead of
+    // leaving a partially fixed project.
     const nativeBinary = nativeArgs ? resolveNativeBinary("lint") : null;
+    let upstreamPromise;
+    if (!shouldRunUpstream) {
+      upstreamPromise = Promise.resolve({ status: 0, stdout: "", stderr: "", signal: null });
+    } else if (options.prestartedUpstream !== null && options.prestartedUpstream !== undefined) {
+      if (JSON.stringify(options.prestartedUpstream.args) !== JSON.stringify(upstreamArgs)) {
+        await options.prestartedUpstream.result;
+        throw new Error("canonical Oxlint prestart arguments diverged from the composed batch");
+      }
+      upstreamPromise = options.prestartedUpstream.result;
+    } else {
+      upstreamPromise = runUpstreamOxlint(upstreamBinary, upstreamArgs, {
+        cwd,
+        env: canonicalToolEnvironment(useMaterializedUpstreamConfig),
+      });
+    }
 
     const [upstreamResult, nativeResult] = await Promise.all([
-      shouldRunUpstream
-        ? runCaptured(upstreamBinary, upstreamArgs, {
-            cwd,
-            env: canonicalToolEnvironment(useMaterializedUpstreamConfig),
-          })
-        : Promise.resolve({ status: 0, stdout: "", stderr: "", signal: null }),
+      upstreamPromise,
       nativeArgs
         ? runCaptured(nativeBinary, nativeArgs, { cwd })
         : Promise.resolve({ status: 0, stdout: "", stderr: "", signal: null }),

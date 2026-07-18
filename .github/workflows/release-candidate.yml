@@ -118,7 +118,18 @@ jobs:
         shell: bash
         run: |
           npm run build:editor
+          npm run licenses:vscode:check
           cargo build --release --locked --target "$TARGET" -p oxc_tsrx_cli --bins
+
+      - name: Smoke the companion CLIs on this host
+        shell: bash
+        run: |
+          suffix=""
+          if [[ "$EXPECTED_PLATFORM" == "win32" ]]; then suffix=".exe"; fi
+          export OXC_TSRX_LINT_BIN="$GITHUB_WORKSPACE/target/$TARGET/release/oxc-tsrx$suffix"
+          export OXC_TSRX_FORMAT_BIN="$GITHUB_WORKSPACE/target/$TARGET/release/oxc-tsrx-fmt$suffix"
+          export OXC_TSRX_LSP_BIN="$GITHUB_WORKSPACE/target/$TARGET/release/oxc-tsrx-lsp$suffix"
+          node --test tests/packaging/runtime-contract.test.mjs tests/vite/package-seam.test.mjs
 
       - name: Verify Linux ABI policy
         if: matrix.libc == 'gnu' || matrix.libc == 'musl'
@@ -216,10 +227,18 @@ jobs:
           node --input-type=module <<'NODE'
           import assert from "node:assert/strict";
           import { readdir, readFile } from "node:fs/promises";
-          import { NATIVE_TARGETS } from "./packages/runtime/dist/targets.js";
+          import { basename } from "node:path";
+          import {
+            NATIVE_TARGETS,
+            nativePackageName,
+          } from "./packages/runtime/dist/targets.js";
 
           const files = (await readdir("release")).sort();
           const version = JSON.parse(await readFile("package.json", "utf8")).version;
+          const extensionManifest = JSON.parse(
+            await readFile("packages/vscode/package.json", "utf8"),
+          );
+          const extensionId = `${extensionManifest.publisher}.${extensionManifest.name}`;
           const expectedNative = NATIVE_TARGETS.map(
             ({ packageSuffix }) => `oxc-tsrx-native-${packageSuffix}-${version}.tgz`,
           );
@@ -231,7 +250,66 @@ jobs:
           }
           assert.equal(files.filter((name) => name.endsWith(".tgz")).length, 11);
           assert.equal(files.filter((name) => name.endsWith(".vsix")).length, 8);
+
+          const expectedReports = NATIVE_TARGETS.flatMap(({ packageSuffix }) => [
+            `native-package-${packageSuffix}.json`,
+            `vscode-package-${packageSuffix}.json`,
+          ]).sort();
+          const reports = files.filter((name) => /^(?:native|vscode)-package-.*\.json$/u.test(name));
+          assert.deepEqual(reports, expectedReports, "release report matrix must be exact");
+
+          const nativeTargets = new Set();
+          const vscodeTargets = new Set();
+          for (const platform of NATIVE_TARGETS) {
+            const [native, vscode] = await Promise.all([
+              readFile(`release/native-package-${platform.packageSuffix}.json`, "utf8").then(
+                JSON.parse,
+              ),
+              readFile(`release/vscode-package-${platform.packageSuffix}.json`, "utf8").then(
+                JSON.parse,
+              ),
+            ]);
+            const nativeFilename = `oxc-tsrx-native-${platform.packageSuffix}-${version}.tgz`;
+            const vscodeFilename = `oxc-tsrx-vscode-${version}-${platform.vscodeTarget}.vsix`;
+
+            assert.equal(native.packageName, nativePackageName(platform));
+            assert.equal(native.version, version);
+            assert.equal(native.target, platform.target);
+            assert.equal(native.vscodeTarget, platform.vscodeTarget);
+            assert.equal(native.filename, nativeFilename);
+            assert.equal(basename(native.tarball), nativeFilename);
+            assert.match(native.lspSha256, /^[a-f0-9]{64}$/u);
+            assert.ok(Number.isSafeInteger(native.lspBytes) && native.lspBytes > 0);
+
+            assert.equal(vscode.extensionId, extensionId);
+            assert.equal(vscode.version, version);
+            assert.equal(vscode.target, platform.target);
+            assert.equal(vscode.vscodeTarget, platform.vscodeTarget);
+            assert.equal(basename(vscode.vsix), vscodeFilename);
+            assert.equal(vscode.lspSha256, vscode.vsixVerification.nativeLspSha256);
+            assert.equal(vscode.lspBytes, vscode.vsixVerification.nativeLspBytes);
+            assert.equal(native.lspSha256, vscode.lspSha256);
+            assert.equal(native.lspBytes, vscode.lspBytes);
+            assert.equal(native.lspSha256, vscode.vsixVerification.nativeLspSha256);
+            assert.equal(native.lspBytes, vscode.vsixVerification.nativeLspBytes);
+            assert.equal(vscode.vsixVerification.extensionId, extensionId);
+            assert.equal(vscode.vsixVerification.version, version);
+            assert.equal(vscode.vsixVerification.target, platform.target);
+            assert.equal(vscode.vsixVerification.vscodeTarget, platform.vscodeTarget);
+
+            assert.equal(nativeTargets.has(native.target), false, `duplicate ${native.target}`);
+            assert.equal(
+              vscodeTargets.has(vscode.vscodeTarget),
+              false,
+              `duplicate ${vscode.vscodeTarget}`,
+            );
+            nativeTargets.add(native.target);
+            vscodeTargets.add(vscode.vscodeTarget);
+          }
+          assert.equal(nativeTargets.size, NATIVE_TARGETS.length);
+          assert.equal(vscodeTargets.size, NATIVE_TARGETS.length);
           NODE
+          node scripts/vsix-archive.mjs release/*.vsix
 
       - name: Stage legal texts and locked dependency inventory
         shell: bash

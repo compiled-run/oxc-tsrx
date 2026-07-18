@@ -5,7 +5,7 @@ the committed `Cargo.lock`. Do not edit it by hand. It covers the normal and
 build dependency closure of the three binaries in `oxc_tsrx_cli`; benchmark
 and development-only dependencies are excluded.
 
-- Cargo.lock SHA-256: `afbab3543428323d6a13d3b91d17e413bc7984105febe1aa30219064996571d4`
+- Cargo.lock SHA-256: `6913e466baf4f202ebc2eb9527c91d5764658a2b3a4f73d280d493ce69af0f3e`
 - Canonical OXC revision: `8e0ed2ebb96137fb1611cdbd5742d5cb46037d40`
 - Shipping third-party packages: 205
 - Accepted license policy: `licenses/allowed-rust-license-expressions.json`

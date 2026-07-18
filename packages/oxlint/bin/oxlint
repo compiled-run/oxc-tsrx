@@ -1,9 +1,41 @@
 #!/usr/bin/env node
 
-import { runCli } from '../dist/cli.js';
+// Persistent V8 compile cache shaves a few milliseconds off every launch;
+// harmless where unsupported.
+try {
+  const { enableCompileCache } = await import('node:module');
+  enableCompileCache?.();
+} catch {}
 
 try {
-  process.exitCode = await runCli(process.argv.slice(2));
+  const {
+    canRunCanonicalOxlint,
+    importDeclaredPackageBinary,
+    planCanonicalOxlintComposition,
+  } = await import('../dist/invocation.js');
+  const args = process.argv.slice(2);
+  if (canRunCanonicalOxlint(args)) {
+    // This invocation cannot select TSRX. Execute the exact binary declared by
+    // the pinned Oxlint package in this process, preserving canonical output,
+    // plugins, config loading, fixes, LSP streams, and cross-platform behavior.
+    await importDeclaredPackageBinary('oxlint-current', 'oxlint', import.meta.url);
+  } else {
+    const vitePlusHost = Boolean(
+      process.env.VP_VERSION ||
+      process.env.VP_COMMAND ||
+      process.env.NODE_PACKAGE_MANAGER === 'vite-plus'
+    );
+    const plan = vitePlusHost ? null : planCanonicalOxlintComposition(args);
+    const prestart = plan === null
+      ? Promise.resolve(null)
+      : import('../dist/prestart.js').then(({ startCanonicalOxlint }) =>
+          startCanonicalOxlint(plan.args));
+    const [{ runCli }, prestartedUpstream] = await Promise.all([
+      import('../dist/cli.js'),
+      prestart,
+    ]);
+    process.exitCode = await runCli(args, { prestartedUpstream });
+  }
 } catch (error) {
   console.error(`oxlint (OXC for TSRX): ${error instanceof Error ? error.message : String(error)}`);
   process.exitCode = 2;

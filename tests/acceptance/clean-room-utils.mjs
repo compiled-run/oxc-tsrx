@@ -1,9 +1,11 @@
 const MUTABLE_OR_HEAVY_SEGMENTS = new Set(['node_modules', 'target', '.docs-demo-tmp'])
+const ROOT_CONTROL_PLANE_SEGMENTS = new Set(['.git', '.fable-codex'])
 
 export function shouldExcludeSourcePath(relative, { excludeReport = false } = {}) {
   const normalized = String(relative).replaceAll('\\', '/').replace(/^\.\//u, '')
   if (!normalized) return false
   const segments = normalized.split('/')
+  if (ROOT_CONTROL_PLANE_SEGMENTS.has(segments[0])) return true
   if (
     segments.some(
       (segment) => MUTABLE_OR_HEAVY_SEGMENTS.has(segment) || segment.startsWith('.corpus-'),

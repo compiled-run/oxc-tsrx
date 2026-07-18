@@ -1,0 +1,13 @@
+direction: down
+
+config: JSON or JSONC config
+compile: Discover, merge, and compile once
+session: Reusable configured session
+file1: File 1 scan, project, parse
+file2: File 2 direct OXC path
+fileN: File N scan, project, parse
+
+config -> compile -> session
+session -> file1
+session -> file2
+session -> fileN

@@ -26,6 +26,9 @@ test('both supported physical Vite+ consumers prove build and dev through the fr
 })
 
 test('the clean-room oracle excludes nested build artifacts and detects concurrent owner edits', async () => {
+  assert.equal(shouldExcludeSourcePath('.git/index'), true)
+  assert.equal(shouldExcludeSourcePath('.fable-codex/runs/critic/result.json'), true)
+  assert.equal(shouldExcludeSourcePath('.fable-codex\\runs\\critic\\ledger.jsonl'), true)
   assert.equal(shouldExcludeSourcePath('target/release/oxc-tsrx'), true)
   assert.equal(shouldExcludeSourcePath('docs/tools/projection-dump/target/release/projection-dump'), true)
   assert.equal(shouldExcludeSourcePath('packages/editor/node_modules/pkg/index.js'), true)
@@ -36,6 +39,12 @@ test('the clean-room oracle excludes nested build artifacts and detects concurre
     shouldExcludeSourcePath('docs/acceptance/clean-room-report.json', { excludeReport: true }),
     true,
   )
+  assert.equal(shouldExcludeSourcePath('.github/workflows/release.yml'), false)
+  assert.equal(shouldExcludeSourcePath('.codex/project.md'), false)
+  assert.equal(shouldExcludeSourcePath('.agents/instructions.md'), false)
+  assert.equal(shouldExcludeSourcePath('.fable-codexish/result.json'), false)
+  assert.equal(shouldExcludeSourcePath('docs/goals/oxc-for-tsrx/state.yaml'), false)
+  assert.equal(shouldExcludeSourcePath('docs/assets/playground.js'), false)
   assert.equal(shouldExcludeSourcePath('crates/targeted/src/lib.rs'), false)
   assert.doesNotThrow(() => assertOwnerSourceUnchanged('same', 'same'))
   assert.throws(

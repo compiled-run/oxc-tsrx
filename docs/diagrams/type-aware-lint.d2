@@ -1,0 +1,16 @@
+direction: down
+
+tsrx: Authored .tsrx
+scan: Shared structural scan
+projection: Type-semantic projection
+ordinary: Authored TS and TSX
+config: Per-file config resolution
+batch: In-memory virtual source batch
+tsgolint: One documented tsgolint v2 process
+mapping: Path-aware labels and fixes
+spans: Authored TSRX spans
+
+tsrx -> scan -> projection -> batch
+ordinary -> batch
+config -> batch
+batch -> tsgolint -> mapping -> spans

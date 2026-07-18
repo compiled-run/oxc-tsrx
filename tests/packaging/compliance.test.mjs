@@ -239,6 +239,9 @@ test("platform VSIX ships the exact native legal tree", async () => {
   assert.ok(entries.has(bundleInventoryPath));
   assert.ok(entries.has("extension/licenses/BUNDLE_DEPENDENCIES.md"));
   const bundleInventory = JSON.parse(entries.get(bundleInventoryPath));
+  const bundledClient = entries.get("extension/dist/extension.bundle.cjs");
+  assert.ok(bundledClient, "VSIX is missing the bundled extension client");
+  assert.equal(sha256(bundledClient), bundleInventory.bundleSha256);
   assert.equal(bundleInventory.packageCount, 12);
   for (const dependency of bundleInventory.packages) {
     for (const legalText of dependency.legalTexts) {

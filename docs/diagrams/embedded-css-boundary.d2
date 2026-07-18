@@ -1,0 +1,13 @@
+direction: down
+
+source: Authored TSRX style element
+scan: TSRX structural scan
+opaque: Opaque raw CSS payload span
+projection: Synthetic marker in projected TSX
+lift: Formatter lift
+output: Original raw CSS bytes
+
+source -> scan -> opaque
+opaque -> projection
+opaque -> lift
+projection -> lift -> output

@@ -1,31 +1,42 @@
 # Oxlint and Oxfmt configuration
 
-OXC for TSRX uses the public configuration and option types from its exact
-canonical OXC revision. Configuration is discovered and compiled once when a
-native session starts, then reused for every `.tsrx` and ordinary JS/TS file in
-that batch. Ordinary `.js`, `.jsx`, `.ts`, and `.tsx` all stay on the direct
-canonical path. Configuration is not read, merged, or compiled in the per-file scan/project/
-parse path.
+If you already have an `.oxlintrc.json` or `.oxfmtrc.json`, it works here
+unchanged. This page is the exact support matrix: which fields the native
+commands honor, how a Vite+ config participates, and what fails loudly instead
+of being silently ignored.
 
-This is configuration compatibility through the project-owned native commands.
-Stock `oxlint` and `oxfmt` still do not recognize `.tsrx`.
+Configuration is loaded once when a
+[native session](/architecture/rust-oxc-core#configured-session-layer)
+starts and reused for every file in that batch. Ordinary `.js`, `.jsx`,
+`.ts`, and `.tsx` files stay on the direct canonical path. Stock `oxlint`
+and `oxfmt` still do not recognize `.tsrx`.
 
-The thin npm companions add one ecosystem-only boundary: when Vite+ supplies a
-`vite.config.*`, they resolve it once through Vite+'s public API, extract the
-serializable `lint` or `fmt` field, and materialize disposable JSON for the
-native TSRX process with the authored config directory carried separately.
-Canonical Oxlint/Oxfmt shares that JSON when no path-sensitive field is present;
-otherwise it loads the authored Vite config so relative semantics remain exact.
-Direct invocation of the Rust binaries continues to reject JavaScript/TypeScript
-config modules.
+Installed through npm? You run the `oxlint` and `oxfmt` commands from
+[`oxlint-tsrx` and `oxfmt-tsrx`](/integrations/vite-plus), and everything on
+this page applies to them too. They can also take `lint` and `fmt` options
+from a Vite+ `vite.config.*`; that contract is the
+[Vite+ configuration boundary](/integrations/vite-plus#configuration-boundary).
+The examples below invoke the native binaries directly because this page
+documents the native boundary.
+
+This is the whole resolution story in one picture. Select a node or step
+through the buttons:
+
+<!-- diagram:config-resolution -->
+
+The config examples on this page are annotated: hover any highlighted field
+name to read what the native boundary does with it.
 
 ## Lint configuration
 
-`oxc-tsrx` searches from the working directory toward the filesystem root for
-one `.oxlintrc.json` or `.oxlintrc.jsonc`. Pass an arbitrary JSON/JSONC file
-with `--config` or `-c` to bypass discovery.
+`oxc-tsrx` searches upward from the working directory for one
+`.oxlintrc.json` or `.oxlintrc.jsonc`, or takes an explicit JSON/JSONC file
+with `--config` or `-c`. One config covers the whole batch; nested
+per-directory discovery is [not implemented yet](#not-yet-supported).
 
-The current native boundary supports:
+The native boundary supports the following.
+
+Config file fields:
 
 - configured built-in rules and built-in plugins, including rule options;
 - `env`, `globals`, and built-in-plugin `settings` through canonical
@@ -33,16 +44,28 @@ The current native boundary supports:
 - JSON/JSONC `extends`, resolved relative to the declaring config;
 - Vite+ object `extends` materialized through canonical OXC's public
   `extends_configs` model;
-- per-file `overrides` for `.tsrx` and ordinary JS/JSX/TS/TSX paths;
-- `ignorePatterns` rooted at the config directory;
-- `options.denyWarnings` and `options.maxWarnings` exit policy;
-- `--allow`/`-A`, `--warn`/`-W`, and `--deny`/`-D` CLI precedence;
-- explicit multi-file batches and identity-mapped `--fix`;
-- JSON diagnostic output at original TSRX byte spans;
-- opt-in official tsgolint rules through `--type-aware`; and
-- opt-in TypeScript syntactic and semantic diagnostics through `--type-check`.
+- per-file `overrides` for `.tsrx` and ordinary JS/JSX/TS/TSX paths; and
+- `ignorePatterns` rooted at the config directory.
+
+CLI flags and exit policy:
+
+- `--allow`/`-A`, `--warn`/`-W`, and `--deny`/`-D` precedence over configured
+  severities; and
+- `options.denyWarnings` and `options.maxWarnings` exit policy.
+
+Output and fixes:
+
+- explicit multi-file batches and identity-mapped `--fix`; and
+- JSON diagnostic output at original TSRX byte spans.
+
+Opt-in type lanes:
+
+- official tsgolint rules through `--type-aware`; and
+- TypeScript syntactic and semantic diagnostics through `--type-check`.
 
 For example:
+
+<!-- annotate-config -->
 
 ```jsonc
 {
@@ -64,14 +87,12 @@ For example:
 }
 ```
 
-```sh
-target/release/oxc-tsrx --format=json src/View.tsrx src/View.tsx
-target/release/oxc-tsrx --format=json --config config/lint.json \
-  --warn no-console --deny no-debugger src/View.tsrx
-target/release/oxc-tsrx --format=json --type-aware \
-  src/View.tsrx src/service.tsrx
-target/release/oxc-tsrx --format=json --type-check src/View.tsrx
-```
+In the demo below, the discovered `.oxlintrc.json` (also passed as
+`config/lint.json`) is this example plus the type-aware additions described in
+the next section. `src/View.tsrx` has a console call, a debugger statement, a
+wrong type annotation, and an unawaited call into `src/service.tsrx`.
+
+<!-- terminal-demo:configuration-lint -->
 
 ### Type-aware linting
 
@@ -79,9 +100,10 @@ The direct native command requires `--type-aware` or `--type-check` even when
 the config contains `options.typeAware` or `options.typeCheck`. Config alone
 fails actionably instead of unexpectedly starting a TypeScript-Go process.
 `--type-check` implies the type-aware lane and additionally reports TypeScript
-syntactic and semantic diagnostics. A resolved Vite+ config is different only
-at the thin npm boundary: `oxlint-tsrx` sees those option fields and forwards
-the corresponding explicit flag automatically.
+syntactic and semantic diagnostics. Through the npm companion, a resolved
+Vite+ config forwards the corresponding explicit flag automatically.
+
+<!-- annotate-config -->
 
 ```jsonc
 {
@@ -104,41 +126,53 @@ the corresponding explicit flag automatically.
 }
 ```
 
-Before any virtual filename is created, OXC resolves rules, severities, and
-overrides against each authored path. A `.tsrx` source is then projected to an
-in-memory `.tsrx.tsx` source override; explicit `.tsrx` imports keep working,
-and no generated source is written to disk. Ordinary TS/TSX can participate in
-the same explicit native project batch without entering the TSRX scanner. An
-eligible multi-file batch uses one tsgolint process, not one process per file.
-The normal syntax-only lane still performs one OXC parse per file and starts
-zero type processes.
+In plain terms:
 
-Type-aware diagnostic labels map back to authored UTF-8 TSRX byte spans. A
-reported edit is eligible for `--fix` only when its complete range has one
-exact identity mapping to authored source. Semantic suggestions and edits that
-touch synthetic or multi-segment projection text are rejected, and every
-accepted edit must survive the existing TSRX validation reparse before a
-source write.
+- The tool hands the type checker a temporary in-memory TSX copy of each
+  `.tsrx` file, then maps every result back onto the bytes you actually
+  wrote. Nothing is written to disk, and one tsgolint process covers the
+  whole batch.
+- Rules and overrides are resolved against your authored `.tsrx` paths
+  before that copy exists, so `**/*.tsrx` overrides keep working.
+- A fix is only applied when the affected text exists verbatim in your
+  authored file and the result reparses as valid TSRX.
 
-The supported protocol executable is exactly `oxlint-tsgolint` 0.24.0, which
-is an exact dependency of `oxlint-tsrx`. Native discovery checks the project
-installation and `PATH`; `OXLINT_TSGOLINT_PATH` can select an executable or its
-directory explicitly. A standalone executable without package metadata also
-requires `OXC_TSRX_TSGOLINT_VERSION=0.24.0`. A missing binary, unverifiable
-binary, or version mismatch fails the command without silently downgrading or
-writing source; the native CLI reports these as tool errors with exit status 2.
+The precise projection and fix-eligibility contract lives in
+[Architecture](/architecture/rust-oxc-core#opt-in-type-aware-lint-path).
 
-JavaScript plugins (`jsPlugins`) and direct-native JavaScript/TypeScript config
-modules still fail before a source parse or write. They are not silently
-disabled. The official JS-plugin host currently lives behind private
-generated/raw-transfer application code, which this project does not import or
-copy.
+Compiler diagnostics from `--type-check` use the same JSON shape as lint
+diagnostics. A TypeScript compiler message has no lint rule name, so its
+`rule` field falls back to `parse-error` while `code` carries the real
+compiler code, such as `typescript(TS2322)`.
 
-The direct native command currently accepts explicit source files and JSON
-output. The npm companion adds Vite+'s directory/glob command shape, combined
-default/JSON reporting, and ordinary-file delegation. Alternate reporters,
-nested per-directory config discovery, and JavaScript plugin hosting remain
-separate compatibility work.
+#### Troubleshooting tsgolint discovery
+
+Type-aware runs need exactly `oxlint-tsgolint` 0.24.0, pinned as an exact
+dependency of `oxlint-tsrx`. When `--type-aware` or `--type-check` fails to
+start:
+
+- Native discovery checks the project installation and `PATH`.
+- `OXLINT_TSGOLINT_PATH` selects an executable or its directory explicitly.
+- A standalone executable without package metadata also requires
+  `OXC_TSRX_TSGOLINT_VERSION=0.24.0`.
+- A missing binary, unverifiable binary, or version mismatch fails the
+  command with exit status 2 instead of silently downgrading or writing
+  source.
+
+### Not yet supported
+
+These fail before a source parse or write; they are not silently disabled:
+
+- JavaScript plugins (`jsPlugins`). The official JS-plugin host currently
+  lives behind private OXC application code, which this project does not
+  import or copy.
+- JavaScript/TypeScript config modules passed to the direct native command.
+- Alternate reporters and nested per-directory config discovery.
+
+The direct native command accepts explicit source files and JSON output; the
+npm companion adds directory/glob arguments, combined default/JSON reporting,
+and ordinary-file delegation. [Limitations](/reference/limitations)
+tracks every remaining boundary.
 
 ## Format configuration
 
@@ -158,9 +192,12 @@ Supported JS/TSX options are:
 
 `overrides`, override `excludeFiles`, and `ignorePatterns` are supported.
 Ordinary JS/TSX takes the canonical direct Oxfmt path with the same resolved
-options. TSRX uses the same options for its one projected Oxfmt parse, then the
-checked lift restores TSRX syntax. Transactional multi-file writes and raw
-`<style>` payload byte preservation are unchanged.
+options. A `.tsrx` file uses the same options: the tool formats a temporary
+TSX view of the file, then restores the TSRX syntax and verifies the result.
+[Transactional multi-file writes](/guide/formatting) and raw `<style>`
+payload byte preservation behave exactly as they do without a config file.
+
+<!-- annotate-config -->
 
 ```jsonc
 {
@@ -177,11 +214,15 @@ checked lift restores TSRX syntax. Transactional multi-file writes and raw
 }
 ```
 
-```sh
-target/release/oxc-tsrx-fmt --check src/View.tsrx src/View.tsx
-target/release/oxc-tsrx-fmt --write --config config/format.json src/View.tsrx
-target/release/oxc-tsrx-fmt --stdin-filepath=src/View.tsrx < src/View.tsrx
-```
+In the demo below, the format configuration shown above is the discovered
+`.oxfmtrc.json` and also `config/format.json`; both sample files still use
+double quotes, so `--check` lists them. In the stdin output, the `@{ }`
+statement container and the `;` before `<section>` are intentional TSRX
+syntax, not formatter damage.
+
+<!-- terminal-demo:configuration-format -->
+
+### Not supported
 
 Enabled `sortImports`, `sortTailwindcss`, `jsdoc`,
 `embeddedLanguageFormatting`, experimental formatter options, unknown
@@ -190,28 +231,10 @@ fail before output or writes. Oxfmt options that affect only non-JS languages,
 such as package-JSON or prose formatting, do not change `.tsrx` output. Raw CSS
 is preserved, not formatted or validated.
 
-Serializable Vite+ `fmt` fields are supported by the npm companion. Callback
-functions and other non-JSON values fail actionably instead of disappearing
-during serialization.
-
 ## Performance evidence
 
-The retained release reports include dedicated configuration invariants:
-
-- lint: one config load, one parse for the configured `.tsrx` file, and an
-  observed configured `no-debugger` diagnostic;
-- format: one config load, two parses for two configured files, and observed
-  quote/semicolon option changes;
-- type-aware: one tsgolint process for both a single-file and a two-file
-  explicit-`.tsrx` import batch, with the default lane still at one OXC parse
-  and zero type processes; and
-- every prior throughput, latency, scaling, cold-start, and RSS threshold is
-  unchanged.
-
-See `benchmarks/native-lint/results-1784242044684.json` and
-`benchmarks/native-format/results-1784242059253.json`. The ecosystem companion
-boundary is independently retained in
-`benchmarks/vite/results-1784242073158.json`. The opt-in TypeScript-Go boundary
-is retained in `benchmarks/type-aware/results-1784242060765.json`: 23.69 ms
-median / 25.04 ms p95 for one TSRX file and 23.78 ms median / 24.46 ms p95 for
-a two-file project, while the default syntax lane remains at 2.62 ms p95.
+The retained release reports pin dedicated configuration invariants: one
+config load per session, unchanged parse counts and thresholds, and one
+tsgolint process per eligible type-aware batch.
+[Benchmarks](/reference/benchmarks) has the methodology, the full gate
+matrix, and the aggregate-selected reports.

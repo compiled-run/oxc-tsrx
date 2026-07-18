@@ -5,9 +5,9 @@ import { mkdir, mkdtemp, readFile, readdir, realpath, stat, writeFile } from "no
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import test from "node:test";
+import { resolveNpmInvocation } from "../../scripts/npm-invocation.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
-const npm = process.platform === "win32" ? "npm.cmd" : "npm";
 
 function hostTarget() {
   if (process.platform === "darwin" && process.arch === "arm64") {
@@ -135,7 +135,14 @@ test("current native release stages a complete, checksummed, npm-installable pla
   assert.equal(resolve(packaged.tarball).startsWith(resolve(artifacts)), true);
 
   const consumer = await mkdtemp(join(tmpdir(), "oxc-tsrx-native-consumer-"));
-  await run(npm, ["install", "--ignore-scripts", "--no-audit", "--no-fund", packaged.tarball], {
+  const npmInvocation = resolveNpmInvocation([
+    "install",
+    "--ignore-scripts",
+    "--no-audit",
+    "--no-fund",
+    packaged.tarball,
+  ]);
+  await run(npmInvocation.executable, npmInvocation.args, {
     cwd: consumer,
     env: { ...process.env, npm_config_cache: join(consumer, ".npm-cache") },
   });
@@ -154,6 +161,9 @@ test("current native release stages a complete, checksummed, npm-installable pla
     process.platform === "win32"
       ? ["oxc-tsrx.exe", "oxc-tsrx-fmt.exe", "oxc-tsrx-lsp.exe"]
       : ["oxc-tsrx", "oxc-tsrx-fmt", "oxc-tsrx-lsp"];
+  const lsp = process.platform === "win32" ? "oxc-tsrx-lsp.exe" : "oxc-tsrx-lsp";
+  assert.equal(packaged.lspSha256, checksums.binaries[lsp].sha256);
+  assert.equal(packaged.lspBytes, checksums.binaries[lsp].bytes);
   assert.deepEqual((await readdir(join(packageRoot, "bin"))).sort(), expected.sort());
   for (const binary of expected) {
     const path = join(packageRoot, "bin", binary);

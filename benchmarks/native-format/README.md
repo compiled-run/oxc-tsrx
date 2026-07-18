@@ -40,24 +40,26 @@ and RSS ≤1.15× canonical TSX. The generalized control lane additionally
 requires ≥15 MiB/s median, ≥12 MiB/s p95, ≤1.35× normalized full/half scaling,
 one OXC parse, and idempotence.
 
-Latest passing report: `results-1784242059253.json`.
+Aggregate-selected representative report: `results-1784321655592.json`.
 
-- 129.45 MiB/s median (119.56 MiB/s p95) retained sequential corpus;
-- 742.54 MiB/s default-thread 16 MiB batch at p95;
-- 20.14 MiB/s generalized median and 18.37 MiB/s p95 across 394 dynamic tags
+- 134.78 MiB/s median (127.00 MiB/s p95) retained sequential corpus;
+- 823.10 MiB/s default-thread 16 MiB batch at p95;
+- 21.79 MiB/s generalized median and 21.14 MiB/s p95 across 394 dynamic tags
   and 197 raw style payloads;
-- 1.014× generalized normalized scaling;
+- 1.000× generalized normalized scaling;
 - one timed config load for two files/two parses with applied options;
-- 3.26 ms fresh stdin p95; and
+- 3.16 ms fresh stdin p95; and
 - 1.143× complete-output RSS.
 
 The report retains 30 raw samples for every sequential phase. Their p95 values
-are 0.880 ms scan, 0.330 ms projection, 0.870 ms canonical parse, 5.382 ms
-canonical format, and 1.123 ms checked lift. Because the RSS ratio lies inside
-the policy's 3% inconclusive band around the 1.15× limit, it was adjudicated by
-three explicit fresh passing runs: `results-1784242049439.json`,
-`results-1784242054518.json`, and `results-1784242059253.json`. Their RSS
-ratios were 1.143166×, 1.143076×, and 1.143166×; no threshold changed.
+are 0.818 ms scan, 0.318 ms projection, 0.848 ms canonical parse, 4.944 ms
+canonical format, and 1.085 ms checked lift. Because the RSS ratio lies inside
+the policy's 3% near-threshold band around the 1.15× limit, it was adjudicated
+by three explicit fresh passing runs: `results-1784321650912.json`,
+`results-1784321655592.json`, and `results-1784321660260.json`. Their RSS
+ratios were 1.143192×, 1.143192×, and 1.143295×. The aggregate selected
+`results-1784321655592.json` by median normalized budget pressure with a stable
+report-path tie-break; no threshold changed.
 
 The stdin upstream ratio compares the direct Rust candidate executable with
 the official Oxfmt npm launcher. It is a diagnostic guardrail rather than a

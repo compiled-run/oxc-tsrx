@@ -1,0 +1,15 @@
+direction: down
+
+flag: Explicit --config path
+discovery: Upward search from the working directory
+viteplus: Vite plus config forwarding
+session: One session loads the config once
+overrides: Per-file overrides and ignore patterns
+batch: Every file in the batch reuses the session
+loud: Unsupported keys fail loudly
+
+flag -> session
+discovery -> session
+viteplus -> session
+session -> overrides -> batch
+session -> loud

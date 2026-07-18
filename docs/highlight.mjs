@@ -42,8 +42,11 @@ export function highlightWith(highlighter, code, lang) {
   })
   if (!html.includes('tabindex=')) html = html.replace('<pre ', '<pre tabindex="0" ')
   // github-dark's comment gray fails WCAG contrast on our darker code
-  // background; lift it to GitHub's brighter comment gray.
-  return html.replaceAll('--shiki-dark:#6A737D', '--shiki-dark:#8B949E')
+  // background; lift it to GitHub's brighter comment gray. github-light's
+  // parameter orange likewise fails on the white code background; darken it.
+  return html
+    .replaceAll('--shiki-dark:#6A737D', '--shiki-dark:#8B949E')
+    .replaceAll('--shiki-light:#E36209', '--shiki-light:#B45000')
 }
 
 export async function highlightHtml(code, lang) {

@@ -2,8 +2,10 @@
 
 Oxfmt-compatible command and programmatic formatting exports with native
 `.tsrx` support. Ordinary JavaScript and TypeScript are delegated to the exact
-official Oxfmt package; TSRX is formatted by the Rust-native OXC for TSRX
-binary and lifted back only after structural validation.
+official Oxfmt package; conservative ordinary-only invocations import its
+declared npm launcher in the same Node process. TSRX is formatted by the
+Rust-native OXC for TSRX binary and lifted back only after structural
+validation.
 
 Use the package directly, or install it under the `oxfmt` alias expected by
 Vite+:

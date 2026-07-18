@@ -130,3 +130,22 @@ test('ordinary JS, JSX, TS, and TSX take the canonical format path byte-for-byte
     assert.equal(candidate.stdout, stock.stdout, name);
   }
 });
+
+test('Unicode decorator identifiers format identically through TSRX and canonical TSX paths', async () => {
+  const cases = {
+    'raw-unicode': '@ifπ\nclass Decorated{method( ){return 1}}\n',
+    'escaped-unicode': '@for\\u03c0\nclass Decorated{method( ){return 1}}\n',
+    'escaped-astral': '@try\\u{1D49C}\nclass Decorated{method( ){return 1}}\n',
+  };
+
+  for (const [name, source] of Object.entries(cases)) {
+    const [tsrx, tsx] = await Promise.all([
+      run(binary, [`--stdin-filepath=${name}.tsrx`], source),
+      run(binary, [`--stdin-filepath=${name}.tsx`], source),
+    ]);
+    assert.equal(tsx.code, 0, tsx.stderr || tsx.stdout);
+    assert.equal(tsrx.code, 0, tsrx.stderr || tsrx.stdout);
+    assert.equal(tsrx.stdout, tsx.stdout, name);
+    assert.equal(tsrx.stderr, '');
+  }
+});

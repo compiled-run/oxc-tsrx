@@ -1887,6 +1887,9 @@ dependencies = [
 [[package]]
 name = "tsrx_syntax"
 version = "0.1.0"
+dependencies = [
+ "unicode-id-start",
+]
 
 [[package]]
 name = "unicode-id"

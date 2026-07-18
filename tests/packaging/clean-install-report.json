@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "startedAt": "2026-07-16T19:59:52.043Z",
-  "completedAt": "2026-07-16T20:00:11.036Z",
+  "startedAt": "2026-07-17T20:07:27.666Z",
+  "completedAt": "2026-07-17T20:07:43.789Z",
   "host": {
     "platform": "darwin",
     "arch": "arm64",
@@ -17,23 +17,23 @@
     "runtime": {
       "name": "@oxc-tsrx/runtime",
       "version": "0.1.0",
-      "integrity": "sha512-tHyaR2KzBLwCBBjqMrrjM9SOgk79K7Vix0Ljl5XQdzu8BVTKf9ZQ0SArJwZ77+lLyS6jQ/zXDy0J/NVbI/LCPg=="
+      "integrity": "sha512-NBtHJGxS9YIambOoj4Cw0bCFgI4XX+gKDXuTkd/o3Ax8Xn6hXqlDNZme70gBf4pbyi96fs1v7ltTX2yca/pZtg=="
     },
     "native": {
       "name": "@oxc-tsrx/native-darwin-arm64",
       "version": "0.1.0",
       "target": "aarch64-apple-darwin",
-      "integrity": "sha512-yyOJmoHZzLTYU/1ifbpEcOqVtPC+RmBf8R1OsCweRGJkBPE9N0Stqwoegul7+KKOoFJTfLVALJ93yQiLm1vxvA=="
+      "integrity": "sha512-GUKon4BAqYo9NKpvnwAJ15ODfR2cBhV162tz+vl9pe00hqz5S70qgNUzXIDQenhvRItoHm3tg/3iskhdsdD9wA=="
     },
     "oxlint": {
       "name": "oxlint-tsrx",
       "version": "0.1.0",
-      "integrity": "sha512-ttQhpz3SFASnLVSUPaEcijo8ff//ENQdiPh9h5kLg7ZIpnnq8Q3EPDatsDVG6Ms3v2j/lDlf5nUJrzQcn2mjnQ=="
+      "integrity": "sha512-mFOsZYJa7+8bam0NtdgmylfWVNBDvyfpiESmYNpaB9oyyOs2pah9DLI7I+EqgbRsLvFNShxDSvlZMuBEjtJqOQ=="
     },
     "oxfmt": {
       "name": "oxfmt-tsrx",
       "version": "0.1.0",
-      "integrity": "sha512-BccpQuWX+P/ZEmoqfBMrpEyVqWGusSNzNmn57kI7QTXGREnmzLnxcBuXqOvrF9dQii+Xf6oq43wyuZUzoQHaVQ=="
+      "integrity": "sha512-Nz3OwO6iKNxeW0u3HTabQUpUny7HwY7i05MrmTT+DD8DfIkRaHNUJBcS3/sZt6SYEAANCP8z8rwemWW/6g0uWQ=="
     },
     "vitePlus": "0.2.4"
   },

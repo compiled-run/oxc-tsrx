@@ -1,0 +1,54 @@
+{
+  "title": "Native lint path",
+  "caption": "How ordinary source and TSRX source reach OXC, then map safe results back to original TSRX bytes.",
+  "nodes": {
+    "ordinary": "Ordinary JavaScript and TypeScript bypass the TSRX scanner and go directly to the OXC parser.",
+    "tsrx": "The native lint path starts with the exact authored TSRX bytes.",
+    "scan": "A linear structural scan recognizes TSRX syntax while protecting strings, comments, templates, JSX text, and Unicode bytes.",
+    "overlay": "The scanner stores structure and original spans in compact flat vectors instead of a second tree.",
+    "projection": "TSRX controls become legal TSX scaffolding while authored descendant ranges stay byte-for-byte unchanged.",
+    "buffer_map": "One projected buffer carries sorted identity segments that connect copied ranges to the original source.",
+    "parser": "OXC parses the original ordinary source or the legal TSX projection once.",
+    "arena": "The OXC program keeps one arena-backed AST whose spans address the projected source bytes.",
+    "lint": "OXC semantic analysis and oxlint rules run on the single parsed program.",
+    "translate": "A label or fix maps back only when its complete range stays inside one authored identity segment.",
+    "diagnostics": "Accepted labels and fixes point to the original TSRX. Unsafe synthetic or cross-segment results are suppressed or rejected."
+  },
+  "steps": [
+    {
+      "label": "Scan",
+      "nodes": [
+        "tsrx",
+        "scan",
+        "overlay"
+      ],
+      "caption": "One linear scan reads your TSRX bytes and records every control and its original span in a compact overlay."
+    },
+    {
+      "label": "Project",
+      "nodes": [
+        "projection",
+        "buffer_map"
+      ],
+      "caption": "TSRX controls become legal TSX scaffolding in one projected buffer, and an identity map ties every copied range back to your original bytes."
+    },
+    {
+      "label": "OXC",
+      "nodes": [
+        "ordinary",
+        "parser",
+        "arena",
+        "lint"
+      ],
+      "caption": "Ordinary files and the projection take the same road: one OXC parse, one arena AST, then semantic analysis and oxlint rules."
+    },
+    {
+      "label": "Map back",
+      "nodes": [
+        "translate",
+        "diagnostics"
+      ],
+      "caption": "Results are translated onto your original TSRX bytes. Anything that cannot be mapped safely is suppressed instead of guessed."
+    }
+  ]
+}

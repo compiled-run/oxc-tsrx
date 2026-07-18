@@ -42,12 +42,12 @@ release.
 
 ## Install
 
-After the approval-gated 0.1.0 registry launch, install the two command
-companions. Their npm package names are project-specific; their executable
-names remain `oxlint` and `oxfmt`:
+You need Node.js 20.19 or newer. Install both packages as dev dependencies.
+The npm package names are project-specific, but the commands you get are the
+familiar `oxlint` and `oxfmt`:
 
 ```sh
-npm install --save-dev oxlint-tsrx@0.1.0 oxfmt-tsrx@0.1.0
+npm install --save-dev oxlint-tsrx oxfmt-tsrx
 npx oxlint --format=json src/Counter.tsrx src/View.tsx
 npx oxfmt --check src/Counter.tsrx src/View.tsx
 ```
@@ -56,16 +56,20 @@ For Vite+, install the same packages under the project-local names Vite+
 resolves:
 
 ```sh
-npm install --save-dev vite-plus@0.2.4 \
-  oxlint@npm:oxlint-tsrx@0.1.0 \
-  oxfmt@npm:oxfmt-tsrx@0.1.0
+npm install --save-dev vite-plus \
+  oxlint@npm:oxlint-tsrx \
+  oxfmt@npm:oxfmt-tsrx
 ```
 
-`@oxc-tsrx/runtime` selects one of eight exact native packages transitively.
-There is no lifecycle download and no JavaScript/Wasm fallback. Until npm shows
-the complete 0.1.0 set, follow the source-build path in the
-[getting-started guide](docs/guide/getting-started.md); local candidate files do
-not prove registry publication.
+That is the whole setup. The tools are written in Rust; a normal npm install
+pulls in `@oxc-tsrx/runtime`, which picks the one prebuilt native binary that
+matches your platform out of eight exact native packages. You do not need
+Rust on your machine, the packages run no install scripts, and the commands
+never download anything later. There is no JavaScript/Wasm fallback. Until
+npm shows the complete 0.1.0 set from the approval-gated registry launch,
+follow the source-build path in the
+[getting-started guide](docs/guide/getting-started.md); local candidate files
+do not prove registry publication.
 
 ## Current proof
 
@@ -88,20 +92,14 @@ MARKLESS_ROOT=/Users/jacksm5pro/dev/open-source/markless \
   OXFMT_BIN=target/release/oxc-tsrx-fmt \
   node --test tests/markless-control-corpus.test.mjs
 
-cargo run --release --locked -p oxc_tsrx_benchmark -- \
-  --assert benchmarks/native-lint/budgets.json
-cargo run --release --locked -p oxc_tsrx_format_benchmark -- \
-  --assert benchmarks/native-format/budgets.json
-
-node benchmarks/vite/run.mjs
-npm run benchmark:type-aware
-npm run benchmark:editor
-npm run benchmark:comparative
+node tests/acceptance/run-performance.mjs
 ```
 
 The fresh end-to-end owner run and every frozen performance lane are indexed
 in the [release acceptance matrix](docs/acceptance/matrix.md), with links to
-the machine-readable clean-room and raw benchmark receipts.
+the machine-readable clean-room, aggregate adjudication, and raw benchmark
+receipts. Individual benchmark commands remain available for diagnostic raw
+runs, but the aggregate runner is the authoritative release command.
 
 The read-only Markless oracle is pinned to committed revision
 `76d0e6a07fa728b9343cc0d342fbe03813c43703`. It proves all 179/179
@@ -110,44 +108,46 @@ parser-valid tracked `.tsrx` files format, reparse, and converge, rejects all
 byte-for-byte, and requires the external worktree fingerprint to remain
 identical.
 
-The latest retained Apple M5 Pro lint report is
-[`benchmarks/native-lint/results-1784242044684.json`](benchmarks/native-lint/results-1784242044684.json):
-262.09 MiB/s scan/project/parse-and-validation, 78.67 MiB/s complete CLI lint,
-1.160× CLI latency versus equivalent TSX, and 3.22 ms fresh-process p95.
+The aggregate-selected Apple M5 Pro lint report is
+[`benchmarks/native-lint/results-1784321646022.json`](benchmarks/native-lint/results-1784321646022.json):
+260.28 MiB/s scan/project/parse-and-validation, 80.24 MiB/s complete CLI lint,
+1.141× CLI latency versus equivalent TSX, and 3.16 ms fresh-process p95.
 Its configuration lane records one config load, one parse, and the configured
 rule's real diagnostic.
 
 The opt-in type-aware report is
-[`benchmarks/type-aware/results-1784242060765.json`](benchmarks/type-aware/results-1784242060765.json):
-23.69 ms median / 25.04 ms p95 for one TSRX file and 23.78 / 24.46 ms for a
+[`benchmarks/type-aware/results-1784321661795.json`](benchmarks/type-aware/results-1784321661795.json):
+22.63 ms median / 24.78 ms p95 for one TSRX file and 22.95 / 24.04 ms for a
 two-file explicit-`.tsrx` import project. Both use one native tsgolint process.
-The same report keeps the default syntax lane at 2.62 ms p95, one OXC parse,
+The same report keeps the default syntax lane at 2.65 ms p95, one OXC parse,
 and zero type processes.
 
-The latest formatter report is
-[`benchmarks/native-format/results-1784242059253.json`](benchmarks/native-format/results-1784242059253.json):
-129.45 MiB/s sequential statement-control formatting, 742.54 MiB/s p95 for a
-16 MiB default-thread batch, and 20.14 MiB/s on repeated control flow plus 394
+The aggregate-selected formatter report is
+[`benchmarks/native-format/results-1784321655592.json`](benchmarks/native-format/results-1784321655592.json):
+134.78 MiB/s sequential statement-control formatting, 823.10 MiB/s p95 for a
+16 MiB default-thread batch, and 21.79 MiB/s on repeated control flow plus 394
 dynamic tags and 197 raw style payloads. The generalized full-versus-half
-normalized scaling ratio is 1.014×, fresh stdin p95 is 3.26 ms, and
+normalized scaling ratio is 1.000×, fresh stdin p95 is 3.16 ms, and
 complete-output RSS is 1.143× canonical same-binary TSX. Every frozen
 assertion passes without changing a threshold; the config lane records one
 load, two files/two parses, and observed quote/semicolon changes.
 
 The Vite/Vite+ command-boundary report is
-[`benchmarks/vite/results-1784242073158.json`](benchmarks/vite/results-1784242073158.json):
-mixed companion lint is 61.18 ms p95 (1.868× canonical two-file TSX), mixed
-format-check is 137.89 ms p95 (1.331× canonical), and complete Vite+ 0.2.4
-mixed lint is 322.65 ms p95. Metadata proves one native parse for the TSRX file
-and zero ordinary files entering the project-owned lane.
+[`benchmarks/vite/results-1784321678410.json`](benchmarks/vite/results-1784321678410.json):
+ordinary `oxfmt-tsrx` is 103.26 ms median / 113.44 ms p95 versus canonical
+Oxfmt's 100.99 / 103.01 ms (1.101× p95). Mixed companion lint is 57.91 ms
+p95 (1.813× canonical two-file TSX), mixed format-check is 127.11 ms p95
+(1.234× canonical), and complete Vite+ 0.2.4 mixed lint is 237.08 ms p95.
+Metadata proves one native parse for the TSRX file and zero ordinary files
+entering the project-owned lane.
 
 The native editor report is
-[`benchmarks/editor/results-1784242073843.json`](benchmarks/editor/results-1784242073843.json):
-2.49 ms median / 2.84 ms p95 from fresh server start/initialize/open to first
-diagnostics across 100 measured processes, 0.124 ms edit-to-diagnostics p95,
-0.378 ms formatting p95, and 0.195 ms code-action p95 on the retained Markless
+[`benchmarks/editor/results-1784321679056.json`](benchmarks/editor/results-1784321679056.json):
+2.40 ms median / 2.59 ms p95 from fresh server start/initialize/open to first
+diagnostics across 100 measured processes, 0.115 ms edit-to-diagnostics p95,
+0.125 ms formatting p95, and 0.114 ms code-action p95 on the retained Markless
 fixture plus disposable probes (1,300 bytes). One long-lived canonical OXC
-stdio server used 11.14 MiB RSS and grew 0 MiB through a 1,000-edit soak. This
+stdio server used 10.98 MiB RSS and grew 0 MiB through a 1,000-edit soak. This
 lane is syntax-only. The separate VS Code 1.128 Extension
 Host artifact
 records automatic OXC for TSRX activation on a real `markless-tsrx` document,
@@ -155,29 +155,45 @@ real format-on-save, live diagnostics, a safe quick fix, and identical
 external-worktree fingerprints before and after.
 
 The matched cross-tool CLI report is
-[`benchmarks/comparative/results-1784242094588.json`](benchmarks/comparative/results-1784242094588.json):
+[`benchmarks/comparative/results-1784321699288.json`](benchmarks/comparative/results-1784321699288.json):
 the same byte-identical 1,000-file TSX corpus, one `no-debugger` rule, one
-explicit file list, and zero-diagnostic default output measured 660.17 ms for
-ESLint + typescript-eslint, 40.87 ms for official Oxlint, and 24.99 ms for OXC
-for TSRX after five warmups and twenty measured processes. A separately labeled
-paired workload with 20% TSRX measured 26.28 ms (1.052× the product's all-TSX
-lane); it is not used as a cross-tool comparison.
+explicit file list, and zero-diagnostic default output, with every lane
+launched through its npm CLI entry point the way projects invoke it. After
+five warmups and twenty measured processes the medians were 609.06 ms for
+ESLint + typescript-eslint, 40.68 ms for official Oxlint, and 45.92 ms for the
+`oxlint-tsrx` command. The ordinary-only command imports the exact declared
+official Oxlint launcher in the same Node process, without entering the TSRX
+dispatch path. A separately labeled mixed-file-types workload (20% TSRX by
+file count) measured 68.38 ms (1.489× the product's all-TSX lane); exactly one public canonical
+Node child and one native TSRX child start in parallel, with zero private
+adapter children. It is not used as a cross-tool comparison. The mixed ratio
+landed inside the unchanged 3% near-threshold band, so the aggregate retained
+three coherent runs and selected this median-pressure report rather than the
+fastest sample.
 
 ## Configuration use
 
-The native commands discover JSON or JSONC Oxlint/Oxfmt configuration once per
+The commands discover JSON or JSONC Oxlint/Oxfmt configuration once per
 session and reuse the compiled state across explicit `.tsrx` and ordinary JS/TS
-files:
+files. With the `oxlint-tsrx` and `oxfmt-tsrx` npm packages installed:
+
+```sh
+npx oxlint --format=json src/Counter.tsrx src/View.tsx
+npx oxlint --format=json --config config/lint.json \
+  --warn no-console --deny no-debugger src/Counter.tsrx
+npx oxlint --format=json --type-aware src/Counter.tsrx
+npx oxlint --format=json --type-check src/Counter.tsrx
+
+npx oxfmt --check src/Counter.tsrx src/View.tsx
+npx oxfmt --write --config config/format.json src/Counter.tsrx
+```
+
+The same invocations work against the native Rust binaries directly (an
+internal detail useful when building from source):
 
 ```sh
 target/release/oxc-tsrx --format=json src/Counter.tsrx src/View.tsx
-target/release/oxc-tsrx --format=json --config config/lint.json \
-  --warn no-console --deny no-debugger src/Counter.tsrx
-target/release/oxc-tsrx --format=json --type-aware src/Counter.tsrx
-target/release/oxc-tsrx --format=json --type-check src/Counter.tsrx
-
 target/release/oxc-tsrx-fmt --check src/Counter.tsrx src/View.tsx
-target/release/oxc-tsrx-fmt --write --config config/format.json src/Counter.tsrx
 ```
 
 Lint supports built-in rules/plugins and their options, `env`, `globals`,
@@ -229,6 +245,16 @@ canonical OXC's language-server transport. The thin `packages/vscode`
 companion launches that native process and attaches to file-backed `.tsrx`
 documents without registering a competing framework language.
 
+The companion also coexists with the official OXC VS Code extension. It
+attaches only to `.tsrx` documents and talks to the project-owned
+`oxc-tsrx-lsp` server, while the official extension keeps serving ordinary
+JS/TS files. That split holds even when a project aliases `oxlint`/`oxfmt` to
+the `oxlint-tsrx`/`oxfmt-tsrx` wrapper packages, because the wrappers load the
+packages' declared canonical launchers in the same Node process for `--lsp`,
+preserving the upstream stdio session. The official extension still cannot
+select `.tsrx` files; the
+companion exists to close exactly that gap.
+
 In a Markless workspace it coexists with the real `markless-tsrx` extension:
 Markless keeps its grammar, TypeScript plugins, completions, navigation, and
 runtime compilation, while OXC for TSRX adds format-on-save, live authored-span
@@ -250,27 +276,37 @@ proof commands, and current packaging boundaries.
 
 ## Formatter use
 
+With the `oxfmt-tsrx` npm package installed:
+
 ```sh
 # Editor/stdin boundary: formatted source is written to stdout.
-target/release/oxc-tsrx-fmt --stdin-filepath=src/Counter.tsrx < src/Counter.tsrx
+npx oxfmt --stdin-filepath=src/Counter.tsrx < src/Counter.tsrx
 
 # Check without modifying files; exits 1 and lists differences.
-target/release/oxc-tsrx-fmt --check src/Counter.tsrx
+npx oxfmt --check src/Counter.tsrx
 
 # Format explicit files. All reads and formats finish before transactional writes.
-target/release/oxc-tsrx-fmt --write src/Counter.tsrx src/View.tsx
+npx oxfmt --write src/Counter.tsrx src/View.tsx
 ```
 
-Ordinary JavaScript and TypeScript files go directly to canonical Oxfmt, and
-the black-box contract requires byte-for-byte output parity. Explicit files are
-read and formatted in the same parallel pipeline; write mode stages every
-successful output before replacing any original.
+The native binary accepts the same flags directly, for example
+`target/release/oxc-tsrx-fmt --check src/Counter.tsrx`.
+
+Ordinary JavaScript and TypeScript files use the exact manifest-declared
+canonical Oxfmt launcher in the wrapper's Node process, and the black-box
+contract requires byte-for-byte output parity with zero TSRX dispatch. Mixed
+batches keep that public canonical lane alongside the native TSRX child.
+Explicit files are read and formatted in the same parallel pipeline; write
+mode stages every successful output before replacing any original.
 
 ## Repository map
 
 - `crates/oxc_adapter`: the only OXC revision boundary;
-- `crates/tsrx_syntax`: compact native overlay plus distinct syntax-lint,
-  type-semantic, and formatter projection/lift paths;
+- `crates/tsrx_syntax`: compact native overlay plus private scanner,
+  mapping, syntax-lint, type-semantic, and formatter projection/lift modules;
+  the [upstream transplant map](docs/architecture/upstreaming-to-oxc.md)
+  classifies what can move directly, what must adapt, and what requires an
+  upstream-only redesign;
 - `crates/tsrx_format`: reusable configured formatting session and
   filesystem-free formatting boundary;
 - `crates/tsrx_lint`: lint orchestration, diagnostic translation, and safe fixes;
@@ -285,12 +321,10 @@ successful output before replacing any original.
   `benchmarks/{vite,editor}`: frozen native and ecosystem-boundary budgets and
   reports;
 - `docs/`: markdown documentation and the vanilla-JS static docs site
-  (`npm run docs:build`, `docs:serve`, `docs:verify`); and
-- `docs/goals/oxc-for-tsrx`: internal GoalBuddy board and durable receipts.
+  (`npm run docs:build`, `docs:serve`, `docs:verify`).
 
 Rejected JavaScript/Prettier and Zig/Yuku prototypes are absent from the
-product tree. Historical measurements remain only in GoalBuddy notes; no Zig
-or JavaScript language core is built or shipped.
+product tree; no Zig or JavaScript language core is built or shipped.
 
 ## Current boundaries
 
@@ -318,4 +352,7 @@ Registry, Marketplace, repository, website, and social publication remain
 separate approval-gated external actions.
 
 See [the Rust/OXC core architecture](docs/architecture/rust-oxc-core.md) for
-source fidelity, performance, update isolation, and current boundaries.
+source fidelity, performance, update isolation, and current boundaries. The
+[maintainer-facing upstream map](docs/architecture/upstreaming-to-oxc.md)
+records the exact current module tree, OXC landing points, closed hooks, and
+review sequence without implying upstream endorsement.

@@ -1,50 +1,77 @@
 ---
 title: Benchmarks
-description: The frozen release performance gates, generated at build time from the latest committed reports.
+description: The frozen release performance gates, generated from aggregate-selected reports.
 ---
 
 # Benchmarks
 
-Performance is a release gate, not a marketing page. Dedicated native and
-ecosystem harnesses assert frozen budgets. Each latest release-gate report
-keeps the applicable host/toolchain/OXC identity, corpus hash, raw timing or
-RSS samples, sampling policy, distributions, and every assertion.
-
-Everything below is generated at build time from the reports selected by
-`docs/acceptance/performance-report.json`, so this page cannot silently select
-a newer failed or incomplete raw run: rerun the aggregate performance oracle,
-rebuild the docs, done.
+Performance is a release gate, not a marketing page. Every selected report
+keeps the host, toolchain, and OXC identity, corpus hash, raw timing or RSS
+samples, sampling policy, distributions, and every assertion. Everything
+below is generated at build time from the reports listed in
+`docs/acceptance/performance-report.json`, so this page cannot silently pick
+up a newer failed or incomplete run.
 
 How to read the results:
 
-- **MiB/s** is throughput: how many mebibytes of source the tool processes
-  per second. Higher is better.
-- **p95** is the nearest-rank 95th percentile of the retained sample set. Each
-  raw report records its sample count; p95 shows tail behavior rather than only
-  the average.
-- **Ratios like 1.004×** use the denominator named by that row. Same-build
-  ordinary-path ratios measure comparable OXC overhead; cold-launcher,
-  type/default, and scaling ratios are different contracts described below.
-- **Budget** is the frozen threshold the result must beat. If any budget
-  fails, the release fails. Each chart bar fills toward the dashed budget
-  line; staying short of the line passes. The number next to the bar is the
-  measured result, and hovering or focusing a row shows the full details.
+- **MiB/s** is throughput: mebibytes of source processed per second. Higher
+  is better.
+- **p95** is the nearest-rank 95th percentile of the retained samples. It
+  shows tail behavior, not just the average.
+- **Ratios like 1.004×** divide by the denominator named in that row.
+- **Budget** is the frozen threshold, drawn as the dashed vertical line in
+  every chart.
+- **Dot strips.** Most chart rows draw one dot per retained sample from the
+  selected report, placed by how much of the row's budget that sample uses.
+  The tall solid tick marks the median sample. The hollow diamond marks the
+  p95 sample. A row passes while its gated value stays on the near side of
+  the dashed budget line. Where dots pile up, the strip gets darker, so you
+  see the whole spread instead of one summary number.
+- **Ratio rows.** The solid marker on the budget scale is the asserted
+  ratio, which is the value the release gate checks. Below it, two thin
+  labeled strips show the raw samples for the numerator and the denominator
+  on one shared scale. The two runs are sampled independently, so dividing
+  sample pairs would invent data; only the asserted ratio is plotted on the
+  budget scale.
+- **Single-value rows.** Some gates record exactly one number per report,
+  like cold starts and editor memory. Those rows keep a plain filled bar,
+  and their tooltip says "single measurement per report".
+- Hover or focus any row for the exact result, the budget, the sample
+  count, the median, and the p95.
 
-Three comparisons need extra care. The matched CLI lane gives ESLint, official
-Oxlint, and OXC for TSRX the same byte-identical 1,000-file TSX corpus, one
-`no-debugger` rule, one explicit file list, zero-diagnostic default output,
-five warmups, and twenty measured processes. Its separate 20% TSRX result is
-paired from the same generated component specifications and is only an
-internal all-TSX-versus-mixed workload ratio. The native cold-start ratios compare a direct
-Rust executable with the official npm launcher, so the absolute cold limits are
-the product gates and the ratios are diagnostic rather than tool-speed claims.
-The formatter's 16.6 MiB/s historical-incumbent floor is an absolute regression
-threshold derived from an older 1.66 MiB/s measurement on a different corpus;
-it is not a like-for-like Prettier speedup claim. Same-build canonical OXC
-controls and the ordinary-source parity lanes are the comparable overhead
-measurements.
+Three results need extra care:
 
-Regenerate the reports with:
+- The matched CLI lane gives ESLint, official Oxlint, and OXC for TSRX the
+  same byte-identical 1,000-file TSX corpus, one rule, and identical run
+  conditions. The separate mixed-file-types result only compares the product
+  against itself on a different workload.
+- The native cold-start ratios compare a direct Rust executable with the
+  official npm launcher, so they are diagnostic, not tool-speed claims.
+- The formatter's 16.6 MiB/s floor is a regression threshold derived from an
+  older 1.66 MiB/s measurement on a different corpus, not a like-for-like
+  Prettier comparison. The same-build canonical OXC controls are the
+  comparable overhead measurements.
+
+Noise is handled by a fail-closed rerun policy instead of picking a
+favorable sample:
+
+- Each invocation creates exactly one fresh report.
+- A first report inside the 3% near-threshold band requires exactly two
+  additional fresh reports. Only the assertions that triggered get
+  two-of-three tolerance; everything else must pass in all three.
+- Any failure more than 3% beyond its threshold is definitive.
+- The representative report is selected by median normalized budget pressure
+  with a stable report-path tie-break, never by picking the fastest run. The
+  aggregate fails if the selected representative is red.
+
+Make the authoritative release decision with:
+
+```sh
+node tests/acceptance/run-performance.mjs
+```
+
+The individual commands below produce diagnostic raw reports without the
+aggregate admission, rerun, and selection policy:
 
 ```sh
 cargo run --release --locked -p oxc_tsrx_benchmark -- \
@@ -66,7 +93,6 @@ npm run benchmark:comparative
   distributed CLI.
 - Normal source metadata excludes configuration time; aggregate metadata and
   dedicated configuration lanes report it separately.
-- Formatter reports retain scan, projection, canonical parse, canonical
-  format, and checked-lift timing arrays separately. Near-threshold RSS follows
-  the retained three-run adjudication policy.
-- Every frozen assertion must pass without changing a threshold.
+- Formatter reports keep scan, projection, canonical parse, canonical format,
+  and checked-lift timing arrays separately.
+- Thresholds never change during adjudication.

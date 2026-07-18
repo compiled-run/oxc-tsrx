@@ -1,0 +1,19 @@
+direction: down
+
+buffer: Your unsaved .tsrx buffer
+framework: Framework extension keeps the language
+companion: Thin VS Code companion
+server: oxc-tsrx-lsp native server
+oxc: Canonical OXC lint and format
+tsgo: Opt-in TypeScript-Go process
+diagnostics: Squiggles on your authored bytes
+edits: Validated formatting and quick fixes
+
+framework -> buffer
+buffer -> companion
+companion -> server
+server -> oxc
+oxc -> diagnostics
+oxc -> edits
+server -> tsgo
+tsgo -> diagnostics

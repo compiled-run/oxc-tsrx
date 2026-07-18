@@ -32,7 +32,11 @@ export function createDemoHighlighter() {
         defaultColor: false,
       })
       if (!html.includes('tabindex=')) html = html.replace('<pre ', '<pre tabindex="0" ')
-      return html.replaceAll('--shiki-dark:#6A737D', '--shiki-dark:#8B949E')
+      // Must stay byte-identical to highlightWith in docs/highlight.mjs,
+      // including its WCAG contrast remaps; docs/verify.mjs gates on parity.
+      return html
+        .replaceAll('--shiki-dark:#6A737D', '--shiki-dark:#8B949E')
+        .replaceAll('--shiki-light:#E36209', '--shiki-light:#B45000')
     },
   }
   return demoHighlighter

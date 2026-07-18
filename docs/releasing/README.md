@@ -57,19 +57,14 @@ advisory; their result cannot replace a required gate.
 Run the frozen performance gates on the documented stable benchmark machine:
 
 ```bash
-cargo run --release --locked -p oxc_tsrx_benchmark -- \
-  --assert benchmarks/native-lint/budgets.json
-cargo run --release --locked -p oxc_tsrx_format_benchmark -- \
-  --assert benchmarks/native-format/budgets.json
-node benchmarks/vite/run.mjs
-npm run benchmark:type-aware
-npm run benchmark:editor
-npm run benchmark:comparative
+node tests/acceptance/run-performance.mjs
 ```
 
 Do not use shared GitHub-hosted runner timing as a substitute for the retained
-same-machine performance reports. A release needs fresh reports with every
-frozen assertion green.
+same-machine performance reports. The aggregate command owns fresh-report
+admission, identity checks, near-threshold reruns, assertion voting, and
+representative selection. Individual family commands are diagnostic raw runs;
+they do not produce a release decision by themselves.
 
 ## 2. Prove the owner workflow
 

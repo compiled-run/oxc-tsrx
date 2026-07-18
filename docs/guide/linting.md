@@ -40,21 +40,7 @@ byte-for-byte identical, which is what makes exact mapping possible:
 
 ## Usage
 
-```sh
-# Explicit files, JSON diagnostics at original TSRX positions
-oxc-tsrx --format=json src/Counter.tsrx src/View.tsx
-
-# Explicit configuration plus per-rule severity from the CLI
-oxc-tsrx --format=json --config config/lint.json \
-  --warn no-console --deny no-debugger src/Counter.tsrx
-
-# Apply safe fixes
-oxc-tsrx --format=json --fix src/Counter.tsrx
-
-# Opt into official TypeScript-Go rules or compiler diagnostics
-oxc-tsrx --format=json --type-aware src/Counter.tsrx
-oxc-tsrx --format=json --type-check src/Counter.tsrx
-```
+<!-- terminal-demo:linting-usage -->
 
 CLI severity flags (`--allow`/`-A`, `--warn`/`-W`, `--deny`/`-D`) override
 whatever the config file says for that rule. Exit codes: `0` clean, `1` when
@@ -89,8 +75,8 @@ JavaScript lint plugins and direct-native JS/TS config files are rejected up
 front instead of half-working. Type-aware lint is supported only through an
 explicit flag and the exact verified `oxlint-tsgolint` 0.24.0 executable; a
 missing or mismatched tool fails without silently falling back. See
-[Configuration](/integrations/configuration.html) for the exact support matrix
-and [Limitations](/reference/limitations.html) for the remaining boundaries.
+[Configuration](/integrations/configuration) for the exact support matrix
+and [Limitations](/reference/limitations) for the remaining boundaries.
 
 ## What is tested
 

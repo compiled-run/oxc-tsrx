@@ -71,8 +71,32 @@ OXC's language-server transport (stdio). It is launched by an editor client,
 not by hand; the VS Code companion in `packages/vscode` starts it for
 file-backed `.tsrx` documents. It provides live authored-span diagnostics,
 whole-document formatting, and validated quick fixes, with opt-in type-aware
-diagnostics. See [Editor integration](/integrations/editor.html) for settings,
+diagnostics. See [Editor integration](/integrations/editor) for settings,
 architecture, and proof commands.
+
+## npm direct upstream route
+
+The npm companion packages (`oxlint-tsrx`, `oxfmt-tsrx`) recognize a small set
+of delegate-only flags. They also conservatively recognize explicit batches
+containing only existing ordinary JS/JSX/TS/TSX files. Those invocations load
+the pinned package's manifest-declared Oxlint or Oxfmt launcher in the same
+Node process instead of initializing the TSRX bridge:
+
+| Command | Delegate-only flags |
+| --- | --- |
+| `oxlint` (via `oxlint-tsrx`) | `--help`, `-h`, `--version`, `-V`, `--rules`, `--lsp`, `--init` |
+| `oxfmt` (via `oxfmt-tsrx`) | `--help`, `-h`, `--version`, `-V`, `--init`, `--migrate`, `--lsp` |
+
+This preserves canonical diagnostics, config/plugin loading, fixes, stdin,
+signals, and lifecycle behavior while avoiding a second process. Ambiguous
+paths, directories, globs, unknown options, and any `.tsrx` input remain on the
+TSRX-aware bridge.
+
+For `--lsp`, loading the upstream launcher in-process keeps its stdio session
+attached without a captured or buffered child. Editor clients can therefore
+use the wrapper command itself as the server command, which is what keeps the
+official OXC VS Code extension working for ordinary JS/TS when a project
+aliases `oxlint`/`oxfmt` to the wrapper packages.
 
 ## Environment variables
 

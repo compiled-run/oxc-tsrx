@@ -17,7 +17,7 @@ stock tool.
 Step by step:
 
 1. The file is scanned and projected to a valid-TSX copy, the same idea as
-   [linting](/guide/linting.html), except here the placeholders are special
+   [linting](/guide/linting), except here the placeholders are special
    markers designed to survive formatting.
 2. Oxfmt parses and formats that copy. Once.
 3. The *lift* walks the formatted output and turns it back into TSRX:
@@ -31,19 +31,7 @@ Step by step:
 
 ## Usage
 
-```sh
-# Check without modifying files; exits 1 and lists files that differ.
-oxc-tsrx-fmt --check src/Counter.tsrx
-
-# Format and write files.
-oxc-tsrx-fmt --write src/Counter.tsrx src/View.tsx
-
-# Editor/stdin mode: formatted source goes to stdout.
-oxc-tsrx-fmt --stdin-filepath=src/Counter.tsrx < src/Counter.tsrx
-
-# Explicit config and worker count
-oxc-tsrx-fmt --write --config config/format.json --threads=4 src/Counter.tsrx
-```
+<!-- terminal-demo:formatting-usage -->
 
 Writes are transactional: every file in the batch must format successfully
 before the first one is replaced on disk, so a crash or bad file never leaves
@@ -56,7 +44,7 @@ upward, or takes `--config`/`-c`. The standard layout options work:
 `printWidth`, `singleQuote`, `semi`, `useTabs`, `tabWidth`, `trailingComma`,
 `arrowParens`, `bracketSpacing`, `singleAttributePerLine`, and more, plus
 `overrides` and `ignorePatterns`. The full list is in
-[Configuration](/integrations/configuration.html).
+[Configuration](/integrations/configuration).
 
 Options that could silently change TSRX output in unsupported ways are
 rejected with a clear error before anything is formatted or written:
