@@ -13,7 +13,7 @@ mod lexical;
 mod overlay;
 mod stack;
 
-pub(crate) use lexical::{is_identifier_continue, is_identifier_start};
+pub(crate) use lexical::is_identifier_continue;
 use lexical::{previous_significant_byte, unsupported_at_construct};
 use stack::TinyStack;
 
@@ -78,6 +78,8 @@ impl<'a> Scanner<'a> {
             nodes: self.nodes,
             clauses: self.clauses,
             embedded_tokens: self.embedded_tokens,
+            parser_dynamic_tokens: Vec::new(),
+            parser_code_blocks: Vec::new(),
             dynamic_tags: self.dynamic_tags,
             dynamic_comments: self.dynamic_comments,
             style_blocks: self.style_blocks,
@@ -295,7 +297,7 @@ impl<'a> Scanner<'a> {
                     pending_control_paren = false;
                     closed_control_paren = false;
                 }
-                byte if is_identifier_start(byte) => {
+                _ if self.identifier_start_width(index).is_some() => {
                     let end = self.skip_identifier(index);
                     let identifier = &self.bytes[index..end];
                     pending_control_paren = matches!(

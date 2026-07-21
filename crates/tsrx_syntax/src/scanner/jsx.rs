@@ -1,10 +1,13 @@
 use crate::{
     diagnostics::{ProjectionError, to_u32},
-    model::{ByteSpan, ControlContext, DynamicTag, EmbeddedKind, EmbeddedToken, NONE, StyleBlock},
+    model::{
+        ByteSpan, ControlContext, DynamicTag, EmbeddedKind, EmbeddedToken, NONE, StructuralKind,
+        StyleBlock,
+    },
 };
 
 use super::{
-    Scanner, is_identifier_continue, is_identifier_start,
+    Scanner,
     lexical::{find_bytes, jsx_text_looks_structural, unsupported_at_construct},
 };
 
@@ -29,8 +32,13 @@ impl Scanner<'_> {
             index = end;
             let owner = to_u32(self.dynamic_tags.len())?;
             self.dynamic_tags.push(DynamicTag {
+                opening: ByteSpan::new(to_u32(start)?, to_u32(end)?),
+                closing: ByteSpan::default(),
                 expression,
                 closing_expression: ByteSpan::default(),
+                subtree_end: owner
+                    .checked_add(1)
+                    .ok_or(ProjectionError::SourceTooLarge)?,
                 first_closing_comment: NONE,
                 closing_comment_count: 0,
                 self_closing: false,
@@ -42,11 +50,7 @@ impl Scanner<'_> {
             });
             dynamic_owner = Some(owner);
         } else {
-            while self.bytes.get(index).is_some_and(|byte| {
-                is_identifier_continue(*byte) || matches!(byte, b'.' | b':' | b'-')
-            }) {
-                index += 1;
-            }
+            index = self.skip_jsx_name(index);
             name_end = index;
             if name_end == name_start {
                 return Err(ProjectionError::UnsupportedSyntax {
@@ -85,13 +89,8 @@ impl Scanner<'_> {
                         break;
                     }
                     byte if byte.is_ascii_whitespace() => index += 1,
-                    byte if is_identifier_start(byte) => {
-                        index += 1;
-                        while self.bytes.get(index).is_some_and(|byte| {
-                            is_identifier_continue(*byte) || matches!(byte, b'-' | b':' | b'.')
-                        }) {
-                            index += 1;
-                        }
+                    _ if self.identifier_start_width(index).is_some() => {
+                        index = self.skip_jsx_name(index);
                         while self.bytes.get(index).is_some_and(u8::is_ascii_whitespace) {
                             index += 1;
                         }
@@ -111,6 +110,10 @@ impl Scanner<'_> {
 
         if let Some(owner) = dynamic_owner {
             self.dynamic_tags[owner as usize].self_closing = self_closing;
+            if self_closing {
+                let end = to_u32(index)?;
+                self.dynamic_tags[owner as usize].closing = ByteSpan::new(end, end);
+            }
         }
 
         if self_closing {
@@ -127,7 +130,11 @@ impl Scanner<'_> {
             let close_start = index + relative_close;
             let owner = to_u32(self.style_blocks.len())?;
             let content = ByteSpan::new(to_u32(index)?, to_u32(close_start)?);
-            self.style_blocks.push(StyleBlock { content });
+            self.style_blocks.push(StyleBlock {
+                element: ByteSpan::new(to_u32(start)?, to_u32(close_start + "</style>".len())?),
+                content,
+                self_closing: false,
+            });
             self.embedded_tokens.push(EmbeddedToken {
                 kind: EmbeddedKind::StyleContent,
                 span: content,
@@ -160,11 +167,7 @@ impl Scanner<'_> {
                         (index, index, expression, identity)
                     } else {
                         let closing_name_start = index;
-                        while self.bytes.get(index).is_some_and(|byte| {
-                            is_identifier_continue(*byte) || matches!(byte, b'.' | b':' | b'-')
-                        }) {
-                            index += 1;
-                        }
+                        index = self.skip_jsx_name(index);
                         (
                             closing_name_start,
                             index,
@@ -202,6 +205,7 @@ impl Scanner<'_> {
                             .checked_sub(first_closing_comment)
                             .ok_or(ProjectionError::StructuralMismatch)?;
                         let tag = &mut self.dynamic_tags[owner as usize];
+                        tag.closing = ByteSpan::new(to_u32(close_start)?, to_u32(index + 1)?);
                         tag.closing_expression = closing_expression;
                         tag.first_closing_comment = first_closing_comment;
                         tag.closing_comment_count = closing_comment_count;
@@ -242,10 +246,8 @@ impl Scanner<'_> {
                     index = self.parse_try(index, ControlContext::JsxChild)?;
                 }
                 b'@' if self.bytes.get(index + 1) == Some(&b'{') => {
-                    return Err(ProjectionError::UnsupportedSyntax {
-                        offset: to_u32(index)?,
-                        construct: "code block directly inside JSX text",
-                    });
+                    self.push_token(StructuralKind::FunctionBody, index)?;
+                    index += 1;
                 }
                 b'@' => {
                     if self.keyword_at(index, b"else")
@@ -318,7 +320,7 @@ impl Scanner<'_> {
                     index += 1;
                     can_start_expression = false;
                 }
-                byte if is_identifier_start(byte) => {
+                _ if self.identifier_start_width(index).is_some() => {
                     index = self.skip_identifier(index);
                     can_start_expression = false;
                 }
@@ -504,7 +506,7 @@ impl Scanner<'_> {
                     *index += 1;
                     *can_start_expression = false;
                 }
-                byte if is_identifier_start(byte) => {
+                _ if self.identifier_start_width(*index).is_some() => {
                     *index = self.skip_identifier(*index);
                     *can_start_expression = matches!(
                         &self.bytes[token_start..*index],

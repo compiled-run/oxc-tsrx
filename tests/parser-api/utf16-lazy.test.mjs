@@ -1,0 +1,152 @@
+import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import test from "node:test";
+
+const root = resolve(import.meta.dirname, "../..");
+
+function run(executable, args) {
+  return new Promise((resolveRun, rejectRun) => {
+    execFile(
+      executable,
+      args,
+      { cwd: root, env: process.env, maxBuffer: 16 * 1024 * 1024 },
+      (error, stdout, stderr) => {
+        if (error) rejectRun(new Error(stderr || stdout, { cause: error }));
+        else resolveRun({ stdout, stderr });
+      },
+    );
+  });
+}
+
+async function withParser(callback) {
+  const temporary = await mkdtemp(join(tmpdir(), "oxc-tsrx-utf16-lazy-"));
+  const previous = process.env.OXC_TSRX_PARSER_ADDON;
+  try {
+    const addon = join(temporary, "parser.node");
+    await run(process.execPath, [
+      "scripts/build-parser-native.mjs",
+      "--skip-build",
+      "--out",
+      addon,
+    ]);
+    process.env.OXC_TSRX_PARSER_ADDON = addon;
+    const parser = await import(`../../packages/parser/index.js?utf16=${Date.now()}`);
+    return await callback(parser);
+  } finally {
+    if (previous === undefined) delete process.env.OXC_TSRX_PARSER_ADDON;
+    else process.env.OXC_TSRX_PARSER_ADDON = previous;
+    await rm(temporary, { recursive: true, force: true });
+  }
+}
+
+function findNode(rootValue, type) {
+  const pending = [rootValue];
+  const seen = new Set();
+  while (pending.length > 0) {
+    const value = pending.pop();
+    if (value === null || typeof value !== "object" || seen.has(value)) continue;
+    seen.add(value);
+    if (value.type === type) return value;
+    if (Array.isArray(value)) pending.push(...value);
+    else pending.push(...Object.values(value));
+  }
+  return null;
+}
+
+test("the Node boundary preserves astral offsets and opaque lone surrogate halves exactly", async () => {
+  await withParser(async ({ parse, parseSync }) => {
+    const unicode = "/*😀*/ import x from \"m😀\";\r\nexport function Viéw() @{ <main title=\"é😀\">T😀</main> }";
+    const unicodeResult = parseSync("Unicode.tsrx", unicode);
+    assert.equal(unicodeResult.errors.length, 0);
+    assert.equal(unicodeResult.program.start, 0);
+    assert.equal(unicodeResult.program.end, unicode.length);
+    assert.equal(unicodeResult.comments[0].start, 0);
+    assert.equal(unicodeResult.comments[0].end, 6);
+    assert.equal(unicodeResult.comments[0].value, "😀");
+    assert.equal(unicodeResult.module.staticImports[0].moduleRequest.value, "m😀");
+    assert.equal(findNode(unicodeResult.program, "JSXText").value, "T😀");
+
+    for (const unit of [0xd800, 0xdc00]) {
+      const surrogate = String.fromCharCode(unit);
+      const source = `/*c${surrogate}*/ const value="q${surrogate}"; function View() @{ <main>x${surrogate}<style>.x{content:"s${surrogate}"}</style></main> }`;
+      const sync = parseSync("Opaque.tsrx", source);
+      const asyncResult = await parse("Opaque.tsrx", source);
+      assert.equal(sync.errors.length, 0);
+      assert.equal(asyncResult.errors.length, 0);
+      assert.equal(sync.comments[0].value.charCodeAt(1), unit);
+      assert.equal(findNode(sync.program, "Literal").value.charCodeAt(1), unit);
+      assert.equal(findNode(sync.program, "JSXText").value.charCodeAt(1), unit);
+      assert.ok(findNode(sync.program, "JSXStyleElement").css.includes(surrogate));
+      assert.deepEqual(asyncResult.program, sync.program);
+      assert.deepEqual(asyncResult.module, sync.module);
+      assert.deepEqual(asyncResult.comments, sync.comments);
+      assert.deepEqual(asyncResult.errors, sync.errors);
+    }
+  });
+});
+
+test("active lone surrogates fail closed at their exact UTF-16 unit and null is cached", async () => {
+  await withParser(async ({ parse, parseSync }) => {
+    for (const unit of [0xd800, 0xdc00]) {
+      const surrogate = String.fromCharCode(unit);
+      const source = `const value=${surrogate};`;
+      const result = parseSync("Active.tsrx", source);
+      const descriptorsBefore = Object.fromEntries(
+        ["program", "module", "comments", "errors"].map((name) => [
+          name,
+          Object.getOwnPropertyDescriptor(result, name),
+        ]),
+      );
+      const errors = result.errors;
+      assert.equal(result.program, null);
+      assert.equal(result.program, null);
+      assert.equal(result.module, null);
+      assert.equal(result.module, null);
+      assert.equal(result.errors, errors);
+      assert.equal(errors[0].message, "unexpected unpaired UTF-16 surrogate in active syntax");
+      assert.deepEqual(
+        [errors[0].labels[0].start, errors[0].labels[0].end],
+        [12, 13],
+      );
+      assert.ok(errors[0].codeframe.includes(surrogate));
+      for (const descriptor of Object.values(descriptorsBefore)) {
+        assert.equal(descriptor.enumerable, true);
+        assert.equal(descriptor.configurable, true);
+        assert.equal(typeof descriptor.get, "function");
+        assert.equal(descriptor.set, undefined);
+        assert.equal(Object.hasOwn(descriptor, "writable"), false);
+      }
+
+      const asyncResult = await parse("Active.tsrx", source);
+      assert.equal(asyncResult.program, null);
+      assert.equal(asyncResult.module, null);
+      assert.deepEqual(asyncResult.errors, errors);
+    }
+  });
+});
+
+test("unavailable transports and recovery fail before parsing with stable operational codes", async () => {
+  await withParser(async ({ ParserOperationalError, parse, parseSync }) => {
+    assert.throws(
+      () => parseSync("x.js", "let x", { experimentalRawTransfer: true }),
+      (error) =>
+        error instanceof ParserOperationalError &&
+        error.code === "ERR_TSRX_CAPABILITY_RAW_TRANSFER",
+    );
+    assert.throws(
+      () => parseSync("x.tsrx", "const x=1", { recovery: "editor" }),
+      (error) =>
+        error instanceof ParserOperationalError &&
+        error.code === "ERR_TSRX_CAPABILITY_RECOVERY",
+    );
+    await assert.rejects(
+      parse("x.tsrx", "const x=1", { recovery: "editor" }),
+      (error) =>
+        error instanceof ParserOperationalError &&
+        error.code === "ERR_TSRX_CAPABILITY_RECOVERY",
+    );
+  });
+});

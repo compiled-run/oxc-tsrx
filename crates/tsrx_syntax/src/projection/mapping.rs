@@ -1,23 +1,20 @@
 use std::ops::Range;
 
-use crate::model::ByteSpan;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) struct MapSegment {
-    pub(super) projected: ByteSpan,
-    pub(super) original_start: u32,
-    pub(super) fixable: bool,
-}
+use crate::{
+    model::ByteSpan,
+    projection_view::{ProjectionSegment, ProjectionView},
+};
 
 /// Legal TSX plus an affine map for ranges copied byte-for-byte from authored TSRX.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MappedProjection {
     pub(super) projected: String,
-    pub(super) segments: Vec<MapSegment>,
+    pub(super) segments: Vec<ProjectionSegment>,
     pub(super) dynamic_prefix: Option<String>,
     pub(super) dynamic_count: u32,
     pub(super) dynamic_offsets: Vec<u32>,
     pub(super) synthetic_generator_spans: Vec<ByteSpan>,
+    pub(super) synthetic_callee_spans: Vec<(u32, u32)>,
 }
 
 /// Legal TSX for TypeScript-Go plus an authored-byte map.
@@ -28,13 +25,21 @@ pub struct MappedProjection {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TypeProjection {
     pub(super) projected: String,
-    pub(super) segments: Vec<MapSegment>,
+    pub(super) segments: Vec<ProjectionSegment>,
 }
 
 impl TypeProjection {
     #[must_use]
     pub fn source(&self) -> &str {
         &self.projected
+    }
+
+    #[must_use]
+    pub fn view(&self) -> ProjectionView<'_> {
+        ProjectionView {
+            source: &self.projected,
+            segments: &self.segments,
+        }
     }
 
     /// Maps a diagnostic whose first and last bytes are both anchored in authored source.
@@ -81,6 +86,14 @@ impl MappedProjection {
         &self.projected
     }
 
+    #[must_use]
+    pub fn view(&self) -> ProjectionView<'_> {
+        ProjectionView {
+            source: &self.projected,
+            segments: &self.segments,
+        }
+    }
+
     /// Maps a projected range only when every byte belongs to one unchanged authored segment.
     #[must_use]
     pub fn map_range(&self, range: Range<u32>) -> Option<Range<u32>> {
@@ -100,9 +113,18 @@ impl MappedProjection {
     /// Returns the collision-free synthetic dynamic-tag namespace and expected tag count.
     #[must_use]
     pub fn dynamic_contract(&self) -> Option<(&str, u32, &[u32])> {
+        if self.dynamic_count == 0 {
+            return None;
+        }
         self.dynamic_prefix
             .as_deref()
             .map(|prefix| (prefix, self.dynamic_count, self.dynamic_offsets.as_slice()))
+    }
+
+    /// Collision-free marker namespace used by the parser-only reconstruction lane.
+    #[must_use]
+    pub fn parser_marker_prefix(&self) -> Option<&str> {
+        self.dynamic_prefix.as_deref()
     }
 
     /// Returns true when an authored range belongs to a generator introduced only as projection
@@ -113,10 +135,16 @@ impl MappedProjection {
             .iter()
             .any(|span| span.intersects(range.start, range.end))
     }
+
+    /// Projected byte spans of helper callees introduced by this projection.
+    #[must_use]
+    pub fn synthetic_callee_spans(&self) -> &[(u32, u32)] {
+        &self.synthetic_callee_spans
+    }
 }
 
 fn map_single_segment(
-    segments: &[MapSegment],
+    segments: &[ProjectionSegment],
     range: Range<u32>,
     require_fixable: bool,
 ) -> Option<Range<u32>> {
@@ -143,10 +171,10 @@ fn map_single_segment(
 mod layout_tests {
     use std::mem::size_of;
 
-    use super::MapSegment;
+    use crate::projection_view::ProjectionSegment;
 
     #[test]
     fn map_segment_layout_remains_compact() {
-        assert_eq!(size_of::<MapSegment>(), 16);
+        assert_eq!(size_of::<ProjectionSegment>(), 16);
     }
 }

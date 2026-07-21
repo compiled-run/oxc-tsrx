@@ -26,6 +26,7 @@
   "type": "module",
   "scripts": {
     "build:native": "cargo build --release --locked -p oxc_tsrx_cli --bins",
+    "build:parser-native": "node scripts/build-parser-native.mjs",
     "test": "node --test tests/native-lint.test.mjs tests/native-control-lint.test.mjs tests/native-format.test.mjs tests/native-control-format.test.mjs tests/config/native-lint-config.test.mjs tests/config/native-format-config.test.mjs tests/vite/package-seam.test.mjs tests/vite/framework-chain.test.mjs tests/vite/vite-plus-commands.test.mjs tests/type-aware/type-aware.test.mjs tests/editor/lsp.test.mjs tests/editor/package.test.mjs",
     "test:config": "node --test tests/config/native-lint-config.test.mjs tests/config/native-format-config.test.mjs",
     "test:native-format": "node --test tests/native-format.test.mjs",
@@ -71,6 +72,7 @@
     "axe-core": "^4.12.1",
     "marked": "^18.0.6",
     "minisearch": "^7.2.0",
+    "oxc-parser-reference": "npm:oxc-parser@0.140.0",
     "playwright-core": "^1.61.1",
     "rolldown": "1.1.5",
     "shiki": "^4.3.1",

@@ -1,0 +1,43 @@
+[package]
+name = "parser_napi_binding"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[features]
+# A nonshipping, untimed qualification sibling can prove that ordinary JS/TS/TSX dispatch never
+# enters TSRX work. Production builds do not enable this feature, so their exports and hot path
+# remain byte-for-byte free of observer atomics and branches.
+stage4-observer = ["tsrx_parser_engine/stage4-observer"]
+
+[dependencies]
+mimalloc-safe = "=0.1.64"
+napi = { version = "=3.10.5", default-features = false, features = ["napi8"] }
+napi-derive = "=3.5.10"
+oxc_adapter = { path = "../oxc_adapter", default-features = false, features = ["parser"] }
+tsrx_parser_engine = { path = "../tsrx_parser_engine" }
+tsrx_tape_schema = { path = "../tsrx_tape_schema" }
+
+[build-dependencies]
+napi-build = "=2.3.2"
+
+[dev-dependencies]
+# The no-op feature removes Node's unresolved host symbols only for Rust unit-test binaries. The
+# shipping cdylib continues to use the exact Node-API 8 feature set above and is tested in Node.
+napi = { version = "=3.10.5", default-features = false, features = ["napi8", "noop"] }
+napi-derive = "=3.5.10"
+
+[lints.rust]
+# napi-rs's generated registration shims contain audited macro-owned unsafe code and annotate
+# those expansions with `allow(unsafe_code)`. `deny` keeps handwritten unsafe rejected while still
+# permitting the generated Node-API boundary; workspace `forbid` cannot be lowered by the macro.
+unsafe_code = "deny"
+
+[lints.clippy]
+all = { level = "deny", priority = -1 }
+pedantic = { level = "deny", priority = -1 }

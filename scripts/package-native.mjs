@@ -5,6 +5,7 @@ import {
   chmod,
   copyFile,
   cp,
+  lstat,
   mkdir,
   mkdtemp,
   readFile,
@@ -14,18 +15,20 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
+import { createRequire } from "node:module";
 import { NATIVE_TARGETS, nativePackageName } from "../packages/runtime/dist/targets.js";
 import { resolveNpmInvocation } from "./npm-invocation.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const revision = "8e0ed2ebb96137fb1611cdbd5742d5cb46037d40";
 const binaryStems = ["oxc-tsrx", "oxc-tsrx-fmt", "oxc-tsrx-lsp"];
+const require = createRequire(import.meta.url);
 
 function parseArguments(argv) {
   const options = {};
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
-    if (!["--target", "--bin-dir", "--out-dir"].includes(argument)) {
+    if (!["--target", "--bin-dir", "--out-dir", "--parser-addon"].includes(argument)) {
       throw new Error(`unsupported option: ${argument}`);
     }
     const value = argv[++index];
@@ -88,7 +91,7 @@ function cpuName(value, format) {
   return architectures[format].get(value) ?? `unknown-0x${value.toString(16)}`;
 }
 
-function inspectMachO(contents, magic) {
+function inspectMachO(contents, magic, imageKind) {
   const thin = new Map([
     ["cefaedfe", { endian: "little", bits: 32 }],
     ["cffaedfe", { endian: "little", bits: 64 }],
@@ -104,11 +107,17 @@ function inspectMachO(contents, magic) {
         : contents.readUInt32BE.bind(contents);
     const cpu = readU32(4);
     const fileType = readU32(12);
-    if (fileType !== 2) {
-      throw new Error(`invalid Mach-O executable: file type ${fileType} is not MH_EXECUTE`);
+    const valid = imageKind === "dynamic-library" ? [6, 8] : [2];
+    if (!valid.includes(fileType)) {
+      throw new Error(
+        imageKind === "dynamic-library"
+          ? `invalid Mach-O dynamic library: file type ${fileType} is not MH_DYLIB or MH_BUNDLE`
+          : `invalid Mach-O executable: file type ${fileType} is not MH_EXECUTE`,
+      );
     }
     return {
       format: "mach-o",
+      ...(imageKind === "dynamic-library" ? { imageKind } : {}),
       os: "darwin",
       bits: thinHeader.bits,
       architectures: [cpuName(cpu, "mach-o")],
@@ -136,10 +145,16 @@ function inspectMachO(contents, magic) {
   for (let index = 0; index < count; index += 1) {
     architectures.add(cpuName(readU32(8 + index * fat.recordBytes), "mach-o"));
   }
-  return { format: "mach-o", os: "darwin", bits: 64, architectures: [...architectures] };
+  return {
+    format: "mach-o",
+    ...(imageKind === "dynamic-library" ? { imageKind } : {}),
+    os: "darwin",
+    bits: 64,
+    architectures: [...architectures],
+  };
 }
 
-function inspectElf(contents) {
+function inspectElf(contents, imageKind) {
   if (contents.subarray(0, 4).toString("hex") !== "7f454c46") return null;
   requireBytes(contents, 20, "ELF");
   if (![1, 2].includes(contents[4])) {
@@ -152,18 +167,24 @@ function inspectElf(contents) {
   const readU16 =
     endian === 1 ? contents.readUInt16LE.bind(contents) : contents.readUInt16BE.bind(contents);
   const fileType = readU16(16);
-  if (![2, 3].includes(fileType)) {
-    throw new Error(`invalid ELF executable: file type ${fileType} is not executable`);
+  const valid = imageKind === "dynamic-library" ? fileType === 3 : [2, 3].includes(fileType);
+  if (!valid) {
+    throw new Error(
+      imageKind === "dynamic-library"
+        ? `invalid ELF dynamic library: file type ${fileType} is not ET_DYN`
+        : `invalid ELF executable: file type ${fileType} is not executable`,
+    );
   }
   return {
     format: "elf",
+    ...(imageKind === "dynamic-library" ? { imageKind } : {}),
     os: "linux",
     bits: contents[4] === 2 ? 64 : 32,
     architectures: [cpuName(readU16(18), "elf")],
   };
 }
 
-function inspectPe(contents) {
+function inspectPe(contents, imageKind) {
   if (contents.subarray(0, 2).toString("ascii") !== "MZ") return null;
   requireBytes(contents, 0x40, "PE");
   const header = contents.readUInt32LE(0x3c);
@@ -175,8 +196,12 @@ function inspectPe(contents) {
   if ((characteristics & 0x0002) === 0) {
     throw new Error("invalid PE executable: executable-image flag is missing");
   }
+  if (imageKind === "dynamic-library" && (characteristics & 0x2000) === 0) {
+    throw new Error("invalid PE dynamic library: DLL flag is missing");
+  }
   return {
     format: "pe",
+    ...(imageKind === "dynamic-library" ? { imageKind } : {}),
     os: "win32",
     bits: contents.readUInt16LE(header + 24) === 0x20b ? 64 : 32,
     architectures: [cpuName(contents.readUInt16LE(header + 4), "pe")],
@@ -186,8 +211,22 @@ function inspectPe(contents) {
 function inspectExecutable(contents) {
   requireBytes(contents, 4, "native");
   const magic = contents.subarray(0, 4).toString("hex");
-  const identity = inspectMachO(contents, magic) ?? inspectElf(contents) ?? inspectPe(contents);
+  const identity =
+    inspectMachO(contents, magic, "executable") ??
+    inspectElf(contents, "executable") ??
+    inspectPe(contents, "executable");
   if (!identity) throw new Error(`unsupported executable header 0x${magic}`);
+  return identity;
+}
+
+function inspectAddon(contents) {
+  requireBytes(contents, 4, "native");
+  const magic = contents.subarray(0, 4).toString("hex");
+  const identity =
+    inspectMachO(contents, magic, "dynamic-library") ??
+    inspectElf(contents, "dynamic-library") ??
+    inspectPe(contents, "dynamic-library");
+  if (!identity) throw new Error(`unsupported dynamic-library header 0x${magic}`);
   return identity;
 }
 
@@ -203,6 +242,20 @@ function assertObjectTarget(name, identity, platform) {
       `${name} object target mismatch: expected ${platform.target} ` +
         `(${format}/${platform.os}/${platform.cpu}), found ` +
         `${identity.format}/${identity.os}/${identity.bits}-bit/${identity.architectures.join("+")}`,
+    );
+  }
+}
+
+function assertAddonTarget(name, identity, platform) {
+  assertObjectTarget(name, identity, platform);
+  if (
+    identity.imageKind !== "dynamic-library" ||
+    identity.architectures.length !== 1 ||
+    identity.architectures[0] !== platform.cpu
+  ) {
+    throw new Error(
+      `${name} addon target mismatch: expected one ${platform.cpu} dynamic library, found ` +
+        `${identity.imageKind ?? "unknown"}/${identity.architectures.join("+")}`,
     );
   }
 }
@@ -264,10 +317,55 @@ try {
     }
   }
 
+  let addonRecord = null;
+  if (options["parser-addon"]) {
+    const source = resolve(root, options["parser-addon"]);
+    const sourceStat = await lstat(source).catch(() => null);
+    if (!sourceStat?.isFile() || sourceStat.isSymbolicLink()) {
+      throw new Error(`required parser addon must be a regular non-symlink file: ${source}`);
+    }
+    const destination = join(stage, "parser.node");
+    await copyFile(source, destination, constants.COPYFILE_FICLONE);
+    const contents = await readFile(destination);
+    const object = { ...inspectAddon(contents), libc: platform.libc ?? null };
+    assertAddonTarget("parser.node", object, platform);
+    const capabilities = {
+      lazy: true,
+      async: true,
+      editorRecovery: false,
+      cssMaterialization: false,
+      rawTransfer: false,
+    };
+    addonRecord = {
+      packageVersion: version,
+      target: platform.target,
+      bytes: contents.length,
+      sha256: sha256(contents),
+      object,
+      nodeApi: 8,
+      oxcRevision: revision,
+      capabilities,
+      role: "canonical-parser",
+      file: "parser.node",
+      apiVersion: 1,
+      transportAbi: 1,
+    };
+    if (host === platform.target) {
+      const binding = require(destination);
+      const keys = Object.keys(binding).sort();
+      if (JSON.stringify(keys) !== JSON.stringify(["nodeApi", "parse", "parseSync"])) {
+        throw new Error(`unexpected parser.node exports: ${keys.join(",")}`);
+      }
+      if (binding.nodeApi() !== addonRecord.nodeApi) {
+        throw new Error(`unexpected parser.node Node-API identity: ${binding.nodeApi()}`);
+      }
+    }
+  }
+
   const manifest = {
     name: packageName,
     version,
-    description: `OXC for TSRX native binaries for ${platform.target}`,
+    description: `OXC for TSRX native binaries${addonRecord ? " and parser addon" : ""} for ${platform.target}`,
     license: "MIT",
     repository: {
       type: "git",
@@ -277,7 +375,15 @@ try {
     homepage: "https://github.com/thejackshelton/oxc-tsrx#readme",
     bugs: { url: "https://github.com/thejackshelton/oxc-tsrx/issues" },
     keywords: ["oxc", "oxlint", "oxfmt", "tsrx", "native"],
-    files: ["bin", "checksums.json", "licenses", "LICENSE", "README.md", "THIRD_PARTY_NOTICES.md"],
+    files: [
+      "bin",
+      ...(addonRecord ? ["parser.node"] : []),
+      "checksums.json",
+      "licenses",
+      "LICENSE",
+      "README.md",
+      "THIRD_PARTY_NOTICES.md",
+    ],
     os: [platform.os],
     cpu: [platform.cpu],
     ...(platform.libc ? { libc: [platform.libc] } : {}),
@@ -285,24 +391,26 @@ try {
     preferUnplugged: true,
     publishConfig: { access: "public", provenance: true },
     oxcTsrx: {
-      schemaVersion: 1,
+      schemaVersion: addonRecord ? 2 : 1,
       nativeProtocolVersion: 1,
       target: platform.target,
       vscodeTarget: platform.vscodeTarget,
       oxcRevision: revision,
       binaries: binaryStems.map((stem) => `${stem}${executableSuffix}`),
+      ...(addonRecord ? { addons: { "parser.node": addonRecord } } : {}),
     },
   };
   const checksums = {
-    schemaVersion: 1,
+    schemaVersion: addonRecord ? 2 : 1,
     packageName,
     version,
     target: platform.target,
     oxcRevision: revision,
     rustc: rustc.stdout.trim(),
-    objectVerification: "executable-header",
+    objectVerification: addonRecord ? "executable-and-dynamic-library-header" : "executable-header",
     verification: host === platform.target ? "host-executed" : "cross-artifact",
     binaries,
+    ...(addonRecord ? { addons: { "parser.node": addonRecord } } : {}),
   };
   await Promise.all([
     writeFile(join(stage, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`),
@@ -341,6 +449,7 @@ try {
       integrity: packed[0].integrity,
       shasum: packed[0].shasum,
       unpackedSize: packed[0].unpackedSize,
+      parserAddon: addonRecord !== null,
     })}\n`,
   );
 } finally {

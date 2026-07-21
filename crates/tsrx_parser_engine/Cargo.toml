@@ -1,0 +1,22 @@
+[package]
+name = "tsrx_parser_engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[features]
+# Exposes a nonshipping, compile-time-selected work observer used only by the Stage 4 qualification
+# sibling. Production callers do not enable this feature.
+stage4-observer = []
+
+[dependencies]
+oxc_adapter = { path = "../oxc_adapter", default-features = false, features = ["parser"] }
+tsrx_syntax = { path = "../tsrx_syntax" }
+tsrx_tape_schema = { path = "../tsrx_tape_schema" }
+unicode-segmentation = "1.13.3"
+unicode-width = "0.2.2"
+
+[lints]
+workspace = true

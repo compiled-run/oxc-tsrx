@@ -3,11 +3,7 @@ use crate::{
     model::{ByteSpan, ClauseRole, ForHeader},
 };
 
-use super::{
-    Scanner,
-    lexical::{is_identifier_start, trim_ascii_end},
-    stack::TinyStack,
-};
+use super::{Scanner, lexical::trim_ascii_end, stack::TinyStack};
 
 impl Scanner<'_> {
     pub(super) fn parse_case_header(
@@ -80,7 +76,7 @@ impl Scanner<'_> {
                     }
                     return Ok((ByteSpan::new(to_u32(start)?, to_u32(end)?), index));
                 }
-                byte if is_identifier_start(byte) => {
+                _ if self.identifier_start_width(index).is_some() => {
                     index = self.skip_identifier(index);
                     can_start_expression = false;
                 }
@@ -127,7 +123,7 @@ impl Scanner<'_> {
         };
         let reset_start = self.skip_ascii_whitespace(comma + 1, inner_end);
         let reset_end = trim_ascii_end(self.bytes, reset_start, inner_end);
-        if reset_start == reset_end || !is_identifier_start(self.bytes[reset_start]) {
+        if reset_start == reset_end || self.identifier_start_width(reset_start).is_none() {
             return Err(ProjectionError::MalformedSyntax {
                 offset: to_u32(reset_start)?,
                 expected: "a reset identifier after the catch error binding",
@@ -237,7 +233,7 @@ impl Scanner<'_> {
             }
             let span = ByteSpan::new(to_u32(value_start)?, to_u32(value_end)?);
             if matches!(kind, ClauseRole::For)
-                && (!is_identifier_start(self.bytes[value_start])
+                && (self.identifier_start_width(value_start).is_none()
                     || self.skip_identifier(value_start) != value_end)
             {
                 return Err(ProjectionError::MalformedSyntax {
@@ -309,7 +305,7 @@ impl Scanner<'_> {
                     index += 1;
                     can_start_expression = true;
                 }
-                byte if is_identifier_start(byte) => {
+                _ if self.identifier_start_width(index).is_some() => {
                     index = self.skip_identifier(index);
                     can_start_expression = false;
                 }
@@ -350,7 +346,7 @@ impl Scanner<'_> {
                     delimiters.pop();
                     index += 1;
                 }
-                byte if delimiters.is_empty() && is_identifier_start(byte) => {
+                _ if delimiters.is_empty() && self.identifier_start_width(index).is_some() => {
                     let word_end = self.skip_identifier(index);
                     if &self.bytes[index..word_end] == keyword {
                         return Ok(Some(index));

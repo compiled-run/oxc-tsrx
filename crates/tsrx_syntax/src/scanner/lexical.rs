@@ -122,20 +122,10 @@ impl Scanner<'_> {
             return true;
         }
         let mut index = start + 1;
-        if !self
-            .bytes
-            .get(index)
-            .is_some_and(|byte| is_identifier_start(*byte))
-        {
+        if self.identifier_start_width(index).is_none() {
             return false;
         }
-        while self
-            .bytes
-            .get(index)
-            .is_some_and(|byte| is_identifier_continue(*byte) || matches!(byte, b'.' | b':' | b'-'))
-        {
-            index += 1;
-        }
+        index = self.skip_jsx_name(index);
         self.bytes.get(index).is_some_and(|byte| {
             byte.is_ascii_whitespace()
                 || *byte == b'>'
@@ -155,7 +145,7 @@ impl Scanner<'_> {
         let end = index + keyword.len();
         self.bytes.get(index..end) == Some(keyword)
             && keyword_boundary(&self.bytes[end..])
-            && (index == 0 || !is_identifier_continue(self.bytes[index - 1]))
+            && !identifier_continue_before(self.bytes, index)
     }
 
     pub(super) const fn after_keyword(index: usize, keyword: &[u8]) -> usize {
@@ -247,12 +237,8 @@ impl Scanner<'_> {
                 in_class = false;
             } else if byte == b'/' && !in_class {
                 index += 1;
-                while self
-                    .bytes
-                    .get(index)
-                    .is_some_and(|byte| is_identifier_continue(*byte))
-                {
-                    index += 1;
+                while let Some(width) = self.identifier_continue_width(index) {
+                    index += width;
                 }
                 return Ok(index);
             } else if matches!(byte, b'\n' | b'\r') {
@@ -277,23 +263,106 @@ impl Scanner<'_> {
         index
     }
 
+    #[inline]
+    pub(super) fn identifier_start_width(&self, index: usize) -> Option<usize> {
+        identifier_start_width(self.bytes, index)
+    }
+
+    #[inline]
+    pub(super) fn identifier_continue_width(&self, index: usize) -> Option<usize> {
+        identifier_continue_width(self.bytes, index)
+    }
+
     pub(super) fn skip_identifier(&self, mut index: usize) -> usize {
-        index += 1;
-        while self
-            .bytes
-            .get(index)
-            .is_some_and(|byte| is_identifier_continue(*byte))
-        {
-            index += 1;
+        let Some(width) = self.identifier_start_width(index) else {
+            return index;
+        };
+        index += width;
+        while let Some(width) = self.identifier_continue_width(index) {
+            index += width;
         }
         index
     }
 
-    pub(super) fn looks_like_jsx_start(&self, index: usize) -> bool {
-        self.bytes
-            .get(index + 1)
-            .is_some_and(|byte| is_identifier_start(*byte) || matches!(byte, b'>' | b'{'))
+    pub(super) fn skip_jsx_name(&self, mut index: usize) -> usize {
+        loop {
+            if let Some(width) = self.identifier_continue_width(index) {
+                index += width;
+            } else if self
+                .bytes
+                .get(index)
+                .is_some_and(|byte| matches!(byte, b'.' | b':' | b'-'))
+            {
+                index += 1;
+            } else {
+                return index;
+            }
+        }
     }
+
+    pub(super) fn looks_like_jsx_start(&self, index: usize) -> bool {
+        self.identifier_start_width(index + 1).is_some()
+            || self
+                .bytes
+                .get(index + 1)
+                .is_some_and(|byte| matches!(byte, b'>' | b'{'))
+    }
+}
+
+#[inline]
+fn identifier_start_width(bytes: &[u8], index: usize) -> Option<usize> {
+    let byte = *bytes.get(index)?;
+    if is_identifier_start(byte) {
+        return Some(1);
+    }
+    if byte.is_ascii() {
+        return None;
+    }
+    let (character, width) = decode_non_ascii_utf8(bytes, index)?;
+    unicode_id_start::is_id_start_unicode(character).then_some(width)
+}
+
+#[inline]
+fn identifier_continue_width(bytes: &[u8], index: usize) -> Option<usize> {
+    let byte = *bytes.get(index)?;
+    if is_identifier_continue(byte) {
+        return Some(1);
+    }
+    if byte.is_ascii() {
+        return None;
+    }
+    let (character, width) = decode_non_ascii_utf8(bytes, index)?;
+    (unicode_id_start::is_id_continue_unicode(character)
+        || matches!(character, '\u{200C}' | '\u{200D}'))
+    .then_some(width)
+}
+
+fn identifier_continue_before(bytes: &[u8], index: usize) -> bool {
+    let Some(mut start) = index.checked_sub(1) else {
+        return false;
+    };
+    if bytes[start].is_ascii() {
+        return is_identifier_continue(bytes[start]);
+    }
+    let lower_bound = index.saturating_sub(4);
+    while start > lower_bound && bytes[start] & 0b1100_0000 == 0b1000_0000 {
+        start -= 1;
+    }
+    identifier_continue_width(bytes, start).is_some_and(|width| start + width == index)
+}
+
+#[inline]
+fn decode_non_ascii_utf8(bytes: &[u8], index: usize) -> Option<(char, usize)> {
+    let width = match *bytes.get(index)? {
+        0xC2..=0xDF => 2,
+        0xE0..=0xEF => 3,
+        0xF0..=0xF4 => 4,
+        _ => return None,
+    };
+    let end = index.checked_add(width)?;
+    let encoded = bytes.get(index..end)?;
+    let character = std::str::from_utf8(encoded).ok()?.chars().next()?;
+    Some((character, width))
 }
 
 pub(super) fn trim_ascii_end(bytes: &[u8], start: usize, mut end: usize) -> usize {

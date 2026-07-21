@@ -29,6 +29,9 @@ const expectedAdapterDependencies = [
   "oxc_ast",
   "oxc_ast_visit",
   "oxc_config",
+  "oxc_data_structures",
+  "oxc_diagnostics",
+  "oxc_estree",
   "oxc_formatter",
   "oxc_formatter_core",
   "oxc_language_server",
@@ -251,6 +254,24 @@ test("no crate bypasses the OXC adapter", async () => {
       `${relative(root, path)} must not declare an OXC source`,
     );
   }
+});
+
+test("the ordinary OXC adapter has a one-way zero-entry boundary from TSRX", async () => {
+  const [adapterManifest, engineManifest] = await Promise.all([
+    readFile(adapterManifestPath, "utf8"),
+    readFile(join(root, "crates/tsrx_parser_engine/Cargo.toml"), "utf8"),
+  ]);
+
+  assert.doesNotMatch(
+    adapterManifest,
+    /^tsrx_(?:parser_engine|syntax)\s*=/m,
+    "ordinary OXC routes must not link the TSRX scanner or parser engine",
+  );
+  assert.match(
+    engineManifest,
+    /^oxc_adapter\s*=\s*\{[^}\n]*path\s*=\s*"\.\.\/oxc_adapter"[^}\n]*default-features\s*=\s*false[^}\n]*features\s*=\s*\[\s*"parser"\s*\][^}\n]*\}/m,
+    "the TSRX engine must depend one-way on only the pinned OXC parser adapter",
+  );
 });
 
 test("the workspace has no Cargo patch, vendor tree, checkout, or copied OXC crate", async () => {

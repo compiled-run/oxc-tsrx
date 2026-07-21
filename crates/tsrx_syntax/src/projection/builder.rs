@@ -10,9 +10,10 @@ use crate::{
 
 use super::{
     format::{HeaderManifest, TryManifest, WrapperManifest},
-    mapping::{MapSegment, MappedProjection},
+    mapping::MappedProjection,
     marker::{collision_free_prefix, validate_overlay_source},
 };
+use crate::projection_view::ProjectionSegment;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Action {
@@ -58,7 +59,7 @@ struct Builder<'a> {
     overlay: &'a Overlay,
     prefix: &'a str,
     output: String,
-    segments: Vec<MapSegment>,
+    segments: Vec<ProjectionSegment>,
     record_segments: bool,
     type_semantic: bool,
     cursor: usize,
@@ -109,6 +110,7 @@ impl<'a> Builder<'a> {
             dynamic_count: 0,
             dynamic_offsets: Vec::new(),
             synthetic_generator_spans: Vec::new(),
+            synthetic_callee_spans: Vec::new(),
         })
     }
 
@@ -157,7 +159,7 @@ impl<'a> Builder<'a> {
         {
             previous.projected.end = projected_end;
         } else {
-            self.segments.push(MapSegment {
+            self.segments.push(ProjectionSegment {
                 projected: ByteSpan::new(projected_start, projected_end),
                 original_start: span.start,
                 fixable,
