@@ -2,6 +2,7 @@
 // Plain JavaScript, no framework. Run with: node docs/build.mjs
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
+import { existsSync } from 'node:fs'
 import { cp, lstat, mkdir, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
@@ -1691,6 +1692,39 @@ async function build() {
       minify: true,
     },
   })
+
+  // In-browser demo engine: bundle the NAPI-RS wasm binding when it has been
+  // built (npm run docs:wasm). Without it the site falls back to the static
+  // preview contract, exactly as before the engine existed.
+  const wasmBinary = process.env.OXC_TSRX_WASM_BINARY
+    ? path.resolve(process.env.OXC_TSRX_WASM_BINARY)
+    : path.join(docsDir, 'tools', 'demo-wasm', 'dist', 'demo-wasm.wasm')
+  const wasmDemo = existsSync(wasmBinary)
+  if (process.env.OXC_TSRX_REQUIRE_WASM === '1' && !wasmDemo) {
+    throw new Error(`required docs WebAssembly artifact is missing: ${wasmBinary}`)
+  }
+  if (wasmDemo) {
+    await mkdir(path.join(outDir, 'assets', 'demo-wasm'), { recursive: true })
+    await rolldownBuild({
+      input: path.join(docsDir, 'demo-wasm-engine-entry.mjs'),
+      platform: 'browser',
+      output: {
+        format: 'esm',
+        file: path.join(outDir, 'assets', 'demo-wasm', 'engine.js'),
+        minify: true,
+      },
+    })
+    await rolldownBuild({
+      input: path.join(docsDir, 'demo-wasm-worker-entry.mjs'),
+      platform: 'browser',
+      output: {
+        format: 'esm',
+        file: path.join(outDir, 'assets', 'demo-wasm', 'wasi-worker-browser.mjs'),
+        minify: true,
+      },
+    })
+    await cp(wasmBinary, path.join(outDir, 'assets', 'demo-wasm', 'demo-wasm.wasm32-wasi.wasm'))
+  }
   await rm(path.join(outDir, 'assets', 'logos'), { recursive: true, force: true })
   await cp(
     path.join(docsDir, '..', 'node_modules', 'minisearch', 'dist', 'es'),
@@ -1700,7 +1734,35 @@ async function build() {
   await writeFile(path.join(outDir, 'search-index.json'), JSON.stringify(searchDocs))
   await writeFile(
     path.join(outDir, 'demo-capabilities.json'),
-    `${JSON.stringify({ ok: true, mode: 'static', native: false, typeAware: false, projection: false })}\n`,
+    `${JSON.stringify({
+      ok: true,
+      mode: wasmDemo ? 'wasm' : 'static',
+      native: false,
+      wasm: wasmDemo,
+      typeAware: false,
+      projection: wasmDemo,
+      completions: false,
+    })}\n`,
+  )
+  // Site navigation links are extensionless (/guide/introduction); Vercel needs
+  // cleanUrls to resolve them to the .html files. The COOP/COEP headers give the wasm demo
+  // engine the cross-origin isolation SharedArrayBuffer requires; the site
+  // loads no cross-origin subresources, so they cost nothing.
+  await writeFile(
+    path.join(outDir, 'vercel.json'),
+    `${JSON.stringify({
+      cleanUrls: true,
+      trailingSlash: false,
+      headers: [
+        {
+          source: '/(.*)',
+          headers: [
+            { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
+            { key: 'Cross-Origin-Embedder-Policy', value: 'require-corp' },
+          ],
+        },
+      ],
+    })}\n`,
   )
 
   const publicPaths = ['/', ...pages.map(({ link }) => link), '/playground']

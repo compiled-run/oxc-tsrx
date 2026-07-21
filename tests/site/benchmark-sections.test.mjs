@@ -148,14 +148,21 @@ test("benchmark charts plot retained distributions honestly", async () => {
   const source = await readFile(join(root, "docs", "benchmarks-data.mjs"), "utf8");
   const html = await benchmarksSectionsHtml();
 
-  // Six charts, each drawing one dot per retained sample on the shared
-  // percent-of-budget axis, with shape-distinct median and p95 markers.
-  assert.equal((html.match(/<svg class="bench-chart"/gu) ?? []).length, 6);
-  const dotCount = (html.match(/class="bench-dot /gu) ?? []).length;
-  assert.ok(dotCount >= 500, `expected the retained sample arrays to appear as dots, saw ${dotCount}`);
-  assert.equal(
-    (html.match(/class="bench-median /gu) ?? []).length,
-    (html.match(/class="bench-p95 /gu) ?? []).length,
+  // Six chart blocks, one figure per numeric gate row, each shipping a
+  // build-time ECharts SVG render for the light theme and one for dark.
+  assert.equal((html.match(/<div class="bench-chart">/gu) ?? []).length, 6);
+  const figures = (html.match(/<figure class="bench-echart"/gu) ?? []).length;
+  assert.ok(figures >= 40, `expected one chart per numeric gate row, saw ${figures}`);
+  assert.equal((html.match(/class="bench-echart-light"/gu) ?? []).length, figures);
+  assert.equal((html.match(/class="bench-echart-dark"/gu) ?? []).length, figures);
+
+  // Every plotted datum in ECharts SSR output carries an ecmeta marker; the
+  // retained sample arrays (hundreds of samples, twice for the two themes)
+  // must actually be in the SVG, not summarized away.
+  const plottedData = (html.match(/ecmeta_ssr_type="chart"/gu) ?? []).length;
+  assert.ok(
+    plottedData >= 2000,
+    `expected the retained sample arrays to appear as plotted marks, saw ${plottedData}`,
   );
 
   // Gates asserted on a single recorded value must say so instead of faking
@@ -165,11 +172,14 @@ test("benchmark charts plot retained distributions honestly", async () => {
   // Ratio gates plot the asserted ratio plus both raw arrays; per-sample
   // ratios are never derived because the runs are not index-paired.
   assert.match(html, /runs are sampled independently, so no per-sample ratios/u);
-  const gateMarkers = (html.match(/class="bench-gate /gu) ?? []).length;
-  assert.equal((html.match(/class="bench-subtrack"/gu) ?? []).length, gateMarkers * 2);
+  assert.match(html, /sampled independently, so no per-sample ratios/u);
 
-  // Every tooltip payload, including the new sample line, stays inside the
-  // double-escaping contract consumed by app.js.
+  // Every chart names its frozen budget on the dashed markLine strip.
+  const budgets = (html.match(/>budget [≤≥] /gu) ?? []).length;
+  assert.ok(budgets >= figures, `expected a labeled budget per chart, saw ${budgets}`);
+
+  // Every tooltip payload, including the sample line on the table rows,
+  // stays inside the double-escaping contract consumed by app.js.
   assert.match(source, /data-samples="\$\{escapeDatasetHtml\(/u);
   assert.match(html, /data-samples="\d+ samples/u);
 });

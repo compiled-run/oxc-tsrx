@@ -71,12 +71,35 @@ whether `oxc.oxc-vscode` has gained a configurable custom-language selector and
 compatible custom-server contract. If it has, qualify that route and retire the
 companion rather than maintaining redundant editor UI.
 
+## Vercel
+
+The owner must verify and control the Vercel project that serves
+`https://oxc-tsrx-docs.vercel.app/`, including its production-domain assignment
+and rollback access. The reviewed `docs/dist` artifact is deployed as the
+project root so `docs/dist/vercel.json` is present at the root of the upload and
+applies clean URLs plus the required cross-origin isolation headers.
+
+Any automated production path needs a protected environment and a narrowly
+scoped Vercel authentication mechanism bound to the intended team and project.
+Project identifiers, tokens, and account configuration remain external state;
+do not guess them, commit them, or infer deployment approval from an artifact
+build. Disable unreviewed automatic production deployments, or gate them so an
+exact approved source commit and website artifact run are the only deployable
+inputs.
+
+After every production deployment, read back both
+`Cross-Origin-Opener-Policy: same-origin` and
+`Cross-Origin-Embedder-Policy: require-corp`, confirm the capability endpoint is
+in WASM mode, and complete the real-browser lint, format, projection, and zero
+server-engine-request walkthrough. A capability JSON response alone is not
+browser execution proof.
+
 ## GitHub and launch surfaces
 
 Before any automated release, verify:
 
 - the canonical repository exists at
-  `https://github.com/thejackshelton/oxc-tsrx` and the owner authorizes the push;
+  `https://github.com/markless-dev/oxc-tsrx` and the owner authorizes the push;
 - Actions is enabled for all required x64/arm64 hosted-runner labels;
 - required checks and protected `npm-release` / `marketplace-release`
   environments are configured;

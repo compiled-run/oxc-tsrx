@@ -3,17 +3,17 @@ export default {
   title: 'OXC for TSRX',
   description:
     'Rust-native linting and formatting for .tsrx source through canonical OXC. No fork, no patches, one parse.',
-  origin: 'https://thejackshelton.github.io',
+  origin: 'https://oxc-tsrx-docs.vercel.app',
   // Root-absolute base path the site is served under, with trailing slash.
   base: '/',
-  repository: 'https://github.com/thejackshelton/oxc-tsrx',
+  repository: 'https://github.com/markless-dev/oxc-tsrx',
   nav: [
     { text: 'Guide', link: '/guide/introduction' },
     { text: 'Playground', link: '/playground' },
     { text: 'Integrations', link: '/integrations/configuration' },
     { text: 'Architecture', link: '/architecture/rust-oxc-core' },
     { text: 'Reference', link: '/reference/cli' },
-    { text: 'GitHub', link: 'https://github.com/thejackshelton/oxc-tsrx' },
+    { text: 'GitHub', link: 'https://github.com/markless-dev/oxc-tsrx' },
   ],
   sidebar: [
     {

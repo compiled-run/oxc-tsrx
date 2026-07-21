@@ -19,25 +19,30 @@ How to read the results:
 - **p95** is the nearest-rank 95th percentile of the retained samples. It
   shows tail behavior, not just the average.
 - **Ratios like 1.004×** divide by the denominator named in that row.
-- **Budget** is the frozen threshold, drawn as the dashed vertical line in
-  every chart.
-- **Dot strips.** Most chart rows draw one dot per retained sample from the
-  selected report, placed by how much of the row's budget that sample uses.
-  The tall solid tick marks the median sample. The hollow diamond marks the
-  p95 sample. A row passes while its gated value stays on the near side of
-  the dashed budget line. Where dots pile up, the strip gets darker, so you
-  see the whole spread instead of one summary number.
-- **Ratio rows.** The solid marker on the budget scale is the asserted
-  ratio, which is the value the release gate checks. Below it, two thin
-  labeled strips show the raw samples for the numerator and the denominator
-  on one shared scale. The two runs are sampled independently, so dividing
-  sample pairs would invent data; only the asserted ratio is plotted on the
-  budget scale.
-- **Single-value rows.** Some gates record exactly one number per report,
-  like cold starts and editor memory. Those rows keep a plain filled bar,
-  and their tooltip says "single measurement per report".
-- Hover or focus any row for the exact result, the budget, the sample
-  count, the median, and the p95.
+- **One chart per gate.** Every numeric release gate gets its own small
+  chart with the gate's name on top and a one-line summary under it,
+  including a plain "pass" or "FAIL" word.
+- **The top strip** shows the checked value as a diamond on an axis that
+  starts at zero. The dashed vertical line is the frozen budget, named in
+  the strip's left label, and the lightly shaded area is the failing side
+  of that budget. The release fails if the diamond ever lands in the
+  shaded area.
+- **The bottom strip** zooms in on the retained samples from the selected
+  report, one dot per sample. Its axis is zoomed to the spread, so read
+  its tick labels; it usually covers a much smaller range than the top
+  strip. The solid vertical line is the median sample and the dotted
+  vertical line is the p95 sample.
+- **Ratio charts.** The diamond in the top strip is the asserted ratio,
+  which is the value the release gate checks. The bottom strip shows the
+  raw samples of the two runs that ratio divides, on one shared
+  milliseconds (or MiB) axis, each run with its own median tick. The two
+  runs are sampled independently, so dividing sample pairs would invent
+  data; only the asserted ratio is plotted against the budget.
+- **Single-value charts.** Some gates record exactly one number per
+  report, like cold starts and editor memory. Those charts show only the
+  top strip and say "single measurement per report".
+- Hover or focus any table row for the exact result, the budget, the
+  sample count, the median, and the p95.
 
 Three results need extra care:
 

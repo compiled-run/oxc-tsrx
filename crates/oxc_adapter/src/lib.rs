@@ -7,7 +7,7 @@ use oxc_span::SourceType;
 #[cfg(feature = "parser")]
 pub mod parser;
 
-#[cfg(feature = "toolchain")]
+#[cfg(feature = "editor")]
 pub mod editor;
 
 #[cfg(any(feature = "parser", feature = "toolchain"))]

@@ -3,16 +3,16 @@
   "displayName": "OXC for TSRX",
   "version": "0.1.0",
   "description": "Native Oxlint and Oxfmt editor support for TSRX",
-  "homepage": "https://thejackshelton.github.io/oxc-tsrx/",
+  "homepage": "https://oxc-tsrx-docs.vercel.app/",
   "publisher": "thejackshelton",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/thejackshelton/oxc-tsrx.git",
+    "url": "https://github.com/markless-dev/oxc-tsrx.git",
     "directory": "packages/vscode"
   },
   "bugs": {
-    "url": "https://github.com/thejackshelton/oxc-tsrx/issues"
+    "url": "https://github.com/markless-dev/oxc-tsrx/issues"
   },
   "keywords": [
     "oxc",

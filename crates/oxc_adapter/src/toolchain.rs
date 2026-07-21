@@ -306,6 +306,34 @@ impl LintEngine {
         Self::new_with_capabilities(options, true, type_check)
     }
 
+    /// Compile one in-memory JSON Oxlint configuration without touching the
+    /// filesystem. The WebAssembly playground uses this: browser WASI
+    /// instances have no writable filesystem to stage a config file in.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same configuration errors as [`Self::new`].
+    pub fn new_from_config_source(
+        cwd: &Path,
+        config_source: Option<&str>,
+        filters: &[RuleFilter],
+        collect_fixes: bool,
+    ) -> Result<Self, String> {
+        let started = Instant::now();
+        let config = match config_source {
+            Some(source) => Oxlintrc::from_string(source).map_err(|error| error.to_string())?,
+            None => Oxlintrc::default(),
+        };
+        let options = LintEngineOptions {
+            cwd,
+            config_path: None,
+            config_base: None,
+            filters,
+            collect_fixes,
+        };
+        Self::build(config, None, &options, false, false, started)
+    }
+
     fn new_with_capabilities(
         options: &LintEngineOptions<'_>,
         type_aware: bool,
@@ -314,6 +342,24 @@ impl LintEngine {
         let started = Instant::now();
         let (config, config_path) =
             load_oxlintrc(options.cwd, options.config_path, options.config_base)?;
+        Self::build(
+            config,
+            config_path,
+            options,
+            type_aware,
+            requested_type_check,
+            started,
+        )
+    }
+
+    fn build(
+        config: Oxlintrc,
+        config_path: Option<PathBuf>,
+        options: &LintEngineOptions<'_>,
+        type_aware: bool,
+        requested_type_check: bool,
+        started: Instant,
+    ) -> Result<Self, String> {
         reject_unavailable_lint_capabilities(&config, type_aware)?;
         let type_check = requested_type_check || config.options.type_check == Some(true);
 

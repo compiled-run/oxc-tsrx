@@ -17,11 +17,16 @@ const validRuleName = (rule) => typeof rule === 'string' && /^[\w@/-]+$/u.test(r
 const apiUrl = (endpoint) => new URL(`../api/${endpoint}`, import.meta.url)
 const capabilitiesUrl = new URL('../demo-capabilities.json', import.meta.url)
 
-async function api(endpoint, body) {
+async function fetchApi(endpoint, body) {
   const response = await fetch(apiUrl(endpoint), { method: 'POST', body })
   if (!response.ok) throw new Error(`API ${endpoint} failed`)
   return response.json()
 }
+
+// When the site is served without the native development server, the same
+// calls run against the WebAssembly engine instead (demo-wasm-backend.js).
+let backend = null
+const api = (endpoint, body) => (backend ? backend(endpoint, body) : fetchApi(endpoint, body))
 
 function byteToCharIndex(text, byteOffset) {
   let bytes = 0
@@ -82,7 +87,8 @@ export async function initDemo(panel) {
   try {
     health = await (await fetch(capabilitiesUrl)).json()
   } catch {}
-  if (!health?.ok || !health.native) {
+  const wasmMode = Boolean(health?.ok && !health.native && health.wasm)
+  if (!health?.ok || (!health.native && !wasmMode)) {
     statusEl.textContent = 'pre-generated example · static preview'
     metaEl.textContent = 'native lint and format run only on the local development server'
     if (shared.code) {
@@ -97,9 +103,14 @@ export async function initDemo(panel) {
     return
   }
 
-  const clientHighlighterPromise = import(new URL('./demo-highlighter.js', import.meta.url))
-    .then((module) => module.createDemoHighlighter())
-    .catch(() => null)
+  // The Shiki bundle is ~770 KiB; it starts loading immediately everywhere
+  // except the wasm-mode home hero, which arms it on first interaction so the
+  // landing page keeps its transfer budget.
+  let clientHighlighterPromise = null
+  const startClientHighlighter = () =>
+    (clientHighlighterPromise ??= import(new URL('./demo-highlighter.js', import.meta.url))
+      .then((module) => module.createDemoHighlighter())
+      .catch(() => null))
 
   const actions = panel.querySelector('#demo-actions')
   const formatButton = panel.querySelector('#demo-format')
@@ -107,6 +118,31 @@ export async function initDemo(panel) {
   const shareButton = panel.querySelector('#demo-share')
   const sidePanel = document.getElementById('pg-side')
   const original = pre.textContent
+
+  if (wasmMode) {
+    if (typeof SharedArrayBuffer === 'undefined') {
+      statusEl.textContent = 'pre-generated example · the in-browser engine could not load'
+      metaEl.textContent = 'this browser cannot run the WebAssembly demo engine'
+      if (hint) hint.textContent = 'static preview'
+      return
+    }
+    let realBackend = null
+    let backendPromise = null
+    const loadBackend = () =>
+      (backendPromise ??= import(new URL('./demo-wasm-backend.js', import.meta.url)).then(
+        (module) => {
+          realBackend = module.createWasmBackend(() => startClientHighlighter())
+          return realBackend
+        },
+      ))
+    backend = (endpoint, body) =>
+      realBackend
+        ? realBackend(endpoint, body)
+        : loadBackend().then((loaded) => loaded(endpoint, body))
+    // The playground workbench starts the engine immediately; the home hero
+    // waits for the first interaction (see boot) to keep its transfer budget.
+    if (sidePanel) void loadBackend()
+  }
 
   // Engine options live in plain state; the clickable examples set them and
   // the footer explains which flags ran. No raw controls to decipher.
@@ -119,7 +155,11 @@ export async function initDemo(panel) {
 
   if (sidePanel) sidePanel.hidden = false
   const modeNote = document.getElementById('pg-mode-note')
-  if (modeNote) modeNote.textContent = 'Connected to the loopback native development server.'
+  if (modeNote) {
+    modeNote.textContent = wasmMode
+      ? 'Runs entirely in this browser tab via WebAssembly. Nothing leaves your machine.'
+      : 'Connected to the loopback native development server.'
+  }
 
   const timesEl = document.createElement('span')
   timesEl.id = 'demo-times'
@@ -203,7 +243,7 @@ export async function initDemo(panel) {
   editor.append(diagLayer, textarea)
   panel.append(tooltip, srDiagnostics, escapeNote)
   actions.hidden = false
-  hint.textContent = 'edit me'
+  hint.textContent = wasmMode ? 'edit me · runs in your browser' : 'edit me'
 
   // In the playground workbench the editor fills its pane and scrolls both
   // axes internally; on the home page it grows with its content instead.
@@ -367,14 +407,17 @@ export async function initDemo(panel) {
     })
   }
 
-  void clientHighlighterPromise.then((highlighter) => {
-    if (!highlighter) return
-    clearTimeout(highlightTimer)
-    highlightGeneration += 1
-    clientHighlighter = highlighter
-    editor.dataset.highlighter = 'client'
-    renderEditor(textarea.value)
-  })
+  const armClientHighlighter = () =>
+    void startClientHighlighter().then((highlighter) => {
+      if (!highlighter) return
+      clearTimeout(highlightTimer)
+      highlightGeneration += 1
+      clientHighlighter = highlighter
+      editor.dataset.highlighter = 'client'
+      renderEditor(textarea.value)
+    })
+  // Home hero in wasm mode defers this to the first interaction (see boot).
+  if (!(wasmMode && !sidePanel)) armClientHighlighter()
 
   // ---- diagnostics ----
   let segments = []
@@ -1207,7 +1250,21 @@ export async function initDemo(panel) {
   // ---- boot: shared code from the URL, then an initial real lint ----
   if (shared.code && shared.code !== original) {
     applySource(shared.code)
+  } else if (wasmMode && !sidePanel) {
+    // Home hero in wasm mode: the multi-megabyte engine loads on the first
+    // interaction so the landing page keeps its transfer budget.
+    setStatus('editable example · the in-browser engine starts on your first edit', 'ok')
+    textarea.addEventListener(
+      'focus',
+      () => {
+        setStatus('loading the in-browser WebAssembly engine…', 'ok')
+        armClientHighlighter()
+        relint()
+      },
+      { once: true },
+    )
   } else {
+    if (wasmMode) setStatus('loading the in-browser WebAssembly engine…', 'ok')
     lint(original, true)
   }
 }

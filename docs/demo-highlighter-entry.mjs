@@ -5,6 +5,7 @@ import githubDark from 'shiki/dist/themes/github-dark.mjs'
 import jsx from 'shiki/dist/langs/jsx.mjs'
 import tsx from 'shiki/dist/langs/tsx.mjs'
 import css from 'shiki/dist/langs/css.mjs'
+import json from 'shiki/dist/langs/json.mjs'
 import tsrxGrammar from './tsrx.tmLanguage.json'
 
 let demoHighlighter = null
@@ -18,6 +19,7 @@ export function createDemoHighlighter() {
       jsx,
       tsx,
       css,
+      json,
       { ...tsrxGrammar, embeddedLangs: ['jsx', 'tsx', 'css'], name: 'tsrx' },
     ],
     engine: createJavaScriptRegexEngine({ forgiving: true }),

@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process'
 import { createReadStream, existsSync, statSync } from 'node:fs'
+import { readFile } from 'node:fs/promises'
 import http from 'node:http'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -8,9 +9,14 @@ const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const dist = path.join(root, 'docs', 'dist')
 // The site is served at the root ('' means no path prefix).
 const basePath = ''
+const requireWasm = process.argv.slice(2).includes('--require-wasm')
+const unsupported = process.argv.slice(2).filter((argument) => argument !== '--require-wasm')
+if (unsupported.length > 0) throw new Error(`unsupported option(s): ${unsupported.join(', ')}`)
 
 const types = {
   '.css': 'text/css; charset=utf-8',
+  '.mjs': 'text/javascript; charset=utf-8',
+  '.wasm': 'application/wasm',
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
@@ -23,12 +29,16 @@ const types = {
   '.xml': 'application/xml; charset=utf-8',
 }
 
-function run(executable, args) {
+function run(executable, args, options = {}) {
   return new Promise((resolve, reject) => {
     execFile(
       executable,
       args,
-      { cwd: root, maxBuffer: 32 * 1024 * 1024 },
+      {
+        cwd: root,
+        env: options.env ?? process.env,
+        maxBuffer: 32 * 1024 * 1024,
+      },
       (error, stdout, stderr) => {
         if (error) reject(new Error(stderr || stdout, { cause: error }))
         else resolve({ stdout, stderr })
@@ -37,9 +47,17 @@ function run(executable, args) {
   })
 }
 
-await run(process.execPath, ['docs/build.mjs'])
+await run(process.execPath, ['docs/build.mjs'], {
+  env: {
+    ...process.env,
+    ...(requireWasm ? { OXC_TSRX_REQUIRE_WASM: '1' } : {}),
+  },
+})
 
 const server = http.createServer((request, response) => {
+  // Mirror the deployed host: cross-origin isolation for the wasm engine.
+  response.setHeader('Cross-Origin-Opener-Policy', 'same-origin')
+  response.setHeader('Cross-Origin-Embedder-Policy', 'require-corp')
   const url = new URL(request.url, 'http://localhost')
   if (basePath && url.pathname === '/') {
     response.writeHead(302, { Location: `${basePath}/` }).end()
@@ -76,10 +94,18 @@ await new Promise((resolve, reject) => {
 try {
   const address = server.address()
   const baseUrl = `http://127.0.0.1:${address.port}${basePath}`
+  // The built site self-describes its demo mode: 'wasm' when the in-browser
+  // engine was bundled (npm run docs:wasm), 'static' otherwise.
+  const capabilities = JSON.parse(
+    await readFile(path.join(dist, 'demo-capabilities.json'), 'utf8'),
+  )
+  if (requireWasm && capabilities.mode !== 'wasm') {
+    throw new Error(`required wasm verification built ${capabilities.mode} mode`)
+  }
   const { stdout, stderr } = await run(process.execPath, [
     'docs/verify.mjs',
     baseUrl,
-    '--mode=static',
+    `--mode=${capabilities.mode === 'wasm' ? 'wasm' : 'static'}`,
   ])
   process.stdout.write(stdout)
   process.stderr.write(stderr)

@@ -7,7 +7,7 @@ repository.workspace = true
 rust-version.workspace = true
 
 [features]
-default = ["toolchain"]
+default = ["toolchain", "editor"]
 parser = [
   "dep:miette",
   "dep:oxc_data_structures",
@@ -21,14 +21,19 @@ toolchain = [
   "dep:oxc_config",
   "dep:oxc_formatter",
   "dep:oxc_formatter_core",
-  "dep:oxc_language_server",
   "dep:oxc_linter",
   "dep:serde",
   "dep:serde_json",
-  "dep:tokio",
-  "dep:tower-lsp-server",
   "oxc_semantic/cfg",
   "oxc_semantic/linter",
+]
+# The LSP editor integration pulls an async runtime and protocol stack that
+# cannot target wasm; lint/format consumers may opt out.
+editor = [
+  "toolchain",
+  "dep:oxc_language_server",
+  "dep:tokio",
+  "dep:tower-lsp-server",
 ]
 
 [dependencies]

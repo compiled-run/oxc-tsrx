@@ -8,8 +8,8 @@ import { NATIVE_TARGETS, nativePackageName } from "../../packages/runtime/dist/t
 import { resolveNpmInvocation } from "../../scripts/npm-invocation.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
-const repository = "https://github.com/thejackshelton/oxc-tsrx";
-const homepage = "https://thejackshelton.github.io/oxc-tsrx/";
+const repository = "https://github.com/markless-dev/oxc-tsrx";
+const homepage = "https://oxc-tsrx-docs.vercel.app/";
 const publicDirectories = ["runtime", "oxlint", "oxfmt"];
 
 const readJson = async (path) => JSON.parse(await readFile(path, "utf8"));
@@ -57,13 +57,17 @@ test("root and public packages expose one launch identity", async () => {
 
 test("launch manifest names every byte set and keeps external actions approval-gated", async () => {
   const launch = await readJson(join(root, "docs", "releasing", "v0.1.0-launch.json"));
-  assert.equal(launch.schemaVersion, 1);
+  assert.equal(launch.schemaVersion, 2);
   assert.equal(launch.version, "0.1.0");
   assert.equal(launch.repository, repository);
   assert.equal(launch.site.url, homepage);
   assert.equal(launch.site.artifact, "docs/dist");
-  assert.equal(launch.site.workflow, ".github/workflows/pages.yml");
+  assert.equal(launch.site.provider, "vercel");
+  assert.equal(launch.site.config, "docs/dist/vercel.json");
+  assert.equal(launch.site.buildWorkflow, ".github/workflows/site-artifact.yml");
   assert.equal(launch.site.trigger, "workflow_dispatch");
+  assert.equal(launch.site.artifactNameTemplate, "oxc-tsrx-docs-{COMMIT_SHA}");
+  assert.equal(launch.site.deployWorkflow, null);
 
   const nativeNames = NATIVE_TARGETS.map(nativePackageName);
   assert.deepEqual(launch.npm.publishOrder.slice(0, nativeNames.length), nativeNames);
@@ -88,19 +92,39 @@ test("launch manifest names every byte set and keeps external actions approval-g
     "social-announcement",
   ]);
 
-  const [notes, runbook, workflow] = await Promise.all([
+  const [notes, runbook, prerequisites, workflow] = await Promise.all([
     readFile(join(root, "docs", "releasing", "v0.1.0.md"), "utf8"),
     readFile(join(root, "docs", "releasing", "launch-runbook.md"), "utf8"),
-    readFile(join(root, ".github", "workflows", "pages.yml"), "utf8"),
+    readFile(join(root, "docs", "releasing", "external-prerequisites.md"), "utf8"),
+    readFile(join(root, ".github", "workflows", "site-artifact.yml"), "utf8"),
   ]);
   assert.match(notes, /^# OXC for TSRX 0\.1\.0/mu);
   assert.match(notes, /Known boundaries/u);
   assert.match(runbook, /exact approval/u);
   assert.match(runbook, /COMMIT_SHA/u);
   assert.match(runbook, /RUN_ID/u);
+  assert.match(runbook, /SITE_RUN_ID/u);
+  assert.match(runbook, /Vercel production deployment/u);
+  assert.match(runbook, /Cross-Origin-Opener-Policy/u);
+  assert.match(runbook, /Cross-Origin-Embedder-Policy/u);
+  assert.match(runbook, /zero `?\/api`? engine requests/u);
+  assert.doesNotMatch(runbook, /GitHub Pages|thejackshelton\.github\.io/u);
+  assert.match(prerequisites, /^## Vercel$/mu);
+  assert.match(prerequisites, /oxc-tsrx-docs\.vercel\.app/u);
+  assert.match(prerequisites, /docs\/dist\/vercel\.json/u);
   assert.match(workflow, /workflow_dispatch:/u);
-  assert.match(workflow, /npm run test:site:static/u);
+  assert.match(workflow, /rustup target add wasm32-wasip1-threads/u);
+  assert.match(workflow, /npm run docs:wasm/u);
+  assert.match(workflow, /OXC_TSRX_REQUIRE_WASM=1 npm run docs:build/u);
+  assert.match(workflow, /node tests\/site\/verify-static\.mjs --require-wasm/u);
+  assert.match(workflow, /actions\/upload-artifact@[0-9a-f]{40}/u);
+  assert.match(workflow, /name: oxc-tsrx-docs-\$\{\{ github\.sha \}\}/u);
+  assert.match(workflow, /path: docs\/dist/u);
   assert.doesNotMatch(workflow, /^\s+push:/mu);
+  assert.doesNotMatch(
+    workflow,
+    /configure-pages|upload-pages-artifact|deploy-pages|github-pages|VERCEL_TOKEN|vercel deploy/iu,
+  );
   assert.doesNotMatch(workflow, /npm publish|vsce publish|git push|curl .*social/iu);
 });
 

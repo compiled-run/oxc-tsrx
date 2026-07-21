@@ -1,0 +1,29 @@
+[package]
+name = "demo-wasm"
+version = "0.0.0"
+edition = "2024"
+publish = false
+description = "Docs-only helper: NAPI-RS bindings that run the real lint, format, and projection engines as WebAssembly in the playground."
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+napi = { version = "3", default-features = false }
+napi-derive = "3"
+serde_json = "1"
+tsrx_format = { path = "../../../crates/tsrx_format" }
+tsrx_lint = { path = "../../../crates/tsrx_lint" }
+tsrx_syntax = { path = "../../../crates/tsrx_syntax" }
+
+[build-dependencies]
+napi-build = "2"
+
+# Deliberately not a member of the product workspace.
+[workspace]
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = "symbols"

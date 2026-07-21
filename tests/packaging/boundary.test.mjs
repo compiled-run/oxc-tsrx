@@ -677,14 +677,21 @@ test("repository npm invocation matches npm's public manifest-declared bin", asy
   assert.doesNotMatch(invocation.args[0], /[\\/]\.bin[\\/]|\.(?:bat|cmd|com|exe|ps1)$/iu);
 });
 
-test("editor docs distinguish OXC's compiled tool seam from unavailable runtime hooks", async () => {
-  const guide = await readFile(editorIntegrationPath, "utf8");
+test("editor and maintainer docs distinguish OXC's compiled seam from runtime hooks", async () => {
+  const [editor, guide] = await Promise.all([
+    readFile(editorIntegrationPath, "utf8"),
+    readFile(upstreamingGuidePath, "utf8"),
+  ]);
+
+  assert.match(editor, /hard-codes its document selectors/i);
+  assert.match(editor, /exposes no public API/i);
+  assert.match(editor, /github\.com\/oxc-project\/oxc\/discussions\/21936/);
   assert.match(guide, /ToolBuilder/);
   assert.match(guide, /compile-time Rust embedding seam/i);
-  assert.match(guide, /not a\s+runtime-configurable parser or tool loader/i);
+  assert.match(guide, /not a runtime language loader/i);
   assert.match(guide, /github\.com\/oxc-project\/oxc\/discussions\/21936/);
+  assert.match(guide, /github\.com\/oxc-project\/oxc\/issues\/19918/);
   assert.match(guide, /github\.com\/oxc-project\/oxc\/pull\/24262/);
-  assert.match(guide, /github\.com\/oxc-project\/oxc\/pull\/20250/);
 });
 
 test("the maintainer guide defines a source-backed upstream transplant contract", async () => {
@@ -769,8 +776,9 @@ test("the maintainer guide defines a source-backed upstream transplant contract"
     /human contributor\s+must review, test, understand, and take responsibility/i,
   );
 
-  for (const source of [readme, editor, siteConfig]) {
+  for (const source of [readme, editor]) {
     assert.match(source, /architecture\/upstreaming-to-oxc(?:\.md|\.html)/);
   }
+  assert.match(siteConfig, /link:\s*['"]\/architecture\/upstreaming-to-oxc['"]/);
   assert.match(core, /(?:\.\/|architecture\/)upstreaming-to-oxc\.md/);
 });

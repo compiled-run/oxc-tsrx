@@ -655,72 +655,33 @@ html.dark .copy-button.copied {
   border-color: var(--c-brand);
 }
 
-/* ---------- benchmark charts ---------- */
+/* ---------- benchmark charts (ECharts SVG rendered at build time) ---------- */
 .bench-chart {
+  margin: 16px 0;
+}
+.bench-echart {
+  margin: 0 0 8px;
+}
+.bench-echart svg {
   display: block;
   width: 100%;
   height: auto;
-  margin: 16px 0;
-  font-family: var(--font-body);
 }
-.bench-chart .bench-label {
-  font-size: 12px;
-  fill: var(--c-text-2);
+/* Each chart ships a light and a dark render; html.dark shows exactly one. */
+.bench-echart-dark {
+  display: none;
 }
-.bench-chart .bench-value {
-  font-size: 11px;
-  fill: var(--c-text-3);
+html.dark .bench-echart-light {
+  display: none;
 }
-.bench-chart .bench-track {
-  fill: var(--c-bg-alt);
-  stroke: var(--c-divider);
-  stroke-width: 1;
+html.dark .bench-echart-dark {
+  display: block;
 }
-html.dark .bench-chart .bench-track {
-  fill: #202127;
+/* Numeric gate rows in the tables carry the hover/focus tooltip. */
+.doc tr.bench-row:hover td,
+.doc tr.bench-row:focus-visible td {
+  background: var(--c-brand-soft);
 }
-.bench-chart .bench-bar.pass {
-  fill: #059669;
-}
-html.dark .bench-chart .bench-bar.pass {
-  fill: #34d399;
-}
-.bench-chart .bench-bar.fail {
-  fill: #dc2626;
-}
-html.dark .bench-chart .bench-bar.fail {
-  fill: #f87171;
-}
-.bench-chart .bench-budget-line {
-  stroke: var(--c-text-3);
-  stroke-width: 1.5;
-  stroke-dasharray: 4 3;
-}
-/* Distribution dot strips: status hues mark pass/fail state only; the solid
-   median tick and the hollow p95 diamond differ by shape, not color; ratio
-   sub-strips are context, so they stay on the neutral text tokens. Dark mode
-   sets its own dot/tick values below. */
-.bench-chart { --b-dot-ok: #059669; --b-dot-bad: #dc2626; --b-tick-ok: #047857; --b-tick-bad: #b91c1c; }
-html.dark .bench-chart { --b-dot-ok: #34d399; --b-dot-bad: #f87171; --b-tick-ok: #34d399; --b-tick-bad: #fca5a5; }
-.bench-dot.pass { fill: var(--b-dot-ok); }
-.bench-dot.fail { fill: var(--b-dot-bad); }
-.bench-dot-sm { opacity: 0.3; }
-.bench-dot-md { opacity: 0.45; }
-html.dark .bench-dot-sm { opacity: 0.42; }
-html.dark .bench-dot-md { opacity: 0.55; }
-.bench-median.pass, .bench-gate.pass { fill: var(--b-tick-ok); }
-.bench-median.fail, .bench-gate.fail { fill: var(--b-tick-bad); }
-.bench-p95, .bench-overflow { fill: none; stroke-width: 1.5; }
-.bench-p95.pass, .bench-overflow.pass { stroke: var(--b-tick-ok); }
-.bench-p95.fail, .bench-overflow.fail { stroke: var(--b-tick-bad); }
-.bench-subtrack { fill: var(--c-bg-alt); stroke: var(--c-divider); }
-html.dark .bench-subtrack { fill: #202127; }
-.bench-subdot { fill: var(--c-text-3); opacity: 0.5; }
-html.dark .bench-subdot { opacity: 0.6; }
-.bench-submedian { fill: var(--c-text-2); }
-.bench-sublabel, .bench-subvalue, .bench-subscale { font-size: 10px; fill: var(--c-text-3); }
-.bench-subscale { font-size: 9px; }
-.bench-subvalue { font-variant-numeric: tabular-nums; }
 .doc td.bench-pass {
   color: #047857;
   white-space: nowrap;

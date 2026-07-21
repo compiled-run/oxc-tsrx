@@ -7,7 +7,7 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-oxc_adapter = { path = "../oxc_adapter" }
+oxc_adapter = { path = "../oxc_adapter", default-features = false, features = ["toolchain"] }
 serde = { version = "1.0.228", features = ["derive"] }
 tsrx_syntax = { path = "../tsrx_syntax" }
 

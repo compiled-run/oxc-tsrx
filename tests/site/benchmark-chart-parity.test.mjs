@@ -1,14 +1,15 @@
-// Chart parity: every plotted coordinate and every displayed median/p95 on
-// the benchmarks page must be recomputable from the raw sample arrays kept in
-// the aggregate-selected reports. This file rebuilds the expectations from the
-// reports independently of docs/benchmarks-data.mjs, so a drift between the
-// charts and the retained data fails loudly.
+// Chart parity: every value the ECharts benchmark charts plot must be
+// recomputable from the raw sample arrays kept in the aggregate-selected
+// reports. This file rebuilds the expectations from the reports independently
+// of docs/benchmarks-data.mjs, then checks the pure chart-option builders the
+// page renders from, so a drift between the charts and the retained data
+// fails loudly.
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import test from "node:test";
 
-import { benchmarksSectionsHtml } from "../../docs/benchmarks-data.mjs";
+import { benchmarkChartOption, benchmarkRowsByFamily } from "../../docs/benchmarks-data.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 const MIB = 1048576;
@@ -25,34 +26,6 @@ const p95 = (values) => {
 const nsToMs = (ns) => ns / 1e6;
 const thpt = (ns, bytes) => bytes / MIB / (ns / 1e9);
 
-// ---------- independent copies of the chart's formatting and geometry ----------
-const fmt = (value) => {
-  if (typeof value !== "number") return String(value);
-  if (Number.isInteger(value)) return String(value);
-  if (value >= 100) return value.toFixed(2);
-  return value.toFixed(3);
-};
-const LABEL_W = 260;
-const TRACK_W = 320;
-const frac = (value, threshold, direction) =>
-  direction === "<=" ? value / threshold : threshold / value;
-const clampF = (fraction) => Math.max(Math.min(fraction, 1.15), 0.005);
-const axisX = (value, threshold, direction) =>
-  LABEL_W + clampF(frac(value, threshold, direction)) * TRACK_W;
-const localX = (value, localMax) => LABEL_W + (value / localMax) * TRACK_W;
-const TOLERANCE = 0.06; // coordinates are emitted with toFixed(1)
-
-const withUnit = (value, unit) => `${fmt(value)}${unit === "×" ? "×" : unit ? ` ${unit}` : ""}`;
-const samplesLine = (row) => {
-  const count = row.values.length;
-  const shown = count <= 5 ? `${count} samples (all shown)` : `${count} samples`;
-  return `${shown} · median ${withUnit(row.median, row.unit)} · p95 ${withUnit(row.p95, row.unit)}`;
-};
-const ratioLine = (numLabel, numValues, denLabel, denValues, unit) =>
-  `${numLabel}: ${numValues.length} samples, median ${withUnit(med(numValues), unit)} · ` +
-  `${denLabel}: ${denValues.length} samples, median ${withUnit(med(denValues), unit)} · ` +
-  `runs are sampled independently, so no per-sample ratios`;
-
 // ---------- expected rows, recomputed from the selected reports ----------
 const families = ["comparative", "native-lint", "native-format", "type-aware", "vite", "editor"];
 
@@ -66,7 +39,6 @@ async function loadReports() {
     assert.match(selected ?? "", new RegExp(`^benchmarks/${family}/results-\\d+\\.json$`));
     reports.set(family, {
       report: JSON.parse(await readFile(join(root, selected), "utf8")),
-      aggregateAssertions: aggregate.results[family].assertions ?? null,
     });
   }
   return reports;
@@ -321,107 +293,98 @@ function arrayFamilyExpectations(report, expectMap) {
   return rows;
 }
 
-// ---------- parse the generated chart markup ----------
-function parseSections(html) {
-  const sections = new Map();
-  const pieces = html.split(/<h2 id="([^"]+)">/);
-  for (let i = 1; i < pieces.length; i += 2) {
-    const body = pieces[i + 1];
-    const chart = body.match(/<svg class="bench-chart"[\s\S]*?<\/svg>/)?.[0] ?? "";
-    const rows = [];
-    for (const match of chart.matchAll(/<g class="bench-row"[\s\S]*?<\/g>/g)) {
-      const block = match[0];
-      const attr = (name) => block.match(new RegExp(`data-${name}="([^"]*)"`))?.[1];
-      const one = (re) => (block.match(re) ? Number(block.match(re)[1]) : null);
-      rows.push({
-        block,
-        label: attr("label"),
-        samples: attr("samples"),
-        pass: attr("pass"),
-        dots: [...block.matchAll(/<circle class="bench-dot [^"]*" cx="([0-9.]+)"/g)].map((m) => Number(m[1])),
-        subdots: [...block.matchAll(/<circle class="bench-subdot" cx="([0-9.]+)"/g)].map((m) => Number(m[1])),
-        medianX: one(/<rect class="bench-median[^"]*" x="([0-9.]+)"/),
-        p95X: one(/<path class="bench-p95[^"]*" d="M ([0-9.]+)/),
-        gateX: one(/<rect class="bench-gate[^"]*" x="([0-9.]+)"/),
-        barWidth: one(/width="([0-9.]+)" height="18" rx="4" class="bench-bar/),
-        submedians: [...block.matchAll(/<rect class="bench-submedian" x="([0-9.]+)"/g)].map((m) => Number(m[1])),
-        sublabels: [...block.matchAll(/class="bench-sublabel">([^<]*)</g)].map((m) => m[1]),
-        subscale: block.match(/class="bench-subscale">([^<]*)</)?.[1] ?? null,
-      });
-    }
-    sections.set(pieces[i], rows);
-  }
-  return sections;
-}
+// ---------- helpers to dig values out of a built chart option ----------
+const series = (option, name) => option.series.find((entry) => entry.name === name);
+const budgetLine = (option) => series(option, "gate").markLine.data[0].xAxis;
+const gateValue = (option) => series(option, "gate").data[0][0];
+const failRegion = (option) => series(option, "gate").markArea.data[0];
 
-const closeTo = (actual, expected, message) =>
-  assert.ok(Math.abs(actual - expected) <= TOLERANCE, `${message}: ${actual} vs ${expected}`);
-
-function checkRow(family, expected, parsed) {
+function checkRow(family, expected, built) {
   const where = `${family}: ${expected.label}`;
-  assert.equal(parsed.label, expected.label, `${where}: label`);
+  assert.equal(built.label, expected.label, `${where}: label`);
+  const reported = expected.reported ?? expected.observed;
+  assert.equal(built.observed, reported, `${where}: module row observed`);
+  assert.equal(built.threshold, expected.threshold, `${where}: module row threshold`);
+  assert.equal(built.direction, expected.direction, `${where}: module row direction`);
+
+  const option = benchmarkChartOption(built, "light");
   const { row } = expected;
+  const isRss = row.kind === "samples" && row.plotThreshold !== undefined;
+  const expectedGate = isRss ? reported / MIB : reported;
+  const expectedBudget = row.plotThreshold ?? expected.threshold;
+
+  // The gate strip plots exactly the asserted value against exactly the
+  // frozen threshold, with the fail region on the correct side.
+  assert.equal(gateValue(option), expectedGate, `${where}: gate value`);
+  assert.equal(budgetLine(option), expectedBudget, `${where}: budget markLine`);
+  const region = failRegion(option);
+  if (expected.direction === "<=") {
+    assert.equal(region[0].xAxis, expectedBudget, `${where}: fail region starts at budget`);
+  } else {
+    assert.equal(region[0].xAxis, 0, `${where}: fail region starts at zero`);
+    assert.equal(region[1].xAxis, expectedBudget, `${where}: fail region ends at budget`);
+  }
+  const gateAxis = option.xAxis[0];
+  assert.ok(
+    gateAxis.min === 0 && gateAxis.max >= Math.max(expectedGate, expectedBudget),
+    `${where}: gate axis contains the value and the budget`,
+  );
+
   if (row.kind === "scalar") {
-    assert.equal(parsed.samples, "single measurement per report", `${where}: scalar tooltip`);
-    assert.equal(parsed.dots.length, 0, `${where}: scalar rows plot no dots`);
-    assert.equal(parsed.subdots.length, 0, `${where}: scalar rows plot no sub-strips`);
-    assert.notEqual(parsed.barWidth, null, `${where}: scalar rows keep the budget bar`);
-    closeTo(
-      parsed.barWidth,
-      clampF(frac(expected.observed, expected.threshold, expected.direction)) * TRACK_W,
-      `${where}: bar width`,
+    assert.equal(series(option, "samples"), undefined, `${where}: scalar rows plot no samples`);
+    assert.match(option.title.subtext, /single measurement per report/u, `${where}: scalar wording`);
+    return;
+  }
+
+  const sampleAxis = option.xAxis[1];
+  if (row.kind === "samples") {
+    const plotted = series(option, "samples").data;
+    assert.deepEqual(
+      plotted.map(([value]) => value),
+      row.values,
+      `${where}: every retained sample is plotted, in order`,
+    );
+    const marks = series(option, "samples").markLine.data;
+    assert.equal(marks[0].xAxis, row.median, `${where}: median markLine`);
+    assert.equal(marks[1].xAxis, row.p95, `${where}: p95 markLine`);
+    assert.ok(
+      sampleAxis.min <= Math.min(...row.values) && sampleAxis.max >= Math.max(...row.values),
+      `${where}: sample axis contains every sample`,
     );
     return;
   }
-  if (row.kind === "samples") {
-    const threshold = row.plotThreshold ?? expected.threshold;
-    assert.equal(parsed.dots.length, row.values.length, `${where}: one dot per retained sample`);
-    row.values.forEach((value, i) => {
-      closeTo(parsed.dots[i], axisX(value, threshold, expected.direction), `${where}: dot ${i}`);
-    });
-    // The median tick rect starts at medianX - 1; the p95 diamond path starts
-    // at its center.
-    closeTo(parsed.medianX + 1, axisX(row.median, threshold, expected.direction), `${where}: median tick`);
-    closeTo(parsed.p95X, axisX(row.p95, threshold, expected.direction), `${where}: p95 marker`);
-    assert.equal(parsed.samples, samplesLine(row), `${where}: tooltip sample line`);
-    return;
-  }
-  // ratio rows
-  assert.equal(parsed.dots.length, 0, `${where}: ratio rows never plot per-sample ratios`);
-  const localMax = Math.max(...row.num.values, ...row.den.values);
-  assert.equal(
-    parsed.subdots.length,
-    row.num.values.length + row.den.values.length,
-    `${where}: sub-strip dot count`,
+
+  // ratio rows: both raw runs plotted, never per-sample ratios.
+  const num = series(option, "numerator samples").data;
+  const den = series(option, "denominator samples").data;
+  assert.deepEqual(num.map(([value]) => value), row.num.values, `${where}: numerator samples`);
+  assert.deepEqual(den.map(([value]) => value), row.den.values, `${where}: denominator samples`);
+  assert.ok(num.every(([, label]) => label === row.num.label), `${where}: numerator category`);
+  assert.ok(den.every(([, label]) => label === row.den.label), `${where}: denominator category`);
+  const medians = series(option, "medians").data;
+  assert.deepEqual(
+    medians,
+    [
+      [med(row.num.values), row.num.label],
+      [med(row.den.values), row.den.label],
+    ],
+    `${where}: sub-strip median ticks`,
   );
-  const allValues = [...row.num.values, ...row.den.values];
-  allValues.forEach((value, i) => {
-    closeTo(parsed.subdots[i], localX(value, localMax), `${where}: sub-strip dot ${i}`);
-  });
-  assert.deepEqual(parsed.sublabels, [row.num.label, row.den.label], `${where}: sub-strip labels`);
-  closeTo(parsed.submedians[0] + 1, localX(med(row.num.values), localMax), `${where}: numerator median tick`);
-  closeTo(parsed.submedians[1] + 1, localX(med(row.den.values), localMax), `${where}: denominator median tick`);
-  closeTo(
-    parsed.gateX + 1.5,
-    axisX(expected.reported ?? expected.observed, expected.threshold, expected.direction),
-    `${where}: gate marker`,
+  const all = [...row.num.values, ...row.den.values];
+  assert.ok(
+    sampleAxis.min === 0 && sampleAxis.max >= Math.max(...all),
+    `${where}: shared raw axis starts at zero and contains every sample`,
   );
-  assert.equal(
-    parsed.subscale,
-    `both strips share one scale, 0 to ${withUnit(localMax, row.unit)}`,
-    `${where}: shared local scale label`,
-  );
-  assert.equal(
-    parsed.samples,
-    ratioLine(row.num.label, row.num.values, row.den.label, row.den.values, row.unit),
-    `${where}: tooltip sample line`,
+  assert.match(
+    option.title.subtext,
+    /sampled independently, so no per-sample ratios/u,
+    `${where}: ratio honesty wording`,
   );
 }
 
 const setup = (async () => {
   const reports = await loadReports();
-  const html = await benchmarksSectionsHtml();
-  const sections = parseSections(html);
+  const built = await benchmarkRowsByFamily();
   const expectations = new Map([
     ["native-lint", arrayFamilyExpectations(reports.get("native-lint").report, expectNativeLint(reports.get("native-lint").report))],
     ["native-format", arrayFamilyExpectations(reports.get("native-format").report, expectNativeFormat(reports.get("native-format").report))],
@@ -430,7 +393,7 @@ const setup = (async () => {
     ["editor", expectEditor(reports.get("editor").report)],
     ["comparative", expectComparative(reports.get("comparative").report)],
   ]);
-  return { reports, sections, expectations };
+  return { reports, built, expectations };
 })();
 
 test("every gated observed value recomputes exactly from a retained sample array", async () => {
@@ -449,13 +412,12 @@ test("every gated observed value recomputes exactly from a retained sample array
   }
 });
 
-test("every plotted coordinate and displayed median/p95 matches recomputation", async () => {
-  const { sections, expectations } = await setup;
+test("every chart option value matches recomputation from the selected reports", async () => {
+  const { built, expectations } = await setup;
   for (const [family, rows] of expectations) {
-    const parsed = sections.get(family);
-    assert.ok(parsed, `missing chart section for ${family}`);
-    assert.equal(parsed.length, rows.length, `${family}: chart row count`);
-    rows.forEach((expected, index) => checkRow(family, expected, parsed[index]));
+    const builtRows = (built[family] ?? []).filter((row) => row.direction !== "==");
+    assert.equal(builtRows.length, rows.length, `${family}: chart row count`);
+    rows.forEach((expected, index) => checkRow(family, expected, builtRows[index]));
   }
 });
 
@@ -467,13 +429,15 @@ test("the RSS budget used for plotting equals the asserted threshold", async () 
 });
 
 test("exactly-1 invariant rows stay out of the charts entirely", async () => {
-  const { reports, sections } = await setup;
+  const { reports, built } = await setup;
   for (const family of ["native-lint", "native-format"]) {
     const report = reports.get(family).report;
     const invariants = report.assertions.filter(
       (entry) => entry.observed === 1 && entry.threshold === 1,
     );
-    const charted = sections.get(family).map((row) => row.label);
+    const charted = built[family]
+      .filter((row) => row.direction !== "==")
+      .map((row) => row.label);
     for (const invariant of invariants) {
       assert.ok(
         !charted.includes(invariant.name.replace(/_/g, " ")),

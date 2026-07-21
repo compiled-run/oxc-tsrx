@@ -5,6 +5,11 @@ import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+// Charts are rendered at build time with ECharts in SSR mode: pure option
+// objects (testable without a browser) turned into static SVG strings, one
+// light and one dark variant per chart. No chart runtime ships to the client.
+import * as echarts from 'echarts'
+
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
 const aggregateReport = readFile(
   path.join(repoRoot, 'docs', 'acceptance', 'performance-report.json'),
@@ -366,14 +371,9 @@ const escapeHtml = (text) =>
 // can never become markup after `dataset` decodes the outer layer.
 export const escapeDatasetHtml = (text) => escapeHtml(escapeHtml(text))
 
-// ---------- chart rendering: distribution rows on a shared percent-of-budget axis ----------
-const CHART = { width: 700, labelWidth: 260, trackWidth: 320 }
-const OVERFLOW_FRACTION = 1.15
-
+// ---------- chart rendering: one ECharts small-multiple chart per gate row ----------
 const fractionOfBudget = (value, threshold, direction) =>
   direction === '<=' ? value / threshold : threshold / value
-const clampFraction = (fraction) => Math.max(Math.min(fraction, OVERFLOW_FRACTION), 0.005)
-const fractionX = (fraction) => CHART.labelWidth + clampFraction(fraction) * CHART.trackWidth
 
 const unitText = (unit) => (unit === '×' ? '×' : unit ? ` ${unit}` : '')
 const valueWithUnit = (value, unit) => `${fmt(value)}${unitText(unit)}`
@@ -393,109 +393,290 @@ function distSummary(dist) {
   return `${shown} · median ${valueWithUnit(dist.median, dist.unit)} · p95 ${valueWithUnit(dist.p95, dist.unit)}`
 }
 
-const overflowMarker = (y, statusClass) =>
-  `<path class="bench-overflow ${statusClass}" d="M ${(CHART.labelWidth + OVERFLOW_FRACTION * CHART.trackWidth + 2).toFixed(1)} ${y + 4} l 6 5 l -6 5"/>`
-
-// One dot per retained sample; the solid full-height tick is the median and
-// the hollow diamond is the p95, distinguished by shape, not color.
-function samplesBandSvg(row, bandY) {
-  const dist = row.dist
-  const statusClass = row.pass ? 'pass' : 'fail'
-  const count = dist.values.length
-  const sizeClass = count <= 5 ? 'bench-dot-lg' : count < 30 ? 'bench-dot-md' : 'bench-dot-sm'
-  const radius = count <= 5 ? 4 : count < 30 ? 3.2 : 2.4
-  const threshold = dist.plotThreshold ?? row.threshold
-  const cy = bandY + 9
-  let overflow = false
-  const dots = dist.values
-    .map((value) => {
-      const fraction = fractionOfBudget(value, threshold, row.direction)
-      if (fraction > OVERFLOW_FRACTION) overflow = true
-      return `<circle class="bench-dot ${sizeClass} ${statusClass}" cx="${fractionX(fraction).toFixed(1)}" cy="${cy}" r="${radius}"/>`
-    })
-    .join('')
-  const p95X = fractionX(fractionOfBudget(dist.p95, threshold, row.direction))
-  const medianX = fractionX(fractionOfBudget(dist.median, threshold, row.direction))
-  return `<rect x="${CHART.labelWidth}" y="${bandY}" width="${CHART.trackWidth}" height="18" rx="4" class="bench-track"/>${dots}<path class="bench-p95 ${statusClass}" d="M ${p95X.toFixed(1)} ${bandY + 2} L ${(p95X + 5).toFixed(1)} ${cy} L ${p95X.toFixed(1)} ${bandY + 16} L ${(p95X - 5).toFixed(1)} ${cy} Z"/><rect class="bench-median ${statusClass}" x="${(medianX - 1).toFixed(1)}" y="${bandY}" width="2" height="18"/>${overflow ? overflowMarker(bandY, statusClass) : ''}`
+// Theme palettes reuse the site's tokens (docs/assets/style.css): brand violet
+// as the single series accent, neutral ink for every piece of text, and the
+// pass/fail state carried by words, never by color alone.
+const CHART_FONT =
+  "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
+const CHART_THEMES = {
+  light: {
+    ink: '#3c3c43',
+    inkSoft: '#545560',
+    inkFaint: '#6e6e76',
+    axisLine: '#c9c9ce',
+    gridLine: '#ececee',
+    accent: '#6d28d9',
+    dotOpacity: 0.35,
+    dotOpacityFew: 0.85,
+    budget: '#6e6e76',
+    breach: 'rgba(220, 38, 38, 0.055)',
+  },
+  dark: {
+    ink: '#dfdfd6',
+    inkSoft: '#b5b5ad',
+    inkFaint: '#98989f',
+    axisLine: '#45454b',
+    gridLine: '#2a2a2e',
+    accent: '#c4b5fd',
+    dotOpacity: 0.5,
+    dotOpacityFew: 0.95,
+    budget: '#98989f',
+    breach: 'rgba(248, 113, 113, 0.08)',
+  },
 }
 
-// Scalar gates keep the original filled budget bar.
-function scalarBandSvg(row, bandY) {
-  const fraction = fractionOfBudget(row.observed, row.threshold, row.direction)
-  return `<rect x="${CHART.labelWidth}" y="${bandY}" width="${CHART.trackWidth}" height="18" rx="4" class="bench-track"/><rect x="${CHART.labelWidth}" y="${bandY}" width="${(clampFraction(fraction) * CHART.trackWidth).toFixed(1)}" height="18" rx="4" class="bench-bar ${row.pass ? 'pass' : 'fail'}"/>${fraction > OVERFLOW_FRACTION ? overflowMarker(bandY, row.pass ? 'pass' : 'fail') : ''}`
+// Nice axis bounds so every sample and the budget line sit inside the plot
+// with padding, and tick labels stay round numbers.
+const NICE_MAX = [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10]
+const niceCeil = (x) => {
+  if (!(x > 0)) return 1
+  const exp = Math.floor(Math.log10(x))
+  const base = x / 10 ** exp
+  const m = NICE_MAX.find((n) => base <= n + 1e-9) ?? 10
+  return m * 10 ** exp
 }
-
-function ratioStripSvg(stripData, stripY, localMax, unit) {
-  const stripX = (value) => CHART.labelWidth + (value / localMax) * CHART.trackWidth
-  const cy = stripY + 5
-  const dots = stripData.values
-    .map((value) => `<circle class="bench-subdot" cx="${stripX(value).toFixed(1)}" cy="${cy}" r="2"/>`)
-    .join('')
-  return `<text x="${CHART.labelWidth - 8}" y="${stripY + 8}" text-anchor="end" class="bench-sublabel">${escapeHtml(stripData.label)}</text><rect x="${CHART.labelWidth}" y="${stripY}" width="${CHART.trackWidth}" height="10" rx="3" class="bench-subtrack"/>${dots}<rect class="bench-submedian" x="${(stripX(stripData.median) - 1).toFixed(1)}" y="${stripY}" width="2" height="10"/><text x="${CHART.labelWidth + CHART.trackWidth + 8}" y="${stripY + 8}" class="bench-subvalue">med ${escapeHtml(valueWithUnit(stripData.median, unit))}</text>`
+const niceStep = (x) => {
+  if (!(x > 0)) return 1
+  const exp = Math.floor(Math.log10(x))
+  const base = x / 10 ** exp
+  const m = [1, 2, 2.5, 5, 10].find((n) => base <= n + 1e-9) ?? 10
+  return m * 10 ** exp
 }
-
-// Ratio gates: a solid marker for the asserted ratio on the budget axis, then
-// the two raw sample arrays it divides as labeled sub-strips on one shared
-// local scale. Per-sample ratios are never derived.
-function ratioRowSvg(row, rowTop) {
-  const bandY = rowTop + 6
-  const statusClass = row.pass ? 'pass' : 'fail'
-  const fraction = fractionOfBudget(row.observed, row.threshold, row.direction)
-  const gateX = fractionX(fraction)
-  const localMax = Math.max(...row.dist.num.values, ...row.dist.den.values)
-  return `<rect x="${CHART.labelWidth}" y="${bandY}" width="${CHART.trackWidth}" height="18" rx="4" class="bench-track"/><rect class="bench-gate ${statusClass}" x="${(gateX - 1.5).toFixed(1)}" y="${bandY}" width="3" height="18" rx="1"/>${fraction > OVERFLOW_FRACTION ? overflowMarker(bandY, statusClass) : ''}${ratioStripSvg(row.dist.num, rowTop + 32, localMax, row.dist.unit)}${ratioStripSvg(row.dist.den, rowTop + 46, localMax, row.dist.unit)}<text x="${CHART.labelWidth}" y="${rowTop + 68}" class="bench-subscale">both strips share one scale, 0 to ${escapeHtml(valueWithUnit(localMax, row.dist.unit))}</text>`
-}
-
-function chartSvg(title, rows) {
-  const numeric = rows.filter((row) => row.direction !== '==')
-  const parts = []
-  const budgetSegments = []
-  let y = 4
-  for (const row of numeric) {
-    const kind = row.dist?.kind ?? 'scalar'
-    const rowHeight = kind === 'ratio' ? 74 : 30
-    const bandY = y + 6
-    const used = fractionOfBudget(row.observed, row.threshold, row.direction)
-    const pctLabel = `${(used * 100).toFixed(used < 0.1 ? 1 : 0)}% of budget`
-    const result = `${fmt(row.observed)}${row.unit ? ` ${row.unit}` : ''}`
-    const budget = `${row.direction === '<=' ? '≤' : '≥'} ${fmt(row.threshold)}${row.unit ? ` ${row.unit}` : ''}`
-    const samples = distSummary(row.dist)
-    const summary = `${row.label}: ${result}, budget ${budget}, ${pctLabel}, ${row.pass ? 'pass' : 'FAIL'}. ${samples}${row.note ? `. ${row.note}` : ''}`
-    const band =
-      kind === 'ratio'
-        ? ratioRowSvg(row, y)
-        : kind === 'samples'
-          ? samplesBandSvg(row, bandY)
-          : scalarBandSvg(row, bandY)
-    // The dashed budget line only spans gate bands: ratio sub-strips use their
-    // own local scale, where the budget position would be meaningless.
-    budgetSegments.push(`<line x1="${CHART.labelWidth + CHART.trackWidth}" y1="${y}" x2="${CHART.labelWidth + CHART.trackWidth}" y2="${y + 30}" class="bench-budget-line"/>`)
-    parts.push(`
-    <g class="bench-row" tabindex="0" role="img" aria-label="${escapeHtml(summary)}"
-       data-label="${escapeDatasetHtml(row.label)}" data-result="${escapeDatasetHtml(result)}"
-       data-budget="${escapeDatasetHtml(budget)}" data-pct="${escapeDatasetHtml(pctLabel)}"
-       data-pass="${row.pass}" data-samples="${escapeDatasetHtml(samples)}"${row.note ? ` data-note="${escapeDatasetHtml(row.note)}"` : ''}>
-      <rect x="2" y="${y + 3}" width="696" height="${rowHeight - 6}" rx="6" class="bench-hit"/>
-      <text x="${CHART.labelWidth - 8}" y="${bandY + 13}" text-anchor="end" class="bench-label">${escapeHtml(row.label)}</text>
-      ${band}
-      <text x="${CHART.labelWidth + CHART.trackWidth + 8}" y="${bandY + 13}" class="bench-value">${escapeHtml(result)}</text>
-    </g>`)
-    y += rowHeight
+// Zoomed axis for the sample strip: fitted to the retained values so spread
+// stays visible even when the budget is 100x away. The tick labels make the
+// zoom explicit.
+function fittedAxis(values) {
+  const lo = Math.min(...values)
+  const hi = Math.max(...values)
+  const span = hi - lo || Math.abs(hi) * 0.02 || 1
+  const step = niceStep(span / 3)
+  return {
+    min: Math.max(0, Math.floor((lo - span * 0.1) / step) * step),
+    max: Math.ceil((hi + span * 0.1) / step) * step,
+    interval: step,
   }
-  const height = y + 4
-  return `<svg class="bench-chart" viewBox="0 0 700 ${height}" role="group" aria-label="${escapeHtml(
-    title,
-  )}: each row places every retained sample as a dot at its share of the frozen budget; the dashed line is the budget, the solid tick is the median, and the hollow diamond is the p95. Hover or focus a row for details.">
-  ${budgetSegments.join('')}
-  ${parts.join('')}
-</svg>`
+}
+const tickLabel = (value) => String(Number(Number(value).toFixed(6)))
+
+// Every chart uses the same two-strip shape: the top strip places the gated
+// value on a zero-based axis with the dashed frozen-budget line and a shaded
+// fail region, and the bottom strip zooms into the retained samples (or, for
+// ratio gates, the two raw runs the ratio divides).
+const GRID = { left: 200, right: 64, gateTop: 52, stripHeight: 30, lowerTop: 118, ratioHeight: 58 }
+const CHART_WIDTH = 700
+export const chartHeightFor = (kind) => (kind === 'ratio' ? 200 : kind === 'samples' ? 176 : 108)
+
+const budgetSymbol = (direction) => (direction === '<=' ? '≤' : '≥')
+
+// The unit the gate strip is plotted in. RSS gates assert bytes but plot MiB
+// (same fraction of budget, readable numbers), signaled by plotThreshold.
+function gateGeometry(row) {
+  const dist = row.dist ?? { kind: 'scalar' }
+  const unit = dist.kind === 'ratio' ? '×' : dist.kind === 'samples' ? dist.unit : row.unit
+  const value = dist.plotThreshold ? row.observed / MIB : row.observed
+  const budget = dist.plotThreshold ?? row.threshold
+  return { unit, value, budget }
+}
+
+export function benchmarkChartOption(row, themeName = 'light') {
+  const t = CHART_THEMES[themeName]
+  const dist = row.dist ?? { kind: 'scalar' }
+  const kind = dist.kind
+  const gate = gateGeometry(row)
+  const gateMax = niceCeil(Math.max(gate.value, gate.budget) * 1.12)
+  const status = row.pass ? 'pass' : 'FAIL'
+  const failRegion =
+    row.direction === '<='
+      ? [{ xAxis: gate.budget }, { xAxis: gateMax }]
+      : [{ xAxis: 0 }, { xAxis: gate.budget }]
+
+  const axisCommon = {
+    type: 'value',
+    axisLine: { show: true, lineStyle: { color: t.axisLine } },
+    axisTick: { show: false },
+    splitLine: { show: true, lineStyle: { color: t.gridLine } },
+    axisLabel: { color: t.inkFaint, fontSize: 11, fontFamily: CHART_FONT, formatter: tickLabel },
+    nameTextStyle: { color: t.inkFaint, fontSize: 11, fontFamily: CHART_FONT },
+    nameGap: 8,
+  }
+  const categoryAxis = (labels) => ({
+    type: 'category',
+    data: labels,
+    axisLine: { show: false },
+    axisTick: { show: false },
+    axisLabel: {
+      color: t.inkSoft,
+      fontSize: 11,
+      fontFamily: CHART_FONT,
+      width: 184,
+      overflow: 'truncate',
+    },
+  })
+
+  const gateSeries = {
+    name: 'gate',
+    type: 'scatter',
+    xAxisIndex: 0,
+    yAxisIndex: 0,
+    clip: false,
+    symbol: 'diamond',
+    symbolSize: 13,
+    itemStyle: { color: t.accent },
+    data: [[gate.value, 0]],
+    markLine: {
+      symbol: 'none',
+      silent: true,
+      animation: false,
+      lineStyle: { color: t.budget, type: [6, 4], width: 1.5 },
+      label: {
+        show: true,
+        formatter: 'budget',
+        position: 'insideEndTop',
+        rotate: 0,
+        color: t.inkSoft,
+        fontSize: 10,
+        fontFamily: CHART_FONT,
+      },
+      data: [{ xAxis: gate.budget }],
+    },
+    markArea: { silent: true, itemStyle: { color: t.breach }, data: [failRegion] },
+  }
+
+  const budgetLabel = `budget ${budgetSymbol(row.direction)} ${valueWithUnit(gate.budget, gate.unit)}`
+  const grids = [
+    { left: GRID.left, right: GRID.right, top: GRID.gateTop, height: GRID.stripHeight },
+  ]
+  const xAxes = [{ ...axisCommon, gridIndex: 0, min: 0, max: gateMax, name: unitText(gate.unit).trim() }]
+  const yAxes = [{ ...categoryAxis([budgetLabel]), gridIndex: 0 }]
+  const series = [gateSeries]
+  let subtext
+
+  if (kind === 'samples') {
+    const n = dist.values.length
+    const axis = fittedAxis(dist.values)
+    grids.push({ left: GRID.left, right: GRID.right, top: GRID.lowerTop, height: GRID.stripHeight })
+    xAxes.push({ ...axisCommon, gridIndex: 1, ...axis, name: unitText(dist.unit).trim() })
+    yAxes.push({ ...categoryAxis([`all ${n} samples`]), gridIndex: 1 })
+    series.push({
+      name: 'samples',
+      type: 'scatter',
+      xAxisIndex: 1,
+      yAxisIndex: 1,
+      clip: false,
+      symbol: 'circle',
+      symbolSize: n <= 5 ? 10 : n >= 60 ? 7 : 8,
+      itemStyle: { color: t.accent, opacity: n <= 5 ? t.dotOpacityFew : t.dotOpacity },
+      data: dist.values.map((value) => [value, 0]),
+      markLine: {
+        symbol: 'none',
+        silent: true,
+        animation: false,
+        label: { show: false },
+        data: [
+          { xAxis: dist.median, lineStyle: { color: t.ink, type: 'solid', width: 2 } },
+          { xAxis: dist.p95, lineStyle: { color: t.ink, type: [2, 3], width: 2 } },
+        ],
+      },
+    })
+    subtext = `measured ${valueWithUnit(gate.value, gate.unit)} · ${status} · below: ${n} samples, median ${valueWithUnit(dist.median, dist.unit)} (solid line), p95 ${valueWithUnit(dist.p95, dist.unit)} (dotted line)`
+  } else if (kind === 'ratio') {
+    const labels = [dist.den.label, dist.num.label]
+    const localMax = niceCeil(Math.max(...dist.num.values, ...dist.den.values) * 1.08)
+    grids.push({ left: GRID.left, right: GRID.right, top: GRID.lowerTop, height: GRID.ratioHeight })
+    xAxes.push({ ...axisCommon, gridIndex: 1, min: 0, max: localMax, name: unitText(dist.unit).trim() })
+    yAxes.push({ ...categoryAxis(labels), gridIndex: 1 })
+    const sideSeries = (name, side) => ({
+      name,
+      type: 'scatter',
+      xAxisIndex: 1,
+      yAxisIndex: 1,
+      clip: false,
+      symbol: 'circle',
+      symbolSize: 8,
+      itemStyle: { color: t.accent, opacity: side.values.length <= 5 ? t.dotOpacityFew : t.dotOpacity },
+      data: side.values.map((value) => [value, side.label]),
+    })
+    series.push(sideSeries('numerator samples', dist.num), sideSeries('denominator samples', dist.den))
+    series.push({
+      name: 'medians',
+      type: 'scatter',
+      xAxisIndex: 1,
+      yAxisIndex: 1,
+      clip: false,
+      symbol: 'rect',
+      symbolSize: [3, 22],
+      itemStyle: { color: t.ink },
+      data: [
+        [dist.num.median, dist.num.label],
+        [dist.den.median, dist.den.label],
+      ],
+    })
+    subtext = `asserted ratio ${valueWithUnit(gate.value, '×')} · ${status} · below: the two runs it divides, sampled independently, so no per-sample ratios`
+  } else {
+    subtext = `single measurement per report: ${valueWithUnit(gate.value, gate.unit)} · ${status}`
+  }
+
+  return {
+    animation: false,
+    title: {
+      text: row.label,
+      subtext,
+      top: 4,
+      left: 2,
+      itemGap: 3,
+      textStyle: { color: t.ink, fontSize: 13, fontWeight: 600, fontFamily: CHART_FONT },
+      subtextStyle: { color: t.inkSoft, fontSize: 11, fontFamily: CHART_FONT },
+    },
+    grid: grids,
+    xAxis: xAxes,
+    yAxis: yAxes,
+    series,
+  }
+}
+
+function renderChartSvg(option, width, height) {
+  const chart = echarts.init(null, null, { renderer: 'svg', ssr: true, width, height })
+  chart.setOption(option)
+  const svg = chart.renderToSVGString()
+  chart.dispose()
+  return svg
+}
+
+// One figure per gate row: the light and dark renders side by side, with CSS
+// showing exactly one depending on html.dark. Screen readers get the same
+// summary the old chart exposed.
+function chartFigure(row) {
+  const kind = row.dist?.kind ?? 'scalar'
+  const height = chartHeightFor(kind)
+  const used = fractionOfBudget(row.observed, row.threshold, row.direction)
+  const pctLabel = `${(used * 100).toFixed(used < 0.1 ? 1 : 0)}% of budget`
+  const result = `${fmt(row.observed)}${row.unit ? ` ${row.unit}` : ''}`
+  const budget = `${budgetSymbol(row.direction)} ${fmt(row.threshold)}${row.unit ? ` ${row.unit}` : ''}`
+  const summary = `${row.label}: ${result}, budget ${budget}, ${pctLabel}, ${row.pass ? 'pass' : 'FAIL'}. ${distSummary(row.dist)}${row.note ? `. ${row.note}` : ''}`
+  const light = renderChartSvg(benchmarkChartOption(row, 'light'), CHART_WIDTH, height)
+  const dark = renderChartSvg(benchmarkChartOption(row, 'dark'), CHART_WIDTH, height)
+  return `<figure class="bench-echart" role="img" aria-label="${escapeHtml(summary)}"><div class="bench-echart-light" aria-hidden="true">${light}</div><div class="bench-echart-dark" aria-hidden="true">${dark}</div></figure>`
+}
+
+function chartsHtml(rows) {
+  const numeric = rows.filter((row) => row.direction !== '==')
+  return `<div class="bench-chart">
+${numeric.map((row) => chartFigure(row)).join('\n')}
+</div>`
 }
 
 function tableHtml(rows) {
   const body = rows
     .map((row) => {
       const budget = row.direction === '==' ? `exactly ${fmt(row.threshold)}` : `${row.direction === '<=' ? '≤' : '≥'} ${fmt(row.threshold)}${row.unit ? ` ${row.unit}` : ''}`
-      return `<tr><td>${escapeHtml(row.label)}</td><td class="num">${fmt(row.observed)}${row.unit ? ` ${row.unit}` : ''}</td><td class="num">${budget}</td><td class="${row.pass ? 'bench-pass' : 'bench-fail'}">${row.pass ? '✓ pass' : '✗ fail'}</td></tr>`
+      const cells = `<td>${escapeHtml(row.label)}</td><td class="num">${fmt(row.observed)}${row.unit ? ` ${row.unit}` : ''}</td><td class="num">${budget}</td><td class="${row.pass ? 'bench-pass' : 'bench-fail'}">${row.pass ? '✓ pass' : '✗ fail'}</td>`
+      if (row.direction === '==') return `<tr>${cells}</tr>`
+      // Numeric gate rows keep the hover/focus tooltip contract: dataset
+      // values stay double-escaped for the innerHTML consumer in app.js.
+      const used = fractionOfBudget(row.observed, row.threshold, row.direction)
+      const pctLabel = `${(used * 100).toFixed(used < 0.1 ? 1 : 0)}% of budget`
+      const result = `${fmt(row.observed)}${row.unit ? ` ${row.unit}` : ''}`
+      return `<tr class="bench-row" tabindex="0" data-label="${escapeDatasetHtml(row.label)}" data-result="${escapeDatasetHtml(result)}" data-budget="${escapeDatasetHtml(budget)}" data-pct="${escapeDatasetHtml(pctLabel)}" data-pass="${row.pass}" data-samples="${escapeDatasetHtml(distSummary(row.dist))}"${row.note ? ` data-note="${escapeDatasetHtml(row.note)}"` : ''}>${cells}</tr>`
     })
     .join('\n')
   return `<div class="table-wrap"><table>
@@ -546,7 +727,7 @@ export async function benchmarksSectionsHtml() {
 <p>${escapeHtml(note)} Report: <code>${escapeHtml(file)}</code> (${escapeHtml(when)}), ${
       allPass ? 'every budget passed' : 'BUDGET FAILURES PRESENT'
     }.</p>
-${chartSvg(title, rows)}
+${chartsHtml(rows)}
 ${tableHtml(rows)}
 ${adjudicationHtml(adjudication)}`)
   }
@@ -631,12 +812,19 @@ const HOME_PICKS = [
   },
 ]
 
-export async function homeBenchmarksHtml() {
+// The normalized rows per family, exported so the chart parity test can check
+// every plotted value against its retained sample array without scraping SVG.
+export async function benchmarkRowsByFamily() {
   const rowsByFamily = {}
   for (const { family, rows: extract } of FAMILIES) {
     const { report } = await latestReport(family)
     rowsByFamily[family] = extract({ report })
   }
+  return rowsByFamily
+}
+
+export async function homeBenchmarksHtml() {
+  const rowsByFamily = await benchmarkRowsByFamily()
   const picked = []
   for (const pick of HOME_PICKS) {
     const row = rowsByFamily[pick.family]?.find((candidate) => pick.match.test(candidate.label))

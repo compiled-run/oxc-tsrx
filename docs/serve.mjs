@@ -36,6 +36,7 @@ const projectionBin =
   process.env.OXC_TSRX_PROJECTION_BIN ??
   path.join(docsDir, 'tools', 'projection-dump', 'target', 'release', 'projection-dump')
 const nativeAvailable = () => existsSync(lintBin) && existsSync(fmtBin)
+const wasmAvailable = () => existsSync(path.join(distDir, 'assets', 'demo-wasm', 'engine.js'))
 // Type-aware lint needs the tsgolint executable resolvable from the workspace,
 // and the linted file must live inside an inferable TypeScript program, which
 // is why demo temp files go under the repo root instead of the OS tmpdir.
@@ -51,6 +52,7 @@ const types = {
   '.html': 'text/html; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
+  '.wasm': 'application/wasm',
   '.mjs': 'text/javascript; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
   '.md': 'text/markdown; charset=utf-8',
@@ -430,10 +432,11 @@ function capabilities(response) {
   response.end(
     JSON.stringify({
       ok: true,
-      mode: nativeAvailable() ? 'native' : 'static',
+      mode: nativeAvailable() ? 'native' : wasmAvailable() ? 'wasm' : 'static',
       native: nativeAvailable(),
+      wasm: !nativeAvailable() && wasmAvailable(),
       typeAware: nativeAvailable() && typeAwareAvailable(),
-      projection: existsSync(projectionBin),
+      projection: existsSync(projectionBin) || wasmAvailable(),
       completions: existsSync(projectionBin) && existsSync(path.join(repoRoot, 'node_modules', 'typescript', 'package.json')),
     }),
   )
@@ -459,6 +462,9 @@ function sameOriginPost(request) {
 }
 
 const server = http.createServer((request, response) => {
+    // Cross-origin isolation lets the wasm demo engine use SharedArrayBuffer.
+    response.setHeader('Cross-Origin-Opener-Policy', 'same-origin')
+    response.setHeader('Cross-Origin-Embedder-Policy', 'require-corp')
     if (!allowedHosts().has(String(request.headers.host ?? '').toLowerCase())) {
       reject(response, 421, 'loopback Host required')
       return

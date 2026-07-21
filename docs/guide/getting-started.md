@@ -102,7 +102,7 @@ If you would rather build the native binaries yourself, you need a stable
 Rust toolchain ([rustup](https://rustup.rs)):
 
 ```sh
-git clone https://github.com/thejackshelton/oxc-tsrx.git
+git clone https://github.com/markless-dev/oxc-tsrx.git
 cd oxc-tsrx
 cargo build --release --locked -p oxc_tsrx_cli --bins
 ```

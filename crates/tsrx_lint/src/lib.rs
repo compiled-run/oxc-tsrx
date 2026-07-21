@@ -21,7 +21,6 @@ pub struct Options {
     pub rules: Vec<String>,
     pub fix: bool,
 }
-
 pub use oxc_adapter::{RuleFilter as ConfigRuleFilter, RuleSeverity as ConfigRuleSeverity};
 
 /// One compiled configuration reused across every file in a lint command/editor batch.
@@ -83,6 +82,22 @@ impl LintSession {
             true,
             type_check,
         )
+    }
+
+    /// Build a session from an in-memory JSON Oxlint configuration without
+    /// reading the filesystem (used by the WebAssembly playground).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for invalid or unsupported configuration.
+    pub fn new_with_config_source(
+        cwd: &Path,
+        config_source: Option<&str>,
+        filters: &[RuleFilter],
+        fix: bool,
+    ) -> Result<Self, String> {
+        let engine = LintEngine::new_from_config_source(cwd, config_source, filters, fix)?;
+        Ok(Self { engine, fix })
     }
 
     fn new_with_capabilities(
@@ -1126,5 +1141,35 @@ mod tests {
         assert!(!fixed.contains("var value"));
         assert!(fixed.contains("let value") || fixed.contains("const value"));
         assert!(!path.exists());
+    }
+
+    #[test]
+    fn in_memory_config_applies_without_a_config_file() {
+        let source = "export function View() @{ console.log('browser'); <p>ok</p>; }";
+        let path = Path::new("browser-demo.tsrx");
+        let session = LintSession::new_with_config_source(
+            Path::new("/demo"),
+            Some(r#"{ "rules": { "no-console": "error" } }"#),
+            &[],
+            false,
+        )
+        .unwrap();
+        let output = session.lint_text(path, source).unwrap();
+        assert!(
+            output
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.rule == "no-console")
+        );
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn in_memory_config_rejects_invalid_json() {
+        let error =
+            LintSession::new_with_config_source(Path::new("/demo"), Some("{ not-json"), &[], false)
+                .err()
+                .expect("invalid JSON must fail before linting");
+        assert!(!error.is_empty());
     }
 }

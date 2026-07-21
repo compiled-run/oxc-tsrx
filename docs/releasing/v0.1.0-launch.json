@@ -1,13 +1,16 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "version": "0.1.0",
-  "repository": "https://github.com/thejackshelton/oxc-tsrx",
+  "repository": "https://github.com/markless-dev/oxc-tsrx",
   "site": {
-    "url": "https://thejackshelton.github.io/oxc-tsrx/",
+    "url": "https://oxc-tsrx-docs.vercel.app/",
     "artifact": "docs/dist",
-    "workflow": ".github/workflows/pages.yml",
+    "provider": "vercel",
+    "config": "docs/dist/vercel.json",
+    "buildWorkflow": ".github/workflows/site-artifact.yml",
     "trigger": "workflow_dispatch",
-    "approvalInput": "DEPLOY WEBSITE 0.1.0"
+    "artifactNameTemplate": "oxc-tsrx-docs-{COMMIT_SHA}",
+    "deployWorkflow": null
   },
   "npm": {
     "distTag": "next",
@@ -42,7 +45,7 @@
   "social": {
     "channel": "X",
     "image": "docs/assets/social-card.png",
-    "text": "OXC for TSRX 0.1.0 is out: native Oxlint + Oxfmt for .tsrx, Vite/Vite+ commands, and format-on-save plus lint diagnostics in VS Code, all without forking OXC. Install oxlint-tsrx + oxfmt-tsrx: https://thejackshelton.github.io/oxc-tsrx/"
+    "text": "OXC for TSRX 0.1.0 is out: native Oxlint + Oxfmt for .tsrx, Vite/Vite+ commands, and format-on-save plus lint diagnostics in VS Code, all without forking OXC. Install oxlint-tsrx + oxfmt-tsrx: https://oxc-tsrx-docs.vercel.app/"
   },
   "requiredApprovals": [
     "repository-push",

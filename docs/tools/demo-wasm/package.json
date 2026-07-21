@@ -1,0 +1,17 @@
+{
+  "name": "demo-wasm",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Docs-only helper: builds the playground WebAssembly engine via NAPI-RS.",
+  "napi": {
+    "binaryName": "demo-wasm",
+    "targets": [
+      "wasm32-wasip1"
+    ]
+  },
+  "devDependencies": {
+    "@emnapi/core": "^1.11.2",
+    "@emnapi/runtime": "^1.11.2",
+    "emnapi": "^1.11.2"
+  }
+}

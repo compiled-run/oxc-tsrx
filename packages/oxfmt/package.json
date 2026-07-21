@@ -11,13 +11,13 @@
     "tsrx",
     "typescript"
   ],
-  "homepage": "https://thejackshelton.github.io/oxc-tsrx/",
+  "homepage": "https://oxc-tsrx-docs.vercel.app/",
   "bugs": {
-    "url": "https://github.com/thejackshelton/oxc-tsrx/issues"
+    "url": "https://github.com/markless-dev/oxc-tsrx/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/thejackshelton/oxc-tsrx.git",
+    "url": "git+https://github.com/markless-dev/oxc-tsrx.git",
     "directory": "packages/oxfmt"
   },
   "type": "module",

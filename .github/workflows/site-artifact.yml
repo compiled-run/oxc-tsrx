@@ -1,0 +1,47 @@
+name: Build website artifact
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: site-artifact-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out the selected exact source revision
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Install Node.js 24.15.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.15.0
+          cache: npm
+
+      - name: Install the locked documentation graph
+        run: npm ci --ignore-scripts
+
+      - name: Install the threaded WASI Rust target
+        run: rustup target add wasm32-wasip1-threads
+
+      - name: Build and prove the real browser-engine artifact
+        run: |
+          npm run docs:wasm
+          OXC_TSRX_REQUIRE_WASM=1 npm run docs:build
+          npm run test:site:unit
+          node tests/site/verify-static.mjs --require-wasm
+          npm run docs:check
+
+      - name: Upload the exact Vercel-shaped static artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: oxc-tsrx-docs-${{ github.sha }}
+          path: docs/dist
+          if-no-files-found: error
+          retention-days: 14

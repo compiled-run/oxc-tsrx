@@ -1,13 +1,15 @@
 import assert from "node:assert/strict";
 import { execFile, spawn } from "node:child_process";
 import http from "node:http";
+import { existsSync } from "node:fs";
 import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { createRequire } from "node:module";
 import { join, relative, resolve, sep } from "node:path";
 import test from "node:test";
 
 const root = resolve(import.meta.dirname, "../..");
-const origin = "https://thejackshelton.github.io";
+const origin = "https://oxc-tsrx-docs.vercel.app";
 const base = "/";
 const siteUrl = `${origin}${base}`;
 
@@ -42,10 +44,10 @@ async function filesUnder(directory) {
   return files.sort();
 }
 
-async function buildTemporarySite() {
+async function buildTemporarySite(environment = {}) {
   const outDir = await mkdtemp(join(tmpdir(), "oxc-tsrx-site-"));
   const result = await run(process.execPath, ["docs/build.mjs"], {
-    env: { ...process.env, OXC_TSRX_DOCS_OUT_DIR: outDir },
+    env: { ...process.env, ...environment, OXC_TSRX_DOCS_OUT_DIR: outDir },
   });
   return { outDir, result };
 }
@@ -145,16 +147,17 @@ test("static launch build has canonical and social metadata on every public page
 
 test("static launch build has a scoped base, crawl metadata, and no internal design gallery", async () => {
   const { outDir } = await buildTemporarySite();
-  const [home, robots, sitemap, playground, capabilities] = await Promise.all([
+  const [home, robots, sitemap, playground, capabilities, vercel] = await Promise.all([
     readFile(join(outDir, "index.html"), "utf8"),
     readFile(join(outDir, "robots.txt"), "utf8"),
     readFile(join(outDir, "sitemap.xml"), "utf8"),
     readFile(join(outDir, "playground.html"), "utf8"),
     readFile(join(outDir, "demo-capabilities.json"), "utf8").then(JSON.parse),
+    readFile(join(outDir, "vercel.json"), "utf8").then(JSON.parse),
   ]);
 
   assert.match(home, /href="\/guide\/getting-started"/u);
-  assert.match(home, /href="https:\/\/github\.com\/thejackshelton\/oxc-tsrx"/u);
+  assert.match(home, /href="https:\/\/github\.com\/markless-dev\/oxc-tsrx"/u);
   assert.match(home, /href="https:\/\/www\.npmjs\.com\/package\/oxlint-tsrx"/u);
   assert.match(home, /href="https:\/\/www\.npmjs\.com\/package\/oxfmt-tsrx"/u);
   assert.match(home, /href="\/assets\//u);
@@ -178,14 +181,79 @@ test("static launch build has a scoped base, crawl metadata, and no internal des
   assert.match(sitemap, new RegExp(`<loc>${siteUrl}</loc>`));
   assert.equal(sitemap.includes("logos.html"), false);
   assert.equal(sitemap.includes(".html"), false);
+  // The build ships the in-browser wasm engine whenever its artifact exists
+  // (npm run docs:wasm); the capability contract self-describes either way.
+  const wasmEngineBuilt = existsSync(
+    join(root, "docs", "tools", "demo-wasm", "dist", "demo-wasm.wasm"),
+  );
   assert.deepEqual(capabilities, {
     ok: true,
-    mode: "static",
+    mode: wasmEngineBuilt ? "wasm" : "static",
     native: false,
+    wasm: wasmEngineBuilt,
     typeAware: false,
-    projection: false,
+    projection: wasmEngineBuilt,
+    completions: false,
   });
+  assert.equal(vercel.cleanUrls, true);
+  assert.equal(vercel.trailingSlash, false);
+  assert.deepEqual(vercel.headers, [
+    {
+      source: "/(.*)",
+      headers: [
+        { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+        { key: "Cross-Origin-Embedder-Policy", value: "require-corp" },
+      ],
+    },
+  ]);
 });
+
+test("launch build fails closed when the browser WebAssembly artifact is required", async () => {
+  const outDir = await mkdtemp(join(tmpdir(), "oxc-tsrx-site-required-wasm-"));
+  try {
+    await assert.rejects(
+      run(process.execPath, ["docs/build.mjs"], {
+        env: {
+          ...process.env,
+          OXC_TSRX_DOCS_OUT_DIR: outDir,
+          OXC_TSRX_REQUIRE_WASM: "1",
+          OXC_TSRX_WASM_BINARY: join(outDir, "missing.wasm"),
+        },
+      }),
+      /required docs WebAssembly artifact is missing/u,
+    );
+  } finally {
+    await rm(outDir, { recursive: true, force: true });
+  }
+});
+
+test(
+  "generated WebAssembly executes the real lint, format, and projection engines",
+  { skip: !existsSync(join(root, "docs/tools/demo-wasm/dist/demo-wasm.wasi.cjs")) },
+  () => {
+    const require = createRequire(import.meta.url);
+    const engine = require(join(root, "docs/tools/demo-wasm/dist/demo-wasm.wasi.cjs"));
+
+    const formatted = JSON.parse(
+      engine.format("export function T() @{ const value=1; <b>{value}</b>; }"),
+    );
+    assert.match(formatted.formatted, /const value = 1;/u);
+
+    const linted = JSON.parse(
+      engine.lint(
+        "export function T() @{ console.log('browser'); <b/>; }",
+        JSON.stringify({ config: '{ "rules": { "no-console": "error" } }' }),
+      ),
+    );
+    assert.ok(linted.diagnostics.some((diagnostic) => diagnostic.rule === "no-console"));
+    assert.equal(linted.oxcTsrx.parseCount, 1);
+
+    const projected = JSON.parse(engine.project("export function T() @{ <b/>; }", false));
+    assert.match(projected.projected, /function T\(\)/u);
+    assert.equal(projected.counts.controls, 0);
+    assert.ok(Array.isArray(projected.tokens));
+  },
+);
 
 test("social preview is a 1200 by 630 PNG", async () => {
   const image = await readFile(join(root, "docs", "assets", "social-card.png"));

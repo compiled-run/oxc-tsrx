@@ -10,7 +10,9 @@ const positional = process.argv.slice(2).filter((argument) => !argument.startsWi
 const mode =
   process.argv.find((argument) => argument.startsWith('--mode='))?.slice('--mode='.length) ??
   'native'
-if (!['native', 'static'].includes(mode)) throw new Error(`unsupported docs verification mode: ${mode}`)
+if (!['native', 'wasm', 'static'].includes(mode)) {
+  throw new Error(`unsupported docs verification mode: ${mode}`)
+}
 const baseUrl = (positional[0] ?? 'http://localhost:4519').replace(/\/$/, '')
 const parsedBaseUrl = new URL(baseUrl)
 const loopback = ['127.0.0.1', 'localhost', '::1'].includes(parsedBaseUrl.hostname)
@@ -23,10 +25,14 @@ const expectedCapabilities = await fetch(`${baseUrl}/demo-capabilities.json`)
 if (
   !expectedCapabilities?.ok ||
   expectedCapabilities.mode !== mode ||
-  (mode === 'native') !== Boolean(expectedCapabilities.native)
+  (mode === 'native') !== Boolean(expectedCapabilities.native) ||
+  (mode === 'wasm') !== Boolean(expectedCapabilities.wasm)
 ) {
   throw new Error(`docs capability mode mismatch: requested ${mode}`)
 }
+// The demo is live (editable, real engine) in native mode and in wasm mode;
+// static builds show the read-only preview.
+const liveDemo = mode !== 'static'
 const docsDir = path.dirname(fileURLToPath(import.meta.url))
 const axeSource = await readFile(
   path.join(docsDir, '..', 'node_modules', 'axe-core', 'axe.min.js'),
@@ -40,7 +46,7 @@ const check = (ok, label, detail = '') => {
   console.log(`${ok ? 'ok  ' : 'FAIL'} ${label}${detail ? ` — ${detail}` : ''}`)
 }
 
-if (mode === 'native') {
+if (mode !== 'static') {
   const [{ createDemoHighlighter }, { getDocsHighlighter, highlightWith }] = await Promise.all([
     import(pathToFileURL(path.join(docsDir, 'dist', 'assets', 'demo-highlighter.js'))),
     import('./highlight.mjs'),
@@ -133,6 +139,7 @@ await context.addInitScript(() => {
 
 const consoleErrors = []
 const badResponses = []
+const serverApiRequests = []
 context.on('page', (page) => {
   page.on('console', (message) => {
     if (message.type() === 'error') consoleErrors.push(`${page.url()}: ${message.text()}`)
@@ -140,6 +147,9 @@ context.on('page', (page) => {
   page.on('pageerror', (error) => consoleErrors.push(`${page.url()}: ${error.message}`))
   page.on('response', (response) => {
     if (response.status() >= 400) badResponses.push(`${response.status()} ${response.url()}`)
+  })
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname.startsWith('/api/')) serverApiRequests.push(request.url())
   })
 })
 
@@ -163,6 +173,9 @@ await page.getByRole('link', { name: 'Get Started' }).click()
 await page.waitForURL('**/guide/getting-started')
 check(true, 'walkthrough: hero action navigates to Getting Started')
 
+// The SPA router updates the URL before the fetched page is swapped in; over
+// a real network the sidebar is not in the DOM yet when the URL settles.
+await page.waitForFunction(() => document.querySelectorAll('.sidebar nav a').length > 0)
 const sidebarLinks = await page
   .locator('.sidebar nav a')
   .evaluateAll((anchors) => anchors.map((a) => ({ href: a.href, text: a.textContent.trim() })))
@@ -365,13 +378,24 @@ await axeScan(`${baseUrl}/reference/benchmarks`)
 
 // ---------- interactive demo (real oxlint/oxfmt through the docs server) ----------
 const health = expectedCapabilities
-if (mode === 'native' && health?.native) {
+if (liveDemo) {
   await page.goto(`${baseUrl}/`, { waitUntil: 'load' })
   await page.waitForSelector('#demo-input', { timeout: 10000 })
+  if (mode === 'wasm') {
+    const wasmHint = (await page.locator('#demo-hint').textContent()).trim()
+    check(
+      wasmHint.includes('runs in your browser'),
+      'wasm: home hint names the in-browser engine',
+      wasmHint,
+    )
+  }
   let demoHighlightRequests = 0
   page.on('request', (request) => {
     if (new URL(request.url()).pathname.endsWith('/api/highlight')) demoHighlightRequests++
   })
+  // The wasm-mode home hero defers the client highlighter and engine until
+  // the first interaction; focus counts as that interaction.
+  await page.locator('#demo-input').focus()
   await page.waitForSelector('#demo-editor[data-highlighter="client"]', { timeout: 15000 })
   const originalDemoInput = await page.inputValue('#demo-input')
   demoHighlightRequests = 0
@@ -801,7 +825,7 @@ await page.goto(`${baseUrl}/guide/tsrx-syntax`, { waitUntil: 'load' })
 const fenceCode = await page.evaluate(() => document.querySelector('.try-button').dataset.code)
 await page.locator('.try-button').first().click()
 await page.waitForURL('**/playground#code=*')
-if (mode === 'native') {
+if (liveDemo) {
   await page.waitForSelector('#demo-input', { timeout: 10000 })
   const editorValue = await page.inputValue('#demo-input')
   check(editorValue === fenceCode, 'try-it: fence code lands in the playground editor')
@@ -815,9 +839,17 @@ if (mode === 'native') {
 }
 
 // ---------- playground: filters, config, share, type-aware ----------
-if (health?.native) {
+if (liveDemo) {
   await page.goto(`${baseUrl}/playground`, { waitUntil: 'load' })
   await page.waitForSelector('#demo-input', { timeout: 10000 })
+  if (mode === 'wasm') {
+    const modeNoteText = (await page.locator('#pg-mode-note').textContent()).trim()
+    check(
+      modeNoteText.includes('WebAssembly'),
+      'wasm: playground mode note names the in-browser engine',
+      modeNoteText,
+    )
+  }
   // "Lint findings" then "Silence a rule": the -A flags run internally.
   await page.locator('#pg-scenario-lint').click()
   await page.waitForSelector('.demo-diag', { timeout: 8000 })
@@ -886,6 +918,7 @@ if (health?.native) {
     'playground: hostile shared filter cannot inject DOM attributes',
   )
 
+  if (mode === 'native') {
   await page.goto(`${baseUrl}/playground`, { waitUntil: 'load' })
   await page.waitForSelector('#demo-input', { timeout: 10000 })
   const staleOriginal = 'export function T() @{\n  const value=1;\n  <b/>;\n}'
@@ -917,6 +950,7 @@ if (health?.native) {
     (await page.inputValue('#demo-input')) === newerSource,
     'playground: stale format response cannot overwrite a newer edit',
   )
+  }
 }
 
 // ---------- home benchmark chart + page menu + dual-pane output ----------
@@ -947,7 +981,7 @@ check(
   `${menuItems} items`,
 )
 await page.keyboard.press('Escape')
-if (health?.native) {
+if (liveDemo) {
   await page.goto(`${baseUrl}/playground`, { waitUntil: 'load' })
   await page.waitForSelector('#demo-input', { timeout: 10000 })
   await page.waitForFunction(
@@ -982,7 +1016,7 @@ if (health?.native) {
 }
 
 // ---------- playground workbench + editor features + hover docs ----------
-if (health?.native) {
+if (liveDemo) {
   await page.goto(`${baseUrl}/playground`, { waitUntil: 'load' })
   await page.waitForSelector('#demo-input', { timeout: 10000 })
   await page.waitForTimeout(600)
@@ -1028,7 +1062,7 @@ check(
 )
 
 // ---------- @-snippet completions (Markless catalog) ----------
-if (health?.native) {
+if (liveDemo) {
   await page.goto(`${baseUrl}/playground`, { waitUntil: 'load' })
   await page.waitForSelector('#demo-input', { timeout: 10000 })
   await page.fill('#demo-input', '')
@@ -1137,7 +1171,7 @@ const projGlossary = (await page.locator('.chart-tooltip:not([hidden])').textCon
 check(projGlossary.length > 10, 'glossary: hover shows the definition tooltip', projGlossary.slice(0, 40))
 
 // ---------- snippet caret + TypeScript completions ----------
-if (health?.native) {
+if (liveDemo) {
   await page.goto(`${baseUrl}/playground`, { waitUntil: 'load' })
   await page.waitForSelector('#demo-input', { timeout: 10000 })
   await page.fill('#demo-input', '')
@@ -1154,7 +1188,10 @@ if (health?.native) {
     'intellisense: snippet caret lands inside the @for header',
     `caret ${caretInfo.caret} expected ${caretInfo.expected}`,
   )
-  const completionsReady = (await (await fetch(`${baseUrl}/api/health`)).json()).completions
+  const completionsReady =
+    mode === 'native'
+      ? (await (await fetch(`${baseUrl}/api/health`)).json()).completions
+      : false
   if (completionsReady) {
     await page.fill(
       '#demo-input',
@@ -1198,7 +1235,7 @@ check(
   'comparative: home shows the matched ESLint, Oxlint, and OXC for TSRX lanes',
   compLabels.filter((l) => /ESLint|Oxlint|OXC for TSRX/.test(l)).join(' | '),
 )
-if (health?.native) {
+if (mode === 'native') {
   const quick = await page.evaluate(async () => {
     const source = 'export function V({items}:{items:string[]}) @{\n  const x = items\n  <b/>;\n}'
     const response = await fetch(document.querySelector('.top-nav a[href$="/playground"]').href.replace(/\/playground$/, '/api/quickinfo'), {
@@ -1246,7 +1283,7 @@ if (health?.native) {
 }
 
 // ---------- guided scenarios + completion menu layout ----------
-if (health?.native) {
+if (liveDemo) {
   await page.goto(`${baseUrl}/playground`, { waitUntil: 'load' })
   await page.waitForSelector('#demo-input', { timeout: 10000 })
   await page.locator('#pg-scenario-lint').click()
@@ -1279,7 +1316,7 @@ const mobileHomeOverflow = await mobile.evaluate(
   () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
 )
 check(!mobileHomeOverflow, 'mobile: home has no horizontal page overflow')
-if (mode === 'native') {
+if (liveDemo) {
   await mobile.waitForSelector('#demo-input', { timeout: 10000 })
   const controlsFit = await mobile.evaluate(() => {
     const panel = document.getElementById('hero-demo')?.getBoundingClientRect()
@@ -1339,6 +1376,13 @@ for (const target of ['/', '/guide/getting-started', '/architecture/rust-oxc-cor
 // ---------- global hygiene ----------
 check(consoleErrors.length === 0, 'hygiene: no console errors', consoleErrors.join('; '))
 check(badResponses.length === 0, 'hygiene: no 4xx/5xx responses', badResponses.join('; '))
+if (mode === 'wasm') {
+  check(
+    serverApiRequests.length === 0,
+    'wasm: the entire session made no server API requests',
+    serverApiRequests.slice(0, 3).join('; '),
+  )
+}
 
 console.log(`\n${passes.length} passed, ${failures.length} failed`)
 if (failures.length > 0) process.exitCode = 1
