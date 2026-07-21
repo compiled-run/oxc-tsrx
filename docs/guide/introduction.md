@@ -7,7 +7,9 @@ description: What OXC for TSRX is, how it works in plain terms, and what it prom
 
 OXC for TSRX lets you lint and format `.tsrx` files with [OXC](https://oxc.rs),
 the same fast Rust tools behind Oxlint and Oxfmt, without forking or
-patching OXC in any way.
+patching OXC in any way. The parser behind those tools is also available as
+a library, [`@oxc-tsrx/parser`](/guide/parsing), for building your own
+tooling.
 
 ## The problem it solves
 

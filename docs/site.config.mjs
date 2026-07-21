@@ -2,7 +2,7 @@
 export default {
   title: 'OXC for TSRX',
   description:
-    'Rust-native linting and formatting for .tsrx source through canonical OXC. No fork, no patches, one parse.',
+    'Rust-native parsing, linting, and formatting for .tsrx source through canonical OXC. No fork, no patches, one parse.',
   origin: 'https://oxc-tsrx-docs.vercel.app',
   // Root-absolute base path the site is served under, with trailing slash.
   base: '/',
@@ -24,6 +24,7 @@ export default {
         { text: 'TSRX Syntax Support', link: '/guide/tsrx-syntax' },
         { text: 'Linting', link: '/guide/linting' },
         { text: 'Formatting', link: '/guide/formatting' },
+        { text: 'Parsing', link: '/guide/parsing' },
       ],
     },
     {
@@ -54,7 +55,7 @@ export default {
     name: 'OXC for TSRX',
     text: 'Native OXC lint and format across the Vite toolchain',
     tagline:
-      'Real Oxlint rules and real Oxfmt formatting for your .tsrx files. No fork, no patches, one parse.',
+      'Real Oxlint rules, real Oxfmt formatting, and a real parser API for your .tsrx files. No fork, no patches, one parse.',
     actions: [
       { theme: 'brand', text: 'Get Started', link: '/guide/getting-started' },
       { theme: 'alt', text: 'What is OXC for TSRX?', link: '/guide/introduction' },
@@ -71,7 +72,7 @@ export default {
       icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M10 9.5 12.5 8v8"/></svg>',
       title: 'Exactly one parse',
       details:
-        'A byte-oriented scan, one legal-TSX projection allocation, and a single canonical OXC parse. Even dynamic tags validate against that same AST.',
+        'A byte-oriented scan, one legal-TSX projection allocation, and a single canonical OXC parse. That same parse is yours to call as a library through <code>@oxc-tsrx/parser</code>.',
     },
     {
       icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="0.5" fill="currentColor"/></svg>',

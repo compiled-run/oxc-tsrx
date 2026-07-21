@@ -122,7 +122,7 @@ test("static launch build has canonical and social metadata on every public page
   assert.match(result.stdout, new RegExp(`-> ${outDir.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\n$`, "u"));
 
   const htmlFiles = (await filesUnder(outDir)).filter((path) => path.endsWith(".html"));
-  assert.equal(htmlFiles.length, 16);
+  assert.equal(htmlFiles.length, 17);
   assert.equal(htmlFiles.some((path) => path.endsWith(`${sep}logos.html`)), false);
 
   for (const path of htmlFiles) {
@@ -177,7 +177,7 @@ test("static launch build has a scoped base, crawl metadata, and no internal des
     `User-agent: *\nAllow: /\nSitemap: ${siteUrl}sitemap.xml\n`,
   );
   assert.match(sitemap, /^<\?xml version="1\.0" encoding="UTF-8"\?>/u);
-  assert.equal([...sitemap.matchAll(/<loc>/gu)].length, 16);
+  assert.equal([...sitemap.matchAll(/<loc>/gu)].length, 17);
   assert.match(sitemap, new RegExp(`<loc>${siteUrl}</loc>`));
   assert.equal(sitemap.includes("logos.html"), false);
   assert.equal(sitemap.includes(".html"), false);

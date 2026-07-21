@@ -1147,18 +1147,30 @@ const howItWorksMarkdown = `1. **Scans** the file once and records where the TSR
 // Package-manager install tabs. Authors write only the npm command after a
 // <!-- pm-install --> marker; the pnpm/yarn/bun equivalents are derived here
 // so the variants can never drift apart.
-const PM_INSTALL_PREFIXES = {
-  npm: 'npm install --save-dev',
-  pnpm: 'pnpm add -D',
-  yarn: 'yarn add -D',
-  bun: 'bun add -d',
-}
+const PM_INSTALL_VARIANTS = [
+  // Order matters: the dev prefix must match before the plain one.
+  {
+    npm: 'npm install --save-dev',
+    pnpm: 'pnpm add -D',
+    yarn: 'yarn add -D',
+    bun: 'bun add -d',
+  },
+  {
+    npm: 'npm install',
+    pnpm: 'pnpm add',
+    yarn: 'yarn add',
+    bun: 'bun add',
+  },
+]
 const PM_INSTALL_PATTERN = /<!-- pm-install -->\r?\n```sh\r?\n([\s\S]*?)\r?\n```/g
 
 function pmInstallTabsHtml(npmCommand, groupId) {
-  if (!npmCommand.startsWith(PM_INSTALL_PREFIXES.npm)) {
+  const PM_INSTALL_PREFIXES = PM_INSTALL_VARIANTS.find((variant) =>
+    npmCommand.startsWith(variant.npm),
+  )
+  if (!PM_INSTALL_PREFIXES) {
     throw new Error(
-      `pm-install block must start with "${PM_INSTALL_PREFIXES.npm}", got: ${npmCommand.split('\n')[0]}`,
+      `pm-install block must start with "npm install --save-dev" or "npm install", got: ${npmCommand.split('\n')[0]}`,
     )
   }
   const managers = Object.keys(PM_INSTALL_PREFIXES)
@@ -1419,7 +1431,7 @@ async function renderHomePage({ description }) {
     <p class="home-upstream-link"><a href="${withBase('/architecture/upstreaming-to-oxc')}">Read the upstreaming review map →</a></p>
   </section>
   <footer class="home-footer">
-    <p class="footer-links"><a href="${config.repository}" target="_blank" rel="noreferrer">GitHub<span class="visually-hidden"> (opens in new tab)</span></a> · <a href="https://www.npmjs.com/package/oxlint-tsrx" target="_blank" rel="noreferrer">oxlint-tsrx<span class="visually-hidden"> (opens in new tab)</span></a> · <a href="https://www.npmjs.com/package/oxfmt-tsrx" target="_blank" rel="noreferrer">oxfmt-tsrx<span class="visually-hidden"> (opens in new tab)</span></a> · <a href="https://www.npmjs.com/package/@oxc-tsrx/runtime" target="_blank" rel="noreferrer">@oxc-tsrx/runtime<span class="visually-hidden"> (opens in new tab)</span></a></p>
+    <p class="footer-links"><a href="${config.repository}" target="_blank" rel="noreferrer">GitHub<span class="visually-hidden"> (opens in new tab)</span></a> · <a href="https://www.npmjs.com/package/oxlint-tsrx" target="_blank" rel="noreferrer">oxlint-tsrx<span class="visually-hidden"> (opens in new tab)</span></a> · <a href="https://www.npmjs.com/package/oxfmt-tsrx" target="_blank" rel="noreferrer">oxfmt-tsrx<span class="visually-hidden"> (opens in new tab)</span></a> · <a href="https://www.npmjs.com/package/@oxc-tsrx/runtime" target="_blank" rel="noreferrer">@oxc-tsrx/runtime<span class="visually-hidden"> (opens in new tab)</span></a> · <a href="https://www.npmjs.com/package/@oxc-tsrx/parser" target="_blank" rel="noreferrer">@oxc-tsrx/parser<span class="visually-hidden"> (opens in new tab)</span></a></p>
     ${footerBadge}
     <p class="footer-disclaimer">${config.footer.disclaimer}</p>
   </footer>

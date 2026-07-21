@@ -12,7 +12,7 @@
         {
           "comment": "Format .tsrx and ordinary JS/TS with real Oxfmt layout",
           "command": "npx oxfmt --check src/Counter.tsrx src/View.tsx",
-          "output": "Checking formatting...\n\nsrc/View.tsx (3ms)\n\nFormat issues found in above 1 files. Run without `--check` to fix.\nFinished in 64ms on 1 files using 18 threads.\nsrc/Counter.tsrx\nNo config found, using defaults. Please add a config file or try `oxfmt --init` if needed.\n"
+          "output": "Checking formatting...\n\nsrc/View.tsx (3ms)\n\nFormat issues found in above 1 files. Run without `--check` to fix.\nFinished in 65ms on 1 files using 18 threads.\nsrc/Counter.tsrx\nNo config found, using defaults. Please add a config file or try `oxfmt --init` if needed.\n"
         }
       ]
     },
@@ -153,6 +153,21 @@
           "comment": "Stdin mode prints the formatted source, single quotes and all",
           "command": "oxc-tsrx-fmt --stdin-filepath=src/View.tsrx < src/View.tsrx",
           "output": "/// <reference path=\"./jsx.d.ts\" />\nimport { loadItems } from './service.tsrx'\n\nexport function View({ label }: { label: string }) @{\n  const version: number = '0.1.0'\n  console.log('render', label)\n  debugger\n  loadItems()\n\n  ;<section class=\"view\">\n    <h2>{label}</h2>\n    <p>v{version}</p>\n  </section>\n}\n"
+        }
+      ]
+    },
+    "parsing-quickstart": {
+      "caption": "Real output, captured at build time. The sample project has the src/View.tsrx and parse.mjs from above, a Broken.tsrx with an unterminated closing tag, and @oxc-tsrx/parser installed.",
+      "transcript": [
+        {
+          "comment": "Run the parse script from above against the good file",
+          "command": "node parse.mjs",
+          "output": "errors: 0\nimports: [ './Row' ]\ntop level: [ 'ImportDeclaration', 'ExportNamedDeclaration' ]\nfound: JSXForExpression\nits first line, straight from your file:\n@for (const item of items; key item.id) {\n"
+        },
+        {
+          "comment": "Parse errors land in result.errors and point at your file",
+          "command": "node parse-broken.mjs",
+          "output": "Error: unterminated JSX closing tag starting at byte 30\n\n  x unterminated JSX closing tag starting at byte 30\n   ,-[src/Broken.tsrx:2:3]\n 1 | export function Broken() @{\n 2 |   <p>hello</p\n   :   ^\n 3 | }\n   `----\n\n"
         }
       ]
     }

@@ -5,6 +5,7 @@
 // is exactly what the tools printed.
 // Prereqs:
 //   cargo build --release --locked -p oxc_tsrx_cli --bins
+//   node scripts/build-parser-native.mjs (parser addon for the parsing demo)
 //   npm ci (for the npm wrappers and the pinned oxlint-tsgolint executable)
 //   jq on PATH (the JSON walkthroughs pipe through it for readable output)
 import { spawnSync } from 'node:child_process'
@@ -14,6 +15,7 @@ import {
   readFileSync,
   realpathSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -221,6 +223,64 @@ const simpleFormatConfig = `{
 }
 `
 
+// The parsing guide's sample file. Must stay identical to the tsrx fence on
+// docs/guide/parsing.md so the recorded output matches the code on the page.
+const parseViewTsrx = `import { Row } from "./Row";
+
+export function View({ items }: { items: Item[] }) @{
+  <ul class="list">
+    @for (const item of items; key item.id) {
+      <Row item={item} />
+    } @empty {
+      <li>No items yet</li>
+    }
+  </ul>
+}
+`
+
+const parseBrokenTsrx = `export function Broken() @{
+  <p>hello</p
+}
+`
+
+// Must stay identical to the js fence on docs/guide/parsing.md.
+const parseScript = `import { readFileSync } from "node:fs";
+import { parseSync } from "@oxc-tsrx/parser";
+
+const source = readFileSync("src/View.tsrx", "utf8");
+const result = parseSync("src/View.tsrx", source);
+
+console.log("errors:", result.errors.length);
+console.log("imports:", result.module.staticImports.map((s) => s.moduleRequest.value));
+console.log("top level:", result.program.body.map((node) => node.type));
+
+function* walk(node) {
+  if (Array.isArray(node)) {
+    for (const item of node) yield* walk(item);
+  } else if (node && typeof node === "object") {
+    if (typeof node.type === "string") yield node;
+    for (const value of Object.values(node)) yield* walk(value);
+  }
+}
+
+const forNode = [...walk(result.program)].find((node) => node.type === "JSXForExpression");
+console.log("found:", forNode.type);
+console.log("its first line, straight from your file:");
+console.log(source.slice(forNode.start, forNode.end).split("\\n")[0]);
+`
+
+const parseBrokenScript = `import { readFileSync } from "node:fs";
+import { parseSync } from "@oxc-tsrx/parser";
+
+const source = readFileSync("src/Broken.tsrx", "utf8");
+const result = parseSync("src/Broken.tsrx", source);
+
+for (const error of result.errors) {
+  console.log(\`\${error.severity}: \${error.message}\`);
+  console.log(error.codeframe);
+}
+`
+
 // ---------- runners ----------
 
 const runners = {
@@ -229,6 +289,8 @@ const runners = {
   npxLint: { bin: process.execPath, prefix: [npmLintBin] },
   npxFmt: { bin: process.execPath, prefix: [npmFormatBin] },
   cat: { bin: '/bin/cat' },
+  // Plain Node scripts (used by the parser API demo).
+  node: { bin: process.execPath },
   // Real shell pipelines (used to pipe JSON reports through jq).
   sh: { bin: '/bin/sh', prefix: ['-c'] },
 }
@@ -271,6 +333,13 @@ function captureDemo(demo) {
       const absolute = path.join(workspace, relative)
       mkdirSync(path.dirname(absolute), { recursive: true })
       writeFileSync(absolute, contents)
+    }
+    // Symlinks let a demo resolve real workspace packages (for example
+    // node_modules/@oxc-tsrx/parser) without copying them into the sample.
+    for (const [relative, target] of Object.entries(demo.links ?? {})) {
+      const absolute = path.join(workspace, relative)
+      mkdirSync(path.dirname(absolute), { recursive: true })
+      symlinkSync(target, absolute)
     }
     return {
       caption: demo.caption,
@@ -567,6 +636,36 @@ const demos = {
         runner: 'fmt',
         args: ['--stdin-filepath=src/View.tsrx'],
         stdinFile: 'src/View.tsrx',
+        expectExit: 0,
+      },
+    ],
+  },
+
+  'parsing-quickstart': {
+    caption:
+      'Real output, captured at build time. The sample project has the src/View.tsrx and parse.mjs from above, a Broken.tsrx with an unterminated closing tag, and @oxc-tsrx/parser installed.',
+    files: {
+      'src/View.tsrx': parseViewTsrx,
+      'src/Broken.tsrx': parseBrokenTsrx,
+      'parse.mjs': parseScript,
+      'parse-broken.mjs': parseBrokenScript,
+    },
+    links: {
+      'node_modules/@oxc-tsrx/parser': path.join(repoRoot, 'packages', 'parser'),
+    },
+    entries: [
+      {
+        comment: 'Run the parse script from above against the good file',
+        command: 'node parse.mjs',
+        runner: 'node',
+        args: ['parse.mjs'],
+        expectExit: 0,
+      },
+      {
+        comment: 'Parse errors land in result.errors and point at your file',
+        command: 'node parse-broken.mjs',
+        runner: 'node',
+        args: ['parse-broken.mjs'],
         expectExit: 0,
       },
     ],

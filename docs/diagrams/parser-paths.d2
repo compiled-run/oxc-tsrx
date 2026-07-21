@@ -1,0 +1,14 @@
+direction: down
+
+ordinary: Ordinary JS, JSX, TS, or TSX
+tsrx: TSRX bytes
+scan: Linear scan
+projection: Mapped legal TSX projection
+parser: OXC parser
+reconstruct: Authored-tree reconstruction
+results: program, module, comments, errors
+
+ordinary -> parser
+tsrx -> scan -> projection -> parser
+parser -> results
+parser -> reconstruct -> results

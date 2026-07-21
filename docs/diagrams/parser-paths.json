@@ -1,0 +1,47 @@
+{
+  "title": "The two parse paths",
+  "caption": "Ordinary files go straight to OXC. TSRX files are scanned, projected, parsed once, then handed back as the tree you actually wrote.",
+  "nodes": {
+    "ordinary": "Ordinary JavaScript and TypeScript skip every TSRX step and take the direct public-OXC path, exactly like oxc-parser.",
+    "tsrx": "A .tsrx parse starts with the exact bytes you wrote.",
+    "scan": "One linear scan finds every TSRX control and records where it starts and ends, while protecting strings, comments, templates, and JSX text.",
+    "projection": "The TSRX controls become legal TSX placeholders in a temporary in-memory copy; your code is copied in byte-for-byte unchanged.",
+    "parser": "Canonical OXC parses the original ordinary source or the projected copy exactly once.",
+    "reconstruct": "The projected tree is rebuilt into the tree you authored: TSRX controls come back as their own node types, and every span points at your original bytes.",
+    "results": "The result exposes program, module, comments, and errors as independent lazy getters, so you only pay for the fields you read."
+  },
+  "steps": [
+    {
+      "label": "Ordinary files",
+      "nodes": [
+        "ordinary",
+        "parser"
+      ],
+      "caption": "A .ts or .tsx file goes straight to the canonical OXC parser, the same road oxc-parser takes."
+    },
+    {
+      "label": "Scan and project",
+      "nodes": [
+        "tsrx",
+        "scan",
+        "projection"
+      ],
+      "caption": "A .tsrx file is scanned once, and its controls become legal TSX placeholders in a temporary in-memory copy. Your code is copied in unchanged."
+    },
+    {
+      "label": "One parse",
+      "nodes": [
+        "parser"
+      ],
+      "caption": "OXC parses that copy exactly once. There is no second parser and no TSRX fork of OXC."
+    },
+    {
+      "label": "Your tree back",
+      "nodes": [
+        "reconstruct",
+        "results"
+      ],
+      "caption": "The tree is rebuilt into what you authored: controls like @for become real nodes, spans point at your bytes, and the four result fields load lazily."
+    }
+  ]
+}
