@@ -1,0 +1,19 @@
+direction: down
+
+ordinary: Ordinary JS, JSX, TS, or TSX
+tsrx: TSRX bytes
+scan: Linear scan
+overlay: Original-span overlay
+projection: Mapped legal TSX projection
+buffer_map: One buffer and affine identity map
+parser: OXC parser
+arena: One arena AST
+lint: Semantic analysis and oxc_linter
+translate: Identity-only label and fix translation
+diagnostics: Original TSRX diagnostics
+
+ordinary -> parser
+tsrx -> scan -> projection -> parser -> lint -> translate -> diagnostics
+scan -> overlay -> lint
+projection -> buffer_map -> lint
+parser -> arena -> lint

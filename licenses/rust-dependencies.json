@@ -5,7 +5,7 @@
     "oxc_tsrx_cli@0.1.0",
     "parser_napi_binding@0.1.0"
   ],
-  "cargoLockSha256": "ec1ac7d49c6a550d46a68f7911dbaf57aef6cf40a7237cf4c16b5a834a2af697",
+  "cargoLockSha256": "30ecc213d8e3398a017040aac2f504c072e67fc4fbd79e0e1b4313de083ae4fe",
   "oxcRevision": "8e0ed2ebb96137fb1611cdbd5742d5cb46037d40",
   "licenseSelectionPolicy": "Each Cargo expression is reviewed; selectedDistributionLicense records the basis used for binary distribution.",
   "packageCount": 220,

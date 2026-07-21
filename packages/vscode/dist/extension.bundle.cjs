@@ -45,11 +45,11 @@ let node_fs = require("node:fs");
 let fs = require("fs");
 fs = __toESM(fs, 1);
 let path = require("path");
-let node_child_process = require("node:child_process");
 let node_module = require("node:module");
 let node_fs_promises = require("node:fs/promises");
 let node_os = require("node:os");
 let node_url = require("node:url");
+let node_child_process = require("node:child_process");
 let url = require("url");
 let module$1 = require("module");
 //#region node_modules/vscode-languageclient/lib/common/utils/is.js
@@ -21849,6 +21849,190 @@ var require_main = /* @__PURE__ */ __commonJSMin(((exports) => {
 	}
 }));
 //#endregion
+//#region packages/runtime/dist/targets.js
+function nativeTargetForHost(os, cpu, libc = void 0) {
+	const target = NATIVE_TARGETS.find((candidate) => candidate.os === os && candidate.cpu === cpu && (candidate.os !== "linux" || candidate.libc === libc));
+	if (!target) {
+		const identity = `${os}-${cpu}${libc ? `-${libc}` : ""}`;
+		throw new Error(`OXC for TSRX has no native package for ${identity}`);
+	}
+	return target;
+}
+function nativePackageName(target) {
+	return `@oxc-tsrx/native-${target.packageSuffix}`;
+}
+var NATIVE_TARGETS;
+var init_targets = __esmMin((() => {
+	NATIVE_TARGETS = Object.freeze([
+		Object.freeze({
+			target: "aarch64-apple-darwin",
+			packageSuffix: "darwin-arm64",
+			os: "darwin",
+			cpu: "arm64",
+			vscodeTarget: "darwin-arm64"
+		}),
+		Object.freeze({
+			target: "x86_64-apple-darwin",
+			packageSuffix: "darwin-x64",
+			os: "darwin",
+			cpu: "x64",
+			vscodeTarget: "darwin-x64"
+		}),
+		Object.freeze({
+			target: "aarch64-unknown-linux-gnu",
+			packageSuffix: "linux-arm64-gnu",
+			os: "linux",
+			cpu: "arm64",
+			libc: "glibc",
+			vscodeTarget: "linux-arm64"
+		}),
+		Object.freeze({
+			target: "x86_64-unknown-linux-gnu",
+			packageSuffix: "linux-x64-gnu",
+			os: "linux",
+			cpu: "x64",
+			libc: "glibc",
+			vscodeTarget: "linux-x64"
+		}),
+		Object.freeze({
+			target: "aarch64-unknown-linux-musl",
+			packageSuffix: "linux-arm64-musl",
+			os: "linux",
+			cpu: "arm64",
+			libc: "musl",
+			vscodeTarget: "alpine-arm64"
+		}),
+		Object.freeze({
+			target: "x86_64-unknown-linux-musl",
+			packageSuffix: "linux-x64-musl",
+			os: "linux",
+			cpu: "x64",
+			libc: "musl",
+			vscodeTarget: "alpine-x64"
+		}),
+		Object.freeze({
+			target: "aarch64-pc-windows-msvc",
+			packageSuffix: "win32-arm64-msvc",
+			os: "win32",
+			cpu: "arm64",
+			vscodeTarget: "win32-arm64"
+		}),
+		Object.freeze({
+			target: "x86_64-pc-windows-msvc",
+			packageSuffix: "win32-x64-msvc",
+			os: "win32",
+			cpu: "x64",
+			vscodeTarget: "win32-x64"
+		})
+	]);
+}));
+//#endregion
+//#region packages/runtime/dist/package-binary.js
+/** Resolve the executable declared by an installed npm package's `bin` field. */
+function resolvePackageBinary(packageName, binaryName, fromUrl) {
+	const localRequire = (0, node_module.createRequire)(fromUrl);
+	const manifestPath = localRequire.resolve(`${packageName}/package.json`);
+	const manifest = localRequire(manifestPath);
+	const declared = typeof manifest.bin === "string" ? manifest.bin : manifest.bin?.[binaryName];
+	if (typeof declared !== "string" || declared.length === 0) throw new Error(`${packageName} does not declare its ${binaryName} npm binary`);
+	const entry = (0, node_path.resolve)((0, node_path.dirname)(manifestPath), declared);
+	let metadata;
+	try {
+		metadata = (0, node_fs.statSync)(entry);
+	} catch {
+		throw new Error(`${packageName} declares a missing ${binaryName} npm binary at ${entry}`);
+	}
+	if (!metadata.isFile()) throw new Error(`${packageName} declares a non-file ${binaryName} npm binary at ${entry}`);
+	return entry;
+}
+var init_package_binary = __esmMin((() => {}));
+//#endregion
+//#region packages/runtime/dist/process.js
+function traceRunStart(trace, started, executable, args) {
+	(0, node_fs.appendFileSync)(trace, `${JSON.stringify({
+		event: "start",
+		pid: process.pid,
+		ppid: process.ppid,
+		started,
+		executable,
+		args,
+		host: {
+			vpVersion: process.env.VP_VERSION ?? null,
+			vpCommand: process.env.VP_COMMAND ?? null,
+			packageManager: process.env.NODE_PACKAGE_MANAGER ?? null,
+			tsgolint: process.env.OXLINT_TSGOLINT_PATH ?? null
+		}
+	})}\n`);
+}
+function traceRunEnd(trace, started, executable, args, status, signal) {
+	(0, node_fs.appendFileSync)(trace, `${JSON.stringify({
+		event: "end",
+		pid: process.pid,
+		ppid: process.ppid,
+		started,
+		ended: Date.now(),
+		executable,
+		args,
+		status,
+		signal
+	})}\n`);
+}
+function runCaptured(executable, args, options = {}) {
+	return new Promise((resolveRun, rejectRun) => {
+		const trace = process.env.OXC_TSRX_TRACE_FILE;
+		const started = Date.now();
+		if (trace) traceRunStart(trace, started, executable, args);
+		const child = (0, node_child_process.spawn)(executable, args, {
+			cwd: options.cwd,
+			env: options.env ?? process.env,
+			stdio: [
+				"pipe",
+				"pipe",
+				"pipe"
+			]
+		});
+		let stdout = "";
+		let stderr = "";
+		child.stdout.setEncoding("utf8");
+		child.stderr.setEncoding("utf8");
+		child.stdout.on("data", (chunk) => stdout += chunk);
+		child.stderr.on("data", (chunk) => stderr += chunk);
+		child.on("error", rejectRun);
+		child.on("close", (status, signal) => {
+			if (trace) traceRunEnd(trace, started, executable, args, status, signal);
+			resolveRun({
+				status: status ?? 2,
+				signal,
+				stdout,
+				stderr
+			});
+		});
+		if (options.input === void 0) child.stdin.end();
+		else child.stdin.end(options.input);
+	});
+}
+function runPassthrough(executable, args, options = {}) {
+	return new Promise((resolveRun, rejectRun) => {
+		const trace = process.env.OXC_TSRX_TRACE_FILE;
+		const started = Date.now();
+		if (trace) traceRunStart(trace, started, executable, args);
+		const child = (0, node_child_process.spawn)(executable, args, {
+			cwd: options.cwd,
+			env: options.env ?? process.env,
+			stdio: "inherit"
+		});
+		child.on("error", rejectRun);
+		child.on("close", (status, signal) => {
+			if (trace) traceRunEnd(trace, started, executable, args, status, signal);
+			resolveRun({
+				status: status ?? 2,
+				signal
+			});
+		});
+	});
+}
+var init_process = __esmMin((() => {}));
+//#endregion
 //#region node_modules/fdir/dist/index.mjs
 function cleanPath(path$11) {
 	let normalized = (0, path.normalize)(path$11);
@@ -24257,6 +24441,13 @@ var require_picomatch = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 }));
 //#endregion
 //#region node_modules/tinyglobby/dist/index.mjs
+var dist_exports$1 = /* @__PURE__ */ __exportAll({
+	convertPathToPattern: () => convertPathToPattern,
+	escapePath: () => escapePath,
+	glob: () => glob,
+	globSync: () => globSync,
+	isDynamicPattern: () => isDynamicPattern
+});
 function getPartialMatcher(patterns, options = {}) {
 	const patternsCount = patterns.length;
 	const patternsParts = Array(patternsCount);
@@ -24325,6 +24516,12 @@ function splitPattern(path$4) {
 	var _result$parts;
 	const result = import_picomatch.default.scan(path$4, splitPatternOptions);
 	return ((_result$parts = result.parts) === null || _result$parts === void 0 ? void 0 : _result$parts.length) ? result.parts : [path$4];
+}
+function convertPosixPathToPattern(path$5) {
+	return escapePosixPath(path$5);
+}
+function convertWin32PathToPattern(path$6) {
+	return escapeWin32Path(path$6).replace(ESCAPED_WIN32_BACKSLASHES, "/");
 }
 /**
 * Checks if a pattern has dynamic parts.
@@ -24504,7 +24701,11 @@ async function glob(globInput, options) {
 	const [crawler, relative] = getCrawler(globInput, options);
 	return crawler ? formatPaths(await crawler.withPromise(), relative) : [];
 }
-var import_picomatch, isReadonlyArray, BACKSLASHES, DRIVE_RELATIVE_PATH, isWin, ONLY_PARENT_DIRECTORIES, WIN32_ROOT_DIR, isRoot, splitPatternOptions, POSIX_UNESCAPED_GLOB_SYMBOLS, WIN32_UNESCAPED_GLOB_SYMBOLS, escapePosixPath, escapeWin32Path, escapePath, PARENT_DIRECTORY, ESCAPING_BACKSLASHES, defaultOptions;
+function globSync(globInput, options) {
+	const [crawler, relative] = getCrawler(globInput, options);
+	return crawler ? formatPaths(crawler.sync(), relative) : [];
+}
+var import_picomatch, isReadonlyArray, BACKSLASHES, DRIVE_RELATIVE_PATH, isWin, ONLY_PARENT_DIRECTORIES, WIN32_ROOT_DIR, isRoot, splitPatternOptions, ESCAPED_WIN32_BACKSLASHES, convertPathToPattern, POSIX_UNESCAPED_GLOB_SYMBOLS, WIN32_UNESCAPED_GLOB_SYMBOLS, escapePosixPath, escapeWin32Path, escapePath, PARENT_DIRECTORY, ESCAPING_BACKSLASHES, defaultOptions;
 var init_dist$1 = __esmMin((() => {
 	init_dist$2();
 	import_picomatch = /* @__PURE__ */ __toESM(require_picomatch(), 1);
@@ -24516,6 +24717,8 @@ var init_dist$1 = __esmMin((() => {
 	WIN32_ROOT_DIR = /^[A-Z]:\/$/i;
 	isRoot = isWin ? (p) => WIN32_ROOT_DIR.test(p) : (p) => p === "/";
 	splitPatternOptions = { parts: true };
+	ESCAPED_WIN32_BACKSLASHES = /\\(?![()[\]{}!+@])/g;
+	convertPathToPattern = isWin ? convertWin32PathToPattern : convertPosixPathToPattern;
 	POSIX_UNESCAPED_GLOB_SYMBOLS = /(?<!\\)([()[\]{}*?|]|^!|[!+@](?=\()|\\(?![()[\]{}!*+?@|]))/g;
 	WIN32_UNESCAPED_GLOB_SYMBOLS = /(?<!\\)([()[\]{}]|^!|[!+@](?=\())/g;
 	escapePosixPath = (path$7) => path$7.replace(POSIX_UNESCAPED_GLOB_SYMBOLS, "\\$&");
@@ -24532,84 +24735,6 @@ var init_dist$1 = __esmMin((() => {
 	};
 }));
 //#endregion
-//#region packages/runtime/dist/targets.js
-function nativeTargetForHost(os, cpu, libc = void 0) {
-	const target = NATIVE_TARGETS.find((candidate) => candidate.os === os && candidate.cpu === cpu && (candidate.os !== "linux" || candidate.libc === libc));
-	if (!target) {
-		const identity = `${os}-${cpu}${libc ? `-${libc}` : ""}`;
-		throw new Error(`OXC for TSRX has no native package for ${identity}`);
-	}
-	return target;
-}
-function nativePackageName(target) {
-	return `@oxc-tsrx/native-${target.packageSuffix}`;
-}
-var NATIVE_TARGETS;
-var init_targets = __esmMin((() => {
-	NATIVE_TARGETS = Object.freeze([
-		Object.freeze({
-			target: "aarch64-apple-darwin",
-			packageSuffix: "darwin-arm64",
-			os: "darwin",
-			cpu: "arm64",
-			vscodeTarget: "darwin-arm64"
-		}),
-		Object.freeze({
-			target: "x86_64-apple-darwin",
-			packageSuffix: "darwin-x64",
-			os: "darwin",
-			cpu: "x64",
-			vscodeTarget: "darwin-x64"
-		}),
-		Object.freeze({
-			target: "aarch64-unknown-linux-gnu",
-			packageSuffix: "linux-arm64-gnu",
-			os: "linux",
-			cpu: "arm64",
-			libc: "glibc",
-			vscodeTarget: "linux-arm64"
-		}),
-		Object.freeze({
-			target: "x86_64-unknown-linux-gnu",
-			packageSuffix: "linux-x64-gnu",
-			os: "linux",
-			cpu: "x64",
-			libc: "glibc",
-			vscodeTarget: "linux-x64"
-		}),
-		Object.freeze({
-			target: "aarch64-unknown-linux-musl",
-			packageSuffix: "linux-arm64-musl",
-			os: "linux",
-			cpu: "arm64",
-			libc: "musl",
-			vscodeTarget: "alpine-arm64"
-		}),
-		Object.freeze({
-			target: "x86_64-unknown-linux-musl",
-			packageSuffix: "linux-x64-musl",
-			os: "linux",
-			cpu: "x64",
-			libc: "musl",
-			vscodeTarget: "alpine-x64"
-		}),
-		Object.freeze({
-			target: "aarch64-pc-windows-msvc",
-			packageSuffix: "win32-arm64-msvc",
-			os: "win32",
-			cpu: "arm64",
-			vscodeTarget: "win32-arm64"
-		}),
-		Object.freeze({
-			target: "x86_64-pc-windows-msvc",
-			packageSuffix: "win32-x64-msvc",
-			os: "win32",
-			cpu: "x64",
-			vscodeTarget: "win32-x64"
-		})
-	]);
-}));
-//#endregion
 //#region packages/runtime/dist/index.js
 var dist_exports = /* @__PURE__ */ __exportAll({
 	argumentValue: () => argumentValue,
@@ -24623,11 +24748,11 @@ var dist_exports = /* @__PURE__ */ __exportAll({
 	prepareVitePlusConfig: () => prepareVitePlusConfig,
 	removeExplicitTsrx: () => removeExplicitTsrx,
 	replaceConfigArgument: () => replaceConfigArgument,
-	replaceOutputFormat: () => replaceOutputFormat,
 	requestedOutputFormat: () => requestedOutputFormat,
 	resolveNativeBinary: () => resolveNativeBinary,
 	resolvePackageBinary: () => resolvePackageBinary,
-	runCaptured: () => runCaptured
+	runCaptured: () => runCaptured,
+	runPassthrough: () => runPassthrough
 });
 function linuxLibc() {
 	if (process.platform !== "linux") return null;
@@ -24673,9 +24798,6 @@ function resolveNativeBinary(kind) {
 		throw new Error(`OXC for TSRX native package ${packageName} is unavailable; install it or set ${environment}. ${detail}`);
 	}
 	return assertExecutable((0, node_path.join)(packageRoot, "bin", executable), packageName);
-}
-function resolvePackageBinary(packageName, binaryName, fromUrl) {
-	return (0, node_path.join)((0, node_path.dirname)((0, node_path.dirname)((0, node_module.createRequire)(fromUrl).resolve(packageName))), "bin", binaryName);
 }
 function findViteConfig(cwd) {
 	let directory = (0, node_path.resolve)(cwd);
@@ -24772,7 +24894,7 @@ function replaceConfigArgument(args, configPath) {
 			index += 1;
 			continue;
 		}
-		if (argument.startsWith("-c=") || argument.startsWith("--config=")) continue;
+		if (argument.startsWith("-c=") || argument.startsWith("-c") && argument.length > 2 || argument.startsWith("--config=")) continue;
 		output.push(argument);
 	}
 	const terminator = output.indexOf("--");
@@ -24786,63 +24908,6 @@ function canonicalToolEnvironment(useResolvedViteConfig) {
 	const environment = { ...process.env };
 	delete environment.VP_VERSION;
 	return environment;
-}
-function runCaptured(executable, args, options = {}) {
-	return new Promise((resolveRun, rejectRun) => {
-		const trace = process.env.OXC_TSRX_TRACE_FILE;
-		const started = Date.now();
-		if (trace) (0, node_fs.appendFileSync)(trace, `${JSON.stringify({
-			event: "start",
-			pid: process.pid,
-			ppid: process.ppid,
-			started,
-			executable,
-			args,
-			host: {
-				vpVersion: process.env.VP_VERSION ?? null,
-				vpCommand: process.env.VP_COMMAND ?? null,
-				packageManager: process.env.NODE_PACKAGE_MANAGER ?? null,
-				tsgolint: process.env.OXLINT_TSGOLINT_PATH ?? null
-			}
-		})}\n`);
-		const child = (0, node_child_process.spawn)(executable, args, {
-			cwd: options.cwd,
-			env: options.env ?? process.env,
-			stdio: [
-				"pipe",
-				"pipe",
-				"pipe"
-			]
-		});
-		let stdout = "";
-		let stderr = "";
-		child.stdout.setEncoding("utf8");
-		child.stderr.setEncoding("utf8");
-		child.stdout.on("data", (chunk) => stdout += chunk);
-		child.stderr.on("data", (chunk) => stderr += chunk);
-		child.on("error", rejectRun);
-		child.on("close", (status, signal) => {
-			if (trace) (0, node_fs.appendFileSync)(trace, `${JSON.stringify({
-				event: "end",
-				pid: process.pid,
-				ppid: process.ppid,
-				started,
-				ended: Date.now(),
-				executable,
-				args,
-				status,
-				signal
-			})}\n`);
-			resolveRun({
-				status: status ?? 2,
-				signal,
-				stdout,
-				stderr
-			});
-		});
-		if (options.input === void 0) child.stdin.end();
-		else child.stdin.end(options.input);
-	});
 }
 function positionalIndices(args, valueOptions) {
 	const indices = [];
@@ -24898,12 +24963,27 @@ async function classifyPattern(raw, cwd, positives, patterns) {
 	} catch {}
 	patterns.push(`${negative ? "!" : ""}${slash(value)}`);
 }
+async function classifyPatterns(inputs, cwd, positives, patterns) {
+	const classified = await Promise.all(inputs.map(async (input) => {
+		const entryPositives = /* @__PURE__ */ new Set();
+		const entryPatterns = [];
+		await classifyPattern(input, cwd, entryPositives, entryPatterns);
+		return {
+			entryPositives,
+			entryPatterns
+		};
+	}));
+	for (const { entryPositives, entryPatterns } of classified) {
+		for (const positive of entryPositives) positives.add(positive);
+		for (const pattern of entryPatterns) patterns.push(pattern);
+	}
+}
 async function discoverTsrxFiles(positionals, cwd = process.cwd()) {
 	const positives = /* @__PURE__ */ new Set();
 	const patterns = [];
-	const inputs = positionals.length === 0 ? ["."] : positionals;
-	for (const input of inputs) await classifyPattern(input, cwd, positives, patterns);
+	await classifyPatterns(positionals.length === 0 ? ["."] : positionals, cwd, positives, patterns);
 	if (patterns.length > 0) {
+		const { glob } = await Promise.resolve().then(() => (init_dist$1(), dist_exports$1));
 		const matches = await glob(patterns, {
 			cwd,
 			absolute: true,
@@ -24916,28 +24996,13 @@ async function discoverTsrxFiles(positionals, cwd = process.cwd()) {
 	}
 	return [...positives].sort();
 }
-function replaceOutputFormat(args, valueOptions, format) {
-	const output = [];
-	for (let index = 0; index < args.length; index += 1) {
-		const argument = args[index];
-		if (argument === "--format" || argument === "-f") {
-			index += 1;
-			continue;
-		}
-		if (argument.startsWith("--format=") || argument.startsWith("-f=")) continue;
-		output.push(argument);
-	}
-	const terminator = output.indexOf("--");
-	if (terminator === -1) output.push(`--format=${format}`);
-	else output.splice(terminator, 0, `--format=${format}`);
-	return output;
-}
 function requestedOutputFormat(args) {
 	for (let index = 0; index < args.length; index += 1) {
 		const argument = args[index];
 		if (argument === "--format" || argument === "-f") return args[index + 1] ?? null;
 		if (argument.startsWith("--format=")) return argument.slice(9);
 		if (argument.startsWith("-f=")) return argument.slice(3);
+		if (argument.startsWith("-f") && argument.length > 2) return argument.slice(2);
 	}
 	return "default";
 }
@@ -24945,7 +25010,10 @@ function argumentValue(args, names) {
 	for (let index = 0; index < args.length; index += 1) {
 		const argument = args[index];
 		if (names.has(argument)) return args[index + 1] ?? null;
-		for (const name of names) if (argument.startsWith(`${name}=`)) return argument.slice(name.length + 1);
+		for (const name of names) {
+			if (argument.startsWith(`${name}=`)) return argument.slice(name.length + 1);
+			if (name.length === 2 && argument.startsWith(name) && argument.length > name.length) return argument.slice(name.length);
+		}
 	}
 	return null;
 }
@@ -24957,8 +25025,9 @@ function pathExists(path) {
 }
 var require$1, runtimeManifest, NATIVE_PROTOCOL_VERSION, OXC_REVISION, ENVIRONMENTS, EXECUTABLES, VITE_CONFIG_FILES;
 var init_dist = __esmMin((() => {
-	init_dist$1();
 	init_targets();
+	init_package_binary();
+	init_process();
 	require$1 = (0, node_module.createRequire)(require("url").pathToFileURL(__filename).href);
 	runtimeManifest = require$1("../package.json");
 	NATIVE_PROTOCOL_VERSION = 1;

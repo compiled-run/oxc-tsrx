@@ -33,7 +33,13 @@ let marklessAfter = null
 let failure = null
 let initialSourceHash = null
 
-const mutableOrHeavy = new Set(['node_modules', 'target', '.docs-demo-tmp'])
+const mutableOrHeavy = new Set([
+  '.git',
+  '.fable-codex',
+  'node_modules',
+  'target',
+  '.docs-demo-tmp',
+])
 
 function cleanEnvironment(root) {
   const environment = {
@@ -321,7 +327,7 @@ try {
   await run(npm, ['test'], {
     cwd: cleanRoot,
     env: environment,
-    label: '60-test product/config/Vite/editor matrix',
+    label: 'product/config/Vite/editor matrix',
   })
   await run(npm, ['run', 'test:packaging:unit'], {
     cwd: cleanRoot,

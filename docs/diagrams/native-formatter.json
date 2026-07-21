@@ -1,0 +1,16 @@
+{
+  "title": "Native formatter path",
+  "caption": "How TSRX becomes marked legal TSX for one Oxfmt pass, then lifts back into formatted TSRX.",
+  "nodes": {
+    "ordinary": "Ordinary JavaScript and TypeScript call the OXC formatter directly.",
+    "tsrx": "Formatting starts from the exact TSRX source bytes.",
+    "scan": "A linear scan records the TSRX structure needed to project and later restore the file.",
+    "overlay": "The compact overlay includes a source fingerprint so stale same-length structure cannot be reused.",
+    "projection": "The formatter projection emits legal TSX with typed markers for TSRX controls, wrappers, dynamic names, and raw style payloads.",
+    "markers": "One projected buffer uses collision-free identifiers so every scaffold occurrence can be validated and found once.",
+    "formatter": "Canonical Oxfmt parses and formats the projected TSX exactly once.",
+    "arena": "The formatter uses one arena-backed AST and does not reparse during the lift.",
+    "lift": "One indexed forward pass removes proven scaffolding, restores authored TSRX syntax, and preserves source order and raw bytes.",
+    "formatted": "The lifted output must contain no scaffold residue and must rescan to the same compact structural fingerprint."
+  }
+}

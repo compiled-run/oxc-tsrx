@@ -1,0 +1,12 @@
+{
+  "title": "Configured session layer",
+  "caption": "One compiled configuration is reused across a batch while each file takes the direct OXC path or the TSRX scan and projection path.",
+  "nodes": {
+    "config": "Lint and format configuration starts as JSON or JSONC above the per-file source hot path.",
+    "compile": "The host discovers, merges, and compiles configuration once instead of rebuilding rules for every file.",
+    "session": "A configured lint or format session keeps project-stable rules, options, globs, and ignore matching ready for reuse.",
+    "file1": "A TSRX file uses the session while taking its scan, projection, and OXC parse path.",
+    "file2": "An ordinary JavaScript or TypeScript file reuses the same session and goes directly to OXC.",
+    "fileN": "Later TSRX files reuse the already compiled session and perform only their per-file source work."
+  }
+}

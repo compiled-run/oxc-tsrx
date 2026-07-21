@@ -1,82 +1,126 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "startedAt": "2026-07-16T22:47:13.376Z",
-  "completedAt": "2026-07-16T22:48:14.761Z",
+  "startedAt": "2026-07-17T20:53:53.925Z",
+  "completedAt": "2026-07-17T20:55:39.901Z",
   "commands": [
     {
       "label": "fresh native lint performance gate",
       "command": "npm run benchmark:native-lint",
       "status": 0,
       "signal": null,
-      "durationMs": 11331.6
+      "startedAtUnixMs": 1784321633926,
+      "completedAtUnixMs": 1784321646128,
+      "durationMs": 12201.4,
+      "reportPath": "benchmarks/native-lint/results-1784321646022.json"
     },
     {
       "label": "fresh native format performance gate",
       "command": "npm run benchmark:native-format",
       "status": 0,
       "signal": null,
-      "durationMs": 4843.9
+      "startedAtUnixMs": 1784321646129,
+      "completedAtUnixMs": 1784321651021,
+      "durationMs": 4891.9,
+      "reportPath": "benchmarks/native-format/results-1784321650912.json"
     },
     {
       "label": "fresh native format performance gate confidence rerun 2/3",
       "command": "npm run benchmark:native-format",
       "status": 0,
       "signal": null,
-      "durationMs": 5072.3
+      "startedAtUnixMs": 1784321651022,
+      "completedAtUnixMs": 1784321655700,
+      "durationMs": 4678.1,
+      "reportPath": "benchmarks/native-format/results-1784321655592.json"
     },
     {
       "label": "fresh native format performance gate confidence rerun 3/3",
       "command": "npm run benchmark:native-format",
       "status": 0,
       "signal": null,
-      "durationMs": 4735
+      "startedAtUnixMs": 1784321655701,
+      "completedAtUnixMs": 1784321660370,
+      "durationMs": 4670,
+      "reportPath": "benchmarks/native-format/results-1784321660260.json"
     },
     {
       "label": "fresh type-aware performance gate",
       "command": "npm run benchmark:type-aware",
       "status": 0,
       "signal": null,
-      "durationMs": 1407.4
+      "startedAtUnixMs": 1784321660376,
+      "completedAtUnixMs": 1784321661802,
+      "durationMs": 1425.7,
+      "reportPath": "benchmarks/type-aware/results-1784321661795.json"
     },
     {
       "label": "fresh Vite/Vite+ boundary gate",
       "command": "/Users/jacksm5pro/.local/share/fnm/node-versions/v24.15.0/installation/bin/node benchmarks/vite/run.mjs",
       "status": 0,
       "signal": null,
-      "durationMs": 12390.5
+      "startedAtUnixMs": 1784321661802,
+      "completedAtUnixMs": 1784321678413,
+      "durationMs": 16610.6,
+      "reportPath": "benchmarks/vite/results-1784321678410.json"
     },
     {
       "label": "fresh incremental editor performance gate",
       "command": "npm run benchmark:editor",
       "status": 0,
       "signal": null,
-      "durationMs": 688.9
+      "startedAtUnixMs": 1784321678413,
+      "completedAtUnixMs": 1784321679063,
+      "durationMs": 649.2,
+      "reportPath": "benchmarks/editor/results-1784321679056.json"
     },
     {
       "label": "fresh like-for-like comparative gate",
-      "command": "npm run benchmark:comparative",
+      "command": "/Users/jacksm5pro/.local/share/fnm/node-versions/v24.15.0/installation/bin/node benchmarks/comparative/run.mjs",
       "status": 0,
       "signal": null,
-      "durationMs": 20909.4
+      "startedAtUnixMs": 1784321679063,
+      "completedAtUnixMs": 1784321699448,
+      "durationMs": 20385,
+      "reportPath": "benchmarks/comparative/results-1784321699288.json"
+    },
+    {
+      "label": "fresh like-for-like comparative gate confidence rerun 2/3",
+      "command": "/Users/jacksm5pro/.local/share/fnm/node-versions/v24.15.0/installation/bin/node benchmarks/comparative/run.mjs",
+      "status": 0,
+      "signal": null,
+      "startedAtUnixMs": 1784321699448,
+      "completedAtUnixMs": 1784321719675,
+      "durationMs": 20226.4,
+      "reportPath": "benchmarks/comparative/results-1784321719516.json"
+    },
+    {
+      "label": "fresh like-for-like comparative gate confidence rerun 3/3",
+      "command": "/Users/jacksm5pro/.local/share/fnm/node-versions/v24.15.0/installation/bin/node benchmarks/comparative/run.mjs",
+      "status": 0,
+      "signal": null,
+      "startedAtUnixMs": 1784321719675,
+      "completedAtUnixMs": 1784321739900,
+      "durationMs": 20225,
+      "reportPath": "benchmarks/comparative/results-1784321739730.json"
     }
   ],
   "results": {
     "native-lint": {
-      "path": "benchmarks/native-lint/results-1784242044684.json",
-      "generatedAtUnixMs": 1784242044684,
+      "path": "benchmarks/native-lint/results-1784321646022.json",
+      "generatedAtUnixMs": 1784321646022,
       "assertions": [
         {
           "name": "P01 median standard-path latency ratio",
           "comparison": "<=",
-          "observed": 1.001270528109029,
+          "observed": 1.002657094801924,
           "threshold": 1.05,
           "pass": true
         },
         {
           "name": "P01 p95 standard-path latency ratio",
           "comparison": "<=",
-          "observed": 0.9947681495326133,
+          "observed": 1.0204889640134525,
           "threshold": 1.08,
           "pass": true
         },
@@ -97,49 +141,49 @@
         {
           "name": "P02 median scan+copy+parse throughput",
           "comparison": ">=",
-          "observed": 262.0938470675739,
+          "observed": 260.2832226941632,
           "threshold": 75,
           "pass": true
         },
         {
           "name": "P02 p95 scan+copy+parse throughput",
           "comparison": ">=",
-          "observed": 236.20407299849873,
+          "observed": 251.0508974613033,
           "threshold": 60,
           "pass": true
         },
         {
           "name": "P02 equivalent-TSX throughput ratio",
           "comparison": ">=",
-          "observed": 0.5852989123312804,
+          "observed": 0.5634482912992623,
           "threshold": 0.5,
           "pass": true
         },
         {
           "name": "P02 warm 10 KiB p95 scan+copy+parse latency",
           "comparison": "<=",
-          "observed": 0.043542,
+          "observed": 0.041375,
           "threshold": 1,
           "pass": true
         },
         {
           "name": "P03 in-process one-thread lint throughput",
           "comparison": ">=",
-          "observed": 131.26624533013856,
+          "observed": 134.91361018782425,
           "threshold": 35,
           "pass": true
         },
         {
           "name": "P03 CLI one-thread lint throughput",
           "comparison": ">=",
-          "observed": 78.66964872597548,
+          "observed": 80.24117738894316,
           "threshold": 35,
           "pass": true
         },
         {
           "name": "P03 end-to-end CLI latency ratio",
           "comparison": "<=",
-          "observed": 1.1604683274183794,
+          "observed": 1.141252523084356,
           "threshold": 1.35,
           "pass": true
         },
@@ -174,14 +218,14 @@
         {
           "name": "P05 fresh-process TSRX p95 latency",
           "comparison": "<=",
-          "observed": 3.21925,
+          "observed": 3.1555,
           "threshold": 50,
           "pass": true
         },
         {
           "name": "P05 fresh-process upstream latency ratio",
           "comparison": "<=",
-          "observed": 0.06003622557038004,
+          "observed": 0.05620644356867722,
           "threshold": 1.25,
           "pass": true
         },
@@ -195,8 +239,8 @@
         {
           "name": "P07 TSRX peak RSS",
           "comparison": "<=",
-          "observed": 232816640,
-          "threshold": 252526592,
+          "observed": 232980480,
+          "threshold": 252690432,
           "pass": true
         }
       ],
@@ -241,13 +285,33 @@
         "triggeredBy": [],
         "requiredReports": 1,
         "decision": "passed",
-        "selectedReport": "benchmarks/native-lint/results-1784242044684.json",
+        "selectedReport": "benchmarks/native-lint/results-1784321646022.json",
+        "selectionPolicy": {
+          "kind": "median-normalized-budget-pressure",
+          "assertions": [],
+          "aggregation": "maximum-pressure-across-triggering-assertions",
+          "ordering": "ascending-pressure",
+          "tieBreak": "report-path-ascending",
+          "selectedIndex": 0,
+          "orderedReports": [
+            {
+              "path": "benchmarks/native-lint/results-1784321646022.json",
+              "budgetPressure": 0
+            }
+          ]
+        },
         "reports": [
           {
-            "path": "benchmarks/native-lint/results-1784242044684.json",
+            "path": "benchmarks/native-lint/results-1784321646022.json",
             "reportPassed": true,
+            "budgetPressure": 0,
             "oxcRevision": "8e0ed2ebb96137fb1611cdbd5742d5cb46037d40",
-            "corpusIdentity": "a941bfde2889495a"
+            "corpusIdentity": "{\"kind\":\"generated retained statement-control TSRX corpus\",\"bytes\":1048596,\"fnv1a64\":\"a941bfde2889495a\",\"structuralForms\":[\"@{\",\"@if\",\"@else\"],\"diagnosticRule\":\"no-debugger\",\"note\":\"Retains the original statement-control workload for longitudinal lint comparisons; the supported TSRX grammar is broader than this corpus.\"}",
+            "budgetsIdentity": "{\"schemaVersion\":1,\"warmups\":5,\"samples\":30,\"warm10kSamples\":100,\"coldProcessSamples\":20,\"rssProcessSamples\":5,\"corpusTargetBytes\":1048576,\"memoryCorpusTargetBytes\":8388608,\"candidateBinary\":\"target/release/oxc-tsrx\",\"stockOxlintBinary\":\"node_modules/oxlint-current/bin/oxlint\",\"p01\":{\"medianLatencyRatioMax\":1.05,\"p95LatencyRatioMax\":1.08},\"p02\":{\"medianMibPerSecondMin\":75,\"p95MibPerSecondMin\":60,\"equivalentTsxRatioMin\":0.5,\"warm10kP95MsMax\":1},\"p03\":{\"oneThreadMedianMibPerSecondMin\":35,\"endToEndLatencyRatioMax\":1.35},\"p05\":{\"coldP95MsMax\":50,\"upstreamLatencyRatioMax\":1.25},\"p07\":{\"upstreamRatioMax\":1.25,\"additiveBytesMax\":33554432}}",
+            "hostIdentity": "{\"os\":\"macos\",\"architecture\":\"aarch64\",\"rustc\":\"rustc 1.95.0 (59807616e 2026-04-14)\",\"system\":\"Darwin Jacks-MacBook-Pro.local 25.5.0 Darwin Kernel Version 25.5.0: Mon Apr 27 20:41:12 PDT 2026; root:xnu-12377.121.6~2/RELEASE_ARM64_T6050 arm64\",\"buildProfile\":\"release (codegen-units=1, thin LTO, panic=abort, stripped)\",\"oxcRevision\":\"8e0ed2ebb96137fb1611cdbd5742d5cb46037d40\",\"stockOxlintVersion\":\"1.74.0\"}",
+            "buildIdentity": "{}",
+            "versionsIdentity": "{}",
+            "routeIdentity": "native-lint"
           }
         ],
         "assertionDecisions": [
@@ -261,11 +325,13 @@
             "decision": "passed",
             "samples": [
               {
-                "path": "benchmarks/native-lint/results-1784242044684.json",
-                "observed": 1.001270528109029,
+                "path": "benchmarks/native-lint/results-1784321646022.json",
+                "observed": 1.002657094801924,
                 "threshold": 1.05,
+                "operator": "<=",
                 "pass": true,
-                "relativeMargin": 0.04640902084854379
+                "relativeMargin": 0.0450884811410248,
+                "budgetPressure": 0.9549115188589752
               }
             ]
           },
@@ -279,11 +345,13 @@
             "decision": "passed",
             "samples": [
               {
-                "path": "benchmarks/native-lint/results-1784242044684.json",
-                "observed": 0.9947681495326133,
+                "path": "benchmarks/native-lint/results-1784321646022.json",
+                "observed": 1.0204889640134525,
                 "threshold": 1.08,
+                "operator": "<=",
                 "pass": true,
-                "relativeMargin": 0.07891838006239517
+                "relativeMargin": 0.05510281109865519,
+                "budgetPressure": 0.9448971889013448
               }
             ]
           },
@@ -297,11 +365,13 @@
             "decision": "passed",
             "samples": [
               {
-                "path": "benchmarks/native-lint/results-1784242044684.json",
+                "path": "benchmarks/native-lint/results-1784321646022.json",
                 "observed": 1,
                 "threshold": 1,
+                "operator": "==",
                 "pass": true,
-                "relativeMargin": null
+                "relativeMargin": null,
+                "budgetPressure": null
               }
             ]
           },
@@ -315,11 +385,13 @@
             "decision": "passed",
             "samples": [
               {
-                "path": "benchmarks/native-lint/results-1784242044684.json",
+                "path": "benchmarks/native-lint/results-1784321646022.json",
                 "observed": 1,
                 "threshold": 1,
+                "operator": "==",
                 "pass": true,
-                "relativeMargin": null
+                "relativeMargin": null,
+                "budgetPressure": null
               }
             ]
           },
@@ -333,11 +405,13 @@
             "decision": "passed",
             "samples": [
               {
-                "path": "benchmarks/native-lint/results-1784242044684.json",
-                "observed": 262.0938470675739,
+                "path": "benchmarks/native-lint/results-1784321646022.json",
+                "observed": 260.2832226941632,
                 "threshold": 75,
+                "operator": ">=",
                 "pass": true,
-                "relativeMargin": 2.494584627567652
+                "relativeMargin": 2.4704429692555094,
+                "budgetPressure": 0.2881476540196605
               }
             ]
           },
@@ -351,11 +425,13 @@
             "decision": "passed",
             "samples": [
               {
-                "path": "benchmarks/native-lint/results-1784242044684.json",
-                "observed": 236.20407299849873,
+                "path": "benchmarks/native-lint/results-1784321646022.json",
+                "observed": 251.0508974613033,
                 "threshold": 60,
+                "operator": ">=",
                 "pass": true,
-                "relativeMargin": 2.936734549974979
+                "relativeMargin": 3.184181624355055,
+                "budgetPressure": 0.23899536152523945
               }
             ]
           },
@@ -369,11 +445,13 @@
             "decision": "passed",
             "samples": [
               {
-                "path": "benchmarks/native-lint/results-1784242044684.json",
-                "observed": 0.5852989123312804,
+                "path": "benchmarks/native-lint/results-1784321646022.json",
+                "observed": 0.5634482912992623,
                 "threshold": 0.5,
+                "operator": ">=",
                 "pass": true,
-                "relativeMargin": 0.1705978246625608
+                "relativeMargin": 0.12689658259852465,
+                "budgetPressure": 0.887392876544259
               }
             ]
           },
@@ -387,11 +465,13 @@
             "decision": "passed",
             "samples": [
               {
-                "path": "benchmarks/native-lint/results-1784242044684.json",
-                "observed": 0.043542,
+                "path": "benchmarks/native-lint/results-1784321646022.json",
+                "observed": 0.041375,
                 "threshold": 1,
+                "operator": "<=",
                 "pass": true,
-                "relativeMargin": 0.956458
+                "relativeMargin": 0.958625,
+                "budgetPressure": 0.041375
               }
             ]
           },
@@ -405,11 +485,13 @@
             "decision": "passed",
             "samples": [
               {
-                "path": "benchmarks/native-lint/results-1784242044684.json",
-                "observed": 131.26624533013856,
+                "path": "benchmarks/native-lint/results-1784321646022.json",
+                "observed": 134.91361018782425,
                 "threshold": 35,
+                "operator": ">=",
                 "pass": true,
-                "relativeMargin": 2.7504641522896733
+                "relativeMargin": 2.8546745767949786,
+                "budgetPressure": 0.2594252718556241
               }
             ]
           },
@@ -423,11 +505,13 @@
             "decision": "passed",
             "samples": [
               {
-                "path": "benchmarks/native-lint/results-1784242044684.json",
-                "observed": 78.66964872597548,
+                "path": "benchmarks/native-lint/results-1784321646022.json",
+                "observed": 80.24117738894316,
                 "threshold": 35,
+                "operator": ">=",
                 "pass": true,
-                "relativeMargin": 1.247704249313585
+                "relativeMargin": 1.2926050682555188,
+                "budgetPressure": 0.43618502543088095
               }
             ]
           },
@@ -441,11 +525,13 @@
             "decision": "passed",
             "samples": [
               {
-                "path": "benchmarks/native-lint/results-1784242044684.json",
-                "observed": 1.1604683274183794,
+                "path": "benchmarks/native-lint/results-1784321646022.json",
+                "observed": 1.141252523084356,
                 "threshold": 1.35,
+                "operator": "<=",
                 "pass": true,
-                "relativeMargin": 0.14039383154194127
+                "relativeMargin": 0.15462776067825487,
+                "budgetPressure": 0.8453722393217451
               }
             ]
           },
@@ -459,11 +545,13 @@
             "decision": "passed",
             "samples": [
               {
-                "path": "benchmarks/native-lint/results-1784242044684.json",
+                "path": "benchmarks/native-lint/results-1784321646022.json",
                 "observed": 1,
                 "threshold": 1,
+                "operator": "==",
                 "pass": true,
-                "relativeMargin": null
+                "relativeMargin": null,
+                "budgetPressure": null
               }
             ]
           },
@@ -477,11 +565,13 @@
             "decision": "passed",
             "samples": [
               {
-                "path": "benchmarks/native-lint/results-1784242044684.json",
+                "path": "benchmarks/native-lint/results-1784321646022.json",
                 "observed": 1,
                 "threshold": 1,
+                "operator": "==",
                 "pass": true,
-                "relativeMargin": null
+                "relativeMargin": null,
+                "budgetPressure": null
               }
             ]
           },
@@ -495,11 +585,13 @@
             "decision": "passed",
             "samples": [
               {
-                "path": "benchmarks/native-lint/results-1784242044684.json",
+                "path": "benchmarks/native-lint/results-1784321646022.json",
                 "observed": 1,
                 "threshold": 1,
+                "operator": "==",
                 "pass": true,
-                "relativeMargin": null
+                "relativeMargin": null,
+                "budgetPressure": null
               }
             ]
           },
@@ -513,11 +605,13 @@
             "decision": "passed",
             "samples": [
               {
-                "path": "benchmarks/native-lint/results-1784242044684.json",
+                "path": "benchmarks/native-lint/results-1784321646022.json",
                 "observed": 1,
                 "threshold": 1,
+                "operator": "==",
                 "pass": true,
-                "relativeMargin": null
+                "relativeMargin": null,
+                "budgetPressure": null
               }
             ]
           },
@@ -531,11 +625,13 @@
             "decision": "passed",
             "samples": [
               {
-                "path": "benchmarks/native-lint/results-1784242044684.json",
-                "observed": 3.21925,
+                "path": "benchmarks/native-lint/results-1784321646022.json",
+                "observed": 3.1555,
                 "threshold": 50,
+                "operator": "<=",
                 "pass": true,
-                "relativeMargin": 0.935615
+                "relativeMargin": 0.9368899999999999,
+                "budgetPressure": 0.06311
               }
             ]
           },
@@ -549,11 +645,13 @@
             "decision": "passed",
             "samples": [
               {
-                "path": "benchmarks/native-lint/results-1784242044684.json",
-                "observed": 0.06003622557038004,
+                "path": "benchmarks/native-lint/results-1784321646022.json",
+                "observed": 0.05620644356867722,
                 "threshold": 1.25,
+                "operator": "<=",
                 "pass": true,
-                "relativeMargin": 0.9519710195436959
+                "relativeMargin": 0.9550348451450581,
+                "budgetPressure": 0.04496515485494178
               }
             ]
           },
@@ -567,11 +665,13 @@
             "decision": "passed",
             "samples": [
               {
-                "path": "benchmarks/native-lint/results-1784242044684.json",
+                "path": "benchmarks/native-lint/results-1784321646022.json",
                 "observed": 1,
                 "threshold": 1,
+                "operator": "==",
                 "pass": true,
-                "relativeMargin": null
+                "relativeMargin": null,
+                "budgetPressure": null
               }
             ]
           },
@@ -585,11 +685,13 @@
             "decision": "passed",
             "samples": [
               {
-                "path": "benchmarks/native-lint/results-1784242044684.json",
-                "observed": 232816640,
-                "threshold": 252526592,
+                "path": "benchmarks/native-lint/results-1784321646022.json",
+                "observed": 232980480,
+                "threshold": 252690432,
+                "operator": "<=",
                 "pass": true,
-                "relativeMargin": 0.07805099591254136
+                "relativeMargin": 0.07800038902937172,
+                "budgetPressure": 0.9219996109706283
               }
             ]
           }
@@ -597,20 +699,20 @@
       }
     },
     "native-format": {
-      "path": "benchmarks/native-format/results-1784242059253.json",
-      "generatedAtUnixMs": 1784242059253,
+      "path": "benchmarks/native-format/results-1784321655592.json",
+      "generatedAtUnixMs": 1784321655592,
       "assertions": [
         {
           "name": "p04_direct_median_ratio",
           "comparison": "candidate standard median / canonical formatter median",
-          "observed": 0.9860896909765142,
+          "observed": 0.9817087235599551,
           "threshold": 1.05,
           "pass": true
         },
         {
           "name": "p04_direct_p95_ratio",
           "comparison": "candidate standard p95 / canonical formatter p95",
-          "observed": 1.00434795627229,
+          "observed": 1.003453427710696,
           "threshold": 1.08,
           "pass": true
         },
@@ -631,49 +733,49 @@
         {
           "name": "p04_sequential_median_mib_s",
           "comparison": "complete TSRX format median throughput",
-          "observed": 129.44577227343345,
+          "observed": 134.77891227576683,
           "threshold": 15,
           "pass": true
         },
         {
           "name": "p04_sequential_p95_mib_s",
           "comparison": "complete TSRX format throughput at p95 latency",
-          "observed": 119.55563342959262,
+          "observed": 126.99952384384967,
           "threshold": 12,
           "pass": true
         },
         {
           "name": "p04_historical_incumbent_derived_floor_mib_s",
           "comparison": "candidate median throughput / absolute 16.6 MiB/s floor derived from 10 x a non-comparable historical 1.66 MiB/s incumbent result",
-          "observed": 129.44577227343345,
+          "observed": 134.77891227576683,
           "threshold": 16.6,
           "pass": true
         },
         {
           "name": "p04_default_thread_mib_s",
           "comparison": "complete multi-file --check throughput at p95 latency",
-          "observed": 742.5355067416775,
+          "observed": 823.0974726799581,
           "threshold": 100,
           "pass": true
         },
         {
           "name": "p04_generalized_control_median_mib_s",
           "comparison": "complete nested/control/dynamic/style format median throughput",
-          "observed": 20.13771739544817,
+          "observed": 21.79011825344402,
           "threshold": 15,
           "pass": true
         },
         {
           "name": "p04_generalized_control_p95_mib_s",
           "comparison": "complete nested/control/dynamic/style format throughput at p95 latency",
-          "observed": 18.370419123966695,
+          "observed": 21.135332299234904,
           "threshold": 12,
           "pass": true
         },
         {
           "name": "p04_generalized_control_linear_scaling",
           "comparison": "full/half median latency normalized by corpus byte ratio",
-          "observed": 1.0143235577680978,
+          "observed": 0.9998296923876036,
           "threshold": 1.35,
           "pass": true
         },
@@ -750,14 +852,14 @@
         {
           "name": "p05_stdin_p95_ms",
           "comparison": "fresh candidate TSRX stdin p95 milliseconds",
-          "observed": 3.262708,
+          "observed": 3.156334,
           "threshold": 110,
           "pass": true
         },
         {
           "name": "p05_upstream_ratio",
           "comparison": "candidate TSRX stdin p95 / stock Oxfmt TSX stdin p95",
-          "observed": 0.03748872767152863,
+          "observed": 0.035607205860578584,
           "threshold": 1.25,
           "pass": true
         },
@@ -771,7 +873,7 @@
         {
           "name": "p07_rss_ratio",
           "comparison": "candidate TSRX RSS / canonical TSX RSS",
-          "observed": 1.143166441136671,
+          "observed": 1.1431922764594424,
           "threshold": 1.15,
           "pass": true
         }
@@ -820,25 +922,67 @@
         ],
         "requiredReports": 3,
         "decision": "passed",
-        "selectedReport": "benchmarks/native-format/results-1784242059253.json",
+        "selectedReport": "benchmarks/native-format/results-1784321655592.json",
+        "selectionPolicy": {
+          "kind": "median-normalized-budget-pressure",
+          "assertions": [
+            "p07_rss_ratio"
+          ],
+          "aggregation": "maximum-pressure-across-triggering-assertions",
+          "ordering": "ascending-pressure",
+          "tieBreak": "report-path-ascending",
+          "selectedIndex": 1,
+          "orderedReports": [
+            {
+              "path": "benchmarks/native-format/results-1784321650912.json",
+              "budgetPressure": 0.9940802403995153
+            },
+            {
+              "path": "benchmarks/native-format/results-1784321655592.json",
+              "budgetPressure": 0.9940802403995153
+            },
+            {
+              "path": "benchmarks/native-format/results-1784321660260.json",
+              "budgetPressure": 0.994169942641024
+            }
+          ]
+        },
         "reports": [
           {
-            "path": "benchmarks/native-format/results-1784242049439.json",
+            "path": "benchmarks/native-format/results-1784321650912.json",
             "reportPassed": true,
+            "budgetPressure": 0.9940802403995153,
             "oxcRevision": "8e0ed2ebb96137fb1611cdbd5742d5cb46037d40",
-            "corpusIdentity": "1986613a3c555b65:ee30862dabc592f4"
+            "corpusIdentity": "{\"corpus\":{\"bytes\":1049086,\"equivalentTsxBytes\":1049086,\"fnv1a64\":\"1986613a3c555b65\",\"structuralForms\":[\"@{\",\"@if\",\"@else\"],\"note\":\"Retained statement-control corpus for comparison with earlier formatter reports.\"},\"generalizedControlCorpus\":{\"bytes\":262339,\"halfBytes\":131516,\"fnv1a64\":\"ee30862dabc592f4\",\"structuralForms\":[\"@{\",\"@if\",\"@else\",\"@for\",\"@empty\",\"index/key\",\"@switch/@case/@default\",\"@try/@pending/@catch\",\"<{dynamic}>\",\"<style>\"],\"dynamicTagCount\":394,\"stylePayloadCount\":197,\"note\":\"Repeated direct JSX-child, nested, expression, annotated loop, switch, source-order try, nested dynamic-tag, and raw-style forms.\"}}",
+            "budgetsIdentity": "{\"schemaVersion\":2,\"warmups\":5,\"samples\":30,\"generalizedControlWarmups\":5,\"generalizedControlSamples\":15,\"batchWarmups\":5,\"batchSamples\":15,\"coldProcessSamples\":20,\"rssProcessSamples\":5,\"corpusTargetBytes\":1048576,\"generalizedControlTargetBytes\":262144,\"batchCorpusTargetBytes\":16777216,\"memoryCorpusTargetBytes\":8388608,\"candidateBinary\":\"target/release/oxc-tsrx-fmt\",\"stockOxfmtBinary\":\"node_modules/oxfmt-current/bin/oxfmt\",\"p04\":{\"directMedianLatencyRatioMax\":1.05,\"directP95LatencyRatioMax\":1.08,\"sequentialMedianMibPerSecondMin\":15,\"sequentialP95MibPerSecondMin\":12,\"historicalIncumbentDerivedMibPerSecondMin\":16.6,\"defaultThreadMibPerSecondMin\":100,\"generalizedControlMedianMibPerSecondMin\":15,\"generalizedControlP95MibPerSecondMin\":12,\"generalizedControlScalingRatioMax\":1.35},\"p05\":{\"stdinP95MsMax\":110,\"upstreamLatencyRatioMax\":1.25},\"p07\":{\"upstreamRatioMax\":1.15}}",
+            "hostIdentity": "{\"os\":\"macos\",\"architecture\":\"aarch64\",\"rustc\":\"rustc 1.95.0 (59807616e 2026-04-14)\",\"system\":\"Darwin Jacks-MacBook-Pro.local 25.5.0 Darwin Kernel Version 25.5.0: Mon Apr 27 20:41:12 PDT 2026; root:xnu-12377.121.6~2/RELEASE_ARM64_T6050 arm64\",\"buildProfile\":\"release (codegen-units=1, thin LTO, panic=abort, stripped)\",\"oxcRevision\":\"8e0ed2ebb96137fb1611cdbd5742d5cb46037d40\",\"stockOxfmtVersion\":\"Version: 0.59.0\"}",
+            "buildIdentity": "{}",
+            "versionsIdentity": "{}",
+            "routeIdentity": "native-format"
           },
           {
-            "path": "benchmarks/native-format/results-1784242054518.json",
+            "path": "benchmarks/native-format/results-1784321655592.json",
             "reportPassed": true,
+            "budgetPressure": 0.9940802403995153,
             "oxcRevision": "8e0ed2ebb96137fb1611cdbd5742d5cb46037d40",
-            "corpusIdentity": "1986613a3c555b65:ee30862dabc592f4"
+            "corpusIdentity": "{\"corpus\":{\"bytes\":1049086,\"equivalentTsxBytes\":1049086,\"fnv1a64\":\"1986613a3c555b65\",\"structuralForms\":[\"@{\",\"@if\",\"@else\"],\"note\":\"Retained statement-control corpus for comparison with earlier formatter reports.\"},\"generalizedControlCorpus\":{\"bytes\":262339,\"halfBytes\":131516,\"fnv1a64\":\"ee30862dabc592f4\",\"structuralForms\":[\"@{\",\"@if\",\"@else\",\"@for\",\"@empty\",\"index/key\",\"@switch/@case/@default\",\"@try/@pending/@catch\",\"<{dynamic}>\",\"<style>\"],\"dynamicTagCount\":394,\"stylePayloadCount\":197,\"note\":\"Repeated direct JSX-child, nested, expression, annotated loop, switch, source-order try, nested dynamic-tag, and raw-style forms.\"}}",
+            "budgetsIdentity": "{\"schemaVersion\":2,\"warmups\":5,\"samples\":30,\"generalizedControlWarmups\":5,\"generalizedControlSamples\":15,\"batchWarmups\":5,\"batchSamples\":15,\"coldProcessSamples\":20,\"rssProcessSamples\":5,\"corpusTargetBytes\":1048576,\"generalizedControlTargetBytes\":262144,\"batchCorpusTargetBytes\":16777216,\"memoryCorpusTargetBytes\":8388608,\"candidateBinary\":\"target/release/oxc-tsrx-fmt\",\"stockOxfmtBinary\":\"node_modules/oxfmt-current/bin/oxfmt\",\"p04\":{\"directMedianLatencyRatioMax\":1.05,\"directP95LatencyRatioMax\":1.08,\"sequentialMedianMibPerSecondMin\":15,\"sequentialP95MibPerSecondMin\":12,\"historicalIncumbentDerivedMibPerSecondMin\":16.6,\"defaultThreadMibPerSecondMin\":100,\"generalizedControlMedianMibPerSecondMin\":15,\"generalizedControlP95MibPerSecondMin\":12,\"generalizedControlScalingRatioMax\":1.35},\"p05\":{\"stdinP95MsMax\":110,\"upstreamLatencyRatioMax\":1.25},\"p07\":{\"upstreamRatioMax\":1.15}}",
+            "hostIdentity": "{\"os\":\"macos\",\"architecture\":\"aarch64\",\"rustc\":\"rustc 1.95.0 (59807616e 2026-04-14)\",\"system\":\"Darwin Jacks-MacBook-Pro.local 25.5.0 Darwin Kernel Version 25.5.0: Mon Apr 27 20:41:12 PDT 2026; root:xnu-12377.121.6~2/RELEASE_ARM64_T6050 arm64\",\"buildProfile\":\"release (codegen-units=1, thin LTO, panic=abort, stripped)\",\"oxcRevision\":\"8e0ed2ebb96137fb1611cdbd5742d5cb46037d40\",\"stockOxfmtVersion\":\"Version: 0.59.0\"}",
+            "buildIdentity": "{}",
+            "versionsIdentity": "{}",
+            "routeIdentity": "native-format"
           },
           {
-            "path": "benchmarks/native-format/results-1784242059253.json",
+            "path": "benchmarks/native-format/results-1784321660260.json",
             "reportPassed": true,
+            "budgetPressure": 0.994169942641024,
             "oxcRevision": "8e0ed2ebb96137fb1611cdbd5742d5cb46037d40",
-            "corpusIdentity": "1986613a3c555b65:ee30862dabc592f4"
+            "corpusIdentity": "{\"corpus\":{\"bytes\":1049086,\"equivalentTsxBytes\":1049086,\"fnv1a64\":\"1986613a3c555b65\",\"structuralForms\":[\"@{\",\"@if\",\"@else\"],\"note\":\"Retained statement-control corpus for comparison with earlier formatter reports.\"},\"generalizedControlCorpus\":{\"bytes\":262339,\"halfBytes\":131516,\"fnv1a64\":\"ee30862dabc592f4\",\"structuralForms\":[\"@{\",\"@if\",\"@else\",\"@for\",\"@empty\",\"index/key\",\"@switch/@case/@default\",\"@try/@pending/@catch\",\"<{dynamic}>\",\"<style>\"],\"dynamicTagCount\":394,\"stylePayloadCount\":197,\"note\":\"Repeated direct JSX-child, nested, expression, annotated loop, switch, source-order try, nested dynamic-tag, and raw-style forms.\"}}",
+            "budgetsIdentity": "{\"schemaVersion\":2,\"warmups\":5,\"samples\":30,\"generalizedControlWarmups\":5,\"generalizedControlSamples\":15,\"batchWarmups\":5,\"batchSamples\":15,\"coldProcessSamples\":20,\"rssProcessSamples\":5,\"corpusTargetBytes\":1048576,\"generalizedControlTargetBytes\":262144,\"batchCorpusTargetBytes\":16777216,\"memoryCorpusTargetBytes\":8388608,\"candidateBinary\":\"target/release/oxc-tsrx-fmt\",\"stockOxfmtBinary\":\"node_modules/oxfmt-current/bin/oxfmt\",\"p04\":{\"directMedianLatencyRatioMax\":1.05,\"directP95LatencyRatioMax\":1.08,\"sequentialMedianMibPerSecondMin\":15,\"sequentialP95MibPerSecondMin\":12,\"historicalIncumbentDerivedMibPerSecondMin\":16.6,\"defaultThreadMibPerSecondMin\":100,\"generalizedControlMedianMibPerSecondMin\":15,\"generalizedControlP95MibPerSecondMin\":12,\"generalizedControlScalingRatioMax\":1.35},\"p05\":{\"stdinP95MsMax\":110,\"upstreamLatencyRatioMax\":1.25},\"p07\":{\"upstreamRatioMax\":1.15}}",
+            "hostIdentity": "{\"os\":\"macos\",\"architecture\":\"aarch64\",\"rustc\":\"rustc 1.95.0 (59807616e 2026-04-14)\",\"system\":\"Darwin Jacks-MacBook-Pro.local 25.5.0 Darwin Kernel Version 25.5.0: Mon Apr 27 20:41:12 PDT 2026; root:xnu-12377.121.6~2/RELEASE_ARM64_T6050 arm64\",\"buildProfile\":\"release (codegen-units=1, thin LTO, panic=abort, stripped)\",\"oxcRevision\":\"8e0ed2ebb96137fb1611cdbd5742d5cb46037d40\",\"stockOxfmtVersion\":\"Version: 0.59.0\"}",
+            "buildIdentity": "{}",
+            "versionsIdentity": "{}",
+            "routeIdentity": "native-format"
           }
         ],
         "assertionDecisions": [
@@ -852,25 +996,31 @@
             "decision": "passed",
             "samples": [
               {
-                "path": "benchmarks/native-format/results-1784242049439.json",
-                "observed": 0.9784383602585932,
+                "path": "benchmarks/native-format/results-1784321650912.json",
+                "observed": 0.9911855016255495,
                 "threshold": 1.05,
+                "operator": "<=",
                 "pass": true,
-                "relativeMargin": 0.06815394261086365
+                "relativeMargin": 0.05601380797566716,
+                "budgetPressure": 0.9439861920243329
               },
               {
-                "path": "benchmarks/native-format/results-1784242054518.json",
-                "observed": 0.9765370684553166,
+                "path": "benchmarks/native-format/results-1784321655592.json",
+                "observed": 0.9817087235599551,
                 "threshold": 1.05,
+                "operator": "<=",
                 "pass": true,
-                "relativeMargin": 0.0699646967092223
+                "relativeMargin": 0.06503931089528091,
+                "budgetPressure": 0.9349606891047191
               },
               {
-                "path": "benchmarks/native-format/results-1784242059253.json",
-                "observed": 0.9860896909765142,
+                "path": "benchmarks/native-format/results-1784321660260.json",
+                "observed": 0.9900225133033156,
                 "threshold": 1.05,
+                "operator": "<=",
                 "pass": true,
-                "relativeMargin": 0.0608669609747484
+                "relativeMargin": 0.057121415901604244,
+                "budgetPressure": 0.9428785840983958
               }
             ]
           },
@@ -884,25 +1034,31 @@
             "decision": "passed",
             "samples": [
               {
-                "path": "benchmarks/native-format/results-1784242049439.json",
-                "observed": 0.9242130366672636,
+                "path": "benchmarks/native-format/results-1784321650912.json",
+                "observed": 0.995807078841518,
                 "threshold": 1.08,
+                "operator": "<=",
                 "pass": true,
-                "relativeMargin": 0.14424718827105226
+                "relativeMargin": 0.07795640848007601,
+                "budgetPressure": 0.922043591519924
               },
               {
-                "path": "benchmarks/native-format/results-1784242054518.json",
-                "observed": 0.9992220807958382,
+                "path": "benchmarks/native-format/results-1784321655592.json",
+                "observed": 1.003453427710696,
                 "threshold": 1.08,
+                "operator": "<=",
                 "pass": true,
-                "relativeMargin": 0.07479436963348322
+                "relativeMargin": 0.07087645582342979,
+                "budgetPressure": 0.9291235441765702
               },
               {
-                "path": "benchmarks/native-format/results-1784242059253.json",
-                "observed": 1.00434795627229,
+                "path": "benchmarks/native-format/results-1784321660260.json",
+                "observed": 0.9782772152267561,
                 "threshold": 1.08,
+                "operator": "<=",
                 "pass": true,
-                "relativeMargin": 0.07004818863676868
+                "relativeMargin": 0.09418776367892956,
+                "budgetPressure": 0.9058122363210704
               }
             ]
           },
@@ -916,25 +1072,31 @@
             "decision": "passed",
             "samples": [
               {
-                "path": "benchmarks/native-format/results-1784242049439.json",
+                "path": "benchmarks/native-format/results-1784321650912.json",
                 "observed": 1,
                 "threshold": 1,
+                "operator": "==",
                 "pass": true,
-                "relativeMargin": null
+                "relativeMargin": null,
+                "budgetPressure": null
               },
               {
-                "path": "benchmarks/native-format/results-1784242054518.json",
+                "path": "benchmarks/native-format/results-1784321655592.json",
                 "observed": 1,
                 "threshold": 1,
+                "operator": "==",
                 "pass": true,
-                "relativeMargin": null
+                "relativeMargin": null,
+                "budgetPressure": null
               },
               {
-                "path": "benchmarks/native-format/results-1784242059253.json",
+                "path": "benchmarks/native-format/results-1784321660260.json",
                 "observed": 1,
                 "threshold": 1,
+                "operator": "==",
                 "pass": true,
-                "relativeMargin": null
+                "relativeMargin": null,
+                "budgetPressure": null
               }
             ]
           },
@@ -948,25 +1110,31 @@
             "decision": "passed",
             "samples": [
               {
-                "path": "benchmarks/native-format/results-1784242049439.json",
+                "path": "benchmarks/native-format/results-1784321650912.json",
                 "observed": 1,
                 "threshold": 1,
+                "operator": "==",
                 "pass": true,
-                "relativeMargin": null
+                "relativeMargin": null,
+                "budgetPressure": null
               },
               {
-                "path": "benchmarks/native-format/results-1784242054518.json",
+                "path": "benchmarks/native-format/results-1784321655592.json",
                 "observed": 1,
                 "threshold": 1,
+                "operator": "==",
                 "pass": true,
-                "relativeMargin": null
+                "relativeMargin": null,
+                "budgetPressure": null
               },
               {
-                "path": "benchmarks/native-format/results-1784242059253.json",
+                "path": "benchmarks/native-format/results-1784321660260.json",
                 "observed": 1,
                 "threshold": 1,
+                "operator": "==",
                 "pass": true,
-                "relativeMargin": null
+                "relativeMargin": null,
+                "budgetPressure": null
               }
             ]
           },
@@ -980,25 +1148,31 @@
             "decision": "passed",
             "samples": [
               {
-                "path": "benchmarks/native-format/results-1784242049439.json",
-                "observed": 127.67140568213345,
+                "path": "benchmarks/native-format/results-1784321650912.json",
+                "observed": 137.6200734508304,
                 "threshold": 15,
+                "operator": ">=",
                 "pass": true,
-                "relativeMargin": 7.511427045475563
+                "relativeMargin": 8.174671563388694,
+                "budgetPressure": 0.10899572732286962
               },
               {
-                "path": "benchmarks/native-format/results-1784242054518.json",
-                "observed": 109.45841621977746,
+                "path": "benchmarks/native-format/results-1784321655592.json",
+                "observed": 134.77891227576683,
                 "threshold": 15,
+                "operator": ">=",
                 "pass": true,
-                "relativeMargin": 6.297227747985164
+                "relativeMargin": 7.985260818384456,
+                "budgetPressure": 0.11129337480709875
               },
               {
-                "path": "benchmarks/native-format/results-1784242059253.json",
-                "observed": 129.44577227343345,
+                "path": "benchmarks/native-format/results-1784321660260.json",
+                "observed": 133.89882195555265,
                 "threshold": 15,
+                "operator": ">=",
                 "pass": true,
-                "relativeMargin": 7.62971815156223
+                "relativeMargin": 7.926588130370177,
+                "budgetPressure": 0.11202488402010892
               }
             ]
           },
@@ -1012,25 +1186,31 @@
             "decision": "passed",
             "samples": [
               {
-                "path": "benchmarks/native-format/results-1784242049439.json",
-                "observed": 121.99876498515412,
+                "path": "benchmarks/native-format/results-1784321650912.json",
+                "observed": 133.38706759788246,
                 "threshold": 12,
+                "operator": ">=",
                 "pass": true,
-                "relativeMargin": 9.166563748762844
+                "relativeMargin": 10.115588966490206,
+                "budgetPressure": 0.08996374398285746
               },
               {
-                "path": "benchmarks/native-format/results-1784242054518.json",
-                "observed": 99.16277664128943,
+                "path": "benchmarks/native-format/results-1784321655592.json",
+                "observed": 126.99952384384967,
                 "threshold": 12,
+                "operator": ">=",
                 "pass": true,
-                "relativeMargin": 7.2635647201074525
+                "relativeMargin": 9.58329365365414,
+                "budgetPressure": 0.09448854323859054
               },
               {
-                "path": "benchmarks/native-format/results-1784242059253.json",
-                "observed": 119.55563342959262,
+                "path": "benchmarks/native-format/results-1784321660260.json",
+                "observed": 126.02964966950523,
                 "threshold": 12,
+                "operator": ">=",
                 "pass": true,
-                "relativeMargin": 8.962969452466051
+                "relativeMargin": 9.502470805792102,
+                "budgetPressure": 0.09521568957359072
               }
             ]
           },
@@ -1044,25 +1224,31 @@
             "decision": "passed",
             "samples": [
               {
-                "path": "benchmarks/native-format/results-1784242049439.json",
-                "observed": 127.67140568213345,
+                "path": "benchmarks/native-format/results-1784321650912.json",
+                "observed": 137.6200734508304,
                 "threshold": 16.6,
+                "operator": ">=",
                 "pass": true,
-                "relativeMargin": 6.691048535068279
+                "relativeMargin": 7.290365870531952,
+                "budgetPressure": 0.12062193823730906
               },
               {
-                "path": "benchmarks/native-format/results-1784242054518.json",
-                "observed": 109.45841621977746,
+                "path": "benchmarks/native-format/results-1784321655592.json",
+                "observed": 134.77891227576683,
                 "threshold": 16.6,
+                "operator": ">=",
                 "pass": true,
-                "relativeMargin": 5.5938804951673164
+                "relativeMargin": 7.1192115828775195,
+                "budgetPressure": 0.12316466811985596
               },
               {
-                "path": "benchmarks/native-format/results-1784242059253.json",
-                "observed": 129.44577227343345,
+                "path": "benchmarks/native-format/results-1784321660260.json",
+                "observed": 133.89882195555265,
                 "threshold": 16.6,
+                "operator": ">=",
                 "pass": true,
-                "relativeMargin": 6.797938088761051
+                "relativeMargin": 7.066194093707991,
+                "budgetPressure": 0.1239742049822539
               }
             ]
           },
@@ -1076,25 +1262,31 @@
             "decision": "passed",
             "samples": [
               {
-                "path": "benchmarks/native-format/results-1784242049439.json",
-                "observed": 796.3303522669446,
+                "path": "benchmarks/native-format/results-1784321650912.json",
+                "observed": 835.7197836818694,
                 "threshold": 100,
+                "operator": ">=",
                 "pass": true,
-                "relativeMargin": 6.963303522669446
+                "relativeMargin": 7.3571978368186945,
+                "budgetPressure": 0.11965733246069313
               },
               {
-                "path": "benchmarks/native-format/results-1784242054518.json",
-                "observed": 680.6151210714,
+                "path": "benchmarks/native-format/results-1784321655592.json",
+                "observed": 823.0974726799581,
                 "threshold": 100,
+                "operator": ">=",
                 "pass": true,
-                "relativeMargin": 5.806151210714001
+                "relativeMargin": 7.23097472679958,
+                "budgetPressure": 0.12149229382810003
               },
               {
-                "path": "benchmarks/native-format/results-1784242059253.json",
-                "observed": 742.5355067416775,
+                "path": "benchmarks/native-format/results-1784321660260.json",
+                "observed": 839.6350584959858,
                 "threshold": 100,
+                "operator": ">=",
                 "pass": true,
-                "relativeMargin": 6.425355067416775
+                "relativeMargin": 7.396350584959858,
+                "budgetPressure": 0.11909936226237042
               }
             ]
           },
@@ -1108,25 +1300,31 @@
             "decision": "passed",
             "samples": [
               {
-                "path": "benchmarks/native-format/results-1784242049439.json",
-                "observed": 20.08148197222285,
+                "path": "benchmarks/native-format/results-1784321650912.json",
+                "observed": 21.205645569004663,
                 "threshold": 15,
+                "operator": ">=",
                 "pass": true,
-                "relativeMargin": 0.33876546481485664
+                "relativeMargin": 0.4137097046003108,
+                "budgetPressure": 0.707358799862468
               },
               {
-                "path": "benchmarks/native-format/results-1784242054518.json",
-                "observed": 18.283435936179718,
+                "path": "benchmarks/native-format/results-1784321655592.json",
+                "observed": 21.79011825344402,
                 "threshold": 15,
+                "operator": ">=",
                 "pass": true,
-                "relativeMargin": 0.21889572907864785
+                "relativeMargin": 0.4526745502296014,
+                "budgetPressure": 0.6883854335039777
               },
               {
-                "path": "benchmarks/native-format/results-1784242059253.json",
-                "observed": 20.13771739544817,
+                "path": "benchmarks/native-format/results-1784321660260.json",
+                "observed": 20.66585164619095,
                 "threshold": 15,
+                "operator": ">=",
                 "pass": true,
-                "relativeMargin": 0.342514493029878
+                "relativeMargin": 0.37772344307939676,
+                "budgetPressure": 0.7258350759894641
               }
             ]
           },
@@ -1140,25 +1338,31 @@
             "decision": "passed",
             "samples": [
               {
-                "path": "benchmarks/native-format/results-1784242049439.json",
-                "observed": 18.73829990733677,
+                "path": "benchmarks/native-format/results-1784321650912.json",
+                "observed": 17.994350700632243,
                 "threshold": 12,
+                "operator": ">=",
                 "pass": true,
-                "relativeMargin": 0.5615249922780642
+                "relativeMargin": 0.4995292250526869,
+                "budgetPressure": 0.6668759656650669
               },
               {
-                "path": "benchmarks/native-format/results-1784242054518.json",
-                "observed": 17.684580187967466,
+                "path": "benchmarks/native-format/results-1784321655592.json",
+                "observed": 21.135332299234904,
                 "threshold": 12,
+                "operator": ">=",
                 "pass": true,
-                "relativeMargin": 0.4737150156639555
+                "relativeMargin": 0.7612776916029086,
+                "budgetPressure": 0.5677696394882042
               },
               {
-                "path": "benchmarks/native-format/results-1784242059253.json",
-                "observed": 18.370419123966695,
+                "path": "benchmarks/native-format/results-1784321660260.json",
+                "observed": 17.58895144436797,
                 "threshold": 12,
+                "operator": ">=",
                 "pass": true,
-                "relativeMargin": 0.5308682603305579
+                "relativeMargin": 0.46574595369733096,
+                "budgetPressure": 0.6822464680714342
               }
             ]
           },
@@ -1172,25 +1376,31 @@
             "decision": "passed",
             "samples": [
               {
-                "path": "benchmarks/native-format/results-1784242049439.json",
-                "observed": 1.0052875467066273,
+                "path": "benchmarks/native-format/results-1784321650912.json",
+                "observed": 1.0267033642509547,
                 "threshold": 1.35,
+                "operator": "<=",
                 "pass": true,
-                "relativeMargin": 0.2553425579950909
+                "relativeMargin": 0.23947898944373736,
+                "budgetPressure": 0.7605210105562626
               },
               {
-                "path": "benchmarks/native-format/results-1784242054518.json",
-                "observed": 1.0447881866716775,
+                "path": "benchmarks/native-format/results-1784321655592.json",
+                "observed": 0.9998296923876036,
                 "threshold": 1.35,
+                "operator": "<=",
                 "pass": true,
-                "relativeMargin": 0.22608282468764634
+                "relativeMargin": 0.25938541304621965,
+                "budgetPressure": 0.7406145869537804
               },
               {
-                "path": "benchmarks/native-format/results-1784242059253.json",
-                "observed": 1.0143235577680978,
+                "path": "benchmarks/native-format/results-1784321660260.json",
+                "observed": 1.0408583715540298,
                 "threshold": 1.35,
+                "operator": "<=",
                 "pass": true,
-                "relativeMargin": 0.24864921646807575
+                "relativeMargin": 0.22899379884886684,
+                "budgetPressure": 0.7710062011511332
               }
             ]
           },
@@ -1204,25 +1414,31 @@
             "decision": "passed",
             "samples": [
               {
-                "path": "benchmarks/native-format/results-1784242049439.json",
+                "path": "benchmarks/native-format/results-1784321650912.json",
                 "observed": 1,
                 "threshold": 1,
+                "operator": "==",
                 "pass": true,
-                "relativeMargin": null
+                "relativeMargin": null,
+                "budgetPressure": null
               },
               {
-                "path": "benchmarks/native-format/results-1784242054518.json",
+                "path": "benchmarks/native-format/results-1784321655592.json",
                 "observed": 1,
                 "threshold": 1,
+                "operator": "==",
                 "pass": true,
-                "relativeMargin": null
+                "relativeMargin": null,
+                "budgetPressure": null
               },
               {
-                "path": "benchmarks/native-format/results-1784242059253.json",
+                "path": "benchmarks/native-format/results-1784321660260.json",
                 "observed": 1,
                 "threshold": 1,
+                "operator": "==",
                 "pass": true,
-                "relativeMargin": null
+                "relativeMargin": null,
+                "budgetPressure": null
               }
             ]
           },
@@ -1236,25 +1452,31 @@
             "decision": "passed",
             "samples": [
               {
-                "path": "benchmarks/native-format/results-1784242049439.json",
+                "path": "benchmarks/native-format/results-1784321650912.json",
                 "observed": 1,
                 "threshold": 1,
+                "operator": "==",
                 "pass": true,
-                "relativeMargin": null
+                "relativeMargin": null,
+                "budgetPressure": null
               },
               {
-                "path": "benchmarks/native-format/results-1784242054518.json",
+                "path": "benchmarks/native-format/results-1784321655592.json",
                 "observed": 1,
                 "threshold": 1,
+                "operator": "==",
                 "pass": true,
-                "relativeMargin": null
+                "relativeMargin": null,
+                "budgetPressure": null
               },
               {
-                "path": "benchmarks/native-format/results-1784242059253.json",
+                "path": "benchmarks/native-format/results-1784321660260.json",
                 "observed": 1,
                 "threshold": 1,
+                "operator": "==",
                 "pass": true,
-                "relativeMargin": null
+                "relativeMargin": null,
+                "budgetPressure": null
               }
             ]
           },
@@ -1268,25 +1490,31 @@
             "decision": "passed",
             "samples": [
               {
-                "path": "benchmarks/native-format/results-1784242049439.json",
+                "path": "benchmarks/native-format/results-1784321650912.json",
                 "observed": 1,
                 "threshold": 1,
+                "operator": "==",
                 "pass": true,
-                "relativeMargin": null
+                "relativeMargin": null,
+                "budgetPressure": null
               },
               {
-                "path": "benchmarks/native-format/results-1784242054518.json",
+                "path": "benchmarks/native-format/results-1784321655592.json",
                 "observed": 1,
                 "threshold": 1,
+                "operator": "==",
                 "pass": true,
-                "relativeMargin": null
+                "relativeMargin": null,
+                "budgetPressure": null
               },
               {
-                "path": "benchmarks/native-format/results-1784242059253.json",
+                "path": "benchmarks/native-format/results-1784321660260.json",
                 "observed": 1,
                 "threshold": 1,
+                "operator": "==",
                 "pass": true,
-                "relativeMargin": null
+                "relativeMargin": null,
+                "budgetPressure": null
               }
             ]
           },
@@ -1300,25 +1528,31 @@
             "decision": "passed",
             "samples": [
               {
-                "path": "benchmarks/native-format/results-1784242049439.json",
+                "path": "benchmarks/native-format/results-1784321650912.json",
                 "observed": 1,
                 "threshold": 1,
+                "operator": "==",
                 "pass": true,
-                "relativeMargin": null
+                "relativeMargin": null,
+                "budgetPressure": null
               },
               {
-                "path": "benchmarks/native-format/results-1784242054518.json",
+                "path": "benchmarks/native-format/results-1784321655592.json",
                 "observed": 1,
                 "threshold": 1,
+                "operator": "==",
                 "pass": true,
-                "relativeMargin": null
+                "relativeMargin": null,
+                "budgetPressure": null
               },
               {
-                "path": "benchmarks/native-format/results-1784242059253.json",
+                "path": "benchmarks/native-format/results-1784321660260.json",
                 "observed": 1,
                 "threshold": 1,
+                "operator": "==",
                 "pass": true,
-                "relativeMargin": null
+                "relativeMargin": null,
+                "budgetPressure": null
               }
             ]
           },
@@ -1332,25 +1566,31 @@
             "decision": "passed",
             "samples": [
               {
-                "path": "benchmarks/native-format/results-1784242049439.json",
+                "path": "benchmarks/native-format/results-1784321650912.json",
                 "observed": 1,
                 "threshold": 1,
+                "operator": "==",
                 "pass": true,
-                "relativeMargin": null
+                "relativeMargin": null,
+                "budgetPressure": null
               },
               {
-                "path": "benchmarks/native-format/results-1784242054518.json",
+                "path": "benchmarks/native-format/results-1784321655592.json",
                 "observed": 1,
                 "threshold": 1,
+                "operator": "==",
                 "pass": true,
-                "relativeMargin": null
+                "relativeMargin": null,
+                "budgetPressure": null
               },
               {
-                "path": "benchmarks/native-format/results-1784242059253.json",
+                "path": "benchmarks/native-format/results-1784321660260.json",
                 "observed": 1,
                 "threshold": 1,
+                "operator": "==",
                 "pass": true,
-                "relativeMargin": null
+                "relativeMargin": null,
+                "budgetPressure": null
               }
             ]
           },
@@ -1364,25 +1604,31 @@
             "decision": "passed",
             "samples": [
               {
-                "path": "benchmarks/native-format/results-1784242049439.json",
+                "path": "benchmarks/native-format/results-1784321650912.json",
                 "observed": 1,
                 "threshold": 1,
+                "operator": "==",
                 "pass": true,
-                "relativeMargin": null
+                "relativeMargin": null,
+                "budgetPressure": null
               },
               {
-                "path": "benchmarks/native-format/results-1784242054518.json",
+                "path": "benchmarks/native-format/results-1784321655592.json",
                 "observed": 1,
                 "threshold": 1,
+                "operator": "==",
                 "pass": true,
-                "relativeMargin": null
+                "relativeMargin": null,
+                "budgetPressure": null
               },
               {
-                "path": "benchmarks/native-format/results-1784242059253.json",
+                "path": "benchmarks/native-format/results-1784321660260.json",
                 "observed": 1,
                 "threshold": 1,
+                "operator": "==",
                 "pass": true,
-                "relativeMargin": null
+                "relativeMargin": null,
+                "budgetPressure": null
               }
             ]
           },
@@ -1396,25 +1642,31 @@
             "decision": "passed",
             "samples": [
               {
-                "path": "benchmarks/native-format/results-1784242049439.json",
+                "path": "benchmarks/native-format/results-1784321650912.json",
                 "observed": 1,
                 "threshold": 1,
+                "operator": "==",
                 "pass": true,
-                "relativeMargin": null
+                "relativeMargin": null,
+                "budgetPressure": null
               },
               {
-                "path": "benchmarks/native-format/results-1784242054518.json",
+                "path": "benchmarks/native-format/results-1784321655592.json",
                 "observed": 1,
                 "threshold": 1,
+                "operator": "==",
                 "pass": true,
-                "relativeMargin": null
+                "relativeMargin": null,
+                "budgetPressure": null
               },
               {
-                "path": "benchmarks/native-format/results-1784242059253.json",
+                "path": "benchmarks/native-format/results-1784321660260.json",
                 "observed": 1,
                 "threshold": 1,
+                "operator": "==",
                 "pass": true,
-                "relativeMargin": null
+                "relativeMargin": null,
+                "budgetPressure": null
               }
             ]
           },
@@ -1428,25 +1680,31 @@
             "decision": "passed",
             "samples": [
               {
-                "path": "benchmarks/native-format/results-1784242049439.json",
+                "path": "benchmarks/native-format/results-1784321650912.json",
                 "observed": 1,
                 "threshold": 1,
+                "operator": "==",
                 "pass": true,
-                "relativeMargin": null
+                "relativeMargin": null,
+                "budgetPressure": null
               },
               {
-                "path": "benchmarks/native-format/results-1784242054518.json",
+                "path": "benchmarks/native-format/results-1784321655592.json",
                 "observed": 1,
                 "threshold": 1,
+                "operator": "==",
                 "pass": true,
-                "relativeMargin": null
+                "relativeMargin": null,
+                "budgetPressure": null
               },
               {
-                "path": "benchmarks/native-format/results-1784242059253.json",
+                "path": "benchmarks/native-format/results-1784321660260.json",
                 "observed": 1,
                 "threshold": 1,
+                "operator": "==",
                 "pass": true,
-                "relativeMargin": null
+                "relativeMargin": null,
+                "budgetPressure": null
               }
             ]
           },
@@ -1460,25 +1718,31 @@
             "decision": "passed",
             "samples": [
               {
-                "path": "benchmarks/native-format/results-1784242049439.json",
+                "path": "benchmarks/native-format/results-1784321650912.json",
                 "observed": 1,
                 "threshold": 1,
+                "operator": "==",
                 "pass": true,
-                "relativeMargin": null
+                "relativeMargin": null,
+                "budgetPressure": null
               },
               {
-                "path": "benchmarks/native-format/results-1784242054518.json",
+                "path": "benchmarks/native-format/results-1784321655592.json",
                 "observed": 1,
                 "threshold": 1,
+                "operator": "==",
                 "pass": true,
-                "relativeMargin": null
+                "relativeMargin": null,
+                "budgetPressure": null
               },
               {
-                "path": "benchmarks/native-format/results-1784242059253.json",
+                "path": "benchmarks/native-format/results-1784321660260.json",
                 "observed": 1,
                 "threshold": 1,
+                "operator": "==",
                 "pass": true,
-                "relativeMargin": null
+                "relativeMargin": null,
+                "budgetPressure": null
               }
             ]
           },
@@ -1492,25 +1756,31 @@
             "decision": "passed",
             "samples": [
               {
-                "path": "benchmarks/native-format/results-1784242049439.json",
+                "path": "benchmarks/native-format/results-1784321650912.json",
                 "observed": 1,
                 "threshold": 1,
+                "operator": "==",
                 "pass": true,
-                "relativeMargin": null
+                "relativeMargin": null,
+                "budgetPressure": null
               },
               {
-                "path": "benchmarks/native-format/results-1784242054518.json",
+                "path": "benchmarks/native-format/results-1784321655592.json",
                 "observed": 1,
                 "threshold": 1,
+                "operator": "==",
                 "pass": true,
-                "relativeMargin": null
+                "relativeMargin": null,
+                "budgetPressure": null
               },
               {
-                "path": "benchmarks/native-format/results-1784242059253.json",
+                "path": "benchmarks/native-format/results-1784321660260.json",
                 "observed": 1,
                 "threshold": 1,
+                "operator": "==",
                 "pass": true,
-                "relativeMargin": null
+                "relativeMargin": null,
+                "budgetPressure": null
               }
             ]
           },
@@ -1524,25 +1794,31 @@
             "decision": "passed",
             "samples": [
               {
-                "path": "benchmarks/native-format/results-1784242049439.json",
-                "observed": 3.508958,
+                "path": "benchmarks/native-format/results-1784321650912.json",
+                "observed": 3.1985,
                 "threshold": 110,
+                "operator": "<=",
                 "pass": true,
-                "relativeMargin": 0.9681003818181818
+                "relativeMargin": 0.9709227272727273,
+                "budgetPressure": 0.02907727272727273
               },
               {
-                "path": "benchmarks/native-format/results-1784242054518.json",
-                "observed": 3.111,
+                "path": "benchmarks/native-format/results-1784321655592.json",
+                "observed": 3.156334,
                 "threshold": 110,
+                "operator": "<=",
                 "pass": true,
-                "relativeMargin": 0.9717181818181818
+                "relativeMargin": 0.9713060545454545,
+                "budgetPressure": 0.028693945454545455
               },
               {
-                "path": "benchmarks/native-format/results-1784242059253.json",
-                "observed": 3.262708,
+                "path": "benchmarks/native-format/results-1784321660260.json",
+                "observed": 3.151167,
                 "threshold": 110,
+                "operator": "<=",
                 "pass": true,
-                "relativeMargin": 0.9703390181818181
+                "relativeMargin": 0.9713530272727272,
+                "budgetPressure": 0.028646972727272728
               }
             ]
           },
@@ -1556,25 +1832,31 @@
             "decision": "passed",
             "samples": [
               {
-                "path": "benchmarks/native-format/results-1784242049439.json",
-                "observed": 0.03665007916522299,
+                "path": "benchmarks/native-format/results-1784321650912.json",
+                "observed": 0.035473967980088526,
                 "threshold": 1.25,
+                "operator": "<=",
                 "pass": true,
-                "relativeMargin": 0.9706799366678217
+                "relativeMargin": 0.9716208256159291,
+                "budgetPressure": 0.02837917438407082
               },
               {
-                "path": "benchmarks/native-format/results-1784242054518.json",
-                "observed": 0.03243729350354832,
+                "path": "benchmarks/native-format/results-1784321655592.json",
+                "observed": 0.035607205860578584,
                 "threshold": 1.25,
+                "operator": "<=",
                 "pass": true,
-                "relativeMargin": 0.9740501651971613
+                "relativeMargin": 0.9715142353115371,
+                "budgetPressure": 0.028485764688462867
               },
               {
-                "path": "benchmarks/native-format/results-1784242059253.json",
-                "observed": 0.03748872767152863,
+                "path": "benchmarks/native-format/results-1784321660260.json",
+                "observed": 0.03547832401668553,
                 "threshold": 1.25,
+                "operator": "<=",
                 "pass": true,
-                "relativeMargin": 0.9700090178627772
+                "relativeMargin": 0.9716173407866515,
+                "budgetPressure": 0.02838265921334842
               }
             ]
           },
@@ -1588,25 +1870,31 @@
             "decision": "passed",
             "samples": [
               {
-                "path": "benchmarks/native-format/results-1784242049439.json",
+                "path": "benchmarks/native-format/results-1784321650912.json",
                 "observed": 1,
                 "threshold": 1,
+                "operator": "==",
                 "pass": true,
-                "relativeMargin": null
+                "relativeMargin": null,
+                "budgetPressure": null
               },
               {
-                "path": "benchmarks/native-format/results-1784242054518.json",
+                "path": "benchmarks/native-format/results-1784321655592.json",
                 "observed": 1,
                 "threshold": 1,
+                "operator": "==",
                 "pass": true,
-                "relativeMargin": null
+                "relativeMargin": null,
+                "budgetPressure": null
               },
               {
-                "path": "benchmarks/native-format/results-1784242059253.json",
+                "path": "benchmarks/native-format/results-1784321660260.json",
                 "observed": 1,
                 "threshold": 1,
+                "operator": "==",
                 "pass": true,
-                "relativeMargin": null
+                "relativeMargin": null,
+                "budgetPressure": null
               }
             ]
           },
@@ -1620,25 +1908,31 @@
             "decision": "passed",
             "samples": [
               {
-                "path": "benchmarks/native-format/results-1784242049439.json",
-                "observed": 1.143166441136671,
+                "path": "benchmarks/native-format/results-1784321650912.json",
+                "observed": 1.1431922764594424,
                 "threshold": 1.15,
+                "operator": "<=",
                 "pass": true,
-                "relativeMargin": 0.0059422250985467955
+                "relativeMargin": 0.005919759600484762,
+                "budgetPressure": 0.9940802403995153
               },
               {
-                "path": "benchmarks/native-format/results-1784242054518.json",
-                "observed": 1.1430762291384755,
+                "path": "benchmarks/native-format/results-1784321655592.json",
+                "observed": 1.1431922764594424,
                 "threshold": 1.15,
+                "operator": "<=",
                 "pass": true,
-                "relativeMargin": 0.006020670314369047
+                "relativeMargin": 0.005919759600484762,
+                "budgetPressure": 0.9940802403995153
               },
               {
-                "path": "benchmarks/native-format/results-1784242059253.json",
-                "observed": 1.143166441136671,
+                "path": "benchmarks/native-format/results-1784321660260.json",
+                "observed": 1.1432954340371775,
                 "threshold": 1.15,
+                "operator": "<=",
                 "pass": true,
-                "relativeMargin": 0.0059422250985467955
+                "relativeMargin": 0.005830057358976026,
+                "budgetPressure": 0.994169942641024
               }
             ]
           }
@@ -1646,7 +1940,7 @@
       },
       "rssAdjudication": {
         "bandFraction": 0.03,
-        "relativeMargin": 0.0059422250985467955,
+        "relativeMargin": 0.005919759600484762,
         "triggered": true,
         "requiredReports": 3,
         "passCount": 3,
@@ -1654,35 +1948,35 @@
         "decision": "passed",
         "reports": [
           {
-            "path": "benchmarks/native-format/results-1784242049439.json",
-            "ratio": 1.143166441136671,
+            "path": "benchmarks/native-format/results-1784321650912.json",
+            "ratio": 1.1431922764594424,
             "threshold": 1.15,
             "pass": true,
             "oxcRevision": "8e0ed2ebb96137fb1611cdbd5742d5cb46037d40",
-            "corpusIdentity": "1986613a3c555b65:ee30862dabc592f4"
+            "corpusIdentity": "{\"corpus\":{\"bytes\":1049086,\"equivalentTsxBytes\":1049086,\"fnv1a64\":\"1986613a3c555b65\",\"structuralForms\":[\"@{\",\"@if\",\"@else\"],\"note\":\"Retained statement-control corpus for comparison with earlier formatter reports.\"},\"generalizedControlCorpus\":{\"bytes\":262339,\"halfBytes\":131516,\"fnv1a64\":\"ee30862dabc592f4\",\"structuralForms\":[\"@{\",\"@if\",\"@else\",\"@for\",\"@empty\",\"index/key\",\"@switch/@case/@default\",\"@try/@pending/@catch\",\"<{dynamic}>\",\"<style>\"],\"dynamicTagCount\":394,\"stylePayloadCount\":197,\"note\":\"Repeated direct JSX-child, nested, expression, annotated loop, switch, source-order try, nested dynamic-tag, and raw-style forms.\"}}"
           },
           {
-            "path": "benchmarks/native-format/results-1784242054518.json",
-            "ratio": 1.1430762291384755,
+            "path": "benchmarks/native-format/results-1784321655592.json",
+            "ratio": 1.1431922764594424,
             "threshold": 1.15,
             "pass": true,
             "oxcRevision": "8e0ed2ebb96137fb1611cdbd5742d5cb46037d40",
-            "corpusIdentity": "1986613a3c555b65:ee30862dabc592f4"
+            "corpusIdentity": "{\"corpus\":{\"bytes\":1049086,\"equivalentTsxBytes\":1049086,\"fnv1a64\":\"1986613a3c555b65\",\"structuralForms\":[\"@{\",\"@if\",\"@else\"],\"note\":\"Retained statement-control corpus for comparison with earlier formatter reports.\"},\"generalizedControlCorpus\":{\"bytes\":262339,\"halfBytes\":131516,\"fnv1a64\":\"ee30862dabc592f4\",\"structuralForms\":[\"@{\",\"@if\",\"@else\",\"@for\",\"@empty\",\"index/key\",\"@switch/@case/@default\",\"@try/@pending/@catch\",\"<{dynamic}>\",\"<style>\"],\"dynamicTagCount\":394,\"stylePayloadCount\":197,\"note\":\"Repeated direct JSX-child, nested, expression, annotated loop, switch, source-order try, nested dynamic-tag, and raw-style forms.\"}}"
           },
           {
-            "path": "benchmarks/native-format/results-1784242059253.json",
-            "ratio": 1.143166441136671,
+            "path": "benchmarks/native-format/results-1784321660260.json",
+            "ratio": 1.1432954340371775,
             "threshold": 1.15,
             "pass": true,
             "oxcRevision": "8e0ed2ebb96137fb1611cdbd5742d5cb46037d40",
-            "corpusIdentity": "1986613a3c555b65:ee30862dabc592f4"
+            "corpusIdentity": "{\"corpus\":{\"bytes\":1049086,\"equivalentTsxBytes\":1049086,\"fnv1a64\":\"1986613a3c555b65\",\"structuralForms\":[\"@{\",\"@if\",\"@else\"],\"note\":\"Retained statement-control corpus for comparison with earlier formatter reports.\"},\"generalizedControlCorpus\":{\"bytes\":262339,\"halfBytes\":131516,\"fnv1a64\":\"ee30862dabc592f4\",\"structuralForms\":[\"@{\",\"@if\",\"@else\",\"@for\",\"@empty\",\"index/key\",\"@switch/@case/@default\",\"@try/@pending/@catch\",\"<{dynamic}>\",\"<style>\"],\"dynamicTagCount\":394,\"stylePayloadCount\":197,\"note\":\"Repeated direct JSX-child, nested, expression, annotated loop, switch, source-order try, nested dynamic-tag, and raw-style forms.\"}}"
           }
         ]
       }
     },
     "type-aware": {
-      "path": "benchmarks/type-aware/results-1784242060765.json",
-      "generatedAtUnixMs": 1784242060764,
+      "path": "benchmarks/type-aware/results-1784321661795.json",
+      "generatedAtUnixMs": 1784321661794,
       "assertions": [
         {
           "name": "defaultSyntaxP95",
@@ -1730,8 +2024,8 @@
       }
     },
     "vite": {
-      "path": "benchmarks/vite/results-1784242073158.json",
-      "generatedAtUnixMs": 1784242073156,
+      "path": "benchmarks/vite/results-1784321678410.json",
+      "generatedAtUnixMs": 1784321678408,
       "assertions": [
         {
           "name": "directLintP95",
@@ -1750,6 +2044,14 @@
           "pass": true
         },
         {
+          "name": "directOrdinaryFormatP95",
+          "pass": true
+        },
+        {
+          "name": "directOrdinaryFormatRatio",
+          "pass": true
+        },
+        {
           "name": "vitePlusLintP95",
           "pass": true
         },
@@ -1760,18 +2062,20 @@
       ],
       "allPassed": true,
       "budgets": {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "directLintP95MsMax": 150,
         "directLintVsCanonicalP95RatioMax": 2.5,
         "directFormatP95MsMax": 220,
         "directFormatVsCanonicalP95RatioMax": 2,
+        "directOrdinaryFormatP95MsMax": 150,
+        "directOrdinaryFormatVsCanonicalP95RatioMax": 1.25,
         "vitePlusCurrentLintP95MsMax": 750,
         "nativeTsrxParseCountPerFile": 1
       }
     },
     "editor": {
-      "path": "benchmarks/editor/results-1784242073843.json",
-      "generatedAtUnixMs": 1784242073842,
+      "path": "benchmarks/editor/results-1784321679056.json",
+      "generatedAtUnixMs": 1784321679055,
       "assertions": [
         {
           "name": "initialOpen",
@@ -1818,32 +2122,229 @@
       }
     },
     "comparative": {
-      "path": "benchmarks/comparative/results-1784242094588.json",
-      "generatedAtUnixMs": 1784242094588,
+      "path": "benchmarks/comparative/results-1784321699288.json",
+      "generatedAtUnixMs": 1784321699288,
       "assertions": [
         {
           "name": "nearOxlintParity",
+          "observed": 1.128676528783247,
+          "threshold": 1.25,
+          "comparison": "<=",
           "pass": true
         },
         {
           "name": "fasterThanEslint",
+          "observed": 13.263588674838509,
+          "threshold": 2,
+          "comparison": ">=",
           "pass": true
         },
         {
           "name": "mixedNoBlowup",
+          "observed": 1.4891681652007984,
+          "threshold": 1.5,
+          "comparison": "<=",
           "pass": true
         }
       ],
       "allPassed": true,
       "budgets": {
-        "schemaVersion": 2,
+        "schemaVersion": 3,
         "warmups": 5,
         "samples": 20,
         "files": 1000,
         "tsrxShare": 0.2,
-        "oxcTsrxVsOxlintMax": 1.5,
+        "oxcTsrxVsOxlintMax": 1.25,
         "eslintVsOxcTsrxMin": 2,
         "mixedVsTsxMax": 1.5
+      },
+      "adjudication": {
+        "bandFraction": 0.03,
+        "triggered": true,
+        "triggeredBy": [
+          "mixedNoBlowup"
+        ],
+        "requiredReports": 3,
+        "decision": "passed",
+        "selectedReport": "benchmarks/comparative/results-1784321699288.json",
+        "selectionPolicy": {
+          "kind": "median-normalized-budget-pressure",
+          "assertions": [
+            "mixedNoBlowup"
+          ],
+          "aggregation": "maximum-pressure-across-triggering-assertions",
+          "ordering": "ascending-pressure",
+          "tieBreak": "report-path-ascending",
+          "selectedIndex": 1,
+          "orderedReports": [
+            {
+              "path": "benchmarks/comparative/results-1784321719516.json",
+              "budgetPressure": 0.9829433264398167
+            },
+            {
+              "path": "benchmarks/comparative/results-1784321699288.json",
+              "budgetPressure": 0.9927787768005323
+            },
+            {
+              "path": "benchmarks/comparative/results-1784321739730.json",
+              "budgetPressure": 0.9946902622230459
+            }
+          ]
+        },
+        "reports": [
+          {
+            "path": "benchmarks/comparative/results-1784321699288.json",
+            "reportPassed": true,
+            "budgetPressure": 0.9927787768005323,
+            "oxcRevision": "8e0ed2ebb96137fb1611cdbd5742d5cb46037d40",
+            "corpusIdentity": "d750dcd9b4a56e71b6f575d9ed907666de03c207851bf712b37fcc1feb0915b0:1a6ee24b7e052bf686e0a9e955561b3b7859a76544948b2f98041ae2f001867b:c6b3fb65e113af11e5b807c6bdad3c8f09a8fb77270459c5025febd90cd3693a",
+            "budgetsIdentity": "{\"schemaVersion\":3,\"warmups\":5,\"samples\":20,\"files\":1000,\"tsrxShare\":0.2,\"oxcTsrxVsOxlintMax\":1.25,\"eslintVsOxcTsrxMin\":2,\"mixedVsTsxMax\":1.5}",
+            "hostIdentity": "{\"platform\":\"darwin\",\"arch\":\"arm64\",\"cpu\":\"Apple M5 Pro\",\"cores\":18,\"osRelease\":\"25.5.0\",\"node\":\"v24.15.0\"}",
+            "buildIdentity": "{\"profile\":\"release\",\"binary\":\"node_modules/oxlint-tsrx/bin/oxlint (all TSX -> in-process oxlint-current declared bin; mixed -> public oxlint-current Node child + target/release/oxc-tsrx)\",\"oxcRevision\":\"8e0ed2ebb96137fb1611cdbd5742d5cb46037d40\"}",
+            "versionsIdentity": "{\"eslint\":\"v10.7.0\",\"typescriptEslint\":\"8.64.0\",\"oxlint\":\"Version: 1.74.0\",\"oxcTsrx\":\"oxc-tsrx 0.1.0 (OXC 8e0ed2ebb96137fb1611cdbd5742d5cb46037d40)\",\"oxcTsrxLauncher\":\"oxlint-tsrx 0.1.0\"}",
+            "routeIdentity": "{\"boundary\":{\"rules\":[\"no-debugger\"],\"fileSelection\":\"same explicit file list\",\"output\":\"zero-diagnostic default output\",\"crossToolCorpus\":\"byte-identical TSX files\",\"launch\":\"every lane measured through its npm CLI entry point, Node launcher included\",\"compileCache\":\"oxlint-tsrx enables the Node module compile cache before routing; five fresh-process warmups precede measurements\",\"productRouting\":{\"allTsx\":\"oxlint-tsrx npm launcher -> oxlint-current declared npm binary in the same Node process\",\"mixed\":\"oxlint-tsrx npm launcher -> public oxlint-current declared npm binary in a Node subprocess plus target/release/oxc-tsrx; the canonical child starts while the bridge loads\"},\"executables\":{\"eslint\":\"node_modules/.bin/eslint\",\"oxlint\":\"node_modules/oxlint-current/bin/oxlint\",\"oxcTsrx\":\"node_modules/oxlint-tsrx/bin/oxlint\",\"oxcTsrxMixed\":\"node_modules/oxlint-tsrx/bin/oxlint\"},\"argumentShape\":{\"eslint\":\"--config eslint.config.mjs --no-ignore --no-warn-ignored <1,000 explicit TSX files>\",\"oxlint\":\"--allow all --deny no-debugger --no-ignore <1,000 explicit TSX files>\",\"oxcTsrx\":\"--allow all --deny no-debugger --no-ignore <1,000 explicit TSX files>\",\"oxcTsrxMixed\":\"--allow all --deny no-debugger --no-ignore <1,000 explicit paired TSX/TSRX files>\"},\"mixedComparison\":\"paired generated component specifications; internal OXC for TSRX workload ratio only\",\"configSha256\":\"413bac026c6018f2f92e63f7e48f74ffb9ba603904fbeee676095efa0e52c07b\"},\"routeEvidence\":{\"ordinaryDispatchEvents\":0,\"mixedDispatchEvents\":2,\"publicCanonicalNodeChildren\":1,\"nativeTsrxChildren\":1,\"privateInProcessAdapterChildren\":0,\"mixedUsesPublicCanonicalNodeChild\":true,\"mixedUsesNativeTsrxChild\":true,\"mixedUsesPrivateInProcessAdapter\":false}}"
+          },
+          {
+            "path": "benchmarks/comparative/results-1784321719516.json",
+            "reportPassed": true,
+            "budgetPressure": 0.9829433264398167,
+            "oxcRevision": "8e0ed2ebb96137fb1611cdbd5742d5cb46037d40",
+            "corpusIdentity": "d750dcd9b4a56e71b6f575d9ed907666de03c207851bf712b37fcc1feb0915b0:1a6ee24b7e052bf686e0a9e955561b3b7859a76544948b2f98041ae2f001867b:c6b3fb65e113af11e5b807c6bdad3c8f09a8fb77270459c5025febd90cd3693a",
+            "budgetsIdentity": "{\"schemaVersion\":3,\"warmups\":5,\"samples\":20,\"files\":1000,\"tsrxShare\":0.2,\"oxcTsrxVsOxlintMax\":1.25,\"eslintVsOxcTsrxMin\":2,\"mixedVsTsxMax\":1.5}",
+            "hostIdentity": "{\"platform\":\"darwin\",\"arch\":\"arm64\",\"cpu\":\"Apple M5 Pro\",\"cores\":18,\"osRelease\":\"25.5.0\",\"node\":\"v24.15.0\"}",
+            "buildIdentity": "{\"profile\":\"release\",\"binary\":\"node_modules/oxlint-tsrx/bin/oxlint (all TSX -> in-process oxlint-current declared bin; mixed -> public oxlint-current Node child + target/release/oxc-tsrx)\",\"oxcRevision\":\"8e0ed2ebb96137fb1611cdbd5742d5cb46037d40\"}",
+            "versionsIdentity": "{\"eslint\":\"v10.7.0\",\"typescriptEslint\":\"8.64.0\",\"oxlint\":\"Version: 1.74.0\",\"oxcTsrx\":\"oxc-tsrx 0.1.0 (OXC 8e0ed2ebb96137fb1611cdbd5742d5cb46037d40)\",\"oxcTsrxLauncher\":\"oxlint-tsrx 0.1.0\"}",
+            "routeIdentity": "{\"boundary\":{\"rules\":[\"no-debugger\"],\"fileSelection\":\"same explicit file list\",\"output\":\"zero-diagnostic default output\",\"crossToolCorpus\":\"byte-identical TSX files\",\"launch\":\"every lane measured through its npm CLI entry point, Node launcher included\",\"compileCache\":\"oxlint-tsrx enables the Node module compile cache before routing; five fresh-process warmups precede measurements\",\"productRouting\":{\"allTsx\":\"oxlint-tsrx npm launcher -> oxlint-current declared npm binary in the same Node process\",\"mixed\":\"oxlint-tsrx npm launcher -> public oxlint-current declared npm binary in a Node subprocess plus target/release/oxc-tsrx; the canonical child starts while the bridge loads\"},\"executables\":{\"eslint\":\"node_modules/.bin/eslint\",\"oxlint\":\"node_modules/oxlint-current/bin/oxlint\",\"oxcTsrx\":\"node_modules/oxlint-tsrx/bin/oxlint\",\"oxcTsrxMixed\":\"node_modules/oxlint-tsrx/bin/oxlint\"},\"argumentShape\":{\"eslint\":\"--config eslint.config.mjs --no-ignore --no-warn-ignored <1,000 explicit TSX files>\",\"oxlint\":\"--allow all --deny no-debugger --no-ignore <1,000 explicit TSX files>\",\"oxcTsrx\":\"--allow all --deny no-debugger --no-ignore <1,000 explicit TSX files>\",\"oxcTsrxMixed\":\"--allow all --deny no-debugger --no-ignore <1,000 explicit paired TSX/TSRX files>\"},\"mixedComparison\":\"paired generated component specifications; internal OXC for TSRX workload ratio only\",\"configSha256\":\"413bac026c6018f2f92e63f7e48f74ffb9ba603904fbeee676095efa0e52c07b\"},\"routeEvidence\":{\"ordinaryDispatchEvents\":0,\"mixedDispatchEvents\":2,\"publicCanonicalNodeChildren\":1,\"nativeTsrxChildren\":1,\"privateInProcessAdapterChildren\":0,\"mixedUsesPublicCanonicalNodeChild\":true,\"mixedUsesNativeTsrxChild\":true,\"mixedUsesPrivateInProcessAdapter\":false}}"
+          },
+          {
+            "path": "benchmarks/comparative/results-1784321739730.json",
+            "reportPassed": true,
+            "budgetPressure": 0.9946902622230459,
+            "oxcRevision": "8e0ed2ebb96137fb1611cdbd5742d5cb46037d40",
+            "corpusIdentity": "d750dcd9b4a56e71b6f575d9ed907666de03c207851bf712b37fcc1feb0915b0:1a6ee24b7e052bf686e0a9e955561b3b7859a76544948b2f98041ae2f001867b:c6b3fb65e113af11e5b807c6bdad3c8f09a8fb77270459c5025febd90cd3693a",
+            "budgetsIdentity": "{\"schemaVersion\":3,\"warmups\":5,\"samples\":20,\"files\":1000,\"tsrxShare\":0.2,\"oxcTsrxVsOxlintMax\":1.25,\"eslintVsOxcTsrxMin\":2,\"mixedVsTsxMax\":1.5}",
+            "hostIdentity": "{\"platform\":\"darwin\",\"arch\":\"arm64\",\"cpu\":\"Apple M5 Pro\",\"cores\":18,\"osRelease\":\"25.5.0\",\"node\":\"v24.15.0\"}",
+            "buildIdentity": "{\"profile\":\"release\",\"binary\":\"node_modules/oxlint-tsrx/bin/oxlint (all TSX -> in-process oxlint-current declared bin; mixed -> public oxlint-current Node child + target/release/oxc-tsrx)\",\"oxcRevision\":\"8e0ed2ebb96137fb1611cdbd5742d5cb46037d40\"}",
+            "versionsIdentity": "{\"eslint\":\"v10.7.0\",\"typescriptEslint\":\"8.64.0\",\"oxlint\":\"Version: 1.74.0\",\"oxcTsrx\":\"oxc-tsrx 0.1.0 (OXC 8e0ed2ebb96137fb1611cdbd5742d5cb46037d40)\",\"oxcTsrxLauncher\":\"oxlint-tsrx 0.1.0\"}",
+            "routeIdentity": "{\"boundary\":{\"rules\":[\"no-debugger\"],\"fileSelection\":\"same explicit file list\",\"output\":\"zero-diagnostic default output\",\"crossToolCorpus\":\"byte-identical TSX files\",\"launch\":\"every lane measured through its npm CLI entry point, Node launcher included\",\"compileCache\":\"oxlint-tsrx enables the Node module compile cache before routing; five fresh-process warmups precede measurements\",\"productRouting\":{\"allTsx\":\"oxlint-tsrx npm launcher -> oxlint-current declared npm binary in the same Node process\",\"mixed\":\"oxlint-tsrx npm launcher -> public oxlint-current declared npm binary in a Node subprocess plus target/release/oxc-tsrx; the canonical child starts while the bridge loads\"},\"executables\":{\"eslint\":\"node_modules/.bin/eslint\",\"oxlint\":\"node_modules/oxlint-current/bin/oxlint\",\"oxcTsrx\":\"node_modules/oxlint-tsrx/bin/oxlint\",\"oxcTsrxMixed\":\"node_modules/oxlint-tsrx/bin/oxlint\"},\"argumentShape\":{\"eslint\":\"--config eslint.config.mjs --no-ignore --no-warn-ignored <1,000 explicit TSX files>\",\"oxlint\":\"--allow all --deny no-debugger --no-ignore <1,000 explicit TSX files>\",\"oxcTsrx\":\"--allow all --deny no-debugger --no-ignore <1,000 explicit TSX files>\",\"oxcTsrxMixed\":\"--allow all --deny no-debugger --no-ignore <1,000 explicit paired TSX/TSRX files>\"},\"mixedComparison\":\"paired generated component specifications; internal OXC for TSRX workload ratio only\",\"configSha256\":\"413bac026c6018f2f92e63f7e48f74ffb9ba603904fbeee676095efa0e52c07b\"},\"routeEvidence\":{\"ordinaryDispatchEvents\":0,\"mixedDispatchEvents\":2,\"publicCanonicalNodeChildren\":1,\"nativeTsrxChildren\":1,\"privateInProcessAdapterChildren\":0,\"mixedUsesPublicCanonicalNodeChild\":true,\"mixedUsesNativeTsrxChild\":true,\"mixedUsesPrivateInProcessAdapter\":false}}"
+          }
+        ],
+        "assertionDecisions": [
+          {
+            "name": "nearOxlintParity",
+            "invariant": false,
+            "triggered": false,
+            "passCount": 3,
+            "failCount": 0,
+            "definitiveFailure": false,
+            "decision": "passed",
+            "samples": [
+              {
+                "path": "benchmarks/comparative/results-1784321699288.json",
+                "observed": 1.128676528783247,
+                "threshold": 1.25,
+                "operator": "<=",
+                "pass": true,
+                "relativeMargin": 0.09705877697340241,
+                "budgetPressure": 0.9029412230265976
+              },
+              {
+                "path": "benchmarks/comparative/results-1784321719516.json",
+                "observed": 1.1217413513660601,
+                "threshold": 1.25,
+                "operator": "<=",
+                "pass": true,
+                "relativeMargin": 0.1026069189071519,
+                "budgetPressure": 0.8973930810928481
+              },
+              {
+                "path": "benchmarks/comparative/results-1784321739730.json",
+                "observed": 1.0980189088965355,
+                "threshold": 1.25,
+                "operator": "<=",
+                "pass": true,
+                "relativeMargin": 0.12158487288277157,
+                "budgetPressure": 0.8784151271172285
+              }
+            ]
+          },
+          {
+            "name": "fasterThanEslint",
+            "invariant": false,
+            "triggered": false,
+            "passCount": 3,
+            "failCount": 0,
+            "definitiveFailure": false,
+            "decision": "passed",
+            "samples": [
+              {
+                "path": "benchmarks/comparative/results-1784321699288.json",
+                "observed": 13.263588674838509,
+                "threshold": 2,
+                "operator": ">=",
+                "pass": true,
+                "relativeMargin": 5.6317943374192545,
+                "budgetPressure": 0.15078875325756066
+              },
+              {
+                "path": "benchmarks/comparative/results-1784321719516.json",
+                "observed": 13.411481561797432,
+                "threshold": 2,
+                "operator": ">=",
+                "pass": true,
+                "relativeMargin": 5.705740780898716,
+                "budgetPressure": 0.1491259553080992
+              },
+              {
+                "path": "benchmarks/comparative/results-1784321739730.json",
+                "observed": 13.486743165983013,
+                "threshold": 2,
+                "operator": ">=",
+                "pass": true,
+                "relativeMargin": 5.743371582991506,
+                "budgetPressure": 0.14829377080780387
+              }
+            ]
+          },
+          {
+            "name": "mixedNoBlowup",
+            "invariant": false,
+            "triggered": true,
+            "passCount": 3,
+            "failCount": 0,
+            "definitiveFailure": false,
+            "decision": "passed",
+            "samples": [
+              {
+                "path": "benchmarks/comparative/results-1784321699288.json",
+                "observed": 1.4891681652007984,
+                "threshold": 1.5,
+                "operator": "<=",
+                "pass": true,
+                "relativeMargin": 0.007221223199467719,
+                "budgetPressure": 0.9927787768005323
+              },
+              {
+                "path": "benchmarks/comparative/results-1784321719516.json",
+                "observed": 1.4744149896597252,
+                "threshold": 1.5,
+                "operator": "<=",
+                "pass": true,
+                "relativeMargin": 0.017056673560183217,
+                "budgetPressure": 0.9829433264398167
+              },
+              {
+                "path": "benchmarks/comparative/results-1784321739730.json",
+                "observed": 1.492035393334569,
+                "threshold": 1.5,
+                "operator": "<=",
+                "pass": true,
+                "relativeMargin": 0.005309737776954056,
+                "budgetPressure": 0.9946902622230459
+              }
+            ]
+          }
+        ]
       }
     }
   },

@@ -1,13 +1,29 @@
 import assert from "node:assert/strict";
-import { readdir, readFile } from "node:fs/promises";
-import { basename, join, relative, resolve, sep } from "node:path";
+import {
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  realpath,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { basename, dirname, join, relative, resolve, sep } from "node:path";
+import { pathToFileURL } from "node:url";
 import test from "node:test";
+import { resolveNpmInvocation } from "../../scripts/npm-invocation.mjs";
+import { resolveVsceInvocation } from "../../scripts/vsce-invocation.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 const adapterManifestPath = join(root, "crates/oxc_adapter/Cargo.toml");
 const adapterSourcePath = join(root, "crates/oxc_adapter/src/lib.rs");
 const editorIntegrationPath = join(root, "docs/integrations/editor.md");
+const upstreamingGuidePath = join(root, "docs/architecture/upstreaming-to-oxc.md");
 const canonicalRepository = "https://github.com/oxc-project/oxc";
+const pinnedOxcRevision = "8e0ed2ebb96137fb1611cdbd5742d5cb46037d40";
+const auditedOxcMain = "6fe866af3036127c2236cc1db557f086c4408905";
 const expectedAdapterDependencies = [
   "oxc_allocator",
   "oxc_ast",
@@ -25,6 +41,59 @@ const expectedAdapterDependencies = [
   "oxc_span",
   "oxc_syntax",
 ];
+
+async function writeNpmFixture(
+  packageRoot,
+  { declared = "./cli/from-public-manifest.mjs", contents = "#!/usr/bin/env node\n" } = {},
+) {
+  const entry = resolve(packageRoot, declared);
+  await mkdir(dirname(entry), { recursive: true });
+  await Promise.all([
+    writeFile(entry, contents),
+    writeFile(
+      join(packageRoot, "package.json"),
+      `${JSON.stringify({
+        name: "npm",
+        version: "99.0.0-test",
+        bin: { npm: declared },
+      })}\n`,
+    ),
+  ]);
+  return entry;
+}
+
+async function publicNpmEntry(entryPath) {
+  const entry = await realpath(entryPath);
+  let directory = dirname(entry);
+  while (true) {
+    const manifestPath = join(directory, "package.json");
+    const source = await readFile(manifestPath, "utf8").catch(() => null);
+    if (source !== null) {
+      let manifest;
+      try {
+        manifest = JSON.parse(source);
+      } catch {
+        manifest = null;
+      }
+      if (manifest?.name === "npm") {
+        const declared = typeof manifest.bin === "string" ? manifest.bin : manifest.bin?.npm;
+        if (typeof declared !== "string" || declared.length === 0) {
+          throw new Error("npm's public package manifest does not declare bin.npm");
+        }
+        return {
+          manifest,
+          entry: await realpath(resolve(directory, declared)),
+        };
+      }
+    }
+
+    const parent = dirname(directory);
+    if (parent === directory) {
+      throw new Error(`could not find npm's public package manifest above ${entry}`);
+    }
+    directory = parent;
+  }
+}
 
 function dependencyTables(manifest) {
   const dependencies = new Map();
@@ -141,9 +210,7 @@ test("canonical OXC crates resolve through one exact adapter revision", async ()
   );
   const [canonicalLockSource] = canonicalLockSources;
   const canonicalPackageNames = new Set(
-    packages
-      .filter((entry) => entry.source === canonicalLockSource)
-      .map((entry) => entry.name),
+    packages.filter((entry) => entry.source === canonicalLockSource).map((entry) => entry.name),
   );
   for (const name of canonicalPackageNames) {
     const conflictingIdentities = packages.filter(
@@ -269,6 +336,347 @@ test("the workspace has no Cargo patch, vendor tree, checkout, or copied OXC cra
   }
 });
 
+test("VSCE runs its manifest-declared JavaScript entry through Node on Windows", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "oxc-tsrx-vsce-invocation-"));
+  const packageRoot = join(directory, "node_modules/@vscode/vsce");
+  const consumer = join(directory, "package-vscode.mjs");
+  const declaredEntry = join(packageRoot, "commands/vsce.js");
+  const windowsNode = String.raw`C:\Program Files\nodejs\node.exe`;
+
+  try {
+    await Promise.all([
+      mkdir(join(packageRoot, "commands"), { recursive: true }),
+      mkdir(join(directory, "node_modules/.bin"), { recursive: true }),
+    ]);
+    await Promise.all([
+      writeFile(consumer, "export {};\n"),
+      writeFile(declaredEntry, "#!/usr/bin/env node\n"),
+      writeFile(join(directory, "node_modules/.bin/vsce.cmd"), "@echo private shim\r\n"),
+      writeFile(
+        join(packageRoot, "package.json"),
+        `${JSON.stringify({
+          name: "@vscode/vsce",
+          version: "1.0.0-test",
+          bin: { vsce: "./commands/vsce.js" },
+        })}\n`,
+      ),
+    ]);
+
+    const invocation = resolveVsceInvocation(["package", "--target", "win32-x64"], {
+      fromUrl: pathToFileURL(consumer).href,
+      nodeExecutable: windowsNode,
+    });
+
+    assert.equal(invocation.executable, windowsNode);
+    assert.deepEqual(invocation.args, [
+      await realpath(resolve(declaredEntry)),
+      "package",
+      "--target",
+      "win32-x64",
+    ]);
+    assert.doesNotMatch(invocation.args[0], /[\\/]\.bin[\\/]|\.cmd$/iu);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("repository VSCE invocation resolves the installed public package manifest", () => {
+  const invocation = resolveVsceInvocation(["--version"]);
+
+  assert.equal(invocation.executable, process.execPath);
+  assert.equal(invocation.args.length, 2);
+  assert.match(invocation.args[0], /node_modules[\\/]@vscode[\\/]vsce[\\/]vsce$/u);
+  assert.equal(invocation.args[1], "--version");
+  assert.doesNotMatch(invocation.args[0], /[\\/]\.bin[\\/]|\.cmd$/iu);
+});
+
+test("npm rejects every exact dotfile basename before shebang inspection", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "oxc-tsrx-npm-rejected-dotfiles-"));
+  const nodeDirectory = join(directory, "node");
+  const nodeExecutable = join(nodeDirectory, "node.exe");
+  const packageRoot = join(nodeDirectory, "node_modules/npm");
+
+  try {
+    await mkdir(nodeDirectory, { recursive: true });
+    await writeFile(nodeExecutable, "simulated node executable\n");
+    for (const name of [
+      ".cmd",
+      ".CMD",
+      ".bat",
+      ".exe",
+      ".com",
+      ".ps1",
+      ".command",
+      ".txt",
+      ".wat",
+      ".js",
+      ".cjs",
+      ".mjs",
+      ".hidden.js",
+    ]) {
+      await writeNpmFixture(packageRoot, {
+        declared: `./cli/${name}`,
+        contents: "#!/usr/bin/env node\nprocess.exit(0);\n",
+      });
+      assert.throws(
+        () => resolveNpmInvocation(["pack"], { nodeExecutable, env: { PATH: "" } }),
+        /could not resolve npm's manifest-declared JavaScript entry/iu,
+        name,
+      );
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("npm categorically rejects manifest-declared shell and native launchers", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "oxc-tsrx-npm-rejected-launchers-"));
+  const nodeDirectory = join(directory, "node");
+  const nodeExecutable = join(nodeDirectory, "node.exe");
+  const packageRoot = join(nodeDirectory, "node_modules/npm");
+
+  try {
+    await mkdir(nodeDirectory, { recursive: true });
+    await writeFile(nodeExecutable, "simulated node executable\n");
+    for (const suffix of [".cmd", ".CMD", ".bat", ".exe", ".com", ".ps1", ".command"]) {
+      await writeNpmFixture(packageRoot, {
+        declared: `./cli/adversarial${suffix}`,
+        contents: "#!/usr/bin/env node\nprocess.exit(0);\n",
+      });
+      assert.throws(
+        () =>
+          resolveNpmInvocation(["pack"], {
+            nodeExecutable,
+            env: { PATH: "" },
+          }),
+        /could not resolve npm's manifest-declared JavaScript entry/iu,
+        suffix,
+      );
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("npm accepts JavaScript entries and only extensionless entries with a Node shebang", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "oxc-tsrx-npm-javascript-entries-"));
+  const nodeDirectory = join(directory, "node");
+  const nodeExecutable = join(nodeDirectory, "node.exe");
+  const packageRoot = join(nodeDirectory, "node_modules/npm");
+
+  try {
+    await mkdir(nodeDirectory, { recursive: true });
+    await writeFile(nodeExecutable, "simulated node executable\n");
+    for (const extension of [".js", ".cjs", ".mjs"]) {
+      const entry = await writeNpmFixture(packageRoot, {
+        declared: `./cli/declared${extension}`,
+        contents: "process.exit(0);\n",
+      });
+      const invocation = resolveNpmInvocation(["pack"], {
+        nodeExecutable,
+        env: { PATH: "" },
+      });
+      assert.equal(invocation.args[0], await realpath(entry), extension);
+    }
+
+    for (const [declared, contents] of [
+      ["./cli/directnode", "#!/usr/bin/node\nprocess.exit(0);\n"],
+      ["./cli/envnode", "#!/usr/bin/env node\nprocess.exit(0);\n"],
+      ["./cli/envsnode", "#!/usr/bin/env -S node --no-warnings\nprocess.exit(0);\n"],
+    ]) {
+      const extensionless = await writeNpmFixture(packageRoot, { declared, contents });
+      assert.equal(
+        resolveNpmInvocation(["pack"], { nodeExecutable, env: { PATH: "" } }).args[0],
+        await realpath(extensionless),
+        declared,
+      );
+    }
+
+    for (const [declared, contents] of [
+      ["./cli/not-javascript.txt", "#!/usr/bin/env node\nprocess.exit(0);\n"],
+      ["./cli/no-node-shebang", "process.exit(0);\n"],
+      ["./cli/wrong-shebang", "#!/bin/echo node\nprocess.exit(0);\n"],
+    ]) {
+      await writeNpmFixture(packageRoot, { declared, contents });
+      assert.throws(
+        () => resolveNpmInvocation(["pack"], { nodeExecutable, env: { PATH: "" } }),
+        /could not resolve npm's manifest-declared JavaScript entry/iu,
+        declared,
+      );
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("npm rejects a manifest-declared entry whose symlink escapes the package root", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "oxc-tsrx-npm-symlink-escape-"));
+  const nodeDirectory = join(directory, "node");
+  const nodeExecutable = join(nodeDirectory, "node.exe");
+  const packageRoot = join(nodeDirectory, "node_modules/npm");
+  const outside = join(directory, "outside");
+
+  try {
+    await Promise.all([
+      mkdir(packageRoot, { recursive: true }),
+      mkdir(outside, { recursive: true }),
+    ]);
+    await Promise.all([
+      writeFile(nodeExecutable, "simulated node executable\n"),
+      writeFile(join(outside, "escaped.js"), "process.exit(0);\n"),
+      writeFile(
+        join(packageRoot, "package.json"),
+        `${JSON.stringify({
+          name: "npm",
+          version: "99.0.0-test",
+          bin: { npm: "./escape/escaped.js" },
+        })}\n`,
+      ),
+      symlink(
+        outside,
+        join(packageRoot, "escape"),
+        process.platform === "win32" ? "junction" : "dir",
+      ),
+    ]);
+
+    assert.throws(
+      () => resolveNpmInvocation(["pack"], { nodeExecutable, env: { PATH: "" } }),
+      /could not resolve npm's manifest-declared JavaScript entry/iu,
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("npm uses its manifest-declared JavaScript entry in a simulated Windows Node layout", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "oxc-tsrx-npm-windows-invocation-"));
+  const nodeDirectory = join(directory, "node");
+  const nodeExecutable = join(nodeDirectory, "node.exe");
+  const packageRoot = join(nodeDirectory, "node_modules/npm");
+
+  try {
+    const declaredEntry = await writeNpmFixture(packageRoot);
+    await Promise.all([
+      writeFile(nodeExecutable, "simulated node executable\n"),
+      writeFile(join(nodeDirectory, "npm.cmd"), "@echo decoy shim that must not execute\r\n"),
+    ]);
+    const invocation = resolveNpmInvocation(["pack", "--json"], {
+      nodeExecutable,
+      env: { PATH: nodeDirectory },
+    });
+
+    assert.equal(invocation.executable, nodeExecutable);
+    assert.deepEqual(invocation.args, [await realpath(declaredEntry), "pack", "--json"]);
+    assert.doesNotMatch(`${invocation.executable}\n${invocation.args.join("\n")}`, /npm\.cmd/iu);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("npm discovery supports the ordinary Unix Node distribution layout", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "oxc-tsrx-npm-unix-invocation-"));
+  const installation = join(directory, "installation");
+  const nodeExecutable = join(installation, "bin/node");
+  const packageRoot = join(installation, "lib/node_modules/npm");
+
+  try {
+    const declaredEntry = await writeNpmFixture(packageRoot);
+    await mkdir(join(installation, "bin"), { recursive: true });
+    await writeFile(nodeExecutable, "simulated node executable\n");
+    const invocation = resolveNpmInvocation(["--version"], {
+      nodeExecutable,
+      env: { PATH: "" },
+    });
+
+    assert.equal(invocation.executable, nodeExecutable);
+    assert.deepEqual(invocation.args, [await realpath(declaredEntry), "--version"]);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("npm_execpath is accepted only when it is the npm manifest's declared entry", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "oxc-tsrx-npm-execpath-invocation-"));
+  const nodeExecutable = join(directory, "detached/node");
+  const packageRoot = join(directory, "share/node_modules/npm");
+
+  try {
+    const declaredEntry = await writeNpmFixture(packageRoot);
+    await mkdir(join(directory, "detached"), { recursive: true });
+    await Promise.all([
+      writeFile(nodeExecutable, "simulated node executable\n"),
+      writeFile(join(packageRoot, "cli/not-npm.js"), "#!/usr/bin/env node\n"),
+    ]);
+    const invocation = resolveNpmInvocation(["pack"], {
+      nodeExecutable,
+      env: { PATH: "", npm_execpath: relative(directory, declaredEntry) },
+      cwd: directory,
+    });
+    assert.deepEqual(invocation, {
+      executable: nodeExecutable,
+      args: [await realpath(declaredEntry), "pack"],
+    });
+
+    assert.throws(
+      () =>
+        resolveNpmInvocation(["pack"], {
+          nodeExecutable,
+          env: { PATH: "", npm_execpath: join(packageRoot, "cli/not-npm.js") },
+        }),
+      /could not resolve npm's manifest-declared JavaScript entry/iu,
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test(
+  "npm discovery follows a PATH launcher symlink back to the declared entry",
+  { skip: process.platform === "win32" ? "file symlinks need elevated Windows privileges" : false },
+  async () => {
+    const directory = await mkdtemp(join(tmpdir(), "oxc-tsrx-npm-path-invocation-"));
+    const nodeExecutable = join(directory, "detached/node");
+    const packageRoot = join(directory, "share/node_modules/npm");
+    const pathDirectory = join(directory, "path-bin");
+
+    try {
+      const declaredEntry = await writeNpmFixture(packageRoot);
+      await Promise.all([
+        mkdir(join(directory, "detached"), { recursive: true }),
+        mkdir(pathDirectory, { recursive: true }),
+      ]);
+      await Promise.all([
+        writeFile(nodeExecutable, "simulated node executable\n"),
+        symlink(declaredEntry, join(pathDirectory, "npm")),
+        writeFile(join(pathDirectory, "npm.cmd"), "@echo decoy shim that must not execute\r\n"),
+      ]);
+      const invocation = resolveNpmInvocation(["pack"], {
+        nodeExecutable,
+        env: { PATH: pathDirectory },
+      });
+
+      assert.deepEqual(invocation, {
+        executable: nodeExecutable,
+        args: [await realpath(declaredEntry), "pack"],
+      });
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  },
+);
+
+test("repository npm invocation matches npm's public manifest-declared bin", async () => {
+  const invocation = resolveNpmInvocation(["--version"]);
+  const expected = await publicNpmEntry(invocation.args[0]);
+
+  assert.equal(invocation.executable, process.execPath);
+  assert.equal(invocation.args.length, 2);
+  assert.equal(expected.manifest.name, "npm");
+  assert.equal(invocation.args[0], expected.entry);
+  assert.equal(invocation.args[1], "--version");
+  assert.doesNotMatch(invocation.args[0], /[\\/]\.bin[\\/]|\.(?:bat|cmd|com|exe|ps1)$/iu);
+});
+
 test("editor docs distinguish OXC's compiled tool seam from unavailable runtime hooks", async () => {
   const guide = await readFile(editorIntegrationPath, "utf8");
   assert.match(guide, /ToolBuilder/);
@@ -277,4 +685,92 @@ test("editor docs distinguish OXC's compiled tool seam from unavailable runtime 
   assert.match(guide, /github\.com\/oxc-project\/oxc\/discussions\/21936/);
   assert.match(guide, /github\.com\/oxc-project\/oxc\/pull\/24262/);
   assert.match(guide, /github\.com\/oxc-project\/oxc\/pull\/20250/);
+});
+
+test("the maintainer guide defines a source-backed upstream transplant contract", async () => {
+  const [guide, readme, core, editor, siteConfig] = await Promise.all([
+    readFile(upstreamingGuidePath, "utf8"),
+    readFile(join(root, "README.md"), "utf8"),
+    readFile(join(root, "docs/architecture/rust-oxc-core.md"), "utf8"),
+    readFile(editorIntegrationPath, "utf8"),
+    readFile(join(root, "docs/site.config.mjs"), "utf8"),
+  ]);
+
+  assert.match(guide, /OXC for TSRX is an independent community project/i);
+  assert.match(guide, /not affiliated with,\s+endorsed by, or a product of/i);
+  assert.match(guide, new RegExp(pinnedOxcRevision));
+  assert.match(guide, new RegExp(auditedOxcMain));
+  assert.match(guide, /audited on 2026-07-16/i);
+  assert.match(guide, /no merged whole-file (?:language |parser )?hook/i);
+  assert.match(guide, /no OXC maintainer\s+interest or endorsement is claimed/i);
+  assert.match(guide, /unicode-id-start\s*=\s*[`"]1[`"]|`unicode-id-start = "1"`/);
+
+  for (const path of [
+    "scanner/overlay.rs",
+    "scanner/lexical.rs",
+    "projection/lint.rs",
+    "projection/lift/scaffold.rs",
+  ]) {
+    assert.match(guide, new RegExp(path.replaceAll("/", "\\/")), path);
+  }
+  assert.doesNotMatch(guide, /projection\/manifest\.rs/);
+
+  for (const classification of [
+    "Direct reuse",
+    "Adapt or replace",
+    "Standalone product glue",
+    "Upstream-only redesign",
+  ]) {
+    assert.match(guide, new RegExp(classification, "i"), classification);
+  }
+
+  for (const closedSeam of ["SourceType", "PartialLoader", "FileKind", "Oxfmt LSP routing"]) {
+    assert.match(guide, new RegExp(closedSeam), closedSeam);
+  }
+  for (const primarySource of [
+    `${canonicalRepository}/blob/${auditedOxcMain}/crates/oxc_span/src/source_type.rs`,
+    `${canonicalRepository}/blob/${auditedOxcMain}/crates/oxc_linter/src/loader/partial_loader/mod.rs`,
+    `${canonicalRepository}/blob/${auditedOxcMain}/apps/oxfmt/src/core/support.rs`,
+    `${canonicalRepository}/blob/${auditedOxcMain}/apps/oxfmt/src/lsp/mod.rs`,
+    `${canonicalRepository}/blob/${auditedOxcMain}/crates/oxc_parser/src/config.rs`,
+    `${canonicalRepository}/blob/${pinnedOxcRevision}/crates/oxc_lexer/README.md`,
+    `${canonicalRepository}/blob/${pinnedOxcRevision}/AGENTS.md`,
+  ]) {
+    assert.ok(guide.includes(primarySource), primarySource);
+  }
+  for (const researchUrl of [
+    `${canonicalRepository}/discussions/21936`,
+    `${canonicalRepository}/issues/19918`,
+    `${canonicalRepository}/pull/24262`,
+  ]) {
+    assert.ok(guide.includes(researchUrl), researchUrl);
+  }
+  assert.match(guide, /unmerged research/i);
+  assert.match(guide, /not (?:runtime |release )?dependencies/i);
+  assert.match(guide, /one (?:canonical )?OXC parse/i);
+  assert.match(guide, /format performs two structural scanner passes/i);
+  assert.match(
+    guide,
+    /affine authored identity segments and explicitly unmapped synthetic regions/i,
+  );
+  assert.match(
+    guide,
+    /no (?:new )?(?:source )?cop(?:y|ies),\s+parses,\s+allocations, or dynamic dispatch/i,
+  );
+  assert.match(guide, /cargo test --locked -p tsrx_syntax --all-targets/);
+  assert.match(guide, /npm run benchmark:native-lint/);
+  assert.match(guide, /npm run benchmark:native-format/);
+  assert.match(guide, /avoid editing generated directories directly/i);
+  assert.match(guide, /`just allocs`/);
+  assert.match(guide, /`just ready`/);
+  assert.match(guide, /disclose AI use/i);
+  assert.match(
+    guide,
+    /human contributor\s+must review, test, understand, and take responsibility/i,
+  );
+
+  for (const source of [readme, editor, siteConfig]) {
+    assert.match(source, /architecture\/upstreaming-to-oxc(?:\.md|\.html)/);
+  }
+  assert.match(core, /(?:\.\/|architecture\/)upstreaming-to-oxc\.md/);
 });

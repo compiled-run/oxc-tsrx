@@ -6,6 +6,7 @@ import { mkdtemp, readFile, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
+import { DEFAULT_VSIX_LIMITS, readVsixEntries } from "../../scripts/vsix-archive.mjs";
 
 const require = createRequire(import.meta.url);
 const yauzl = require("yauzl");
@@ -82,18 +83,63 @@ test("platform VSIX embeds exactly the matching native language server and notic
   const packaged = JSON.parse(result.stdout);
   assert.equal(packaged.target, hostTarget());
   assert.equal(packaged.extensionId, "thejackshelton.oxc-tsrx-vscode");
+  assert.equal(packaged.vsixVerification.extensionId, packaged.extensionId);
+  assert.equal(packaged.vsixVerification.version, "0.1.0");
+  assert.equal(packaged.vsixVerification.target, packaged.target);
+  assert.equal(packaged.vsixVerification.vscodeTarget, packaged.vscodeTarget);
+  assert.equal(packaged.vsixVerification.nativeLspSha256, packaged.lspSha256);
+  assert.equal(packaged.vsixVerification.nativeLspBytes, packaged.lspBytes);
   assert.ok((await stat(packaged.vsix)).size <= 12 * 1024 * 1024);
+  await assert.rejects(
+    readVsixEntries(packaged.vsix, { ...DEFAULT_VSIX_LIMITS, maxEntries: 1 }),
+    /entry verification limit/iu,
+  );
 
   const entries = await readZip(packaged.vsix);
+  const bundledClient = entries.get("extension/dist/extension.bundle.cjs");
+  const bundledInventoryContents = entries.get("extension/licenses/bundle-dependencies.json");
+  const bundledReport = entries.get("extension/licenses/BUNDLE_DEPENDENCIES.md");
+  assert.ok(bundledClient);
+  assert.ok(bundledInventoryContents);
+  assert.ok(bundledReport);
+  const bundledInventory = JSON.parse(bundledInventoryContents);
+  assert.equal(
+    packaged.vsixVerification.bundleSha256,
+    createHash("sha256").update(bundledClient).digest("hex"),
+  );
+  assert.equal(packaged.vsixVerification.bundleSha256, bundledInventory.bundleSha256);
+  assert.equal(
+    packaged.vsixVerification.inventorySha256,
+    createHash("sha256").update(bundledInventoryContents).digest("hex"),
+  );
+  assert.equal(
+    packaged.vsixVerification.reportSha256,
+    createHash("sha256").update(bundledReport).digest("hex"),
+  );
+  assert.equal(packaged.vsixVerification.packageCount, bundledInventory.packageCount);
+  assert.equal(
+    packaged.vsixVerification.legalTextCount,
+    bundledInventory.packages.reduce(
+      (count, dependency) => count + dependency.legalTexts.length,
+      0,
+    ),
+  );
   const suffix = process.platform === "win32" ? ".exe" : "";
+  assert.equal(packaged.vsixVerification.nativeBinary, `oxc-tsrx-lsp${suffix}`);
   const nativePath = `extension/dist/native/oxc-tsrx-lsp${suffix}`;
   assert.ok(entries.has(nativePath));
   assert.ok(entries.has("extension/dist/native/manifest.json"));
   assert.ok(entries.has("extension/dist/native/LICENSE"));
   assert.ok(entries.has("extension/dist/native/THIRD_PARTY_NOTICES.md"));
   assert.ok(entries.has("extension/THIRD_PARTY_NOTICES.md"));
-  assert.equal([...entries.keys()].some((name) => name.includes("node_modules/")), false);
-  assert.equal([...entries.keys()].some((name) => /dist\/native\/oxc-tsrx-fmt/.test(name)), false);
+  assert.equal(
+    [...entries.keys()].some((name) => name.includes("node_modules/")),
+    false,
+  );
+  assert.equal(
+    [...entries.keys()].some((name) => /dist\/native\/oxc-tsrx-fmt/.test(name)),
+    false,
+  );
   assert.equal(
     [...entries.keys()].some((name) => /dist\/native\/oxc-tsrx(?:\.exe)?$/.test(name)),
     false,
@@ -117,7 +163,9 @@ test("platform VSIX embeds exactly the matching native language server and notic
   assert.equal(manifest.target, hostTarget());
   assert.equal(manifest.oxcRevision, "8e0ed2ebb96137fb1611cdbd5742d5cb46037d40");
   assert.equal(manifest.binary, `oxc-tsrx-lsp${suffix}`);
-  const sourceHash = createHash("sha256").update(await readFile(executable)).digest("hex");
+  const sourceHash = createHash("sha256")
+    .update(await readFile(executable))
+    .digest("hex");
   const packagedHash = createHash("sha256").update(entries.get(nativePath)).digest("hex");
   assert.equal(manifest.sha256, sourceHash);
   assert.equal(packagedHash, sourceHash);

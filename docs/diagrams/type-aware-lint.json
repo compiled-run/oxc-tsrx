@@ -1,0 +1,15 @@
+{
+  "title": "Opt-in type-aware lint path",
+  "caption": "How an opted-in mixed TSRX and TypeScript project reaches one type-aware process without writing generated source to the project.",
+  "nodes": {
+    "tsrx": "Authored TSRX enters the separate type-aware project lane only when type-aware linting or type checking is enabled.",
+    "scan": "TSRX reuses the shared structural scan before building its type-semantic projection.",
+    "projection": "This projection preserves types, bindings, imports, control flow, and component callability while emitting legal TypeScript and TSX.",
+    "ordinary": "Ordinary TypeScript and TSX can join the project batch without going through the TSRX scanner or projection.",
+    "config": "Rules and path-sensitive overrides resolve against each authored file name before TSRX gets a virtual script identity.",
+    "batch": "The complete mixed project is held in memory. TSRX uses a virtual .tsrx.tsx name and no generated file is written to the project.",
+    "tsgolint": "One documented protocol-v2 tsgolint process receives the whole project batch through standard input.",
+    "mapping": "Path-aware messages identify their source file, and safe fixes must cover one exact authored identity range.",
+    "spans": "Labels and applicable fixes finish on the original TSRX spans. Edited TSRX is rescanned and reparsed before write."
+  }
+}

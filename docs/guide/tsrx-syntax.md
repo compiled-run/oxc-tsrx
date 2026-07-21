@@ -5,14 +5,22 @@ description: The TSRX grammar slice the native overlay recognizes today, and how
 
 # TSRX Syntax Support
 
-The native scanner (`tsrx_syntax::scan`) performs a byte-oriented structural
-scan into a compact overlay. This page lists exactly what that overlay
-recognizes today. Anything outside this slice **fails closed**: the command
-reports an actionable error instead of guessing.
+The native scanner (`tsrx_syntax::scan`) reads your `.tsrx` file once, byte by
+byte, and records where every piece of TSRX-only syntax starts and ends. That
+record is called the overlay.
+
+This page lists exactly which syntax the overlay recognizes today. Anything
+outside this list **fails closed**: instead of guessing what your code means
+and possibly producing wrong output, the command stops and reports an error
+that tells you what it found and where.
 
 ## Control flow
 
-### Function bodies
+### Statement containers
+
+`@{ }` is a statement container, the successor and extension of JSX expression
+containers: where JSX's `{ }` holds a single expression, `@{ }` holds ordinary
+statements.
 
 ```tsrx
 @{

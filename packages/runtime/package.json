@@ -21,6 +21,8 @@
   "main": "./dist/index.js",
   "exports": {
     ".": "./dist/index.js",
+    "./package-binary": "./dist/package-binary.js",
+    "./process": "./dist/process.js",
     "./package.json": "./package.json"
   },
   "files": [

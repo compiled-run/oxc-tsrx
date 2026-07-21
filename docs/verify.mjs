@@ -11,7 +11,7 @@ const mode =
   process.argv.find((argument) => argument.startsWith('--mode='))?.slice('--mode='.length) ??
   'native'
 if (!['native', 'static'].includes(mode)) throw new Error(`unsupported docs verification mode: ${mode}`)
-const baseUrl = (positional[0] ?? 'http://localhost:4519/oxc-tsrx').replace(/\/$/, '')
+const baseUrl = (positional[0] ?? 'http://localhost:4519').replace(/\/$/, '')
 const parsedBaseUrl = new URL(baseUrl)
 const loopback = ['127.0.0.1', 'localhost', '::1'].includes(parsedBaseUrl.hostname)
 if (mode === 'native' && (parsedBaseUrl.protocol !== 'http:' || !loopback)) {
@@ -160,13 +160,13 @@ check(!homeHorizontalOverflow, 'home: no horizontal page overflow')
 
 // ---------- walkthrough: hero action then every sidebar page ----------
 await page.getByRole('link', { name: 'Get Started' }).click()
-await page.waitForURL('**/guide/getting-started.html')
+await page.waitForURL('**/guide/getting-started')
 check(true, 'walkthrough: hero action navigates to Getting Started')
 
 const sidebarLinks = await page
   .locator('.sidebar nav a')
   .evaluateAll((anchors) => anchors.map((a) => ({ href: a.href, text: a.textContent.trim() })))
-check(sidebarLinks.length === 12, 'walkthrough: sidebar lists 12 pages', String(sidebarLinks.length))
+check(sidebarLinks.length === 13, 'walkthrough: sidebar lists 13 pages', String(sidebarLinks.length))
 
 for (const link of sidebarLinks) {
   await page.goto(link.href, { waitUntil: 'load' })
@@ -182,23 +182,23 @@ for (const link of sidebarLinks) {
 }
 
 // ---------- prev/next ----------
-await page.goto(`${baseUrl}/guide/introduction.html`, { waitUntil: 'load' })
+await page.goto(`${baseUrl}/guide/introduction`, { waitUntil: 'load' })
 await page.locator('.pager-link.next a').click()
-await page.waitForURL('**/guide/getting-started.html')
+await page.waitForURL('**/guide/getting-started')
 await page.locator('.pager-link.prev a').click()
-await page.waitForURL('**/guide/introduction.html')
+await page.waitForURL('**/guide/introduction')
 check(true, 'pager: next and previous navigate correctly')
 
 // ---------- SPA routing (Navigation API) ----------
-await page.goto(`${baseUrl}/guide/introduction.html`, { waitUntil: 'load' })
+await page.goto(`${baseUrl}/guide/introduction`, { waitUntil: 'load' })
 const marker = await page.evaluate(() => {
   window.__spaMarker = true
-  document.querySelector('.sidebar a[href$="linting.html"]').focus()
+  document.querySelector('.sidebar a[href$="/guide/linting"]').focus()
   return true
 })
 check(marker, 'spa: marker set')
 await page.keyboard.press('Enter')
-await page.waitForURL('**/guide/linting.html')
+await page.waitForURL('**/guide/linting')
 await page.waitForFunction(
   () => document.querySelector('article h1')?.textContent.trim() === 'Linting',
 )
@@ -213,12 +213,12 @@ const spaState = await page.evaluate(() => ({
 check(spaState.stillSpa, 'spa: navigation did not reload the page (JS state survives)')
 check(spaState.h1 === 'Linting', 'spa: content swapped in place', spaState.h1)
 check(
-  spaState.focusHref?.endsWith('linting.html'),
+  spaState.focusHref?.endsWith('/guide/linting'),
   'spa: focus stays on the activated sidebar link',
   String(spaState.focusHref),
 )
 check(
-  spaState.ariaCurrent?.endsWith('linting.html') && spaState.title.startsWith('Linting'),
+  spaState.ariaCurrent?.endsWith('/guide/linting') && spaState.title.startsWith('Linting'),
   'spa: aria-current and title updated',
 )
 check(Boolean(spaState.announced), 'spa: route change announced via aria-live', spaState.announced)
@@ -229,7 +229,7 @@ await page.evaluate(() => {
   window.__spaMarker = true
 })
 await page.getByRole('link', { name: 'Get Started' }).click()
-await page.waitForURL('**/guide/getting-started.html')
+await page.waitForURL('**/guide/getting-started')
 await page.waitForFunction(
   () => document.querySelector('article h1')?.textContent.trim() === 'Getting Started',
 )
@@ -244,14 +244,14 @@ check(
 )
 
 // ---------- outline scroll spy ----------
-await page.goto(`${baseUrl}/architecture/rust-oxc-core.html`, { waitUntil: 'load' })
+await page.goto(`${baseUrl}/architecture/rust-oxc-core`, { waitUntil: 'load' })
 await page.evaluate(() => document.getElementById('performance-evidence').scrollIntoView())
 await page.waitForTimeout(400)
 const spied = await page.locator('.outline .active a').getAttribute('href')
 check(spied === '#performance-evidence', 'outline: scroll spy tracks section', String(spied))
 
 // ---------- theme toggle + persistence ----------
-await page.goto(`${baseUrl}/guide/introduction.html`, { waitUntil: 'load' })
+await page.goto(`${baseUrl}/guide/introduction`, { waitUntil: 'load' })
 await page.emulateMedia({ colorScheme: 'light' })
 const isDark = () => page.evaluate(() => document.documentElement.classList.contains('dark'))
 const initialDark = await isDark()
@@ -287,7 +287,11 @@ const activeDescendant = await page.locator('#search-input').getAttribute('aria-
 check(activeDescendant === 'search-result-0', 'search: arrow keys drive aria-activedescendant')
 await page.keyboard.press('Enter')
 await page.waitForFunction(() => !document.getElementById('search-dialog').open)
-check(/#|\.html/.test(page.url()), 'search: Enter navigates to result', page.url())
+check(
+  /#|\/(guide|integrations|architecture|reference|playground)\//.test(`${page.url()}/`),
+  'search: Enter navigates to result',
+  page.url(),
+)
 
 await page.keyboard.press(process.platform === 'darwin' ? 'Meta+k' : 'Control+k')
 await page.waitForSelector('#search-dialog[open]')
@@ -302,7 +306,7 @@ await page.waitForFunction(() => !document.getElementById('search-dialog').open)
 check(true, 'search: Escape closes dialog')
 
 // ---------- copy button ----------
-await page.goto(`${baseUrl}/guide/getting-started.html`, { waitUntil: 'load' })
+await page.goto(`${baseUrl}/guide/getting-started`, { waitUntil: 'load' })
 const firstBlock = page.locator('.code-block').first()
 const firstBlockSource = (await firstBlock.locator('code').textContent()).trimEnd()
 await firstBlock.hover()
@@ -311,7 +315,7 @@ const clipboard = await page.evaluate(() => navigator.clipboard.readText())
 check(clipboard === firstBlockSource, 'copy: code block copies exact source to clipboard')
 
 // ---------- keyboard navigation / skip link ----------
-await page.goto(`${baseUrl}/guide/introduction.html`, { waitUntil: 'load' })
+await page.goto(`${baseUrl}/guide/introduction`, { waitUntil: 'load' })
 await page.keyboard.press('Tab')
 const skipFocused = await page.evaluate(
   () => document.activeElement?.classList.contains('skip-link') ?? false,
@@ -352,12 +356,12 @@ async function axeScan(url, { dark = false, openDialog = false } = {}) {
 
 await axeScan(`${baseUrl}/`)
 await axeScan(`${baseUrl}/`, { dark: true })
-await axeScan(`${baseUrl}/guide/getting-started.html`)
-await axeScan(`${baseUrl}/guide/getting-started.html`, { dark: true })
-await axeScan(`${baseUrl}/reference/benchmarks.html`, { dark: true })
-await axeScan(`${baseUrl}/guide/introduction.html`, { openDialog: true })
-await axeScan(`${baseUrl}/playground.html`)
-await axeScan(`${baseUrl}/reference/benchmarks.html`)
+await axeScan(`${baseUrl}/guide/getting-started`)
+await axeScan(`${baseUrl}/guide/getting-started`, { dark: true })
+await axeScan(`${baseUrl}/reference/benchmarks`, { dark: true })
+await axeScan(`${baseUrl}/guide/introduction`, { openDialog: true })
+await axeScan(`${baseUrl}/playground`)
+await axeScan(`${baseUrl}/reference/benchmarks`)
 
 // ---------- interactive demo (real oxlint/oxfmt through the docs server) ----------
 const health = expectedCapabilities
@@ -482,7 +486,7 @@ if (mode === 'native' && health?.native) {
       (await page.locator('#demo-times').textContent()).trim() === '',
     'demo: static home has no timing readout',
   )
-  await page.goto(`${baseUrl}/playground.html`, { waitUntil: 'load' })
+  await page.goto(`${baseUrl}/playground`, { waitUntil: 'load' })
   await page.waitForFunction(
     () => document.getElementById('demo-hint')?.textContent === 'static preview',
   )
@@ -513,8 +517,8 @@ if (mode === 'native' && health?.native) {
   // Arrive as an actual shared-link navigation. A hash-only navigation on an
   // already-open playground is same-document and intentionally does not rerun
   // module initialization.
-  await page.goto(`${baseUrl}/guide/introduction.html`, { waitUntil: 'load' })
-  await page.goto(`${baseUrl}/playground.html#code=${encoded}`, { waitUntil: 'load' })
+  await page.goto(`${baseUrl}/guide/introduction`, { waitUntil: 'load' })
+  await page.goto(`${baseUrl}/playground#code=${encoded}`, { waitUntil: 'load' })
   await page.waitForFunction(
     () => document.getElementById('demo-hint')?.textContent === 'static preview',
   )
@@ -526,7 +530,7 @@ if (mode === 'native' && health?.native) {
 }
 
 // ---------- data-driven benchmarks page ----------
-await page.goto(`${baseUrl}/reference/benchmarks.html`, { waitUntil: 'load' })
+await page.goto(`${baseUrl}/reference/benchmarks`, { waitUntil: 'load' })
 await page.waitForSelector('.bench-chart', { timeout: 10000 })
 const chartCount = await page.locator('.bench-chart').count()
 const passCells = await page.locator('td.bench-pass').count()
@@ -553,7 +557,7 @@ const llms = await (await fetch(`${baseUrl}/llms.txt`)).text()
 check(llms.startsWith('# OXC for TSRX'), 'llms: llms.txt is served and well-formed')
 const llmsFull = await (await fetch(`${baseUrl}/llms-full.txt`)).text()
 check(llmsFull.includes('## '), 'llms: llms-full.txt contains page content')
-await page.goto(`${baseUrl}/guide/linting.html`, { waitUntil: 'load' })
+await page.goto(`${baseUrl}/guide/linting`, { waitUntil: 'load' })
 await page.locator('.copy-md-button').first().click()
 await page.waitForFunction(() =>
   document.querySelector('.copy-md-button').textContent.includes('Copied'),
@@ -571,7 +575,7 @@ const disclaimer = (await page.locator('.footer-disclaimer').textContent()).trim
 check(disclaimer.includes('not affiliated'), 'footer: VoidZero non-affiliation disclaimer present')
 
 // ---------- projection explorer ----------
-await page.goto(`${baseUrl}/guide/linting.html`, { waitUntil: 'load' })
+await page.goto(`${baseUrl}/guide/linting`, { waitUntil: 'load' })
 const tabCount = await page
   .locator('[aria-label="Projection stages"] [role="tab"]')
   .count()
@@ -590,11 +594,213 @@ const mappedSelected = await page.evaluate(
 )
 check(mappedSelected, 'explorer: arrow keys move between tabs')
 
+// ---------- how-it-works walkthrough ----------
+await page.goto(`${baseUrl}/guide/introduction`, { waitUntil: 'load' })
+await page.waitForSelector('[data-how-it-works][data-hiw-ready]')
+const hiwSteps = await page.locator('[data-hiw-step]').count()
+check(hiwSteps === 4, 'how-it-works: four step buttons', String(hiwSteps))
+const hiwInitial = await page.evaluate(() => {
+  const figure = document.querySelector('[data-how-it-works]')
+  const visibleTexts = [...figure.querySelectorAll('.hiw-text')].filter(
+    (text) => getComputedStyle(text).display !== 'none',
+  )
+  return { step: figure.dataset.step, visible: visibleTexts.length }
+})
+check(
+  hiwInitial.step === 'scan' && hiwInitial.visible === 1,
+  'how-it-works: starts on scan with a single explanation visible',
+  JSON.stringify(hiwInitial),
+)
+await page.locator('[data-hiw-step="lint"]').click()
+const hiwLint = await page.evaluate(() => {
+  const figure = document.querySelector('[data-how-it-works]')
+  const button = figure.querySelector('[data-hiw-step="lint"]')
+  const diagLine = figure.querySelector(
+    '.projection-map-pane:last-of-type [data-diag-line]',
+  )
+  return {
+    step: figure.dataset.step,
+    pressed: button.getAttribute('aria-pressed'),
+    highlighted: getComputedStyle(diagLine).boxShadow !== 'none',
+  }
+})
+check(
+  hiwLint.step === 'lint' && hiwLint.pressed === 'true' && hiwLint.highlighted,
+  'how-it-works: lint step highlights the flagged lines in the projected pane',
+  JSON.stringify(hiwLint),
+)
+await page.locator('[data-scaffolding-toggle]').click()
+// Scaffold lines fade over a 140ms transition; wait for it to land.
+await page.waitForFunction(
+  () =>
+    Number(
+      getComputedStyle(document.querySelector('[data-how-it-works] [data-scaffold]'))
+        .opacity,
+    ) < 1,
+  null,
+  { timeout: 2000 },
+)
+check(true, 'how-it-works: dim-the-scaffolding toggle still fades scaffold lines')
+await page.locator('[data-scaffolding-toggle]').click()
+
+// ---------- architecture diagram step tabs ----------
+await page.goto(`${baseUrl}/architecture/rust-oxc-core`, { waitUntil: 'load' })
+await page.waitForSelector('.diagram[data-ready] [data-diagram-step]')
+const diagramInitialStrip = await page.evaluate(() => {
+  const figure = document.querySelector('.diagram[data-ready]')
+  return {
+    strip: figure.querySelector('.diagram-caption-strip').textContent,
+    firstCaption: figure.querySelector('[data-diagram-step]').dataset.caption,
+  }
+})
+check(
+  diagramInitialStrip.strip === diagramInitialStrip.firstCaption,
+  'diagram: strip starts on the first step caption',
+  JSON.stringify(diagramInitialStrip),
+)
+const diagramStepSwitch = await page.evaluate(() => {
+  const figure = document.querySelector('.diagram[data-ready]')
+  const steps = figure.querySelectorAll('[data-diagram-step]')
+  const third = steps[2]
+  third.click()
+  return {
+    strip: figure.querySelector('.diagram-caption-strip').textContent,
+    caption: third.dataset.caption,
+    pressed: third.getAttribute('aria-pressed'),
+  }
+})
+check(
+  diagramStepSwitch.pressed === 'true' &&
+    diagramStepSwitch.caption.length > 0 &&
+    diagramStepSwitch.strip === diagramStepSwitch.caption,
+  'diagram: clicking a step tab swaps the caption strip to that step',
+  JSON.stringify(diagramStepSwitch),
+)
+const diagramNodeAfterStep = await page.evaluate(() => {
+  const figure = document.querySelector('.diagram[data-ready]')
+  const node = figure.querySelector('[data-diagram-node]')
+  node.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+  return {
+    strip: figure.querySelector('.diagram-caption-strip').textContent,
+    caption: node.dataset.caption,
+  }
+})
+check(
+  diagramNodeAfterStep.strip === diagramNodeAfterStep.caption,
+  'diagram: clicking a node still shows that node explanation',
+  JSON.stringify(diagramNodeAfterStep),
+)
+
+// ---------- transplant matrix filter + review route (upstreaming page) ----------
+await page.goto(`${baseUrl}/architecture/upstreaming-to-oxc`, { waitUntil: 'load' })
+await page.waitForSelector('[data-matrix-filter][data-ready]')
+const matrixFiltered = await page.evaluate(() => {
+  const filter = document.querySelector('[data-matrix-filter]')
+  const chip = filter.querySelector('[data-matrix-chip="reuse"]')
+  chip.click()
+  const rows = [...filter.querySelectorAll('tr[data-classification]')]
+  return {
+    pressed: chip.getAttribute('aria-pressed'),
+    visible: rows.filter((row) => !row.hidden).length,
+    hidden: rows.filter((row) => row.hidden).length,
+    allVisible: rows.filter((row) => !row.hidden).every((row) => row.dataset.classification === 'reuse'),
+    status: filter.querySelector('[data-matrix-status]').textContent,
+  }
+})
+check(
+  matrixFiltered.pressed === 'true' &&
+    matrixFiltered.visible > 0 &&
+    matrixFiltered.hidden > 0 &&
+    matrixFiltered.allVisible &&
+    /Showing \d+ of \d+/.test(matrixFiltered.status),
+  'matrix filter: classification chip hides other rows and announces the count',
+  JSON.stringify(matrixFiltered),
+)
+const matrixReset = await page.evaluate(() => {
+  const filter = document.querySelector('[data-matrix-filter]')
+  filter.querySelector('[data-matrix-chip="all"]').click()
+  return [...filter.querySelectorAll('tr[data-classification]')].every((row) => !row.hidden)
+})
+check(matrixReset, 'matrix filter: All chip restores every row')
+const reviewProgress = await page.evaluate(() => {
+  const route = document.querySelector('[data-review-route]')
+  const checks = [...route.querySelectorAll('[data-review-check]')]
+  const status = route.querySelector('[data-review-status]')
+  const initial = status.textContent
+  checks[0].click()
+  const afterOne = status.textContent
+  for (const box of checks.slice(1)) box.click()
+  return { initial, afterOne, done: status.textContent, total: route.dataset.totalMinutes }
+})
+check(
+  reviewProgress.initial.includes(`About ${reviewProgress.total} minutes`) &&
+    /minutes of reading left/.test(reviewProgress.afterOne) &&
+    reviewProgress.done.includes('whole map'),
+  'review route: checking steps updates the minutes-left status to completion',
+  JSON.stringify(reviewProgress),
+)
+
+// ---------- editor replay (editor page) ----------
+await page.goto(`${baseUrl}/integrations/editor`, { waitUntil: 'load' })
+await page.waitForSelector('[data-editor-replay][data-ready]')
+const replaySquiggles = await page.evaluate(() => ({
+  squiggles: document.querySelectorAll('[data-editor-replay] .er-squiggle').length,
+  windows: document.querySelectorAll('[data-editor-replay] .er-window').length,
+}))
+check(
+  replaySquiggles.squiggles >= 3 && replaySquiggles.windows === 3,
+  'editor replay: three stage windows render with diagnostic squiggles',
+  JSON.stringify(replaySquiggles),
+)
+const replayStage = await page.evaluate(() => {
+  const replay = document.querySelector('[data-editor-replay]')
+  const tabs = [...replay.querySelectorAll('[role="tab"]')]
+  tabs[2].click()
+  const panels = [...replay.querySelectorAll('[role="tabpanel"]')]
+  return {
+    selected: tabs[2].getAttribute('aria-selected'),
+    lastVisible: !panels[2].hidden,
+    firstHidden: panels[0].hidden,
+  }
+})
+check(
+  replayStage.selected === 'true' && replayStage.lastVisible && replayStage.firstHidden,
+  'editor replay: stage tabs switch the visible editor window',
+  JSON.stringify(replayStage),
+)
+const replayPlay = await page.evaluate(() => {
+  const replay = document.querySelector('[data-editor-replay]')
+  replay.querySelector('[data-er-play]').click()
+  const tabs = [...replay.querySelectorAll('[role="tab"]')]
+  return tabs[0].getAttribute('aria-selected')
+})
+check(replayPlay === 'true', 'editor replay: Play rewinds to the first stage and starts advancing')
+
+// ---------- annotated config fields (configuration page) ----------
+await page.goto(`${baseUrl}/integrations/configuration`, { waitUntil: 'load' })
+const configHovers = await page
+  .locator('.code-block[data-lang="jsonc"] .tsrx-hover')
+  .count()
+check(configHovers >= 10, 'config docs: jsonc fields annotated with hover docs', String(configHovers))
+await page.locator('.code-block[data-lang="jsonc"] .tsrx-hover').first().scrollIntoViewIfNeeded()
+await page.waitForTimeout(250)
+await page
+  .locator('.code-block[data-lang="jsonc"] .tsrx-hover')
+  .first()
+  .dispatchEvent('mouseover')
+await page.waitForSelector('.chart-tooltip:not([hidden])', { timeout: 4000 })
+const configHoverText = (await page.locator('.chart-tooltip').textContent()).trim()
+check(
+  configHoverText.length > 20,
+  'config docs: hovering a field shows its native-boundary meaning',
+  configHoverText.slice(0, 50),
+)
+
 // ---------- try-it buttons ----------
-await page.goto(`${baseUrl}/guide/tsrx-syntax.html`, { waitUntil: 'load' })
+await page.goto(`${baseUrl}/guide/tsrx-syntax`, { waitUntil: 'load' })
 const fenceCode = await page.evaluate(() => document.querySelector('.try-button').dataset.code)
 await page.locator('.try-button').first().click()
-await page.waitForURL('**/playground.html#code=*')
+await page.waitForURL('**/playground#code=*')
 if (mode === 'native') {
   await page.waitForSelector('#demo-input', { timeout: 10000 })
   const editorValue = await page.inputValue('#demo-input')
@@ -610,7 +816,7 @@ if (mode === 'native') {
 
 // ---------- playground: filters, config, share, type-aware ----------
 if (health?.native) {
-  await page.goto(`${baseUrl}/playground.html`, { waitUntil: 'load' })
+  await page.goto(`${baseUrl}/playground`, { waitUntil: 'load' })
   await page.waitForSelector('#demo-input', { timeout: 10000 })
   // "Lint findings" then "Silence a rule": the -A flags run internally.
   await page.locator('#pg-scenario-lint').click()
@@ -647,7 +853,7 @@ if (health?.native) {
   )
   check(true, 'playground: share URL restores the snippet')
   if (health.typeAware) {
-    await page.goto(`${baseUrl}/playground.html`, { waitUntil: 'load' })
+    await page.goto(`${baseUrl}/playground`, { waitUntil: 'load' })
     await page.waitForSelector('#demo-input', { timeout: 10000 })
     await page.locator('#pg-scenario-types').click()
     await page.waitForFunction(
@@ -659,7 +865,7 @@ if (health?.native) {
     check(true, 'playground: type-aware unavailable on this host (skipped)', 'tsgolint missing')
   }
   // Format-as-diff on deliberately misformatted code.
-  await page.goto(`${baseUrl}/playground.html`, { waitUntil: 'load' })
+  await page.goto(`${baseUrl}/playground`, { waitUntil: 'load' })
   await page.waitForSelector('#demo-input', { timeout: 10000 })
   await page.fill('#demo-input', 'export function T() @{\n  const x=1;\n  <b/>\n}')
   await page.locator('#demo-format').click()
@@ -670,7 +876,7 @@ if (health?.native) {
 
   const maliciousRule = 'x" onpointerover="window.__shareXss=1" data-x="'
   await page.goto(
-    `${baseUrl}/playground.html#filters=${encodeURIComponent(`${maliciousRule}:warn`)}`,
+    `${baseUrl}/playground#filters=${encodeURIComponent(`${maliciousRule}:warn`)}`,
     { waitUntil: 'load' },
   )
   await page.waitForSelector('#demo-input', { timeout: 10000 })
@@ -680,7 +886,7 @@ if (health?.native) {
     'playground: hostile shared filter cannot inject DOM attributes',
   )
 
-  await page.goto(`${baseUrl}/playground.html`, { waitUntil: 'load' })
+  await page.goto(`${baseUrl}/playground`, { waitUntil: 'load' })
   await page.waitForSelector('#demo-input', { timeout: 10000 })
   const staleOriginal = 'export function T() @{\n  const value=1;\n  <b/>;\n}'
   const newerSource = 'export function T() @{\n  const newer = 2;\n  <b/>;\n}'
@@ -728,7 +934,7 @@ check(
   'home: chart rows explain their metric on hover',
   homeTip.slice(0, 60),
 )
-await page.goto(`${baseUrl}/guide/linting.html`, { waitUntil: 'load' })
+await page.goto(`${baseUrl}/guide/linting`, { waitUntil: 'load' })
 await page.locator('.page-menu-toggle').click()
 await page.waitForSelector('.page-menu-list:not([hidden])')
 const menuItems = await page.locator('.page-menu-list [role="menuitem"]').count()
@@ -742,7 +948,7 @@ check(
 )
 await page.keyboard.press('Escape')
 if (health?.native) {
-  await page.goto(`${baseUrl}/playground.html`, { waitUntil: 'load' })
+  await page.goto(`${baseUrl}/playground`, { waitUntil: 'load' })
   await page.waitForSelector('#demo-input', { timeout: 10000 })
   await page.waitForFunction(
     () => document.getElementById('pg-projected').textContent.includes('_t0_'),
@@ -777,7 +983,7 @@ if (health?.native) {
 
 // ---------- playground workbench + editor features + hover docs ----------
 if (health?.native) {
-  await page.goto(`${baseUrl}/playground.html`, { waitUntil: 'load' })
+  await page.goto(`${baseUrl}/playground`, { waitUntil: 'load' })
   await page.waitForSelector('#demo-input', { timeout: 10000 })
   await page.waitForTimeout(600)
   const paneBox = () => page.locator('#pg-output').boundingBox()
@@ -807,7 +1013,7 @@ if (health?.native) {
     'editor: brackets auto-close like the Markless language configuration',
   )
 }
-await page.goto(`${baseUrl}/guide/tsrx-syntax.html`, { waitUntil: 'load' })
+await page.goto(`${baseUrl}/guide/tsrx-syntax`, { waitUntil: 'load' })
 const hoverSpans = await page.locator('.tsrx-hover').count()
 check(hoverSpans >= 8, 'hover docs: TSRX constructs annotated in code examples', String(hoverSpans))
 await page.locator('.tsrx-hover').first().scrollIntoViewIfNeeded()
@@ -816,14 +1022,14 @@ await page.locator('.tsrx-hover').first().dispatchEvent('mouseover')
 await page.waitForSelector('.chart-tooltip:not([hidden])', { timeout: 4000 })
 const hoverText = (await page.locator('.chart-tooltip').textContent()).trim()
 check(
-  hoverText.includes('Function body') || hoverText.includes('Conditional'),
+  hoverText.includes('Statement container') || hoverText.includes('Conditional'),
   'hover docs: editor-style tooltip shows construct documentation',
   hoverText.slice(0, 50),
 )
 
 // ---------- @-snippet completions (Markless catalog) ----------
 if (health?.native) {
-  await page.goto(`${baseUrl}/playground.html`, { waitUntil: 'load' })
+  await page.goto(`${baseUrl}/playground`, { waitUntil: 'load' })
   await page.waitForSelector('#demo-input', { timeout: 10000 })
   await page.fill('#demo-input', '')
   await page.click('#demo-input')
@@ -913,7 +1119,7 @@ check(
   homeNotes.every((note) => note.length > 20),
   'home: every metric has a plain-language explanation on hover',
 )
-await page.goto(`${baseUrl}/reference/benchmarks.html`, { waitUntil: 'load' })
+await page.goto(`${baseUrl}/reference/benchmarks`, { waitUntil: 'load' })
 const glossaryTerms = await page.evaluate(() =>
   [...document.querySelectorAll('article .tsrx-hover')].map((el) => el.dataset.docTitle),
 )
@@ -932,7 +1138,7 @@ check(projGlossary.length > 10, 'glossary: hover shows the definition tooltip', 
 
 // ---------- snippet caret + TypeScript completions ----------
 if (health?.native) {
-  await page.goto(`${baseUrl}/playground.html`, { waitUntil: 'load' })
+  await page.goto(`${baseUrl}/playground`, { waitUntil: 'load' })
   await page.waitForSelector('#demo-input', { timeout: 10000 })
   await page.fill('#demo-input', '')
   await page.click('#demo-input')
@@ -995,7 +1201,7 @@ check(
 if (health?.native) {
   const quick = await page.evaluate(async () => {
     const source = 'export function V({items}:{items:string[]}) @{\n  const x = items\n  <b/>;\n}'
-    const response = await fetch(document.querySelector('.top-nav a[href$="playground.html"]').href.replace('playground.html', 'api/quickinfo'), {
+    const response = await fetch(document.querySelector('.top-nav a[href$="/playground"]').href.replace(/\/playground$/, '/api/quickinfo'), {
       method: 'POST',
       body: JSON.stringify({ source, offset: source.indexOf('items\n') + 3 }),
     })
@@ -1006,7 +1212,7 @@ if (health?.native) {
     'hover types: quickinfo returns the real TypeScript type',
     quick.info?.display ?? 'none',
   )
-  await page.goto(`${baseUrl}/playground.html`, { waitUntil: 'load' })
+  await page.goto(`${baseUrl}/playground`, { waitUntil: 'load' })
   await page.waitForSelector('#demo-input', { timeout: 10000 })
   const hoverSource = 'export function V({items}:{items:string[]}) @{\n  const x = items\n  <b/>;\n}'
   await page.fill('#demo-input', hoverSource)
@@ -1041,7 +1247,7 @@ if (health?.native) {
 
 // ---------- guided scenarios + completion menu layout ----------
 if (health?.native) {
-  await page.goto(`${baseUrl}/playground.html`, { waitUntil: 'load' })
+  await page.goto(`${baseUrl}/playground`, { waitUntil: 'load' })
   await page.waitForSelector('#demo-input', { timeout: 10000 })
   await page.locator('#pg-scenario-lint').click()
   await page.waitForSelector('.demo-diag', { timeout: 8000 })
@@ -1090,7 +1296,7 @@ if (mode === 'native') {
   })
   check(controlsFit, 'mobile: native demo controls stay inside the code panel')
 }
-await mobile.goto(`${baseUrl}/guide/introduction.html`, { waitUntil: 'load' })
+await mobile.goto(`${baseUrl}/guide/introduction`, { waitUntil: 'load' })
 const menuToggle = mobile.locator('#menu-toggle')
 check(await menuToggle.isVisible(), 'mobile: hamburger visible at 390px')
 await menuToggle.click()
@@ -1100,7 +1306,7 @@ check(
   'mobile: drawer opens with aria-expanded',
 )
 await mobile.locator('.sidebar a', { hasText: 'Linting' }).click()
-await mobile.waitForURL('**/guide/linting.html')
+await mobile.waitForURL('**/guide/linting')
 check(true, 'mobile: drawer navigation works')
 const horizontalOverflow = await mobile.evaluate(
   () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
@@ -1109,7 +1315,7 @@ check(!horizontalOverflow, 'mobile: no horizontal page overflow')
 await mobile.close()
 
 // ---------- performance ----------
-for (const target of ['/', '/guide/getting-started.html', '/architecture/rust-oxc-core.html']) {
+for (const target of ['/', '/guide/getting-started', '/architecture/rust-oxc-core']) {
   await page.goto(`${baseUrl}${target}`, { waitUntil: 'load' })
   const metrics = await page.evaluate(() => {
     const nav = performance.getEntriesByType('navigation')[0]

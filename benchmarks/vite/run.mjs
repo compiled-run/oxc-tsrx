@@ -15,8 +15,13 @@ const budgetsPath = join(root, "benchmarks/vite/budgets.json");
 const budgets = JSON.parse(await readFile(budgetsPath, "utf8"));
 const lintBin = join(root, "target/release/oxc-tsrx");
 const formatBin = join(root, "target/release/oxc-tsrx-fmt");
+const productLintBin = join(root, "node_modules/oxlint-tsrx/bin/oxlint");
+const productFormatBin = join(root, "node_modules/oxfmt-tsrx/bin/oxfmt");
+const canonicalOxfmtBin = join(root, "node_modules/oxfmt-current/bin/oxfmt");
 const warmups = 5;
-const samples = 15;
+// Twenty samples make nearest-rank p95 the second-highest observation instead
+// of the single maximum, so one scheduler outlier cannot decide a release.
+const samples = 20;
 
 function run(command, args, options) {
   return new Promise((resolveRun, rejectRun) => {
@@ -121,7 +126,7 @@ const canonicalLint = await measure(
 const directLint = await measure(
   () =>
     run(
-      join(root, "packages/oxlint/bin/oxlint"),
+      productLintBin,
       ["--format=json", "--config", lintConfig, ordinary, tsrx],
       { cwd: root, env: { ...process.env, OXC_TSRX_LINT_BIN: lintBin } },
     ),
@@ -132,7 +137,16 @@ const lintMetadata = JSON.parse(directLint.finalResult.stdout).oxcTsrx;
 const canonicalFormat = await measure(
   () =>
     run(
-      join(root, "node_modules/oxfmt-current/bin/oxfmt"),
+      canonicalOxfmtBin,
+      ["--check", "--config", formatConfig, ordinary, equivalent],
+      { cwd: root, env: process.env },
+    ),
+  1,
+);
+const directOrdinaryFormat = await measure(
+  () =>
+    run(
+      productFormatBin,
       ["--check", "--config", formatConfig, ordinary, equivalent],
       { cwd: root, env: process.env },
     ),
@@ -141,12 +155,56 @@ const canonicalFormat = await measure(
 const directFormat = await measure(
   () =>
     run(
-      join(root, "packages/oxfmt/bin/oxfmt"),
+      productFormatBin,
       ["--check", "--config", formatConfig, ordinary, tsrx],
       { cwd: root, env: { ...process.env, OXC_TSRX_FORMAT_BIN: formatBin } },
     ),
   1,
 );
+
+const ordinaryFormatResult = ({ status, stdout, stderr }) => ({
+  status,
+  stdout: stdout.replace(/<?\d+(?:\.\d+)?ms\b/gu, "<runtime>"),
+  stderr,
+});
+assert.deepEqual(
+  ordinaryFormatResult(directOrdinaryFormat.finalResult),
+  ordinaryFormatResult(canonicalFormat.finalResult),
+  "ordinary npm formatter must preserve canonical process behavior",
+);
+const routeDirectory = await mkdtemp(join(tmpdir(), "oxc-tsrx-vite-route-"));
+const ordinaryFormatTrace = join(routeDirectory, "ordinary-format.jsonl");
+let ordinaryFormatDispatchEvents = 0;
+try {
+  const tracedOrdinaryFormat = await run(
+    productFormatBin,
+    ["--check", "--config", formatConfig, ordinary, equivalent],
+    {
+      cwd: root,
+      env: { ...process.env, OXC_TSRX_TRACE_FILE: ordinaryFormatTrace },
+    },
+  );
+  assert.deepEqual(
+    ordinaryFormatResult(tracedOrdinaryFormat),
+    ordinaryFormatResult(canonicalFormat.finalResult),
+    "traced ordinary npm formatter parity",
+  );
+  try {
+    ordinaryFormatDispatchEvents = (await readFile(ordinaryFormatTrace, "utf8"))
+      .trim()
+      .split("\n")
+      .filter(Boolean).length;
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+  }
+  assert.equal(
+    ordinaryFormatDispatchEvents,
+    0,
+    "ordinary npm formatting must not enter the TSRX process-dispatch layer",
+  );
+} finally {
+  await rm(routeDirectory, { recursive: true, force: true });
+}
 
 const consumer = await makeVitePlusConsumer();
 let vitePlusLint;
@@ -171,7 +229,7 @@ try {
 }
 
 const summary = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   timestamp: new Date().toISOString(),
   host: {
     platform: process.platform,
@@ -184,6 +242,8 @@ const summary = {
     profile: "release",
     lintBinary: "target/release/oxc-tsrx",
     formatBinary: "target/release/oxc-tsrx-fmt",
+    lintLauncher: "node_modules/oxlint-tsrx/bin/oxlint",
+    formatLauncher: "node_modules/oxfmt-tsrx/bin/oxfmt",
     oxcRevision: lintMetadata.oxcRevision,
   },
   corpus: await corpusIdentity(),
@@ -201,6 +261,7 @@ const summary = {
   canonicalLint: summarize(canonicalLint),
   directMixedLint: summarize(directLint),
   canonicalFormat: summarize(canonicalFormat),
+  directOrdinaryFormat: summarize(directOrdinaryFormat),
   directMixedFormat: summarize(directFormat),
   vitePlusCurrentMixedLint: summarize(vitePlusLint),
   ratios: {},
@@ -208,6 +269,8 @@ const summary = {
     nativeTsrxParseCount: lintMetadata.parseCount,
     nativeTsrxFiles: lintMetadata.files.tsrx,
     ordinaryFilesInNativeLane: lintMetadata.files.standard,
+    ordinaryFormatProcessParity: true,
+    ordinaryFormatDispatchEvents,
   },
   budgets,
   assertions: {},
@@ -216,6 +279,8 @@ summary.ratios.directLintVsCanonicalP95 =
   summary.directMixedLint.p95Ms / summary.canonicalLint.p95Ms;
 summary.ratios.directFormatVsCanonicalP95 =
   summary.directMixedFormat.p95Ms / summary.canonicalFormat.p95Ms;
+summary.ratios.directOrdinaryFormatVsCanonicalP95 =
+  summary.directOrdinaryFormat.p95Ms / summary.canonicalFormat.p95Ms;
 summary.assertions = {
   directLintP95: summary.directMixedLint.p95Ms <= budgets.directLintP95MsMax,
   directLintRatio:
@@ -223,6 +288,11 @@ summary.assertions = {
   directFormatP95: summary.directMixedFormat.p95Ms <= budgets.directFormatP95MsMax,
   directFormatRatio:
     summary.ratios.directFormatVsCanonicalP95 <= budgets.directFormatVsCanonicalP95RatioMax,
+  directOrdinaryFormatP95:
+    summary.directOrdinaryFormat.p95Ms <= budgets.directOrdinaryFormatP95MsMax,
+  directOrdinaryFormatRatio:
+    summary.ratios.directOrdinaryFormatVsCanonicalP95 <=
+    budgets.directOrdinaryFormatVsCanonicalP95RatioMax,
   vitePlusLintP95: summary.vitePlusCurrentMixedLint.p95Ms <= budgets.vitePlusCurrentLintP95MsMax,
   oneNativeParse:
     lintMetadata.parseCount === budgets.nativeTsrxParseCountPerFile &&

@@ -1,12 +1,14 @@
-import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
-import { appendFileSync, existsSync, statSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, parse, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
-import { glob } from "tinyglobby";
 import { nativePackageName, nativeTargetForHost } from "./targets.js";
+import { resolvePackageBinary } from "./package-binary.js";
+
+export { resolvePackageBinary } from "./package-binary.js";
+export { runCaptured, runPassthrough } from "./process.js";
 
 const require = createRequire(import.meta.url);
 const runtimeManifest = require("../package.json");
@@ -120,12 +122,6 @@ export function resolveNativeBinary(kind) {
     );
   }
   return assertExecutable(join(packageRoot, "bin", executable), packageName);
-}
-
-export function resolvePackageBinary(packageName, binaryName, fromUrl) {
-  const localRequire = createRequire(fromUrl);
-  const main = localRequire.resolve(packageName);
-  return join(dirname(dirname(main)), "bin", binaryName);
 }
 
 function findViteConfig(cwd) {
@@ -249,7 +245,13 @@ export function replaceConfigArgument(args, configPath) {
       index += 1;
       continue;
     }
-    if (argument.startsWith("-c=") || argument.startsWith("--config=")) continue;
+    if (
+      argument.startsWith("-c=") ||
+      (argument.startsWith("-c") && argument.length > 2) ||
+      argument.startsWith("--config=")
+    ) {
+      continue;
+    }
     output.push(argument);
   }
   const terminator = output.indexOf("--");
@@ -264,55 +266,6 @@ export function canonicalToolEnvironment(useResolvedViteConfig) {
   const environment = { ...process.env };
   delete environment.VP_VERSION;
   return environment;
-}
-
-export function runCaptured(executable, args, options = {}) {
-  return new Promise((resolveRun, rejectRun) => {
-    const trace = process.env.OXC_TSRX_TRACE_FILE;
-    const started = Date.now();
-    if (trace) {
-      appendFileSync(
-        trace,
-        `${JSON.stringify({
-          event: "start",
-          pid: process.pid,
-          ppid: process.ppid,
-          started,
-          executable,
-          args,
-          host: {
-            vpVersion: process.env.VP_VERSION ?? null,
-            vpCommand: process.env.VP_COMMAND ?? null,
-            packageManager: process.env.NODE_PACKAGE_MANAGER ?? null,
-            tsgolint: process.env.OXLINT_TSGOLINT_PATH ?? null,
-          },
-        })}\n`,
-      );
-    }
-    const child = spawn(executable, args, {
-      cwd: options.cwd,
-      env: options.env ?? process.env,
-      stdio: ["pipe", "pipe", "pipe"],
-    });
-    let stdout = "";
-    let stderr = "";
-    child.stdout.setEncoding("utf8");
-    child.stderr.setEncoding("utf8");
-    child.stdout.on("data", (chunk) => (stdout += chunk));
-    child.stderr.on("data", (chunk) => (stderr += chunk));
-    child.on("error", rejectRun);
-    child.on("close", (status, signal) => {
-      if (trace) {
-        appendFileSync(
-          trace,
-          `${JSON.stringify({ event: "end", pid: process.pid, ppid: process.ppid, started, ended: Date.now(), executable, args, status, signal })}\n`,
-        );
-      }
-      resolveRun({ status: status ?? 2, signal, stdout, stderr });
-    });
-    if (options.input === undefined) child.stdin.end();
-    else child.stdin.end(options.input);
-  });
 }
 
 export function positionalIndices(args, valueOptions) {
@@ -378,12 +331,32 @@ async function classifyPattern(raw, cwd, positives, patterns) {
   patterns.push(`${negative ? "!" : ""}${slash(value)}`);
 }
 
+// Order-preserving concurrent classification: explicit file lists can carry a
+// thousand positionals, and one awaited stat per entry costs ~10 ms serially.
+async function classifyPatterns(inputs, cwd, positives, patterns) {
+  const classified = await Promise.all(
+    inputs.map(async (input) => {
+      const entryPositives = new Set();
+      const entryPatterns = [];
+      await classifyPattern(input, cwd, entryPositives, entryPatterns);
+      return { entryPositives, entryPatterns };
+    }),
+  );
+  for (const { entryPositives, entryPatterns } of classified) {
+    for (const positive of entryPositives) positives.add(positive);
+    for (const pattern of entryPatterns) patterns.push(pattern);
+  }
+}
+
 export async function discoverTsrxFiles(positionals, cwd = process.cwd()) {
   const positives = new Set();
   const patterns = [];
   const inputs = positionals.length === 0 ? ["."] : positionals;
-  for (const input of inputs) await classifyPattern(input, cwd, positives, patterns);
+  await classifyPatterns(inputs, cwd, positives, patterns);
   if (patterns.length > 0) {
+    // Lazy: explicit file lists never glob, and tinyglobby costs a few
+    // milliseconds of parse time on every launch otherwise.
+    const { glob } = await import("tinyglobby");
     const matches = await glob(patterns, {
       cwd,
       absolute: true,
@@ -397,29 +370,13 @@ export async function discoverTsrxFiles(positionals, cwd = process.cwd()) {
   return [...positives].sort();
 }
 
-export function replaceOutputFormat(args, valueOptions, format) {
-  const output = [];
-  for (let index = 0; index < args.length; index += 1) {
-    const argument = args[index];
-    if (argument === "--format" || argument === "-f") {
-      index += 1;
-      continue;
-    }
-    if (argument.startsWith("--format=") || argument.startsWith("-f=")) continue;
-    output.push(argument);
-  }
-  const terminator = output.indexOf("--");
-  if (terminator === -1) output.push(`--format=${format}`);
-  else output.splice(terminator, 0, `--format=${format}`);
-  return output;
-}
-
 export function requestedOutputFormat(args) {
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];
     if (argument === "--format" || argument === "-f") return args[index + 1] ?? null;
     if (argument.startsWith("--format=")) return argument.slice("--format=".length);
     if (argument.startsWith("-f=")) return argument.slice(3);
+    if (argument.startsWith("-f") && argument.length > 2) return argument.slice(2);
   }
   return "default";
 }
@@ -430,6 +387,9 @@ export function argumentValue(args, names) {
     if (names.has(argument)) return args[index + 1] ?? null;
     for (const name of names) {
       if (argument.startsWith(`${name}=`)) return argument.slice(name.length + 1);
+      if (name.length === 2 && argument.startsWith(name) && argument.length > name.length) {
+        return argument.slice(name.length);
+      }
     }
   }
   return null;

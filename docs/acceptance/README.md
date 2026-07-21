@@ -27,9 +27,16 @@ node tests/acceptance/run-performance.mjs
 ```
 
 This writes new retained reports under `benchmarks/*/results-*.json` and a
-single index at `performance-report.json`. Every harness assertion must be
-present and true. GitHub-hosted runner timing is not a replacement for this
-stable-machine proof.
+single index at `performance-report.json`. Each invocation must create exactly
+one fresh report. If the first report places a numeric assertion within 3% of
+its unchanged threshold, the aggregate runs exactly two more identity-coherent
+reports. Only assertions that triggered on the first report receive two-of-
+three tolerance. Any invariant failure, non-triggering assertion failure, or
+failure more than 3% beyond its threshold fails the aggregate. Reports are
+ordered by normalized budget pressure and the median is selected with a stable
+report-path tie-break; the aggregate also fails if that selected raw report is
+red. GitHub-hosted runner timing is not a replacement for this stable-machine
+proof.
 
 The two reports are evidence, not publication authority. Repository push,
 hosted multi-platform candidate production, npm/Marketplace publication, Pages

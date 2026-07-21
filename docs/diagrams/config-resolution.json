@@ -1,0 +1,35 @@
+{
+  "title": "How configuration is resolved",
+  "caption": "Three ways a config can arrive, one load per session, and a loud failure for anything the native boundary does not support.",
+  "nodes": {
+    "flag": "Passing --config or -c points at an exact JSON or JSONC file. Nothing else is searched.",
+    "discovery": "Without a flag, the tool searches upward from the working directory for one .oxlintrc.json/.oxlintrc.jsonc or .oxfmtrc.json/.oxfmtrc.jsonc.",
+    "viteplus": "Through the npm companions, a Vite+ vite.config.* can supply lint and fmt options, materialized through canonical OXC's public extends model.",
+    "session": "The winning config is loaded and compiled exactly once when the native session starts. There is no per-file rediscovery.",
+    "overrides": "overrides blocks and ignorePatterns are resolved against your authored paths, so **/*.tsrx patterns keep working.",
+    "batch": "Every file in the batch reuses the same compiled session. Ordinary JS and TS files take the direct canonical path with the same options.",
+    "loud": "An unsupported field fails the command before any parse or write. Nothing is silently ignored, so your config never lies to you."
+  },
+  "steps": [
+    {
+      "label": "Choose a source",
+      "nodes": ["flag", "discovery", "viteplus"],
+      "caption": "An explicit flag wins, upward discovery is the default, and Vite+ can forward options through the npm companions."
+    },
+    {
+      "label": "Load once",
+      "nodes": ["session"],
+      "caption": "One load, one compile, at session start. The benchmark gates pin this: one config load per session, no matter how many files."
+    },
+    {
+      "label": "Apply per file",
+      "nodes": ["overrides", "batch"],
+      "caption": "Overrides and ignore patterns match your authored paths while the whole batch shares the compiled session."
+    },
+    {
+      "label": "Fail loudly",
+      "nodes": ["loud"],
+      "caption": "Anything unsupported stops the command with a clear error instead of quietly changing behavior."
+    }
+  ]
+}

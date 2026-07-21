@@ -203,7 +203,7 @@ export async function initDemo(panel) {
   editor.append(diagLayer, textarea)
   panel.append(tooltip, srDiagnostics, escapeNote)
   actions.hidden = false
-  hint.textContent = health.completions ? 'edit me · real oxlint & oxfmt · TS completions on' : 'edit me · real oxlint & oxfmt'
+  hint.textContent = 'edit me'
 
   // In the playground workbench the editor fills its pane and scrolls both
   // axes internally; on the home page it grows with its content instead.

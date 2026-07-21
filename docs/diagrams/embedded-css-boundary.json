@@ -1,0 +1,12 @@
+{
+  "title": "Embedded CSS boundary",
+  "caption": "The current boundary records raw style payloads as opaque spans, keeps them out of the JavaScript AST, and restores their original bytes after formatting.",
+  "nodes": {
+    "source": "A lowercase style element in authored TSRX contains a raw CSS payload.",
+    "scan": "The TSRX scanner recognizes the style boundary but does not parse, validate, lint, or format its CSS.",
+    "opaque": "The raw payload is stored as an opaque span that borrows its bytes from the original source.",
+    "projection": "The JavaScript projection replaces the payload with a synthetic marker, so raw CSS stays outside the OXC JavaScript AST.",
+    "lift": "The formatter lift uses the recorded span and marker to restore the embedded payload in source order.",
+    "output": "The output contains the original raw CSS bytes unchanged. CSS diagnostics and CSS formatting remain outside this boundary."
+  }
+}

@@ -21,7 +21,9 @@ const requestedPort = Number(process.argv[2] ?? 4519)
 if (!Number.isInteger(requestedPort) || requestedPort < 0 || requestedPort > 65_535) {
   throw new Error(`invalid docs port: ${process.argv[2] ?? requestedPort}`)
 }
-const basePath = `/${config.base.split('/').filter(Boolean).join('/')}`
+// '' when the site is served at the root, '/some/prefix' otherwise.
+const baseSegments = config.base.split('/').filter(Boolean)
+const basePath = baseSegments.length > 0 ? `/${baseSegments.join('/')}` : ''
 let boundPort = requestedPort
 const allowedHosts = () => new Set([`127.0.0.1:${boundPort}`, `localhost:${boundPort}`])
 const allowedOrigins = () => new Set([...allowedHosts()].map((host) => `http://${host}`))
@@ -51,6 +53,7 @@ const types = {
   '.js': 'text/javascript; charset=utf-8',
   '.mjs': 'text/javascript; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
+  '.md': 'text/markdown; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.woff2': 'font/woff2',
@@ -467,7 +470,7 @@ const server = http.createServer((request, response) => {
       reject(response, 400, 'malformed URL')
       return
     }
-    if (url.pathname === '/') {
+    if (basePath && url.pathname === '/') {
       response.writeHead(302, { Location: `${basePath}/` }).end()
       return
     }

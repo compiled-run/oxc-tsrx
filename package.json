@@ -10,7 +10,7 @@
     "tsrx",
     "vite"
   ],
-  "homepage": "https://thejackshelton.github.io/oxc-tsrx/",
+  "homepage": "https://thejackshelton.github.io/",
   "bugs": {
     "url": "https://github.com/thejackshelton/oxc-tsrx/issues"
   },
@@ -35,7 +35,7 @@
     "test:type-aware": "node --test tests/type-aware/type-aware.test.mjs",
     "test:editor": "node --test tests/editor/lsp.test.mjs tests/editor/package.test.mjs",
     "test:editor:vscode": "node tests/editor/vscode-run.mjs",
-    "test:packaging:unit": "node --test tests/packaging/native-version.test.mjs tests/packaging/native-package.test.mjs tests/packaging/runtime-contract.test.mjs tests/packaging/public-package-metadata.test.mjs tests/packaging/boundary.test.mjs tests/packaging/css-boundary.test.mjs tests/packaging/compliance.test.mjs tests/packaging/vscode-artifact.test.mjs",
+    "test:packaging:unit": "node --test tests/packaging/native-version.test.mjs tests/packaging/native-package.test.mjs tests/packaging/runtime-contract.test.mjs tests/packaging/public-package-metadata.test.mjs tests/packaging/boundary.test.mjs tests/packaging/css-boundary.test.mjs tests/packaging/compliance.test.mjs tests/packaging/vscode-build-freshness.test.mjs tests/packaging/vsix-archive.test.mjs tests/packaging/vscode-artifact.test.mjs",
     "test:packaging:clean": "node --test tests/packaging/clean-install.test.mjs",
     "test:packaging:matrix": "node --test tests/packaging/vite-plus-matrix.test.mjs",
     "test:packaging:vscode": "node tests/packaging/vscode-installed-run.mjs",
@@ -45,17 +45,19 @@
     "licenses:rust:generate": "node scripts/generate-rust-license-inventory.mjs",
     "licenses:rust:check": "node scripts/generate-rust-license-inventory.mjs --check",
     "licenses:vscode:generate": "node scripts/generate-vscode-license-inventory.mjs",
-    "licenses:vscode:check": "node scripts/generate-vscode-license-inventory.mjs --check",
+    "licenses:vscode:check": "npm run build:editor:check && node scripts/generate-vscode-license-inventory.mjs --check",
     "licenses:generate": "npm run licenses:rust:generate && npm run licenses:vscode:generate",
     "licenses:check": "npm run licenses:rust:check && npm run licenses:vscode:check",
     "test:compliance": "node --test tests/packaging/css-boundary.test.mjs tests/packaging/compliance.test.mjs",
     "test:markless-control": "node --test tests/markless-control-corpus.test.mjs",
     "build:editor": "npm run build --workspace=oxc-tsrx-vscode",
+    "build:editor:check": "npm run build --workspace=oxc-tsrx-vscode -- --check",
     "docs:build": "node docs/build.mjs",
+    "docs:transcripts": "node docs/generate-transcripts.mjs",
     "docs:serve": "node docs/serve.mjs",
     "docs:verify": "node docs/verify.mjs",
     "docs:check": "node scripts/check-docs-fresh.mjs",
-    "test:site:unit": "node --test tests/site/benchmark-sections.test.mjs tests/site/launch-build.test.mjs",
+    "test:site:unit": "node --test tests/site/benchmark-sections.test.mjs tests/site/benchmark-chart-parity.test.mjs tests/site/launch-build.test.mjs",
     "test:site:static": "node tests/site/verify-static.mjs",
     "test:site": "npm run test:site:unit && npm run test:site:static",
     "test:release": "node --test tests/release/launch-contract.test.mjs",
@@ -66,6 +68,7 @@
     "benchmark:comparative": "node benchmarks/comparative/run.mjs --assert"
   },
   "devDependencies": {
+    "@terrastruct/d2": "^0.1.33",
     "axe-core": "^4.12.1",
     "marked": "^18.0.6",
     "minisearch": "^7.2.0",

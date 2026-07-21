@@ -1,0 +1,18 @@
+direction: down
+
+ordinary: Ordinary JS, JSX, TS, or TSX
+tsrx: TSRX bytes
+scan: Linear scan
+overlay: Fingerprint overlay
+projection: Marked legal TSX projection
+markers: One buffer and collision-free IDs
+formatter: Oxfmt
+arena: One arena AST and one parse
+lift: Indexed one-forward-pass lift
+formatted: Formatted TSRX
+
+ordinary -> formatter
+tsrx -> scan -> projection -> formatter -> lift -> formatted
+scan -> overlay -> lift
+projection -> markers -> lift
+formatter -> arena -> lift

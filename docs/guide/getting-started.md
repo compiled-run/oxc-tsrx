@@ -1,6 +1,6 @@
 ---
 title: Getting Started
-description: Install the native companion packages or build from source, then run your first TSRX lint and format.
+description: Install oxlint-tsrx and oxfmt-tsrx, then lint and format your first TSRX file.
 ---
 
 # Getting Started
@@ -8,43 +8,98 @@ description: Install the native companion packages or build from source, then ru
 OXC for TSRX ships as two npm packages: `oxlint-tsrx` for linting and
 `oxfmt-tsrx` for formatting. They give you the same `oxlint` and `oxfmt`
 commands you may already know, with TSRX support built in, and they plug into
-Vite+ and Visual Studio Code. Under the hood, each package runs a native Rust
-binary (`oxc-tsrx`, `oxc-tsrx-fmt`, and `oxc-tsrx-lsp` for editors) that
-`@oxc-tsrx/runtime` selects for your platform. The 0.1.0 package set is
-released as one unit; if any required platform package is missing at that exact
-version, installation fails instead of falling back to a slower or different
-engine.
+[Vite+](/integrations/vite-plus) and
+[Visual Studio Code](/integrations/editor).
 
-## Install the command packages
+## Install
 
-After the approval-gated 0.1.0 registry launch, install both companions:
+You need Node.js 20.19 or newer. Install both packages as dev dependencies:
 
+<!-- pm-install -->
 ```sh
-npm install --save-dev oxlint-tsrx@0.1.0 oxfmt-tsrx@0.1.0
+npm install --save-dev oxlint-tsrx oxfmt-tsrx
 ```
 
-The package names are project-specific, while their executable names stay
-compatible with OXC:
+That is the whole setup. The tools are written in Rust, and your package
+manager downloads a ready-made binary for your operating system as part of
+this normal install. You do not need Rust on your machine, the packages run
+no install scripts, and the commands never download anything later. If your
+CI blocks postinstall scripts, this install still works.
 
+### Using Vite+?
+
+If your project runs on [Vite+](/integrations/vite-plus), install the
+same two packages under the `oxlint` and `oxfmt` names Vite+ looks for, next
+to `vite-plus` itself:
+
+<!-- pm-install -->
 ```sh
-npx oxlint --format=json src/Counter.tsrx src/View.tsx
-npx oxfmt --check src/Counter.tsrx src/View.tsx
-npx oxfmt --write src/Counter.tsrx src/View.tsx
+npm install --save-dev vite-plus \
+  oxlint@npm:oxlint-tsrx \
+  oxfmt@npm:oxfmt-tsrx
 ```
 
-`@oxc-tsrx/runtime` is installed transitively and selects the exact native
-package for the host. There is no install script and no downloaded-at-runtime
-binary. If npm does not yet show the complete 0.1.0 package set, use the source
-checkout below; this repository never treats local release preparation as proof
-that a registry publication happened.
+After that, `vp lint`, `vp fmt`, and `vp check --fix` handle `.tsrx` files
+automatically. The [Vite and Vite+ page](/integrations/vite-plus) has
+the full quick start.
 
-## Prerequisites
+## Create a TSRX file
 
-- A stable Rust toolchain ([rustup](https://rustup.rs), `cargo`).
-- Node.js `^20.19.0 || >=22.12.0` for the JavaScript tests and companion
-  packages.
+Save this as `src/Cart.tsrx`. On this site, the "Try in playground" button
+under the snippet lets you explore it in your browser without installing
+anything. The `var total` and `debugger` lines are there on purpose: they
+give the linter something to catch.
 
-## Build from source
+```tsrx
+export function Cart({ items }: Props) @{
+  var total = 0;
+  debugger;
+
+  <section class="cart">
+    @if (items.length > 0) {
+      @for (const item of items; key item.id) {
+        <Row item={item} />
+      }
+    } @else {
+      <Empty />
+    }
+  </section>
+}
+```
+
+## Lint and format it
+
+Run the linter, then ask the formatter which files would change. This is a
+recording of both commands running against this exact file:
+
+<!-- terminal-demo -->
+
+Every diagnostic points at line and column numbers in your original TSRX
+code, never at a transformed copy. Once you have fixed the warnings, let the
+formatter write its layout changes:
+
+<!-- terminal-demo:getting-started-format-write -->
+
+Two things to know:
+
+- **Mixed file types are fine.** `.tsrx` files go through the TSRX engine,
+  while ordinary `.js`/`.ts`/`.tsx` files go straight to OXC.
+- **You can tune rule severity inline.** For example
+  `npx oxlint --warn no-console --deny no-debugger src/Cart.tsrx`.
+
+## Configuration
+
+Both commands find your normal OXC config by searching upward from the
+current directory (`.oxlintrc.json`/`.oxlintrc.jsonc` for lint,
+`.oxfmtrc.json`/`.oxfmtrc.jsonc` for format), or take an explicit
+`--config`/`-c` path. See
+[Configuration](/integrations/configuration) for exactly which fields
+are supported.
+
+## Build from source (optional)
+
+If you would rather build the native binaries yourself, you need a stable
+Rust toolchain ([rustup](https://rustup.rs)):
 
 ```sh
 git clone https://github.com/thejackshelton/oxc-tsrx.git
@@ -52,91 +107,23 @@ cd oxc-tsrx
 cargo build --release --locked -p oxc_tsrx_cli --bins
 ```
 
-Keep the `--locked` flag: it makes Cargo use the exact dependency versions in
-the lockfile, which is how the project guarantees you're building against the
-one pinned OXC commit (`8e0ed2ebb96137fb1611cdbd5742d5cb46037d40`). The
-binaries land in `target/release/`.
+Keep the `--locked` flag: it makes Cargo build against the exact pinned OXC
+commit from the lockfile. The binaries land in `target/release/`:
 
-## Your first lint
+<!-- terminal-demo:getting-started-native -->
 
-```sh
-target/release/oxc-tsrx --format=json src/Counter.tsrx src/View.tsx
-```
-
-Two things to know:
-
-- **List files explicitly.** The native CLI doesn't walk directories or
-  expand globs yet; that's handled by the npm companions and Vite+.
-- **Mixed file types are fine.** `.tsrx` files go through the TSRX engine;
-  ordinary `.js`/`.ts`/`.tsx` files go straight to OXC.
-
-Diagnostics come out as JSON, positioned at your original TSRX code. You can
-tweak rule severity right on the command line:
-
-```sh
-target/release/oxc-tsrx --format=json \
-  --warn no-console --deny no-debugger src/Counter.tsrx
-```
-
-## Your first format
-
-```sh
-# Check only: exits 1 and lists the files that would change.
-target/release/oxc-tsrx-fmt --check src/Counter.tsrx
-
-# Format and write files.
-target/release/oxc-tsrx-fmt --write src/Counter.tsrx src/View.tsx
-
-# Editor/stdin mode: formatted source goes to stdout.
-target/release/oxc-tsrx-fmt --stdin-filepath=src/Counter.tsrx < src/Counter.tsrx
-```
-
-Write mode formats everything first and only then replaces files, so a failure
-in one file never leaves your project half-written.
-
-## Configuration
-
-Both commands look for your normal OXC config by searching from the current
-directory upward (`.oxlintrc.json`/`.oxlintrc.jsonc` for lint,
-`.oxfmtrc.json`/`.oxfmtrc.jsonc` for format), or take an explicit
-`--config`/`-c` path. Config is read and compiled once per run, then reused
-for every file. See [Configuration](/integrations/configuration.html) for
-exactly which fields are supported.
-
-## Run the project's own checks
-
-The repository's full proof suite:
-
-```sh
-cargo fmt --all -- --check
-cargo clippy --workspace --all-targets --locked -- -D warnings
-cargo test --workspace --locked
-cargo build --release --locked -p oxc_tsrx_cli --bins
-npm test
-npm run build:editor
-npm run test:editor
-npm run test:editor:vscode
-```
-
-Performance is enforced by benchmark gates; see
-[Benchmarks](/reference/benchmarks.html):
-
-```sh
-cargo run --release --locked -p oxc_tsrx_benchmark -- \
-  --assert benchmarks/native-lint/budgets.json
-cargo run --release --locked -p oxc_tsrx_format_benchmark -- \
-  --assert benchmarks/native-format/budgets.json
-npm run benchmark:type-aware
-npm run benchmark:editor
-```
+The native binaries emit JSON diagnostics and want explicit file paths. The
+friendly text output, directory walking, and glob handling come from the npm
+commands, so most projects only need those. See the
+[CLI Reference](/reference/cli) for every flag.
 
 ## Next steps
 
 - See which TSRX syntax is supported in
-  [TSRX Syntax](/guide/tsrx-syntax.html).
+  [TSRX Syntax](/guide/tsrx-syntax).
 - Wire the commands into `vp lint` / `vp fmt` with
-  [Vite and Vite+](/integrations/vite-plus.html).
-- Configure live diagnostics and format-on-save with
-  [Editor integration](/integrations/editor.html).
+  [Vite and Vite+](/integrations/vite-plus).
+- Get live diagnostics and format-on-save with
+  [Editor integration](/integrations/editor).
 - Curious how it works under the hood? Read
-  [Architecture](/architecture/rust-oxc-core.html).
+  [Architecture](/architecture/rust-oxc-core).

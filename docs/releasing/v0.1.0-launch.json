@@ -42,7 +42,7 @@
   "social": {
     "channel": "X",
     "image": "docs/assets/social-card.png",
-    "text": "OXC for TSRX 0.1.0 is out: native Oxlint + Oxfmt for .tsrx, Vite/Vite+ commands, and format-on-save plus lint diagnostics in VS Code—without forking OXC. Install oxlint-tsrx + oxfmt-tsrx: https://thejackshelton.github.io/oxc-tsrx/"
+    "text": "OXC for TSRX 0.1.0 is out: native Oxlint + Oxfmt for .tsrx, Vite/Vite+ commands, and format-on-save plus lint diagnostics in VS Code, all without forking OXC. Install oxlint-tsrx + oxfmt-tsrx: https://thejackshelton.github.io/oxc-tsrx/"
   },
   "requiredApprovals": [
     "repository-push",

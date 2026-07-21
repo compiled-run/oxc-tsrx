@@ -1,39 +1,24 @@
+import { readFileSync } from "node:fs";
 import {
   argumentValue,
   canonicalToolEnvironment,
   discoverTsrxFiles,
   isViteConfigPath,
   prepareVitePlusConfig,
-  positionalIndices,
   removeExplicitTsrx,
   replaceConfigArgument,
   resolveNativeBinary,
   resolvePackageBinary,
   runCaptured,
+  runPassthrough,
 } from "@oxc-tsrx/runtime";
-
-const VALUE_OPTIONS = new Set([
-  "-c",
-  "--config",
-  "--migrate",
-  "--stdin-filepath",
-  "--ignore-path",
-  "--threads",
-]);
-const DELEGATE_ONLY = new Set(["--help", "-h", "--version", "-V", "--init", "--migrate", "--lsp"]);
+import { VALUE_OPTIONS, parseOxfmtInvocation, parseOxfmtOption } from "./invocation.js";
 const NATIVE_VALUE_OPTIONS = new Map([
   ["-c", "--config"],
   ["--config", "--config"],
   ["--threads", "--threads"],
 ]);
 const WRAPPER_OPTIONS = new Set(["--no-error-on-unmatched-pattern"]);
-
-function parseOption(argument) {
-  const equals = argument.indexOf("=");
-  return equals === -1
-    ? { name: argument, value: null }
-    : { name: argument.slice(0, equals), value: argument.slice(equals + 1) };
-}
 
 function nativeArguments(args, files, resolvedConfig) {
   const output = [];
@@ -46,7 +31,7 @@ function nativeArguments(args, files, resolvedConfig) {
       continue;
     }
     if (!argument.startsWith("-") || argument === "-") continue;
-    const { name, value: inlineValue } = parseOption(argument);
+    const { name, value: inlineValue } = parseOxfmtOption(argument);
     if (NATIVE_VALUE_OPTIONS.has(name)) {
       const value = inlineValue ?? args[++index];
       if (!value) throw new Error(`${name} requires a value`);
@@ -71,30 +56,32 @@ function nativeArguments(args, files, resolvedConfig) {
 
 async function delegate(args, cwd, input) {
   const upstream = resolvePackageBinary("oxfmt-current", "oxfmt", import.meta.url);
-  const result = await runCaptured(upstream, args, { cwd, input });
+  const upstreamArgs = [upstream, ...args];
+  // --lsp starts a long-lived stdio LSP server, so the session must stream
+  // through the wrapper instead of being captured and replayed on exit.
+  if (args.some((argument) => argument.split("=")[0] === "--lsp")) {
+    const result = await runPassthrough(process.execPath, upstreamArgs, { cwd });
+    return result.status;
+  }
+  const result = await runCaptured(process.execPath, upstreamArgs, { cwd, input });
   process.stdout.write(result.stdout);
   process.stderr.write(result.stderr);
   return result.status;
 }
 
-function stdinPath(args) {
-  for (let index = 0; index < args.length; index += 1) {
-    const argument = args[index];
-    if (argument === "--stdin-filepath") return args[index + 1] ?? null;
-    if (argument.startsWith("--stdin-filepath=")) return argument.slice("--stdin-filepath=".length);
-  }
-  return null;
-}
-
 export async function runCli(args, options = {}) {
   const cwd = options.cwd ?? process.cwd();
-  const input = options.input;
-  if (args.some((argument) => DELEGATE_ONLY.has(argument.split("=")[0]))) {
-    return delegate(args, cwd, input);
+  const invocation = parseOxfmtInvocation(args);
+  if (invocation.delegateOnly) {
+    return delegate(args, cwd, options.input);
   }
 
-  const requestedStdin = stdinPath(args);
+  const requestedStdin = invocation.stdinFilepath;
   if (requestedStdin !== null) {
+    // The executable bridge owns stdin for TSRX. Keep bytes as a Buffer so the
+    // native formatter receives the exact input without a UTF-8 decode/re-encode
+    // round trip. Programmatic callers can still provide an explicit input.
+    const input = options.input ?? readFileSync(0);
     if (!requestedStdin.split("?")[0].endsWith(".tsrx")) return delegate(args, cwd, input);
     const explicitConfig = argumentValue(args, new Set(["-c", "--config"]));
     const bridgeViteConfig = explicitConfig === null || isViteConfigPath(explicitConfig);
@@ -120,7 +107,7 @@ export async function runCli(args, options = {}) {
     }
   }
 
-  const positions = positionalIndices(args, VALUE_OPTIONS).map((index) => args[index]);
+  const positions = invocation.positionals;
   const files = await discoverTsrxFiles(positions, cwd);
   const explicitConfig = argumentValue(args, new Set(["-c", "--config"]));
   const bridgeViteConfig = explicitConfig === null || isViteConfigPath(explicitConfig);
@@ -147,7 +134,7 @@ export async function runCli(args, options = {}) {
     const nativeBinary = nativeArgs ? resolveNativeBinary("format") : null;
     const [upstreamResult, nativeResult] = await Promise.all([
       shouldRunUpstream
-        ? runCaptured(upstream, upstreamArgs, {
+        ? runCaptured(process.execPath, [upstream, ...upstreamArgs], {
             cwd,
             env: canonicalToolEnvironment(useMaterializedUpstreamConfig),
           })

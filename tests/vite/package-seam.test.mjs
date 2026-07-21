@@ -10,9 +10,13 @@ const root = resolve(import.meta.dirname, "../..");
 const lintBin = process.env.OXC_TSRX_LINT_BIN ?? join(root, "target/release/oxc-tsrx");
 const formatBin = process.env.OXC_TSRX_FORMAT_BIN ?? join(root, "target/release/oxc-tsrx-fmt");
 
-function run(command, args, options) {
+function runProcess(executable, args, options = {}) {
   return new Promise((resolveRun, rejectRun) => {
-    const child = spawn(command, args, { ...options, stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(executable, args, {
+      cwd: options.cwd,
+      env: options.env,
+      stdio: [options.input === undefined ? "ignore" : "pipe", "pipe", "pipe"],
+    });
     let stdout = "";
     let stderr = "";
     child.stdout.setEncoding("utf8");
@@ -21,8 +25,96 @@ function run(command, args, options) {
     child.stderr.on("data", (chunk) => (stderr += chunk));
     child.on("error", rejectRun);
     child.on("close", (status) => resolveRun({ status, stdout, stderr }));
+    if (options.input !== undefined) child.stdin.end(options.input);
   });
 }
+
+function run(command, args, options = {}) {
+  return runProcess(process.execPath, [command, ...args], options);
+}
+
+function lspInitializeRoundTrip(binPath, { timeoutMs = 15_000 } = {}) {
+  return new Promise((resolveSession, rejectSession) => {
+    const child = spawn(process.execPath, [binPath, "--lsp"], {
+      cwd: root,
+      env: { ...process.env, OXC_TSRX_LINT_BIN: lintBin, OXC_TSRX_FORMAT_BIN: formatBin },
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    let stdout = Buffer.alloc(0);
+    let settled = false;
+    const finish = (error, value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      const deliver = () => (error ? rejectSession(error) : resolveSession(value));
+      if (child.exitCode === null && child.signalCode === null) {
+        child.once("close", deliver);
+        child.kill();
+      } else {
+        deliver();
+      }
+    };
+    const timer = setTimeout(() => {
+      finish(
+        new Error(
+          `no LSP initialize response within ${timeoutMs}ms; stdout so far: ${JSON.stringify(stdout.toString("utf8").slice(0, 200))}`,
+        ),
+      );
+    }, timeoutMs);
+    child.on("error", (error) => finish(error));
+    child.on("close", (status, signal) => {
+      finish(new Error(`LSP child exited before responding (status ${status}, signal ${signal})`));
+    });
+    child.stdout.on("data", (chunk) => {
+      stdout = Buffer.concat([stdout, chunk]);
+      const header = stdout.toString("utf8").match(/Content-Length: (\d+)\r\n\r\n/);
+      if (!header) return;
+      const bodyStart = header.index + header[0].length;
+      const bodyLength = Number(header[1]);
+      if (stdout.length < bodyStart + bodyLength) return;
+      try {
+        finish(null, JSON.parse(stdout.subarray(bodyStart, bodyStart + bodyLength).toString("utf8")));
+      } catch (error) {
+        finish(error);
+      }
+    });
+    const message = JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: { processId: null, rootUri: null, capabilities: {} },
+    });
+    child.stdin.write(`Content-Length: ${Buffer.byteLength(message)}\r\n\r\n${message}`);
+  });
+}
+
+test("oxlint wrapper keeps a canonical --lsp stdio session alive", async () => {
+  const response = await lspInitializeRoundTrip(join(root, "packages/oxlint/bin/oxlint"));
+  assert.equal(response.id, 1);
+  assert.ok(response.result?.capabilities, `initialize response missing capabilities: ${JSON.stringify(response)}`);
+});
+
+test("oxfmt wrapper keeps a canonical --lsp stdio session alive", async () => {
+  const response = await lspInitializeRoundTrip(join(root, "packages/oxfmt/bin/oxfmt"));
+  assert.equal(response.id, 1);
+  assert.ok(response.result?.capabilities, `initialize response missing capabilities: ${JSON.stringify(response)}`);
+});
+
+test("oxfmt executable forwards TSRX stdin to the native formatter", async () => {
+  const source = 'export function View( ) @{<div title="proof">TSRX</div>}';
+  const args = ["--stdin-filepath=View.tsrx"];
+  const environment = { ...process.env, OXC_TSRX_FORMAT_BIN: formatBin };
+  const [actual, expected] = await Promise.all([
+    run(join(root, "packages/oxfmt/bin/oxfmt"), args, {
+      cwd: root,
+      env: environment,
+      input: source,
+    }),
+    runProcess(formatBin, args, { cwd: root, env: environment, input: source }),
+  ]);
+  assert.deepEqual(actual, expected);
+  assert.notEqual(actual.stdout, "", "formatter output must not be empty");
+});
 
 test("drop-in package roots preserve canonical config APIs and add TSRX formatting", async () => {
   process.env.OXC_TSRX_LINT_BIN = lintBin;
@@ -86,26 +178,57 @@ test("package manifests have Vite+ compatible root and bin shapes", async () => 
 
 test("mixed package lint delegates ordinary TSX and parses each TSRX file once", async () => {
   const fixture = join(root, "tests/fixtures/vite/toolchain/diagnostics");
-  const result = await run(
-    join(root, "packages/oxlint/bin/oxlint"),
-    [
-      "--format=json",
-      "--config",
-      join(fixture, ".oxlintrc.json"),
-      join(fixture, "src/ordinary.tsx"),
-      join(fixture, "src/view.tsrx"),
-    ],
-    {
-      cwd: root,
-      env: { ...process.env, OXC_TSRX_LINT_BIN: lintBin },
-    },
-  );
-  assert.equal(result.status, 1, result.stderr || result.stdout);
-  const output = JSON.parse(result.stdout);
-  assert.equal(output.number_of_files, 2);
-  assert.equal(output.oxcTsrx.parseCount, 1);
-  assert.equal(output.oxcTsrx.files.tsrx, 1);
-  assert.equal(output.oxcTsrx.files.standard, 0);
-  assert.ok(output.diagnostics.some((diagnostic) => diagnostic.filename.endsWith("ordinary.tsx")));
-  assert.ok(output.diagnostics.some((diagnostic) => diagnostic.filename.endsWith("view.tsrx")));
+  const traceDirectory = await mkdtemp(join(tmpdir(), "oxc-tsrx-public-route-"));
+  const trace = join(traceDirectory, "trace.jsonl");
+  try {
+    const result = await run(
+      join(root, "packages/oxlint/bin/oxlint"),
+      [
+        "--format=json",
+        "--config",
+        join(fixture, ".oxlintrc.json"),
+        join(fixture, "src/ordinary.tsx"),
+        join(fixture, "src/view.tsrx"),
+      ],
+      {
+        cwd: root,
+        env: {
+          ...process.env,
+          OXC_TSRX_LINT_BIN: lintBin,
+          OXC_TSRX_TRACE_FILE: trace,
+        },
+      },
+    );
+    assert.equal(result.status, 1, result.stderr || result.stdout);
+    const output = JSON.parse(result.stdout);
+    assert.equal(output.number_of_files, 2);
+    assert.equal(output.oxcTsrx.parseCount, 1);
+    assert.equal(output.oxcTsrx.files.tsrx, 1);
+    assert.equal(output.oxcTsrx.files.standard, 0);
+    assert.ok(output.diagnostics.some((diagnostic) => diagnostic.filename.endsWith("ordinary.tsx")));
+    assert.ok(output.diagnostics.some((diagnostic) => diagnostic.filename.endsWith("view.tsrx")));
+
+    const starts = (await readFile(trace, "utf8"))
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line))
+      .filter((event) => event.event === "start");
+    assert.ok(
+      starts.some(
+        (event) =>
+          event.executable === process.execPath &&
+          event.args[0]
+            ?.replaceAll("\\", "/")
+            .endsWith("node_modules/oxlint-current/bin/oxlint"),
+      ),
+      "mixed ordinary files must use the public manifest-declared Oxlint launcher via Node",
+    );
+    assert.ok(
+      starts.some((event) => resolve(event.executable) === resolve(lintBin)),
+      "mixed TSRX files must use the native TSRX binary",
+    );
+    assert.ok(starts.every((event) => !event.executable.startsWith("in-process:")));
+  } finally {
+    await rm(traceDirectory, { recursive: true, force: true });
+  }
 });

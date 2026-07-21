@@ -17,9 +17,9 @@ import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { createRequire } from "node:module";
 import { NATIVE_TARGETS, nativePackageName } from "../packages/runtime/dist/targets.js";
+import { resolveNpmInvocation } from "./npm-invocation.mjs";
 
 const root = resolve(import.meta.dirname, "..");
-const npm = process.platform === "win32" ? "npm.cmd" : "npm";
 const revision = "8e0ed2ebb96137fb1611cdbd5742d5cb46037d40";
 const binaryStems = ["oxc-tsrx", "oxc-tsrx-fmt", "oxc-tsrx-lsp"];
 const require = createRequire(import.meta.url);
@@ -421,21 +421,29 @@ try {
     cp(join(root, "licenses"), join(stage, "licenses"), { recursive: true }),
   ]);
 
-  const { stdout } = await run(npm, ["pack", "--json", "--pack-destination", outDirectory], {
+  const npmEnvironment = { ...process.env, npm_config_cache: join(stage, ".npm-cache") };
+  const npmInvocation = resolveNpmInvocation(
+    ["pack", "--json", "--pack-destination", outDirectory],
+    { cwd: stage, env: npmEnvironment },
+  );
+  const { stdout } = await run(npmInvocation.executable, npmInvocation.args, {
     cwd: stage,
-    env: { ...process.env, npm_config_cache: join(stage, ".npm-cache") },
+    env: npmEnvironment,
   });
   const packed = JSON.parse(stdout);
   if (!Array.isArray(packed) || packed.length !== 1) {
     throw new Error(`unexpected npm pack response: ${stdout}`);
   }
   const tarball = join(outDirectory, packed[0].filename);
+  const lsp = binaries[`oxc-tsrx-lsp${executableSuffix}`];
   process.stdout.write(
     `${JSON.stringify({
       packageName,
       version,
       target: platform.target,
       vscodeTarget: platform.vscodeTarget,
+      lspSha256: lsp.sha256,
+      lspBytes: lsp.bytes,
       tarball,
       filename: basename(tarball),
       integrity: packed[0].integrity,

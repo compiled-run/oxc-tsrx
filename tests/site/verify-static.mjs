@@ -6,7 +6,8 @@ import { fileURLToPath } from 'node:url'
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const dist = path.join(root, 'docs', 'dist')
-const basePath = '/oxc-tsrx'
+// The site is served at the root ('' means no path prefix).
+const basePath = ''
 
 const types = {
   '.css': 'text/css; charset=utf-8',
@@ -40,11 +41,11 @@ await run(process.execPath, ['docs/build.mjs'])
 
 const server = http.createServer((request, response) => {
   const url = new URL(request.url, 'http://localhost')
-  if (url.pathname === '/') {
+  if (basePath && url.pathname === '/') {
     response.writeHead(302, { Location: `${basePath}/` }).end()
     return
   }
-  if (url.pathname !== basePath && !url.pathname.startsWith(`${basePath}/`)) {
+  if (basePath && url.pathname !== basePath && !url.pathname.startsWith(`${basePath}/`)) {
     response.writeHead(404, { 'Content-Type': 'text/plain' }).end('Not found')
     return
   }

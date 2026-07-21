@@ -8,6 +8,7 @@ const root = document.documentElement
 function syncThemeButton() {
   themeToggle.setAttribute('aria-pressed', String(root.classList.contains('dark')))
 }
+
 syncThemeButton()
 
 themeToggle.addEventListener('click', () => {
@@ -77,6 +78,208 @@ function initCopyButtons() {
   }
 }
 
+function applyPmChoice(pm) {
+  for (const group of document.querySelectorAll('[data-pm-tabs]')) {
+    if (!group.querySelector(`[role="tab"][data-pm="${pm}"]`)) continue
+    for (const tab of group.querySelectorAll('[role="tab"]')) {
+      const active = tab.dataset.pm === pm
+      tab.setAttribute('aria-selected', String(active))
+      tab.tabIndex = active ? 0 : -1
+    }
+    for (const panel of group.querySelectorAll('[role="tabpanel"]')) {
+      panel.hidden = panel.dataset.pm !== pm
+    }
+  }
+}
+
+function initPmTabs() {
+  const selectPm = (pm) => {
+    try {
+      localStorage.setItem('oxc-tsrx-pm', pm)
+    } catch {}
+    applyPmChoice(pm)
+  }
+  for (const group of document.querySelectorAll('[data-pm-tabs]:not([data-ready])')) {
+    group.dataset.ready = '1'
+    const tabs = [...group.querySelectorAll('[role="tab"]')]
+    for (const tab of tabs) tab.addEventListener('click', () => selectPm(tab.dataset.pm))
+    group.querySelector('[role="tablist"]').addEventListener('keydown', (event) => {
+      const delta = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0
+      const index = tabs.indexOf(document.activeElement)
+      if (!delta || index === -1) return
+      event.preventDefault()
+      const next = tabs[(index + delta + tabs.length) % tabs.length]
+      next.focus()
+      selectPm(next.dataset.pm)
+    })
+  }
+  let stored = null
+  try {
+    stored = localStorage.getItem('oxc-tsrx-pm')
+  } catch {}
+  if (stored) applyPmChoice(stored)
+}
+
+function initDiagrams() {
+  for (const figure of document.querySelectorAll('.diagram:not([data-ready])')) {
+    figure.dataset.ready = '1'
+
+    const activateNode = (node) => {
+      const nodeId = node.dataset.diagramNode
+      for (const candidate of figure.querySelectorAll('[data-diagram-node]')) {
+        const active = candidate.dataset.diagramNode === nodeId
+        candidate.classList.toggle('diagram-node-active', active)
+        candidate.setAttribute('aria-pressed', String(active))
+      }
+      figure.querySelector('.diagram-caption-strip').textContent = node.dataset.caption
+    }
+
+    const activateStep = (step) => {
+      const selected = new Set(JSON.parse(step.dataset.nodes))
+      for (const button of figure.querySelectorAll('[data-diagram-step]')) {
+        button.setAttribute('aria-pressed', String(button === step))
+      }
+      for (const node of figure.querySelectorAll('[data-diagram-node]')) {
+        const highlighted = selected.has(node.dataset.diagramNode)
+        node.classList.toggle('diagram-step-highlight', highlighted)
+        node.classList.toggle('diagram-step-dimmed', !highlighted)
+        node.classList.remove('diagram-node-active')
+        node.setAttribute('aria-pressed', 'false')
+      }
+      if (step.dataset.caption) {
+        figure.querySelector('.diagram-caption-strip').textContent = step.dataset.caption
+      }
+    }
+
+    figure.addEventListener('click', (event) => {
+      const step = event.target.closest('[data-diagram-step]')
+      if (step) {
+        activateStep(step)
+        return
+      }
+      const node = event.target.closest('[data-diagram-node]')
+      if (node && figure.contains(node)) activateNode(node)
+    })
+
+    const firstStep = figure.querySelector('[data-diagram-step]')
+    if (firstStep) activateStep(firstStep)
+
+    figure.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return
+      const node = event.target.closest('[data-diagram-node]')
+      if (!node || !figure.contains(node)) return
+      event.preventDefault()
+      activateNode(node)
+    })
+  }
+}
+
+function initProjectionMaps() {
+  for (const map of document.querySelectorAll('[data-projection-map]:not([data-ready])')) {
+    map.dataset.ready = '1'
+    let activeMapId = null
+
+    const highlightPair = (mapId) => {
+      if (mapId === activeMapId) return
+      activeMapId = mapId
+      for (const line of map.querySelectorAll('[data-map-id]')) {
+        line.classList.toggle('projection-line-active', line.dataset.mapId === mapId)
+      }
+    }
+
+    map.addEventListener('mouseover', (event) => {
+      const line = event.target.closest('[data-map-id]')
+      if (line && map.contains(line)) highlightPair(line.dataset.mapId)
+    })
+    map.addEventListener('mouseleave', () => highlightPair(null))
+    map.addEventListener('focusin', (event) => {
+      const line = event.target.closest('[data-map-id]')
+      if (line && map.contains(line)) highlightPair(line.dataset.mapId)
+    })
+    map.addEventListener('focusout', (event) => {
+      if (!map.contains(event.relatedTarget)) highlightPair(null)
+    })
+
+    map.querySelector('[data-scaffolding-toggle]')?.addEventListener('click', (event) => {
+      const pressed = event.currentTarget.getAttribute('aria-pressed') !== 'true'
+      event.currentTarget.setAttribute('aria-pressed', String(pressed))
+      map.classList.toggle('projection-map-dim-scaffolding', pressed)
+    })
+  }
+}
+
+function initHowItWorks() {
+  for (const figure of document.querySelectorAll('[data-how-it-works]:not([data-hiw-ready])')) {
+    figure.dataset.hiwReady = '1'
+    const buttons = [...figure.querySelectorAll('[data-hiw-step]')]
+
+    const selectStep = (step) => {
+      figure.dataset.step = step
+      for (const button of buttons) {
+        button.setAttribute('aria-pressed', String(button.dataset.hiwStep === step))
+      }
+    }
+
+    for (const button of buttons) {
+      button.addEventListener('click', () => selectStep(button.dataset.hiwStep))
+    }
+    // Without JS the strip shows all four explanations; with JS it becomes a
+    // step-through starting at the first step.
+    selectStep(buttons[0].dataset.hiwStep)
+  }
+}
+
+const pageCleanupCallbacks = []
+
+function cleanupPage() {
+  for (const cleanup of pageCleanupCallbacks.splice(0)) cleanup()
+}
+
+function initTerminalDemos() {
+  for (const terminal of document.querySelectorAll('[data-terminal-demo]:not([data-ready])')) {
+    terminal.dataset.ready = '1'
+    const button = terminal.querySelector('[data-terminal-play]')
+    const lines = [...terminal.querySelectorAll('.gs-terminal-line')]
+    let timerId = null
+
+    const stopReplay = () => {
+      if (timerId !== null) clearTimeout(timerId)
+      timerId = null
+    }
+    pageCleanupCallbacks.push(stopReplay)
+
+    terminal.classList.add('gs-terminal-enhanced')
+
+    button.addEventListener('click', () => {
+      stopReplay()
+      for (const line of lines) line.classList.add('gs-terminal-line-hidden')
+
+      if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        for (const line of lines) line.classList.remove('gs-terminal-line-hidden')
+        button.textContent = 'Replay'
+        button.setAttribute('aria-label', 'Replay terminal walkthrough')
+        return
+      }
+
+      let index = 0
+      const revealNext = () => {
+        if (!terminal.isConnected) {
+          stopReplay()
+          return
+        }
+        lines[index++].classList.remove('gs-terminal-line-hidden')
+        if (index < lines.length) timerId = setTimeout(revealNext, 80)
+        else {
+          timerId = null
+          button.textContent = 'Replay'
+          button.setAttribute('aria-label', 'Replay terminal walkthrough')
+        }
+      }
+      revealNext()
+    })
+  }
+}
+
 // ---------- per-page: outline scroll spy (one persistent listener) ----------
 let spyEntries = []
 let spyActiveItem = null
@@ -122,6 +325,16 @@ window.addEventListener(
 
 function initPage() {
   initCopyButtons()
+  initPmTabs()
+  initDiagrams()
+  initProjectionMaps()
+  initHowItWorks()
+  initTerminalDemos()
+  if (document.querySelector('[data-matrix-filter], [data-review-route], [data-editor-replay]')) {
+    import(new URL('./interactive.js', import.meta.url))
+      .then((module) => module.init(pageCleanupCallbacks))
+      .catch(() => {})
+  }
   collectOutline()
   const demo = document.getElementById('hero-demo')
   if (demo && !demo.dataset.ready) {
@@ -135,8 +348,8 @@ initPage()
 
 // ---------- delegated one-time handlers (survive SPA content swaps) ----------
 const playgroundHref = () =>
-  document.querySelector('.top-nav a[href$="playground.html"]')?.getAttribute('href') ??
-  '/playground.html'
+  document.querySelector('.top-nav a[href$="/playground"]')?.getAttribute('href') ??
+  '/playground'
 
 const toBase64Url = (text) => {
   const bytes = new TextEncoder().encode(text)
@@ -205,12 +418,14 @@ function showChartTooltip(row) {
     chartTooltip.setAttribute('role', 'tooltip')
     document.body.appendChild(chartTooltip)
   }
-  const { label, result, budget, pct, pass, note } = row.dataset
+  // Dataset values are double-escaped at build time, so they stay inert here.
+  const { label, result, budget, pct, pass, note, samples } = row.dataset
   chartTooltip.innerHTML =
     `<strong>${label}</strong>` +
     `<span>Result: ${result}</span>` +
     `<span>Budget: ${budget}</span>` +
     `<span>${pct} · ${pass === 'true' ? '✓ pass' : '✗ fail'}</span>` +
+    (samples ? `<span class="chart-tooltip-samples">${samples}</span>` : '') +
     (note ? `<span class="chart-tooltip-note">${note}</span>` : '')
   chartTooltip.hidden = false
   const bar = row.querySelector('.bench-bar')?.getBoundingClientRect() ?? row.getBoundingClientRect()
@@ -277,6 +492,7 @@ async function fetchPage(href) {
 }
 
 function swapPage(html, url) {
+  cleanupPage()
   const doc = new DOMParser().parseFromString(html, 'text/html')
   const newMain = doc.querySelector('.layout .content')
   const currentMain = document.querySelector('.layout .content')
@@ -318,7 +534,10 @@ if ('navigation' in window) {
     if (!event.canIntercept || event.hashChange || event.downloadRequest !== null) return
     const url = new URL(event.destination.url)
     if (url.origin !== location.origin) return
-    if (!(url.pathname.endsWith('.html') || url.pathname.endsWith('/'))) return
+    // Pages are extensionless routes (or "/", or a direct .html file); anything
+    // with another file extension is an asset the router must not intercept.
+    const lastSegment = url.pathname.split('/').at(-1) ?? ''
+    if (lastSegment.includes('.') && !lastSegment.endsWith('.html')) return
     event.intercept({
       scroll: 'manual',
       focusReset: 'manual',

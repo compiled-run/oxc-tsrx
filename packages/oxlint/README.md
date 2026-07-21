@@ -2,7 +2,9 @@
 
 Oxlint-compatible command and configuration exports with native `.tsrx`
 support. Ordinary JavaScript and TypeScript are delegated to the exact official
-Oxlint package; TSRX is routed once to the Rust-native OXC for TSRX binary.
+Oxlint package; conservative ordinary-only invocations import its declared npm
+launcher in the same Node process. TSRX is routed once to the Rust-native OXC
+for TSRX binary.
 
 Use the package directly, or install it under the `oxlint` alias expected by
 Vite+:
