@@ -1,0 +1,46 @@
+{
+  "schema": "true-oxc-installed-performance-v1",
+  "contractSha256": "1c0eadb6373a97048a552eee41a0b00498ca0d5c30e4497f5dc8448ba98eb002",
+  "marklessCommit": "5ae565b9b178934519af46ff6cb1905dff604860",
+  "discoveredFiles": 214,
+  "acceptedFiles": 201,
+  "acceptedBytes": 203034,
+  "sourceManifestSha256": "69d863e9ea34058956b46a5478928ac79a9ce896c8928988c7e8cd0f6799a79b",
+  "semanticSha256": "6a5145948dca8d82b1000c858dae15c2e289ca2ea2e286f8b2ed6dc0b2624df8",
+  "splitSha256": "e9d1ef7c718522cce16e372af7db4f1d027ca1891284f7b2237f642154f1f1e6",
+  "split": {
+    "algorithm": "sha256(path + NUL + bytes), training iff first digest byte modulo 4 == 0",
+    "training": { "files": 50, "bytes": 41509 },
+    "heldout": { "files": 151, "bytes": 161525 },
+    "heldoutBySize": {
+      "small": { "files": 52, "bytes": 8394 },
+      "medium": { "files": 44, "bytes": 19025 },
+      "large": { "files": 55, "bytes": 134106 }
+    }
+  },
+  "protocol": {
+    "children": 5,
+    "warmupsPerArm": 4,
+    "retainedRoundsPerArm": 15,
+    "alternatingArmOrder": true,
+    "outlierRemoval": false,
+    "forcedGc": false,
+    "maximumCampaignReruns": 1,
+    "acrossChildCvMax": 0.05
+  },
+  "gates": {
+    "small": { "candidateMedianMsMax": 1.25, "candidateToStockMax": 0.95 },
+    "medium": { "candidateMedianMsMax": 2.9, "candidateToStockMax": 0.95 },
+    "large": { "candidateMedianMsMax": 13.4, "candidateToStockMax": 0.95 },
+    "full": {
+      "candidateMedianMsMax": 17.2,
+      "candidateToStockMax": 0.9,
+      "throughputSpeedupMin": 1.1
+    },
+    "heldout": {
+      "medianThroughputSpeedupMin": 1.1,
+      "meanThroughputSpeedupMin": 1.1,
+      "candidateToOfficialMedianMax": 1.5
+    }
+  }
+}

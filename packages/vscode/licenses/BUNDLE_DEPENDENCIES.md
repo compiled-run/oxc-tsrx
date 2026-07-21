@@ -6,7 +6,7 @@ installed package's actual license text. Do not edit it by hand.
 
 - Bundle: `packages/vscode/dist/extension.bundle.cjs`
 - Bundle SHA-256: `e7797c03c143c55d296e2805f9b6883a2b77fd81d0c15b6609fab0dda9b8152b`
-- package-lock.json SHA-256: `4eb28a9dd047e6d039cb4a15b3f56d4f621dd6c2b97c7410b12613b00384f0e2`
+- package-lock.json SHA-256: `de2566e99c9bbbb229e3bb12594921816aa391b88b5d68b861ea10079b9db57f`
 - Bundled third-party packages: 12
 
 Every listed license/copyright text is shipped byte-exactly below

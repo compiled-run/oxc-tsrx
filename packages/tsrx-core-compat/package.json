@@ -1,0 +1,57 @@
+{
+  "name": "@oxc-tsrx/tsrx-core-compat",
+  "version": "0.1.0",
+  "description": "A dependency-light @tsrx/core parser facade powered by @oxc-tsrx/parser",
+  "keywords": [
+    "oxc",
+    "parser",
+    "tsrx"
+  ],
+  "homepage": "https://thejackshelton.github.io/oxc-tsrx/",
+  "bugs": {
+    "url": "https://github.com/thejackshelton/oxc-tsrx/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/thejackshelton/oxc-tsrx.git",
+    "directory": "packages/tsrx-core-compat"
+  },
+  "type": "module",
+  "main": "./index.js",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./index.js",
+      "default": "./index.js"
+    },
+    "./types": {
+      "types": "./types/index.d.ts"
+    },
+    "./types/estree": {
+      "types": "./types/estree.d.ts"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "facade.js",
+    "index.js",
+    "index.d.ts",
+    "types",
+    "LICENSE",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "dependencies": {
+    "@oxc-project/types": "0.140.0",
+    "@oxc-tsrx/parser": "0.1.0"
+  },
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}

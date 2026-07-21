@@ -3,27 +3,36 @@ use std::{fmt::Write as _, ops::Range};
 use crate::{
     model::{
         ByteSpan, ClauseRole, ControlContext, ControlKind, EmbeddedKind, NONE, Overlay,
-        ProjectionError, StructuralKind, to_u32,
+        ParserDynamicKind, ProjectionError, StructuralKind, to_u32,
     },
     scanner::{Scanner, source_fingerprint},
 };
 
+#[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct MapSegment {
-    projected: ByteSpan,
-    original_start: u32,
-    fixable: bool,
+pub struct ProjectionSegment {
+    pub projected: ByteSpan,
+    pub original_start: u32,
+    pub fixable: bool,
+}
+
+/// Allocation-free borrowed access to one legal-TSX projection and its affine source map.
+#[derive(Debug, Clone, Copy)]
+pub struct ProjectionView<'a> {
+    pub source: &'a str,
+    pub segments: &'a [ProjectionSegment],
 }
 
 /// Legal TSX plus an affine map for ranges copied byte-for-byte from authored TSRX.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MappedProjection {
     projected: String,
-    segments: Vec<MapSegment>,
+    segments: Vec<ProjectionSegment>,
     dynamic_prefix: Option<String>,
     dynamic_count: u32,
     dynamic_offsets: Vec<u32>,
     synthetic_generator_spans: Vec<ByteSpan>,
+    synthetic_callee_spans: Vec<(u32, u32)>,
 }
 
 /// Legal TSX for TypeScript-Go plus an authored-byte map.
@@ -34,13 +43,21 @@ pub struct MappedProjection {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TypeProjection {
     projected: String,
-    segments: Vec<MapSegment>,
+    segments: Vec<ProjectionSegment>,
 }
 
 impl TypeProjection {
     #[must_use]
     pub fn source(&self) -> &str {
         &self.projected
+    }
+
+    #[must_use]
+    pub fn view(&self) -> ProjectionView<'_> {
+        ProjectionView {
+            source: &self.projected,
+            segments: &self.segments,
+        }
     }
 
     /// Maps a diagnostic whose first and last bytes are both anchored in authored source.
@@ -87,6 +104,14 @@ impl MappedProjection {
         &self.projected
     }
 
+    #[must_use]
+    pub fn view(&self) -> ProjectionView<'_> {
+        ProjectionView {
+            source: &self.projected,
+            segments: &self.segments,
+        }
+    }
+
     /// Maps a projected range only when every byte belongs to one unchanged authored segment.
     #[must_use]
     pub fn map_range(&self, range: Range<u32>) -> Option<Range<u32>> {
@@ -106,9 +131,22 @@ impl MappedProjection {
     /// Returns the collision-free synthetic dynamic-tag namespace and expected tag count.
     #[must_use]
     pub fn dynamic_contract(&self) -> Option<(&str, u32, &[u32])> {
+        if self.dynamic_count == 0 {
+            return None;
+        }
         self.dynamic_prefix
             .as_deref()
             .map(|prefix| (prefix, self.dynamic_count, self.dynamic_offsets.as_slice()))
+    }
+
+    /// Collision-free marker namespace used by the parser-only reconstruction lane.
+    ///
+    /// Parser projections retain this even when their only implemented construct has no emitted
+    /// marker (for example a self-closing raw style element), so validation never has to infer a
+    /// namespace from untrusted projected comments.
+    #[must_use]
+    pub fn parser_marker_prefix(&self) -> Option<&str> {
+        self.dynamic_prefix.as_deref()
     }
 
     /// Returns true when an authored range belongs to a generator introduced only as projection
@@ -119,10 +157,20 @@ impl MappedProjection {
             .iter()
             .any(|span| span.intersects(range.start, range.end))
     }
+
+    /// Projected byte spans of helper callees introduced by this projection.
+    ///
+    /// The parser's dynamic-expression validator uses these exact spans to distinguish generated
+    /// control helpers from authored calls, including authored escaped identifiers that decode to
+    /// the same collision-free prefix.
+    #[must_use]
+    pub fn synthetic_callee_spans(&self) -> &[(u32, u32)] {
+        &self.synthetic_callee_spans
+    }
 }
 
 fn map_single_segment(
-    segments: &[MapSegment],
+    segments: &[ProjectionSegment],
     range: Range<u32>,
     require_fixable: bool,
 ) -> Option<Range<u32>> {
@@ -252,18 +300,27 @@ impl FormatProjection {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Action {
     TryEnd(u32),
+    ParserCodeBlockEnd(u32),
     WrapperEnd(u32),
     WrapperStart(u32),
     Token(u32),
     Header { clause: u32, ordinal: u32 },
     ForBody(u32),
     Embedded(u32),
+    ParserDynamic(u32),
 }
 
 impl Action {
     fn key(self, overlay: &Overlay) -> (u32, u8) {
         match self {
             Self::TryEnd(node) => (overlay.nodes[node as usize].span.end, 0),
+            Self::ParserCodeBlockEnd(block) => (
+                overlay.parser_code_blocks[block as usize]
+                    .body
+                    .end
+                    .saturating_sub(1),
+                0,
+            ),
             Self::WrapperEnd(node) => (overlay.nodes[node as usize].span.end, 1),
             Self::WrapperStart(node) => (overlay.nodes[node as usize].span.start, 2),
             Self::Token(token) => (overlay.tokens[token as usize].span.start, 3),
@@ -276,6 +333,7 @@ impl Action {
                 0,
             ),
             Self::Embedded(token) => (overlay.embedded_tokens[token as usize].span.start, 3),
+            Self::ParserDynamic(token) => (overlay.parser_dynamic_tokens[token as usize].offset, 2),
         }
     }
 }
@@ -293,10 +351,11 @@ struct Builder<'a> {
     overlay: &'a Overlay,
     prefix: &'a str,
     output: String,
-    segments: Vec<MapSegment>,
+    segments: Vec<ProjectionSegment>,
     record_segments: bool,
-    type_semantic: bool,
+    purpose: ProjectionPurpose,
     cursor: usize,
+    synthetic_callee_spans: Vec<(u32, u32)>,
 }
 
 impl<'a> Builder<'a> {
@@ -305,8 +364,11 @@ impl<'a> Builder<'a> {
         overlay: &'a Overlay,
         prefix: &'a str,
         record_segments: bool,
-        type_semantic: bool,
+        purpose: ProjectionPurpose,
     ) -> Self {
+        let raw_style_bytes = overlay.style_blocks.iter().fold(0_usize, |bytes, style| {
+            bytes.saturating_add(style.content.end.saturating_sub(style.content.start) as usize)
+        });
         Self {
             source,
             overlay,
@@ -314,6 +376,7 @@ impl<'a> Builder<'a> {
             output: String::with_capacity(
                 source
                     .len()
+                    .saturating_sub(raw_style_bytes)
                     .saturating_add(overlay.tokens.len().saturating_mul(64))
                     .saturating_add(overlay.embedded_tokens.len().saturating_mul(32)),
             ),
@@ -324,14 +387,16 @@ impl<'a> Builder<'a> {
                         .len()
                         .saturating_mul(2)
                         .saturating_add(overlay.dynamic_tags.len())
+                        .saturating_add(overlay.style_blocks.len())
                         .saturating_add(1),
                 )
             } else {
                 Vec::new()
             },
             record_segments,
-            type_semantic,
+            purpose,
             cursor: 0,
+            synthetic_callee_spans: Vec::new(),
         }
     }
 
@@ -344,7 +409,14 @@ impl<'a> Builder<'a> {
             dynamic_count: 0,
             dynamic_offsets: Vec::new(),
             synthetic_generator_spans: Vec::new(),
+            synthetic_callee_spans: self.synthetic_callee_spans,
         })
+    }
+
+    fn record_synthetic_callee(&mut self, start: usize) -> Result<(), ProjectionError> {
+        self.synthetic_callee_spans
+            .push((to_u32(start)?, to_u32(self.output.len())?));
+        Ok(())
     }
 
     fn copy_to(&mut self, end: usize) -> Result<(), ProjectionError> {
@@ -392,7 +464,7 @@ impl<'a> Builder<'a> {
         {
             previous.projected.end = projected_end;
         } else {
-            self.segments.push(MapSegment {
+            self.segments.push(ProjectionSegment {
                 projected: ByteSpan::new(projected_start, projected_end),
                 original_start: span.start,
                 fixable,
@@ -407,10 +479,14 @@ impl<'a> Builder<'a> {
         if node.context == ControlContext::JsxChild {
             self.output.push('{');
         }
+        let callee_start = self.output.len();
+        write!(self.output, "{}W{node_index}_", self.prefix)
+            .expect("writing to a String cannot fail");
+        self.record_synthetic_callee(callee_start)?;
         write!(
             self.output,
-            "{}W{node_index}_({{async *{}M{node_index}_(){{/*{}N{node_index}S__*/",
-            self.prefix, self.prefix, self.prefix
+            "({{async *{}M{node_index}_(){{/*{}N{node_index}S__*/",
+            self.prefix, self.prefix
         )
         .expect("writing to a String cannot fail");
         Ok(())
@@ -465,7 +541,10 @@ impl<'a> Builder<'a> {
             });
         }
         match token.kind {
-            StructuralKind::FunctionBody if self.type_semantic => {
+            StructuralKind::FunctionBody if self.purpose == ProjectionPurpose::Parser => {
+                self.parser_function_body(token_index, start)?;
+            }
+            StructuralKind::FunctionBody if self.purpose == ProjectionPurpose::Types => {
                 write!(self.output, "/*{}{token_index}*/", self.prefix)
                     .expect("writing to a String cannot fail");
                 self.cursor = start + 1;
@@ -481,12 +560,14 @@ impl<'a> Builder<'a> {
                 if token.owner == NONE {
                     return Err(ProjectionError::StructuralMismatch);
                 }
-                write!(
-                    self.output,
-                    "/*{}{token_index}*/{}T{}_({{async *{}B{}_()",
-                    self.prefix, self.prefix, token.owner, self.prefix, token.owner
-                )
-                .expect("writing to a String cannot fail");
+                write!(self.output, "/*{}{token_index}*/", self.prefix)
+                    .expect("writing to a String cannot fail");
+                let callee_start = self.output.len();
+                write!(self.output, "{}T{}_", self.prefix, token.owner)
+                    .expect("writing to a String cannot fail");
+                self.record_synthetic_callee(callee_start)?;
+                write!(self.output, "({{async *{}B{}_()", self.prefix, token.owner)
+                    .expect("writing to a String cannot fail");
                 self.cursor = start + spelling.len();
             }
             StructuralKind::Pending => {
@@ -530,6 +611,61 @@ impl<'a> Builder<'a> {
         Ok(())
     }
 
+    fn parser_function_body(
+        &mut self,
+        token_index: u32,
+        start: usize,
+    ) -> Result<(), ProjectionError> {
+        // Keep the authored opening brace affine. A JSX-child code block then gets an
+        // authenticated function wrapper so its body may contain statements; ordinary blocks
+        // need only the marker after the brace.
+        self.cursor = start + 1;
+        self.copy_to(start + 2)?;
+        if self.parser_code_block(token_index).is_some() {
+            write!(
+                self.output,
+                "(async function*{}J{token_index}_(){{/*{}{token_index}*/",
+                self.prefix, self.prefix
+            )
+            .expect("writing to a String cannot fail");
+        } else {
+            write!(self.output, "/*{}{token_index}*/", self.prefix)
+                .expect("writing to a String cannot fail");
+        }
+        Ok(())
+    }
+
+    fn parser_code_block(&self, token: u32) -> Option<usize> {
+        self.overlay
+            .parser_code_blocks
+            .binary_search_by_key(&token, |block| block.token)
+            .ok()
+    }
+
+    fn parser_code_block_end(&mut self, block_index: u32) -> Result<(), ProjectionError> {
+        if self.purpose != ProjectionPurpose::Parser {
+            return Err(ProjectionError::StructuralMismatch);
+        }
+        let block = self
+            .overlay
+            .parser_code_blocks
+            .get(block_index as usize)
+            .ok_or(ProjectionError::StructuralMismatch)?;
+        let closing = block
+            .body
+            .end
+            .checked_sub(1)
+            .ok_or(ProjectionError::StructuralMismatch)? as usize;
+        if self.source.as_bytes().get(closing) != Some(&b'}') {
+            return Err(ProjectionError::SourceChanged {
+                offset: block.body.end.saturating_sub(1),
+            });
+        }
+        self.copy_to(closing)?;
+        self.output.push_str("})");
+        Ok(())
+    }
+
     fn catch_has_header(&self, node: u32) -> Result<bool, ProjectionError> {
         let mut clause = self.overlay.nodes[node as usize].first_clause;
         while clause != NONE {
@@ -544,7 +680,7 @@ impl<'a> Builder<'a> {
 
     fn header(&mut self, clause_index: u32, ordinal: u32) -> Result<(), ProjectionError> {
         let clause = self.overlay.clauses[clause_index as usize];
-        if self.type_semantic {
+        if self.purpose == ProjectionPurpose::Types {
             return self.type_header(clause);
         }
         let header = clause.for_header;
@@ -556,33 +692,35 @@ impl<'a> Builder<'a> {
         self.copy_to(clause.header.start as usize)?;
         self.output.push('(');
         self.copy_original(header.left)?;
-        write!(
-            self.output,
-            " of {}H{ordinal}_(/*{}R{ordinal}S__*/",
-            self.prefix, self.prefix
-        )
-        .expect("writing to a String cannot fail");
+        self.output.push_str(" of ");
+        let callee_start = self.output.len();
+        write!(self.output, "{}H{ordinal}_", self.prefix).expect("writing to a String cannot fail");
+        self.record_synthetic_callee(callee_start)?;
+        write!(self.output, "(/*{}R{ordinal}S__*/", self.prefix)
+            .expect("writing to a String cannot fail");
         self.copy_original(header.right)?;
         write!(self.output, "/*{}R{ordinal}E__*/", self.prefix)
             .expect("writing to a String cannot fail");
         if !header.index.is_empty() {
-            write!(
-                self.output,
-                ",{}IH{ordinal}_(/*{}I{ordinal}S__*/",
-                self.prefix, self.prefix
-            )
-            .expect("writing to a String cannot fail");
+            self.output.push(',');
+            let callee_start = self.output.len();
+            write!(self.output, "{}IH{ordinal}_", self.prefix)
+                .expect("writing to a String cannot fail");
+            self.record_synthetic_callee(callee_start)?;
+            write!(self.output, "(/*{}I{ordinal}S__*/", self.prefix)
+                .expect("writing to a String cannot fail");
             self.copy_original(header.index)?;
             write!(self.output, "/*{}I{ordinal}E__*/)", self.prefix)
                 .expect("writing to a String cannot fail");
         }
         if !header.key.is_empty() {
-            write!(
-                self.output,
-                ",{}KH{ordinal}_(/*{}K{ordinal}S__*/",
-                self.prefix, self.prefix
-            )
-            .expect("writing to a String cannot fail");
+            self.output.push(',');
+            let callee_start = self.output.len();
+            write!(self.output, "{}KH{ordinal}_", self.prefix)
+                .expect("writing to a String cannot fail");
+            self.record_synthetic_callee(callee_start)?;
+            write!(self.output, "(/*{}K{ordinal}S__*/", self.prefix)
+                .expect("writing to a String cannot fail");
             self.copy_original(header.key)?;
             write!(self.output, "/*{}K{ordinal}E__*/)", self.prefix)
                 .expect("writing to a String cannot fail");
@@ -627,7 +765,7 @@ impl<'a> Builder<'a> {
     }
 
     fn for_body(&mut self, clause_index: u32) -> Result<(), ProjectionError> {
-        if !self.type_semantic {
+        if self.purpose != ProjectionPurpose::Types {
             return Err(ProjectionError::StructuralMismatch);
         }
         let clause = self.overlay.clauses[clause_index as usize];
@@ -651,6 +789,7 @@ impl<'a> Builder<'a> {
         Ok(())
     }
 
+    #[allow(clippy::too_many_lines)]
     fn embedded(&mut self, token_index: u32) -> Result<(), ProjectionError> {
         let token = self.overlay.embedded_tokens[token_index as usize];
         let span_start = token.span.start as usize;
@@ -678,9 +817,18 @@ impl<'a> Builder<'a> {
                     self.prefix, token.owner, self.prefix, token.owner
                 )
                 .expect("writing to a String cannot fail");
+                if self.purpose == ProjectionPurpose::Parser {
+                    self.output.push('(');
+                }
                 self.cursor = tag.expression.start as usize;
-                self.copy_original_with_fixability(tag.expression, tag.self_closing)?;
+                self.copy_original_with_fixability(
+                    tag.expression,
+                    tag.self_closing || self.purpose == ProjectionPurpose::Parser,
+                )?;
                 self.cursor = tag.expression.end as usize;
+                if self.purpose == ProjectionPurpose::Parser {
+                    self.output.push(')');
+                }
                 write!(self.output, "}} {}Z{}_={{null}}", self.prefix, token.owner)
                     .expect("writing to a String cannot fail");
                 self.cursor = span_end;
@@ -698,33 +846,45 @@ impl<'a> Builder<'a> {
                     .dynamic_tags
                     .get(token.owner as usize)
                     .ok_or(ProjectionError::StructuralMismatch)?;
-                let first = tag.first_closing_comment as usize;
-                let end = first
-                    .checked_add(tag.closing_comment_count as usize)
-                    .ok_or(ProjectionError::SourceTooLarge)?;
-                let comments = self
-                    .overlay
-                    .dynamic_comments
-                    .get(first..end)
-                    .ok_or(ProjectionError::StructuralMismatch)?;
-                for (offset, comment) in comments.iter().enumerate() {
-                    let comment_source = self
-                        .source
-                        .as_bytes()
-                        .get(comment.start as usize..comment.end as usize)
-                        .ok_or(ProjectionError::SourceChanged {
-                            offset: comment.start,
-                        })?;
-                    if comment.start < tag.closing_expression.start
-                        || comment.end > tag.closing_expression.end
-                        || (!comment_source.starts_with(b"//")
-                            && !comment_source.starts_with(b"/*"))
-                    {
+                if self.purpose == ProjectionPurpose::Parser {
+                    if tag.closing_expression.is_empty() {
                         return Err(ProjectionError::StructuralMismatch);
                     }
-                    let ordinal = first + offset;
-                    write!(self.output, "{{/*{}Q{ordinal}__*/ null}}", self.prefix)
+                    write!(self.output, "{{{}C{}_((", self.prefix, token.owner)
                         .expect("writing to a String cannot fail");
+                    self.cursor = tag.closing_expression.start as usize;
+                    self.copy_original_with_fixability(tag.closing_expression, true)?;
+                    self.cursor = tag.closing_expression.end as usize;
+                    self.output.push_str("))}");
+                } else {
+                    let first = tag.first_closing_comment as usize;
+                    let end = first
+                        .checked_add(tag.closing_comment_count as usize)
+                        .ok_or(ProjectionError::SourceTooLarge)?;
+                    let comments = self
+                        .overlay
+                        .dynamic_comments
+                        .get(first..end)
+                        .ok_or(ProjectionError::StructuralMismatch)?;
+                    for (offset, comment) in comments.iter().enumerate() {
+                        let comment_source = self
+                            .source
+                            .as_bytes()
+                            .get(comment.start as usize..comment.end as usize)
+                            .ok_or(ProjectionError::SourceChanged {
+                                offset: comment.start,
+                            })?;
+                        if comment.start < tag.closing_expression.start
+                            || comment.end > tag.closing_expression.end
+                            || (!comment_source.starts_with(b"//")
+                                && !comment_source.starts_with(b"/*"))
+                        {
+                            return Err(ProjectionError::StructuralMismatch);
+                        }
+                        let ordinal = first + offset;
+                        write!(self.output, "{{/*{}Q{ordinal}__*/ null}}", self.prefix)
+                            .expect("writing to a String cannot fail");
+                    }
                 }
                 write!(self.output, "</{}D{}>", self.prefix, token.owner)
                     .expect("writing to a String cannot fail");
@@ -746,6 +906,82 @@ impl<'a> Builder<'a> {
                 )
                 .expect("writing to a String cannot fail");
                 self.cursor = span_end;
+            }
+        }
+        Ok(())
+    }
+
+    fn parser_dynamic(&mut self, token_index: u32) -> Result<(), ProjectionError> {
+        if self.purpose != ProjectionPurpose::Parser {
+            return Err(ProjectionError::StructuralMismatch);
+        }
+        let token = self.overlay.parser_dynamic_tokens[token_index as usize];
+        let tag = self
+            .overlay
+            .dynamic_tags
+            .get(token.owner as usize)
+            .ok_or(ProjectionError::StructuralMismatch)?;
+        match token.kind {
+            ParserDynamicKind::OpenStart => {
+                if token.offset != tag.opening.start
+                    || self
+                        .source
+                        .as_bytes()
+                        .get(tag.opening.start as usize..tag.expression.start as usize)
+                        != Some(b"<{")
+                {
+                    return Err(ProjectionError::StructuralMismatch);
+                }
+                self.copy_to(tag.opening.start as usize)?;
+                write!(
+                    self.output,
+                    "<{}D{} {}A{}_={{(",
+                    self.prefix, token.owner, self.prefix, token.owner
+                )
+                .expect("writing to a String cannot fail");
+                self.cursor = tag.expression.start as usize;
+            }
+            ParserDynamicKind::OpenEnd => {
+                if token.offset != tag.expression.end
+                    || tag.opening.end != tag.expression.end.saturating_add(1)
+                    || self.source.as_bytes().get(tag.expression.end as usize) != Some(&b'}')
+                {
+                    return Err(ProjectionError::StructuralMismatch);
+                }
+                self.copy_to(tag.expression.end as usize)?;
+                write!(self.output, ")}} {}Z{}_={{null}}", self.prefix, token.owner)
+                    .expect("writing to a String cannot fail");
+                self.cursor = tag.opening.end as usize;
+            }
+            ParserDynamicKind::CloseStart => {
+                if token.offset != tag.closing.start
+                    || self
+                        .source
+                        .as_bytes()
+                        .get(tag.closing.start as usize..tag.closing_expression.start as usize)
+                        != Some(b"</{")
+                {
+                    return Err(ProjectionError::StructuralMismatch);
+                }
+                self.copy_to(tag.closing.start as usize)?;
+                self.output.push('{');
+                let callee_start = self.output.len();
+                write!(self.output, "{}C{}_", self.prefix, token.owner)
+                    .expect("writing to a String cannot fail");
+                self.record_synthetic_callee(callee_start)?;
+                self.output.push_str("((");
+                self.cursor = tag.closing_expression.start as usize;
+            }
+            ParserDynamicKind::CloseEnd => {
+                if token.offset != tag.closing_expression.end
+                    || tag.closing.end <= tag.closing_expression.end
+                {
+                    return Err(ProjectionError::StructuralMismatch);
+                }
+                self.copy_to(tag.closing_expression.end as usize)?;
+                write!(self.output, "))}}</{}D{}>", self.prefix, token.owner)
+                    .expect("writing to a String cannot fail");
+                self.cursor = tag.closing.end as usize;
             }
         }
         Ok(())
@@ -785,6 +1021,21 @@ pub fn project_for_lint(
     overlay: &Overlay,
 ) -> Result<MappedProjection, ProjectionError> {
     Ok(build_projection(source, overlay, true)?.mapped)
+}
+
+/// Builds the legal-TSX projection consumed by the canonical TSRX parser.
+///
+/// Unlike the lint projection, this parser-only lane retains each authored closing dynamic-tag
+/// expression inside collision-free scaffold consumed after the same single OXC parse.
+///
+/// # Errors
+///
+/// Returns an error for a stale overlay or a projection scaffold collision.
+pub fn project_for_parser(
+    source: &str,
+    overlay: &Overlay,
+) -> Result<MappedProjection, ProjectionError> {
+    Ok(build_projection_with_purpose(source, overlay, true, ProjectionPurpose::Parser)?.mapped)
 }
 
 /// Builds the Rust-native TypeScript-Go projection.
@@ -942,6 +1193,7 @@ fn build_projection(
 enum ProjectionPurpose {
     Syntax,
     Types,
+    Parser,
 }
 
 fn build_projection_with_purpose(
@@ -951,29 +1203,83 @@ fn build_projection_with_purpose(
     purpose: ProjectionPurpose,
 ) -> Result<BuiltProjection, ProjectionError> {
     validate_overlay_source(source, overlay)?;
+    validate_projection_lane(overlay, purpose)?;
     let prefix = collision_free_prefix(source)?;
     let (wrapper_actions, wrappers) = build_wrapper_actions(overlay)?;
 
     let (try_end_actions, tries) = build_try_actions(source, overlay)?;
+    let mut parser_code_block_end_actions = overlay
+        .parser_code_blocks
+        .iter()
+        .enumerate()
+        .map(|(index, _)| to_u32(index).map(Action::ParserCodeBlockEnd))
+        .collect::<Result<Vec<_>, _>>()?;
+    parser_code_block_end_actions.sort_unstable_by_key(|action| action.key(overlay));
 
     let (header_actions, headers) =
         build_header_actions(overlay, purpose == ProjectionPurpose::Types)?;
 
-    let mut builder = Builder::new(
-        source,
+    let mut builder = Builder::new(source, overlay, &prefix, record_segments, purpose);
+    project_actions(
+        &mut builder,
         overlay,
-        &prefix,
-        record_segments,
-        purpose == ProjectionPurpose::Types,
-    );
+        purpose,
+        &wrapper_actions,
+        &try_end_actions,
+        &parser_code_block_end_actions,
+        &header_actions,
+    )?;
+    let mut mapped = builder.finish()?;
+    mapped.synthetic_generator_spans = overlay
+        .nodes
+        .iter()
+        .filter(|node| node.context != ControlContext::Statement || node.kind == ControlKind::Try)
+        .map(|node| node.span)
+        .collect();
+    if record_segments && (!overlay.dynamic_tags.is_empty() || purpose == ProjectionPurpose::Parser)
+    {
+        mapped.dynamic_prefix = Some(prefix.clone());
+    }
+    if record_segments && !overlay.dynamic_tags.is_empty() {
+        mapped.dynamic_count = to_u32(overlay.dynamic_tags.len())?;
+        mapped.dynamic_offsets = overlay
+            .dynamic_tags
+            .iter()
+            .map(|tag| tag.expression.start)
+            .collect();
+    }
+    Ok(BuiltProjection {
+        mapped,
+        prefix,
+        wrappers,
+        headers,
+        tries,
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+fn project_actions(
+    builder: &mut Builder<'_>,
+    overlay: &Overlay,
+    purpose: ProjectionPurpose,
+    wrapper_actions: &[Action],
+    try_end_actions: &[Action],
+    parser_code_block_end_actions: &[Action],
+    header_actions: &[Action],
+) -> Result<(), ProjectionError> {
     let mut wrapper_cursor = 0usize;
     let mut try_end_cursor = 0usize;
+    let mut parser_code_block_end_cursor = 0usize;
     let mut token_cursor = 0usize;
     let mut header_cursor = 0usize;
     let mut embedded_cursor = 0usize;
+    let mut parser_dynamic_cursor = 0usize;
     loop {
         let wrapper = wrapper_actions.get(wrapper_cursor).copied();
         let try_end = try_end_actions.get(try_end_cursor).copied();
+        let parser_code_block_end = parser_code_block_end_actions
+            .get(parser_code_block_end_cursor)
+            .copied();
         let token = (token_cursor < overlay.tokens.len())
             .then(|| to_u32(token_cursor).map(Action::Token))
             .transpose()?;
@@ -981,17 +1287,32 @@ fn build_projection_with_purpose(
         let embedded = (embedded_cursor < overlay.embedded_tokens.len())
             .then(|| to_u32(embedded_cursor).map(Action::Embedded))
             .transpose()?;
-        let Some(action) = [wrapper, try_end, token, header, embedded]
-            .into_iter()
-            .flatten()
-            .min_by_key(|action| action.key(overlay))
-        else {
+        let parser_dynamic = (purpose == ProjectionPurpose::Parser
+            && parser_dynamic_cursor < overlay.parser_dynamic_tokens.len())
+        .then(|| to_u32(parser_dynamic_cursor).map(Action::ParserDynamic))
+        .transpose()?;
+        let Some(action) = [
+            wrapper,
+            try_end,
+            parser_code_block_end,
+            token,
+            header,
+            embedded,
+            parser_dynamic,
+        ]
+        .into_iter()
+        .flatten()
+        .min_by_key(|action| action.key(overlay)) else {
             break;
         };
         match action {
             Action::TryEnd(node) => {
                 try_end_cursor += 1;
                 builder.try_end(node)?;
+            }
+            Action::ParserCodeBlockEnd(block) => {
+                parser_code_block_end_cursor += 1;
+                builder.parser_code_block_end(block)?;
             }
             Action::WrapperEnd(node) => {
                 wrapper_cursor += 1;
@@ -1015,33 +1336,188 @@ fn build_projection_with_purpose(
             }
             Action::Embedded(token) => {
                 embedded_cursor += 1;
-                builder.embedded(token)?;
+                if purpose != ProjectionPurpose::Parser
+                    || overlay.embedded_tokens[token as usize].kind == EmbeddedKind::StyleContent
+                {
+                    builder.embedded(token)?;
+                }
+            }
+            Action::ParserDynamic(token) => {
+                parser_dynamic_cursor += 1;
+                builder.parser_dynamic(token)?;
             }
         }
     }
-    let mut mapped = builder.finish()?;
-    mapped.synthetic_generator_spans = overlay
-        .nodes
-        .iter()
-        .filter(|node| node.context != ControlContext::Statement || node.kind == ControlKind::Try)
-        .map(|node| node.span)
-        .collect();
-    if record_segments && !overlay.dynamic_tags.is_empty() {
-        mapped.dynamic_prefix = Some(prefix.clone());
-        mapped.dynamic_count = to_u32(overlay.dynamic_tags.len())?;
-        mapped.dynamic_offsets = overlay
-            .dynamic_tags
-            .iter()
-            .map(|tag| tag.expression.start)
-            .collect();
+    Ok(())
+}
+
+fn validate_projection_lane(
+    overlay: &Overlay,
+    purpose: ProjectionPurpose,
+) -> Result<(), ProjectionError> {
+    if purpose == ProjectionPurpose::Parser {
+        validate_parser_code_blocks(overlay)?;
+        return validate_parser_dynamic_boundaries(overlay);
     }
-    Ok(BuiltProjection {
-        mapped,
-        prefix,
-        wrappers,
-        headers,
-        tries,
-    })
+    if overlay.parser_dynamic_tokens.is_empty()
+        && overlay.style_blocks.iter().all(|style| !style.self_closing)
+    {
+        Ok(())
+    } else {
+        Err(ProjectionError::StructuralMismatch)
+    }
+}
+
+fn validate_parser_code_blocks(overlay: &Overlay) -> Result<(), ProjectionError> {
+    let mut previous_token = None;
+    for block in &overlay.parser_code_blocks {
+        let token = overlay
+            .tokens
+            .get(block.token as usize)
+            .ok_or(ProjectionError::StructuralMismatch)?;
+        if token.kind != StructuralKind::FunctionBody
+            || block.body.start != token.span.end
+            || block.body.end <= block.body.start
+            || block.body.end > overlay.source_len
+            || previous_token.is_some_and(|previous| previous >= block.token)
+        {
+            return Err(ProjectionError::StructuralMismatch);
+        }
+        previous_token = Some(block.token);
+    }
+    Ok(())
+}
+
+fn validate_parser_dynamic_boundaries(overlay: &Overlay) -> Result<(), ProjectionError> {
+    if overlay.dynamic_tags.is_empty() {
+        return if overlay.parser_dynamic_tokens.is_empty() {
+            Ok(())
+        } else {
+            Err(ProjectionError::StructuralMismatch)
+        };
+    }
+    if overlay.parser_dynamic_tokens.is_empty() {
+        return Err(ProjectionError::StructuralMismatch);
+    }
+
+    let tag_count = to_u32(overlay.dynamic_tags.len())?;
+    let mut next_owner = 0_u32;
+    let mut previous_offset = None;
+    let mut stack = Vec::<(u32, u8)>::with_capacity(overlay.dynamic_tags.len().min(16));
+
+    validate_dynamic_subtree_bounds(overlay, tag_count, &mut stack)?;
+
+    for token in &overlay.parser_dynamic_tokens {
+        if previous_offset.is_some_and(|offset| token.offset < offset) {
+            return Err(ProjectionError::StructuralMismatch);
+        }
+        previous_offset = Some(token.offset);
+        let tag = overlay
+            .dynamic_tags
+            .get(token.owner as usize)
+            .ok_or(ProjectionError::StructuralMismatch)?;
+        match token.kind {
+            ParserDynamicKind::OpenStart => {
+                if token.owner != next_owner
+                    || token.offset != tag.opening.start
+                    || tag.subtree_end <= token.owner
+                    || tag.subtree_end > tag_count
+                {
+                    return Err(ProjectionError::StructuralMismatch);
+                }
+                stack.push((token.owner, 1));
+                next_owner = next_owner
+                    .checked_add(1)
+                    .ok_or(ProjectionError::SourceTooLarge)?;
+            }
+            ParserDynamicKind::OpenEnd => {
+                if stack.last() != Some(&(token.owner, 1)) || token.offset != tag.expression.end {
+                    return Err(ProjectionError::StructuralMismatch);
+                }
+                if tag.self_closing {
+                    stack.pop();
+                } else if let Some((_, phase)) = stack.last_mut() {
+                    *phase = 2;
+                }
+            }
+            ParserDynamicKind::CloseStart => {
+                if tag.self_closing
+                    || stack.last() != Some(&(token.owner, 2))
+                    || token.offset != tag.closing.start
+                {
+                    return Err(ProjectionError::StructuralMismatch);
+                }
+                if let Some((_, phase)) = stack.last_mut() {
+                    *phase = 3;
+                }
+            }
+            ParserDynamicKind::CloseEnd => {
+                if tag.self_closing
+                    || stack.last() != Some(&(token.owner, 3))
+                    || token.offset != tag.closing_expression.end
+                {
+                    return Err(ProjectionError::StructuralMismatch);
+                }
+                stack.pop();
+            }
+        }
+    }
+    if next_owner == tag_count && stack.is_empty() {
+        Ok(())
+    } else {
+        Err(ProjectionError::StructuralMismatch)
+    }
+}
+
+fn validate_dynamic_subtree_bounds(
+    overlay: &Overlay,
+    tag_count: u32,
+    stack: &mut Vec<(u32, u8)>,
+) -> Result<(), ProjectionError> {
+    // Dynamic owners are assigned in opening-source preorder. Validate every exclusive subtree
+    // bound from the authored element ranges before using those bounds as identity-scan jumps.
+    // The caller reuses this stack allocation for boundary-event phases.
+    let mut previous_opening = None;
+    for (index, tag) in overlay.dynamic_tags.iter().enumerate() {
+        let owner = to_u32(index)?;
+        let full_end = tag.closing.end;
+        if previous_opening.is_some_and(|start| tag.opening.start <= start)
+            || tag.opening.start >= full_end
+            || tag.self_closing != tag.closing.is_empty()
+            || (tag.self_closing && tag.closing.end <= tag.opening.end)
+            || tag.subtree_end <= owner
+            || tag.subtree_end > tag_count
+        {
+            return Err(ProjectionError::StructuralMismatch);
+        }
+        previous_opening = Some(tag.opening.start);
+
+        while stack.last().is_some_and(|&(active, _)| {
+            let active = &overlay.dynamic_tags[active as usize];
+            let active_end = active.closing.end;
+            tag.opening.start >= active_end
+        }) {
+            let (completed, _) = stack.pop().ok_or(ProjectionError::StructuralMismatch)?;
+            if overlay.dynamic_tags[completed as usize].subtree_end != owner {
+                return Err(ProjectionError::StructuralMismatch);
+            }
+        }
+
+        if stack.last().is_some_and(|&(parent, _)| {
+            let parent = &overlay.dynamic_tags[parent as usize];
+            let parent_end = parent.closing.end;
+            full_end > parent_end
+        }) {
+            return Err(ProjectionError::StructuralMismatch);
+        }
+        stack.push((owner, 0));
+    }
+    while let Some((completed, _)) = stack.pop() {
+        if overlay.dynamic_tags[completed as usize].subtree_end != tag_count {
+            return Err(ProjectionError::StructuralMismatch);
+        }
+    }
+    Ok(())
 }
 
 fn build_wrapper_actions(
@@ -2711,6 +3187,10 @@ fn structural_fingerprint(overlay: &Overlay) -> u128 {
     mix(overlay.embedded_tokens.len() as u64);
     for token in &overlay.embedded_tokens {
         mix(u64::from(token.owner) << 8 | token.kind as u64);
+    }
+    mix(overlay.parser_code_blocks.len() as u64);
+    for block in &overlay.parser_code_blocks {
+        mix(u64::from(block.token) << 32 | u64::from(block.body.end));
     }
     mix(overlay.dynamic_tags.len() as u64);
     for tag in &overlay.dynamic_tags {

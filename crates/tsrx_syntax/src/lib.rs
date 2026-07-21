@@ -4,13 +4,53 @@ mod model;
 mod projection;
 mod scanner;
 
-pub use model::{ByteSpan, Overlay, ProjectionError, StructuralKind, StructuralToken};
+pub use model::{
+    ByteSpan, ClauseRole, ControlContext, ControlKind, EmbeddedKind, ForHeader, NONE_INDEX,
+    Overlay, OverlayClause, OverlayDynamicTag, OverlayEmbedded, OverlayNode, OverlayStyleBlock,
+    OverlayToken, OverlayView, ParserCodeBlock, ParserDynamicKind, ParserDynamicToken,
+    ProjectionError, StructuralKind, StructuralToken,
+};
 pub use projection::{
-    FormatProjection, MappedProjection, TypeProjection, lift_formatted, project,
-    project_for_format, project_for_lint, project_for_types,
+    FormatProjection, MappedProjection, ProjectionSegment, ProjectionView, TypeProjection,
+    lift_formatted, project, project_for_format, project_for_lint, project_for_parser,
+    project_for_types,
 };
 
+pub use scanner::OpaqueSurrogateContext;
 use scanner::Scanner;
+
+/// Full result of the WTF-8 lexical proof, including any earlier authored grammar failure.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Wtf8SurrogateClassification {
+    pub contexts: Vec<Option<OpaqueSurrogateContext>>,
+    pub earlier_error: Option<ProjectionError>,
+}
+
+/// Classifies pre-recorded three-byte WTF-8 lone-surrogate positions without passing them to OXC.
+///
+/// A `None` entry is syntactically active, ambiguous, or could not be proven before an earlier
+/// grammar stop. Production callers must fail closed for every such entry.
+#[must_use]
+pub fn classify_wtf8_surrogates(
+    source: &[u8],
+    byte_offsets: &[u32],
+) -> Vec<Option<OpaqueSurrogateContext>> {
+    Scanner::new_for_surrogate_classification(source, byte_offsets).classify_surrogates()
+}
+
+/// Classifies WTF-8 surrogate probes while retaining an earlier structural scanner failure.
+#[must_use]
+pub fn classify_wtf8_surrogates_detailed(
+    source: &[u8],
+    byte_offsets: &[u32],
+) -> Wtf8SurrogateClassification {
+    let (contexts, earlier_error) = Scanner::new_for_surrogate_classification(source, byte_offsets)
+        .classify_surrogates_detailed();
+    Wtf8SurrogateClassification {
+        contexts,
+        earlier_error,
+    }
+}
 
 /// Performs one byte-oriented structural scan and returns a compact overlay over `source`.
 ///
@@ -22,13 +62,26 @@ pub fn scan(source: &str) -> Result<Overlay, ProjectionError> {
     Scanner::new(source).finish()
 }
 
+/// Performs the parser-specific structural scan, including TSRX nested inside dynamic tag names.
+///
+/// The normal [`scan`] route remains unchanged for lint, format, and type projections. This
+/// parser-only route adds flat source-ordered dynamic-name boundaries so overlapping authored
+/// syntax can still be projected in one linear pass.
+///
+/// # Errors
+///
+/// Returns the same malformed, unsupported, unterminated, and source-size failures as [`scan`].
+pub fn scan_for_parser(source: &str) -> Result<Overlay, ProjectionError> {
+    Scanner::new_for_parser(source).finish()
+}
+
 #[cfg(test)]
 mod tests {
     use std::fmt::Write as _;
 
     use super::{
         ProjectionError, StructuralKind, lift_formatted, project, project_for_format,
-        project_for_lint, project_for_types, scan,
+        project_for_lint, project_for_parser, project_for_types, scan, scan_for_parser,
     };
 
     #[test]
@@ -191,6 +244,219 @@ mod tests {
                 "{source}"
             );
         }
+    }
+
+    #[test]
+    fn parser_dynamic_projection_is_isolated_from_existing_tool_projections() {
+        let source = "const value=<{a, b}>x</{/*lead*/ a, b /*tail*/}>;";
+        let overlay = scan(source).unwrap();
+        let lint = project_for_lint(source, &overlay).unwrap();
+        let format = project_for_format(source, &overlay).unwrap();
+        let types = project_for_types(source, &overlay).unwrap();
+        let parser_overlay = scan_for_parser(source).unwrap();
+        let parser = project_for_parser(source, &parser_overlay).unwrap();
+
+        assert_eq!(lint.source(), format.source());
+        assert!(types.source().starts_with(lint.source()));
+        assert!(!lint.source().contains("C0_(("));
+        assert!(lint.source().contains("Q0__"));
+        assert!(lint.source().contains("Q1__"));
+        assert!(parser.source().contains("A0_={(a, b)}"));
+        assert!(parser.source().contains("C0_((/*lead*/ a, b /*tail*/))"));
+        assert!(!parser.source().contains("Q0__"));
+        assert_eq!(
+            project_for_lint(source, &overlay).unwrap().source(),
+            lint.source()
+        );
+    }
+
+    #[test]
+    fn parser_dynamic_root_controls_use_expression_context() {
+        for (source, expected) in [
+            ("const x=<{/*root*/ @if(ok){Tag}@else{Fallback}}/>;", "W0_"),
+            (
+                "const x=<{@for(item of items){item.Tag}@empty{Fallback}}/>;",
+                "W0_",
+            ),
+            (
+                "const x=<{@switch(kind){@case 0:{A}@default:{B}}}/>;",
+                "W0_",
+            ),
+            ("const x=<{@try{A}@pending{B}@catch{C}}/>;", "T0_"),
+        ] {
+            let overlay = scan_for_parser(source)
+                .unwrap_or_else(|error| panic!("parser scan failed for `{source}`: {error}"));
+            assert!(
+                overlay
+                    .view()
+                    .nodes
+                    .iter()
+                    .all(|node| node.context == super::ControlContext::Expression),
+                "root control was not classified as an expression for `{source}`"
+            );
+            let projected = project_for_parser(source, &overlay)
+                .unwrap_or_else(|error| panic!("parser projection failed for `{source}`: {error}"));
+            assert!(projected.source().contains(expected), "{source}");
+        }
+    }
+
+    #[test]
+    fn parser_dynamic_controls_inside_arrow_blocks_keep_statement_context() {
+        let source = "const x=<{() => { @if(ok){return Tag} return Fallback }}/>;";
+        let overlay = scan_for_parser(source).expect("arrow-block parser scan");
+        assert_eq!(overlay.view().nodes.len(), 1);
+        assert_eq!(
+            overlay.view().nodes[0].context,
+            super::ControlContext::Statement
+        );
+        project_for_parser(source, &overlay).expect("arrow-block parser projection");
+
+        let source = "const x=<{() => <{@if(ok){Tag}@else{Fallback}}/>}/>;";
+        let overlay = scan_for_parser(source).expect("nested dynamic parser scan");
+        assert_eq!(overlay.dynamic_tag_count(), 2);
+        assert_eq!(overlay.view().nodes.len(), 1);
+        assert_eq!(
+            overlay.view().nodes[0].context,
+            super::ControlContext::Expression
+        );
+        project_for_parser(source, &overlay).expect("nested dynamic parser projection");
+    }
+
+    #[test]
+    fn jsx_expression_containers_give_direct_root_controls_expression_context() {
+        let controls = [
+            "@if(ok){A}@else{B}",
+            "@for(item of items){item.Tag}@empty{Fallback}",
+            "@switch(kind){@case 0:{A}@default:{B}}",
+            "@try{A}@pending{B}@catch{C}",
+        ];
+
+        for control in controls {
+            for source in [
+                format!("const x=<main child={{/*root*/ {control}}}/>;"),
+                format!("const x=<{{Outer}} child={{/*root*/ {control}}}/>;"),
+                format!("const x=<main>{{/*root*/ {control}}}</main>;"),
+            ] {
+                let overlay = scan_for_parser(&source)
+                    .unwrap_or_else(|error| panic!("parser scan failed for `{source}`: {error}"));
+                assert!(
+                    overlay
+                        .view()
+                        .nodes
+                        .iter()
+                        .all(|node| node.context == super::ControlContext::Expression),
+                    "container-root control was not classified as an expression for `{source}`"
+                );
+                project_for_parser(&source, &overlay).unwrap_or_else(|error| {
+                    panic!("parser projection failed for `{source}`: {error}")
+                });
+            }
+        }
+    }
+
+    #[test]
+    fn parser_dynamic_overlays_cannot_cross_projection_lanes() {
+        let source = "const x=<{outer}><{inner}/></{outer}>;";
+        let ordinary = scan(source).expect("ordinary scan");
+        assert!(matches!(
+            project_for_parser(source, &ordinary),
+            Err(ProjectionError::StructuralMismatch)
+        ));
+
+        let parser = scan_for_parser(source).expect("parser scan");
+        assert!(matches!(
+            project_for_lint(source, &parser),
+            Err(ProjectionError::StructuralMismatch)
+        ));
+        assert!(matches!(
+            project_for_format(source, &parser),
+            Err(ProjectionError::StructuralMismatch)
+        ));
+        assert!(matches!(
+            project_for_types(source, &parser),
+            Err(ProjectionError::StructuralMismatch)
+        ));
+
+        let style_source = "const x=<style/>;";
+        let parser_style =
+            scan_for_parser(style_source).expect("parser-only self-closing style scan");
+        assert_eq!(parser_style.style_block_count(), 1);
+        assert!(matches!(
+            project_for_lint(style_source, &parser_style),
+            Err(ProjectionError::StructuralMismatch)
+        ));
+        assert!(matches!(
+            project_for_format(style_source, &parser_style),
+            Err(ProjectionError::StructuralMismatch)
+        ));
+        assert!(matches!(
+            project_for_types(style_source, &parser_style),
+            Err(ProjectionError::StructuralMismatch)
+        ));
+        project_for_parser(style_source, &parser_style).expect("parser style stays in parser lane");
+
+        let mut crossing = parser.clone();
+        crossing.parser_dynamic_tokens.swap(0, 1);
+        assert!(matches!(
+            project_for_parser(source, &crossing),
+            Err(ProjectionError::StructuralMismatch)
+        ));
+
+        let mut bad_subtree = parser;
+        bad_subtree.dynamic_tags[0].subtree_end = 0;
+        assert!(matches!(
+            project_for_parser(source, &bad_subtree),
+            Err(ProjectionError::StructuralMismatch)
+        ));
+
+        let source = "const x=<><{Outer} child={<{Inner}/>}/><{Sibling}/></>;";
+        let parser = scan_for_parser(source).expect("nested attribute and sibling scan");
+        assert_eq!(
+            parser
+                .view()
+                .dynamic_tags
+                .iter()
+                .map(|tag| tag.subtree_end)
+                .collect::<Vec<_>>(),
+            [2, 2, 3]
+        );
+        assert!(parser.view().dynamic_tags[0].closing.is_empty());
+        assert!(
+            parser.view().dynamic_tags[0].closing.end > parser.view().dynamic_tags[0].opening.end
+        );
+        project_for_parser(source, &parser).expect("valid nested attribute subtree bounds");
+
+        let mut swallowed_sibling = parser.clone();
+        swallowed_sibling.dynamic_tags[0].subtree_end = 3;
+        assert!(matches!(
+            project_for_parser(source, &swallowed_sibling),
+            Err(ProjectionError::StructuralMismatch)
+        ));
+
+        let mut truncated_descendant = parser;
+        truncated_descendant.dynamic_tags[0].subtree_end = 1;
+        assert!(matches!(
+            project_for_parser(source, &truncated_descendant),
+            Err(ProjectionError::StructuralMismatch)
+        ));
+    }
+
+    #[test]
+    fn deeply_nested_dynamic_identity_scanning_is_linear() {
+        const DEPTH: usize = 64;
+        let mut expression = String::from("Leaf");
+        for _ in 0..DEPTH {
+            expression = format!("() => <{{{expression}}}/>");
+        }
+        let source = format!("const x=<{{{expression}}}/>;");
+        let (overlay, identity_tokens) = super::Scanner::new_for_parser(&source)
+            .finish_with_identity_token_visits()
+            .expect("deep parser scan");
+        assert_eq!(overlay.dynamic_tag_count(), DEPTH + 1);
+        assert!(
+            identity_tokens <= DEPTH * 12,
+            "identity normalization revisited {identity_tokens} tokens for depth {DEPTH}"
+        );
     }
 
     #[test]

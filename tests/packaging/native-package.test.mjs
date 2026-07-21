@@ -177,6 +177,75 @@ test("current native release stages a complete, checksummed, npm-installable pla
   );
 });
 
+test("canonical parser packaging adds one verified schema-2 addon without changing the executable family", async () => {
+  const temporary = await mkdtemp(join(tmpdir(), "oxc-tsrx-parser-native-package-"));
+  const addon = join(temporary, "parser.node");
+  await run(process.execPath, [
+    "scripts/build-parser-native.mjs",
+    "--skip-build",
+    "--out",
+    addon,
+  ]);
+  const artifacts = join(temporary, "artifacts");
+  await mkdir(artifacts, { recursive: true });
+  const { stdout } = await run(process.execPath, [
+    "scripts/package-native.mjs",
+    "--target",
+    hostTarget(),
+    "--bin-dir",
+    "target/release",
+    "--parser-addon",
+    addon,
+    "--out-dir",
+    artifacts,
+  ]);
+  const packaged = JSON.parse(stdout);
+
+  const consumer = join(temporary, "consumer");
+  await mkdir(consumer, { recursive: true });
+  await run(npm, ["install", "--ignore-scripts", "--no-audit", "--no-fund", packaged.tarball], {
+    cwd: consumer,
+    env: { ...process.env, npm_config_cache: join(temporary, ".npm-cache") },
+  });
+
+  const packageRoot = join(consumer, "node_modules", ...packaged.packageName.split("/"));
+  const manifest = JSON.parse(await readFile(join(packageRoot, "package.json"), "utf8"));
+  const checksums = JSON.parse(await readFile(join(packageRoot, "checksums.json"), "utf8"));
+  assert.equal(manifest.oxcTsrx.schemaVersion, 2);
+  assert.deepEqual(manifest.oxcTsrx.binaries, checksums.binaries ? Object.keys(checksums.binaries) : []);
+  assert.deepEqual(Object.keys(manifest.oxcTsrx.addons), ["parser.node"]);
+  assert.deepEqual(Object.keys(checksums.addons), ["parser.node"]);
+  assert.deepEqual(manifest.oxcTsrx.addons["parser.node"], checksums.addons["parser.node"]);
+
+  const record = checksums.addons["parser.node"];
+  const installedAddon = join(packageRoot, "parser.node");
+  assert.equal(record.role, "canonical-parser");
+  assert.equal(record.file, "parser.node");
+  assert.equal(record.apiVersion, 1);
+  assert.equal(record.transportAbi, 1);
+  assert.equal(record.nodeApi, 8);
+  assert.equal(record.packageVersion, "0.1.0");
+  assert.equal(record.target, hostTarget());
+  assert.equal(record.oxcRevision, "8e0ed2ebb96137fb1611cdbd5742d5cb46037d40");
+  assert.deepEqual(record.capabilities, {
+    lazy: true,
+    async: true,
+    editorRecovery: false,
+    cssMaterialization: false,
+    rawTransfer: false,
+  });
+  assert.equal(record.object.imageKind, "dynamic-library");
+  assert.equal(record.object.bits, 64);
+  assert.deepEqual(record.object.architectures, [process.arch]);
+  assert.equal(record.object.os, process.platform);
+  assert.equal(record.bytes, (await stat(installedAddon)).size);
+  assert.equal(record.sha256, await sha256(installedAddon));
+
+  const binding = (await import("node:module")).createRequire(import.meta.url)(installedAddon);
+  assert.deepEqual(Object.keys(binding).sort(), ["nodeApi", "parse", "parseSync"]);
+  assert.equal(binding.nodeApi(), 8);
+});
+
 test("native packaging rejects current-host object files labeled as another architecture", async () => {
   const artifacts = await mkdtemp(join(tmpdir(), "oxc-tsrx-native-wrong-target-"));
   await assert.rejects(

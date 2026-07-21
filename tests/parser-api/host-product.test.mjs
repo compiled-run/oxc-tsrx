@@ -1,0 +1,245 @@
+import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
+import { mkdir, mkdtemp, readFile, realpath, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import test from "node:test";
+import {
+  nativePackageName,
+  nativeTargetForHost,
+} from "../../packages/parser/targets.js";
+
+const root = resolve(import.meta.dirname, "../..");
+const npm = process.platform === "win32" ? "npm.cmd" : "npm";
+
+function linuxLibc() {
+  if (process.platform !== "linux") return undefined;
+  return process.report?.getReport?.().header?.glibcVersionRuntime ? "glibc" : "musl";
+}
+
+function hostTarget() {
+  return nativeTargetForHost(process.platform, process.arch, linuxLibc());
+}
+
+function run(executable, args, options = {}) {
+  return new Promise((resolveRun, rejectRun) => {
+    execFile(
+      executable,
+      args,
+      {
+        cwd: options.cwd ?? root,
+        env: options.env ?? process.env,
+        maxBuffer: 32 * 1024 * 1024,
+      },
+      (error, stdout, stderr) => {
+        if (error) rejectRun(new Error(stderr || stdout, { cause: error }));
+        else resolveRun({ stdout, stderr });
+      },
+    );
+  });
+}
+
+test("untouched packed parser and host-native tarballs load, parse, and preserve lazy identity", async () => {
+  const temporary = await mkdtemp(join(tmpdir(), "oxc-tsrx-parser-host-product-"));
+  try {
+    const artifacts = join(temporary, "artifacts");
+    const consumer = join(temporary, "consumer");
+    const npmCache = join(temporary, "npm-cache");
+    await Promise.all([mkdir(artifacts), mkdir(consumer), mkdir(npmCache)]);
+    const npmEnvironment = {
+      ...process.env,
+      npm_config_cache: npmCache,
+      npm_config_offline: "true",
+    };
+    delete npmEnvironment.OXC_TSRX_PARSER_ADDON;
+
+    const addon = join(temporary, "parser.node");
+    await run(process.execPath, [
+    "scripts/build-parser-native.mjs",
+    "--skip-build",
+    "--out",
+    addon,
+    ]);
+    const nativePackage = JSON.parse(
+    (
+      await run(process.execPath, [
+        "scripts/package-native.mjs",
+        "--target",
+        hostTarget().target,
+        "--bin-dir",
+        "target/release",
+        "--parser-addon",
+        addon,
+        "--out-dir",
+        artifacts,
+      ])
+    ).stdout,
+    );
+    const parserPack = JSON.parse(
+    (
+      await run(
+        npm,
+        ["pack", "--json", "--pack-destination", artifacts],
+        { cwd: join(root, "packages/parser"), env: npmEnvironment },
+      )
+    ).stdout,
+    );
+    assert.equal(parserPack.length, 1);
+    const parserTarball = join(artifacts, parserPack[0].filename);
+    const typesPack = JSON.parse(
+    (
+      await run(
+        npm,
+        ["pack", "--json", "--pack-destination", artifacts],
+        {
+          cwd: join(root, "packages/parser/node_modules/@oxc-project/types"),
+          env: npmEnvironment,
+        },
+      )
+    ).stdout,
+    );
+    assert.equal(typesPack.length, 1);
+    const typesTarball = join(artifacts, typesPack[0].filename);
+
+    await run(
+    npm,
+    [
+      "install",
+      "--offline",
+      "--ignore-scripts",
+      "--no-audit",
+      "--no-fund",
+      "--package-lock=false",
+      parserTarball,
+      nativePackage.tarball,
+      typesTarball,
+    ],
+    { cwd: consumer, env: npmEnvironment },
+    );
+
+    const parserRoot = join(consumer, "node_modules", "@oxc-tsrx", "parser");
+    const nativeRoot = join(
+    consumer,
+    "node_modules",
+    ...nativePackageName(hostTarget()).split("/"),
+    );
+    const parserManifest = JSON.parse(await readFile(join(parserRoot, "package.json"), "utf8"));
+    const nativeManifest = JSON.parse(await readFile(join(nativeRoot, "package.json"), "utf8"));
+    assert.equal(parserManifest.version, nativeManifest.version);
+    assert.equal(
+    parserManifest.optionalDependencies[nativeManifest.name],
+    nativeManifest.version,
+    );
+
+    const childSource = String.raw`
+    import { createRequire } from "node:module";
+    import { capabilities, parse, parseSync } from "@oxc-tsrx/parser";
+    const require = createRequire(import.meta.url);
+    const ordinary = parseSync("entry.tsx", "export const value = <main>{1n}</main>");
+    const source = "function View() @{ @if(ok){<main/>}@else{<aside/>} }";
+    const tsrx = parseSync("View.tsrx", source);
+    const asyncResult = await parse("View.tsrx", source);
+    const invalid = parseSync("Broken.tsrx", "function Broken() @{ @if(ok){");
+    const descriptors = Object.fromEntries(
+      ["program", "module", "comments", "errors"].map((name) => {
+        const descriptor = Object.getOwnPropertyDescriptor(tsrx, name);
+        return [name, {
+          enumerable: descriptor.enumerable,
+          configurable: descriptor.configurable,
+          getter: typeof descriptor.get,
+          setter: descriptor.set,
+          writable: Object.hasOwn(descriptor, "writable"),
+        }];
+      }),
+    );
+    const loadedAddons = Object.keys(require.cache).filter((path) => path.endsWith("parser.node"));
+    process.stdout.write(JSON.stringify({
+      capabilities,
+      ordinary: {
+        program: ordinary.program.type,
+        bigint: typeof ordinary.program.body[0].declaration.declarations[0].init.children[0].expression.value,
+        module: ordinary.module.hasModuleSyntax,
+        comments: ordinary.comments.length,
+        errors: ordinary.errors.length,
+      },
+      tsrx: {
+        program: tsrx.program.type,
+        sameProgram: tsrx.program === tsrx.program,
+        sameModule: tsrx.module === tsrx.module,
+        sameComments: tsrx.comments === tsrx.comments,
+        sameErrors: tsrx.errors === tsrx.errors,
+        errors: tsrx.errors.length,
+      },
+      async: {
+        program: asyncResult.program.type,
+        errors: asyncResult.errors.length,
+      },
+      invalid: {
+        program: invalid.program,
+        cachedNull: invalid.program === invalid.program,
+        module: invalid.module,
+        errors: invalid.errors.length,
+      },
+      descriptors,
+      loadedAddons,
+    }));
+    `;
+    const childEnvironment = { ...process.env };
+    delete childEnvironment.OXC_TSRX_PARSER_ADDON;
+    const observation = JSON.parse(
+    (
+      await run(process.execPath, ["--input-type=module", "-e", childSource], {
+        cwd: consumer,
+        env: childEnvironment,
+      })
+    ).stdout,
+    );
+
+    assert.deepEqual(observation.capabilities, {
+    apiVersion: 1,
+    languages: ["js", "jsx", "ts", "tsx", "dts", "tsrx"],
+    target: hostTarget().target,
+    nodeApi: 8,
+    nodeEngine: "^20.19.0 || >=22.12.0",
+    oxcRevision: "8e0ed2ebb96137fb1611cdbd5742d5cb46037d40",
+    lazy: true,
+    async: true,
+    editorRecovery: false,
+    cssMaterialization: false,
+    rawTransfer: false,
+    });
+    assert.deepEqual(observation.ordinary, {
+    program: "Program",
+    bigint: "bigint",
+    module: true,
+    comments: 0,
+    errors: 0,
+    });
+    assert.deepEqual(observation.tsrx, {
+    program: "Program",
+    sameProgram: true,
+    sameModule: true,
+    sameComments: true,
+    sameErrors: true,
+    errors: 0,
+    });
+    assert.deepEqual(observation.async, { program: "Program", errors: 0 });
+    assert.equal(observation.invalid.program, null);
+    assert.equal(observation.invalid.cachedNull, true);
+    assert.equal(observation.invalid.module, null);
+    assert.ok(observation.invalid.errors > 0);
+    for (const descriptor of Object.values(observation.descriptors)) {
+      assert.deepEqual(descriptor, {
+      enumerable: true,
+      configurable: true,
+      getter: "function",
+      writable: false,
+      });
+    }
+    assert.deepEqual(observation.loadedAddons, [
+      await realpath(join(nativeRoot, "parser.node")),
+    ]);
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
+});

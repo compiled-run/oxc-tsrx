@@ -902,15 +902,51 @@ all spans through the recorded boundary table. The authored materializer then ov
 cooked, literal, regex, template, JSX text, comment, CSS, module-value, diagnostic-source, and
 filename-sensitive values from the original UTF-16 slices using reference-compatible decoders.
 
-A lone surrogate in a syntactically active context is never disguised as an identifier or token.
-The lane returns the same fail-closed acceptance class and UTF-16 error position frozen from the
-reference invalid-context fixtures. If the prepass cannot prove a context, substitution is not
-performed and the result is a structured fail-closed parse error, not replacement text or a
-categorical input rejection. No production result is returned from a substituted parse until all
-fixups are consumed exactly once and every public slice round-trips to the original `Vec<u16>`.
+A lone surrogate in a syntactically active context is never disguised as an identifier or token and
+is never represented by a lexically valid placeholder. Public OXC accepts only Rust `&str`, so the
+active/unproven rejection lane makes one explicit transport-byte correction: it replaces the exact
+three-byte WTF-8 probe interval with the noncharacter U+FFFF in the private parse buffer and records
+that interval as a position-keyed **poison marker**. This is not an opaque or semantic substitution;
+the authored UTF-16 unit remains the sole value/offset authority, and the poison marker is allowed
+only because the pinned adapter proves that OXC rejects it in every frozen active context.
+
+The whole poison-marked buffer is passed through the same one public-OXC parse so genuine earlier
+TSRX or JavaScript grammar failures retain causal source order. A poison marker can never authorize
+or contribute to a successful Program or module result: such a result is an invariant failure. The
+bridge discards poison-caused diagnostics and synthesizes the exact reference active-surrogate
+failure from original UTF-16; it may retain an independently parsed earlier grammar diagnostic only
+when that diagnostic's complete causal label set is provably before the rejection candidate. An
+authored U+FFFF has no marker and remains distinct by interval, including when it is itself an
+earlier invalid active character. A causal label ending exactly where a poison interval begins is
+accepted as earlier only when that label is exactly one authored U+FFFF or U+E000 scalar interval
+and no fixup starts there; wider, overlapping, or marker-backed intervals are not independent
+evidence. If the prepass cannot prove an opaque context, this poison lane
+returns a structured fail-closed parse error, not replacement text or a categorical input
+rejection. No production result is returned until every opaque fixup and rejection marker is
+consumed exactly once, every private rejection carrier is dropped, and every public slice
+round-trips to the original `Vec<u16>`.
 If the reference accepts a context that this lane cannot reproduce exactly, the differential gate
 stops that implementation and withholds the affected product; it may not turn the case into a
 public compatibility limitation.
+
+Fatal OXC parses can retain valid prefix entries in the public `ModuleRecord` even when the partial
+`Program.body` is empty. Therefore source-order arbitration never reconstructs a partial Program or
+partial module table. Only when quoted-string fixups exist, the adapter may copy the raw public
+import/export `NameSpan` intervals that begin at a quote into a small revision-neutral rejection
+carrier. The carrier owns no source text, AST node, module request, or semantic value; its spans are
+affine-mapped once, used only to select the earliest forbidden import/export name, and cleared before
+the binding-neutral result returns. Module requests, dynamic imports, attributes, declarations, and
+ordinary strings never enter this carrier.
+
+The one-parse proof is coupled to the invocation itself: the adapter increments a request-local
+counter at the exact public `Parser::parse` call and the engine requires the returned count to equal
+one on every success and failure route. UTF-16 reconstruction is narrowly context-gated. The
+T033-added bridge, classifier, source-order merge, and repair-copy paths are source/table
+proportional: Program, module, comment, diagnostic, and codeframe repairs traverse only relevant
+packed tables; module records are merged in existing source order without sorting; and a direct
+already-compact Program is not compacted again. Previously qualified bounded reconstruction sorts
+and indexed lookups remain outside that narrower linear claim. Private placeholder storage is
+redacted from `Debug`, while public packed-text accessors reconstruct the original UTF-16 units.
 
 CSS conversion uses a separate index whose zero is the first UTF-16 unit of `css`. It never adds
 the module offset of the `<style>` payload to selectors. When the compatibility layer needs a
@@ -944,7 +980,14 @@ conversion table. A later byte surface must be experimentally named with its dom
 Qualification separately times ordinary direct binding, well-formed TSRX input, and the rare
 WTF-8/UTF-16 lane. It counts the TSRX `Vec<u16>`, UTF-8 buffer, boundary/fixup table, and restored
 copied bytes and enforces the frozen well-formed and surrogate-lane overhead budgets. No literal
-zero-overhead claim is made without a measurement capable of establishing it.
+zero-overhead claim is made without a measurement capable of establishing it. Retained release-mode
+campaigns double dense source, module-record, and diagnostic workloads, record median time and exact
+bridge work counts, and block release if the broad linear ceilings fail. The ASCII identity route
+must record zero boundary, fixup, rejection, and substituted-byte work; ordinary JS/TS/TSX never
+constructs the TSRX bridge at all. A private release-test observer records restored UTF-16 units and
+bytes separately for Program raw, Program semantic/cooked, module, comment, and diagnostic
+codeframe emissions. Production monomorphizes that generic observer to a zero-sized no-op; it adds
+no trait object, atomic, global counter, or runtime instrumentation branch.
 
 ## Diagnostics, strict mode, and loose/collect recovery
 
@@ -1152,7 +1195,7 @@ The fixed TSRX lifecycle is:
 
 | State | Live native state | Transition and mandatory release |
 | --- | --- | --- |
-| Input bridge | Original `Vec<u16>`; direct UTF-8 or substituted UTF-8; boundary/fixup tables | Build overlay/projection; account every source byte and code unit |
+| Input bridge | Original `Vec<u16>`; direct UTF-8, opaque-substituted UTF-8, or active poison-marked UTF-8; boundary/fixup/rejection tables | Build overlay/projection; account every source byte and code unit |
 | OXC parse/serialize | Input state, projected source, arena AST, growing projected records | Finish projected serialization; drop OXC return and arena inside adapter |
 | Authored reconstruction | Input state, shrinking projected records, growing authored records | Destructively consume records; drop each projected-only column/table after last use |
 | Native result | Authored program/module/comment/error tables only | Drop both source buffers, overlay, projection, maps, fixups, and projected tables before returning to JS |
@@ -1378,20 +1421,28 @@ process installs both wrappers and one package from each family, then attributes
 engine and CSS/recovery sections to the compatibility marginal. Canonical budgets can qualify
 without compatibility evidence; a facade budget cannot hide either wrapper or native family.
 
-Numeric budgets must be frozen from reproducible baselines before implementation approval. Each
-budget records an absolute bound and, where a matched control exists, a ratio bound against pinned
-OXC or the pre-parser product. Existing ordinary lint/format budgets remain independent and must
+Numeric budgets for observable pre-product boundaries must be frozen from reproducible baselines
+before implementation approval. Each budget records an absolute bound and, where a matched control
+exists, a ratio bound against pinned OXC or the pre-parser product. Internal logical allocation,
+adapter-owned copy, and TSRX-work counters that the published OXC addon does not expose instead use
+an identically instrumented local public-OXC observation control; their counter names, attribution,
+positive controls, and exact-zero ordinary invariant are frozen before implementation, and their
+numeric candidate gates are blocking before the affected parser stage can exit. The observation
+binary is never timed or shipped. Existing ordinary lint/format budgets remain independent and must
 stay green. Once frozen, no budget may be weakened, widened, reclassified, or have its corpus
 changed merely to admit a regression; changing a flawed measurement requires a written methodology
 correction and rerunning both old and new candidates. A regression blocks the responsible stage or
 experimental capability.
 
-The ordinary release budget is independently blocking: candidate end-to-end time, allocation and
-copied-byte counts, peak/retained memory, result materialization, and result-shape parity are paired
-against the exact pinned `oxc-parser` package. The incremental JS/native route branch and package
-loader are reported as separate rows rather than absorbed into TSRX work. Any ordinary-path metric
-beyond its Stage-1C absolute or matched ratio budget blocks the canonical package and every facade
-that depends on it, even when TSRX benchmarks pass.
+The ordinary release budget is independently blocking: candidate end-to-end time, peak/retained
+memory, result materialization, and result-shape parity are paired against the exact pinned
+`oxc-parser` package. Logical allocation and copied-byte rows are paired against the identically
+instrumented local public-OXC observation control because the published addon exposes no comparable
+internal counters; published-addon values remain explicitly unobservable rather than fabricated.
+The incremental JS/native route branch and package loader are reported as separate rows rather than
+absorbed into TSRX work. Any ordinary-path metric beyond its Stage-1C observable budget or its later
+instrumented candidate gate blocks the canonical package and every facade that depends on it, even
+when TSRX benchmarks pass.
 
 Stages 1C and 1F use the same fixed measurement protocol before their respective implementation
 lanes: exact corpus commit and
@@ -1399,11 +1450,13 @@ per-file SHA-256 list; exact Node, Rust, linker, OS, CPU, governor/power, alloca
 identities; ten warmups followed by thirty recorded samples in each of five clean processes; no
 outlier deletion; median, p95, median absolute deviation, and raw samples; randomized corpus order
 from a recorded seed; and cold-start runs in fresh processes. The numeric budget file records an
-absolute ceiling and matched-control ratio for every time/byte/count family. A candidate passes
-only when both bounds pass in at least four of five processes and the aggregate p95 passes; a noisy
-baseline whose coefficient of variation exceeds 5% is rerun, never used
-to widen a candidate budget. Canonical raw logs and budget derivations are retained before Stage 2;
-compatibility evidence is independently retained before Stage 5 and does not block Stages 2–4.
+absolute ceiling and a matched-control ratio wherever a comparable control exists; opaque official
+internal counters are `not-observable`, not numeric. A candidate passes only when every applicable
+bound passes in at least four of five processes and the aggregate p95 passes; a noisy baseline whose
+coefficient of variation exceeds 5% is rerun, never used to widen a candidate budget. Canonical
+observable raw logs and budget derivations are retained before Stage 2; candidate-only internal
+counter evidence is retained before the affected Stage 3 or Stage 4 exit. Compatibility evidence is
+independently retained before Stage 5 and does not block Stages 2–4.
 
 ## Conformance and benchmark oracle
 
@@ -1556,9 +1609,9 @@ after its prerequisite gate is retained in a receipt.
 
 | Stage | Prerequisites | Owned outputs | Binary exit gate | Rollback, fallback, and explicit stop |
 | --- | --- | --- | --- | --- |
-| 1C. Freeze canonical oracle and performance receipt | This revised design and pinned OXC/local sources | Independently receipted ordinary and raw-canonical graph/descriptor/offset/string/route fixtures; canonical package failure matrix; pinned `oxc-parser` baseline with separate branch/loader rows; identities, raw evidence, variance policy, and numeric canonical budgets | Two deterministic captures/digests match; mutations fail; ordinary parity and zero-TSRX counters hold; canonical package cases and numeric reruns pass | Stop canonical work if capture is nondeterministic or a canonical/ordinary budget cannot be frozen; compatibility or CSS evidence is not a prerequisite |
+| 1C. Freeze canonical oracle and observable performance receipt | This revised design and pinned OXC/local sources | Independently receipted ordinary and raw-canonical graph/descriptor/offset/string/route fixtures; canonical package failure matrix; pinned `oxc-parser` observable baseline with separate branch/loader rows; identities, raw evidence, variance policy, observable numeric budgets, and a frozen local-observation counter contract | Two deterministic captures/digests match; mutations fail; ordinary route/semantic parity holds; published-addon opaque counters are explicitly unobservable; measurable package cases and numeric reruns pass | Stop canonical work if capture is nondeterministic or an observable canonical/ordinary budget cannot be frozen; internal exact-zero/copy/allocation candidate gates remain blocking before the affected parser stage exits; compatibility or CSS evidence is not a prerequisite |
 | 1F. Freeze compatibility oracle receipt | This revised design and exact installed 0.1.32/Volar/ESTree sources | Independently receipted compatibility graphs, declarations, exact `View.tsrx` recovery fixture, 16 modes, CSS/hash/string/helpers, arrays, and compatibility-package failure matrix | Reference captures match twice; declaration positive/negative gates pass; `View.tsrx` strict/collect/loose outcomes and hash vectors match; mutations fail | Withhold compatibility work if any consumed contract cannot be frozen; this does not block Stages 2–4 and does not itself approve CSS implementation |
-| 2. Leaf schema and overlay seam | Stage 1C green | OXC-independent `tsrx_tape_schema`; borrowed `tsrx_syntax` overlay/projection views using `first_root`/`next_sibling` | Dependency audit is acyclic; nested-root/control snapshots reconstruct every custom node; syntax/schema crates add no Node-API/OXC/CSS/serde dependency | Revert accessors/schema without touching scan/projection; stop on a cycle or permanent node graph |
+| 2. Leaf schema and overlay seam | Stage 1C semantic/non-fork and observable-budget gate green; internal counter contract frozen | OXC-independent `tsrx_tape_schema`; borrowed `tsrx_syntax` overlay/projection views using `first_root`/`next_sibling` | Dependency audit is acyclic; nested-root/control snapshots expose every custom node; syntax/schema crates add no Node-API/OXC/CSS/serde dependency | Revert accessors/schema without touching scan/projection; stop on a cycle or permanent node graph |
 | 3. Allocator-contained serialization | Stage 2 green | Direct `oxc_adapter::parse_ordinary` preserving the pinned binding pipeline; TSRX-only `oxc_adapter::parse_to_projected_tape`, revision-local serializer, destructive authored reconstruction | Ordinary binding snapshots match pinned OXC and instrumentation enters no TSRX lane; lifetime/dependency audit proves no OXC type/borrow escapes; exact module/error shapes, root chains, release points, copied-byte and transient-peak gates pass | Keep current adapter APIs; stop on ordinary-pipeline drift, fork, patch, mixed revision, cycle, or unbounded copies |
 | 4. Canonical binding | Stage 3 green | `parser.node`, source-family dispatching ESM wrapper, exact declarations, configurable lazy getters with null sentinels, capabilities, sync/async | Canonical OXC-fidelity, module, diagnostics, descriptors, UTF-16/WTF-8, transport, memory, and size matrices pass on a host target; every ordinary extension/override takes the direct binding; separate branch/loader measurements and all ordinary metrics stay within frozen pinned-`oxc-parser` budgets | Ship nothing or later ship raw-only canonical parser after full target qualification; any ordinary regression blocks release; no facade dependency |
 | 5. Recovery and CSS compatibility | Stages 1F and 4 green, plus approved compatibility-only CSS decision | Source-fixed collect/loose recovery, completeness marker, isolated Rust CSS materializer and compatibility tape | Exact `View.tsrx` topology/error/comment/identity outcomes; compiler fail-closed invariant; CSS topology/hash/modes and every compatibility-only gate pass | Disable recovery or withhold only the compatibility addon/family; canonical parser remains raw and fail-closed |

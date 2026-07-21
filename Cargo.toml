@@ -4,9 +4,12 @@ members = [
   "crates/oxc_tsrx_benchmark",
   "crates/oxc_tsrx_cli",
   "crates/oxc_tsrx_format_benchmark",
+  "crates/parser_napi_binding",
   "crates/tsrx_format",
   "crates/tsrx_lint",
+  "crates/tsrx_parser_engine",
   "crates/tsrx_syntax",
+  "crates/tsrx_tape_schema",
 ]
 resolver = "2"
 

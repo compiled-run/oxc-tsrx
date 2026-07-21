@@ -1,8 +1,11 @@
 use std::{error::Error, fmt, ops::Range};
 
-pub(crate) const NONE: u32 = u32::MAX;
+/// Missing index sentinel for every flat overlay chain.
+pub const NONE_INDEX: u32 = u32::MAX;
+pub(crate) const NONE: u32 = NONE_INDEX;
 
 /// A byte range in the original UTF-8 source.
+#[repr(C)]
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct ByteSpan {
     pub start: u32,
@@ -30,6 +33,7 @@ impl ByteSpan {
 }
 
 /// Structural spellings retained by the compact overlay.
+#[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StructuralKind {
     FunctionBody,
@@ -61,30 +65,34 @@ impl StructuralKind {
 }
 
 /// One authored `@` byte. The payload stays in the original source.
+#[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct StructuralToken {
     pub kind: StructuralKind,
     pub span: ByteSpan,
-    pub(crate) owner: u32,
+    pub owner: u32,
 }
 
+#[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ControlKind {
+pub enum ControlKind {
     If,
     For,
     Switch,
     Try,
 }
 
+#[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ControlContext {
+pub enum ControlContext {
     Statement,
     Expression,
     JsxChild,
 }
 
+#[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ClauseRole {
+pub enum ClauseRole {
     If,
     ElseIf,
     Else,
@@ -97,36 +105,84 @@ pub(crate) enum ClauseRole {
     Catch,
 }
 
+#[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum EmbeddedKind {
+pub enum EmbeddedKind {
     DynamicOpen,
     DynamicClose,
     StyleContent,
 }
 
+#[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct EmbeddedToken {
+pub enum ParserDynamicKind {
+    OpenStart,
+    OpenEnd,
+    CloseStart,
+    CloseEnd,
+}
+
+/// One source-ordered boundary used only by the parser projection.
+///
+/// Splitting a dynamic name around its authored expression allows nested TSRX syntax to be
+/// projected without overlapping replacement spans.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ParserDynamicToken {
+    pub kind: ParserDynamicKind,
+    pub offset: u32,
+    pub owner: u32,
+}
+
+/// One JSX-child `@{ ... }` boundary used only by the parser projection.
+///
+/// The ordinary structural token keeps its one-byte `@` span. This sparse side table records
+/// the matching authored braces so the parser projection can surround statement-bearing child
+/// blocks with legal, authenticated TSX without rescanning the source.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ParserCodeBlock {
+    pub token: u32,
+    pub body: ByteSpan,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EmbeddedToken {
     pub kind: EmbeddedKind,
     pub span: ByteSpan,
     pub owner: u32,
 }
 
+#[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct DynamicTag {
+pub struct DynamicTag {
+    pub opening: ByteSpan,
+    /// Paired closing tag, or an empty span at the full element end for a self-closing tag.
+    pub closing: ByteSpan,
     pub expression: ByteSpan,
     pub closing_expression: ByteSpan,
+    /// Exclusive preorder boundary for dynamic tags nested inside this element.
+    pub subtree_end: u32,
     pub first_closing_comment: u32,
     pub closing_comment_count: u32,
     pub self_closing: bool,
 }
 
+#[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct StyleBlock {
+pub struct StyleBlock {
+    /// Complete authored JSX style element, including its opening and optional closing tag.
+    pub element: ByteSpan,
+    /// Exact authored bytes between the opening and closing tags. Empty at `element.end` for a
+    /// self-closing style element.
     pub content: ByteSpan,
+    pub self_closing: bool,
 }
 
+#[repr(C)]
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub(crate) struct ForHeader {
+pub struct ForHeader {
     pub left: ByteSpan,
     pub right: ByteSpan,
     pub index: ByteSpan,
@@ -135,8 +191,9 @@ pub(crate) struct ForHeader {
     pub r#await: bool,
 }
 
+#[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct Clause {
+pub struct Clause {
     pub role: ClauseRole,
     pub keyword: ByteSpan,
     pub header: ByteSpan,
@@ -146,8 +203,9 @@ pub(crate) struct Clause {
     pub next: u32,
 }
 
+#[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct SyntaxNode {
+pub struct SyntaxNode {
     pub kind: ControlKind,
     pub context: ControlContext,
     pub span: ByteSpan,
@@ -159,6 +217,29 @@ pub(crate) struct SyntaxNode {
     pub last_clause: u32,
 }
 
+pub type OverlayToken = StructuralToken;
+pub type OverlayNode = SyntaxNode;
+pub type OverlayClause = Clause;
+pub type OverlayEmbedded = EmbeddedToken;
+pub type OverlayDynamicTag = DynamicTag;
+pub type OverlayStyleBlock = StyleBlock;
+
+/// Allocation-free borrowed access to the scanner's existing flat storage.
+#[derive(Debug, Clone, Copy)]
+pub struct OverlayView<'a> {
+    pub source_len: u32,
+    pub tokens: &'a [OverlayToken],
+    pub nodes: &'a [OverlayNode],
+    pub clauses: &'a [OverlayClause],
+    pub embedded: &'a [OverlayEmbedded],
+    pub parser_dynamic: &'a [ParserDynamicToken],
+    pub parser_code_blocks: &'a [ParserCodeBlock],
+    pub dynamic_tags: &'a [OverlayDynamicTag],
+    pub dynamic_comments: &'a [ByteSpan],
+    pub style_blocks: &'a [OverlayStyleBlock],
+    pub first_root: u32,
+}
+
 /// Compact lossless overlay over the original source.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Overlay {
@@ -168,6 +249,8 @@ pub struct Overlay {
     pub(crate) nodes: Vec<SyntaxNode>,
     pub(crate) clauses: Vec<Clause>,
     pub(crate) embedded_tokens: Vec<EmbeddedToken>,
+    pub(crate) parser_dynamic_tokens: Vec<ParserDynamicToken>,
+    pub(crate) parser_code_blocks: Vec<ParserCodeBlock>,
     pub(crate) dynamic_tags: Vec<DynamicTag>,
     pub(crate) dynamic_comments: Vec<ByteSpan>,
     pub(crate) style_blocks: Vec<StyleBlock>,
@@ -176,6 +259,24 @@ pub struct Overlay {
 }
 
 impl Overlay {
+    /// Borrows every reconstruction-relevant flat table without allocating another graph.
+    #[must_use]
+    pub fn view(&self) -> OverlayView<'_> {
+        OverlayView {
+            source_len: self.source_len,
+            tokens: &self.tokens,
+            nodes: &self.nodes,
+            clauses: &self.clauses,
+            embedded: &self.embedded_tokens,
+            parser_dynamic: &self.parser_dynamic_tokens,
+            parser_code_blocks: &self.parser_code_blocks,
+            dynamic_tags: &self.dynamic_tags,
+            dynamic_comments: &self.dynamic_comments,
+            style_blocks: &self.style_blocks,
+            first_root: self.first_root,
+        }
+    }
+
     #[must_use]
     pub fn tokens(&self) -> &[StructuralToken] {
         &self.tokens
