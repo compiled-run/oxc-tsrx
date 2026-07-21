@@ -1,0 +1,29 @@
+{
+  "packageVersion": "0.1.0",
+  "target": "aarch64-apple-darwin",
+  "bytes": 2524512,
+  "sha256": "b6bd470efde19803087af37508ad61c6ee27d2bcadf8f6a815c3705363a51264",
+  "object": {
+    "format": "mach-o",
+    "imageKind": "dynamic-library",
+    "bits": 64,
+    "architectures": [
+      "arm64"
+    ],
+    "os": "darwin",
+    "libc": null
+  },
+  "nodeApi": 8,
+  "oxcRevision": "8e0ed2ebb96137fb1611cdbd5742d5cb46037d40",
+  "capabilities": {
+    "lazy": true,
+    "async": true,
+    "editorRecovery": false,
+    "cssMaterialization": false,
+    "rawTransfer": false
+  },
+  "role": "canonical-parser",
+  "file": "parser.node",
+  "apiVersion": 1,
+  "transportAbi": 1
+}
