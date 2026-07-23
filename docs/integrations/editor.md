@@ -98,6 +98,18 @@ absolute. Type and config-path changes rebuild workspace tools live; changing
 source development, `OXC_TSRX_LSP_BIN` points the test harness at the
 release binary.
 
+## Run the visible lint demo
+
+The repository contains an intentionally lint-broken workspace at
+`examples/vscode-lints`. Open the repository in Visual Studio Code, choose
+**Run and Debug → TSRX: lint demo**, and press **F5**. The launch task builds
+the local server and extension, opens `LintDemo.tsrx`, and shows five real
+authored-span diagnostics plus the validated `no-var` quick fix.
+
+Those are built-in Oxlint rules. JavaScript plugin rules need an additional
+host/parser seam; the current prototypes and upstream status are documented
+under [Custom JavaScript plugins](/integrations/custom-js-plugins).
+
 ## Reproducible proof
 
 Build the server, then run the protocol and package tests, the real

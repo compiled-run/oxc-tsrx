@@ -68,7 +68,7 @@ release binaries explicitly. A missing native artifact is an error; `.tsrx`
 is never silently delegated to stock tools.
 
 Use the framework plugin exactly as its framework documents. No OXC for TSRX
-Vite plugin is added:
+Vite plugin is required for compilation:
 
 ```js
 import { tsrxReact } from '@tsrx/vite-plugin-react';
@@ -92,6 +92,26 @@ export default defineConfig({
   },
 });
 ```
+
+## Optional parser-aware Vite plugins
+
+Vite does not expose a public custom-parser replacement for Rolldown, but a
+pre-transform plugin can inspect raw `.tsrx` before the framework compiler.
+The retained `examples/custom-js-plugins/tsrx-parser-service.mjs` composes
+around the existing framework plugin, caches one authored
+`@oxc-tsrx/parser` result, and exposes it to parser-aware consumers:
+
+```js
+plugins: [
+  withTsrxParser(tsrxReact(), (parser) => tsrxDemoLint(parser)),
+]
+```
+
+The framework plugin still owns compilation, CSS, maps, and HMR. Rolldown
+still parses only the generated JavaScript. A real Vite build proves this
+ordering and the authored custom-node observation; see
+[Custom JavaScript plugins](/integrations/custom-js-plugins) for the complete
+example and the separate Oxlint host boundary.
 
 ## Configuration boundary
 
@@ -164,4 +184,4 @@ this package.
 Everything above is proven locally. Hosted production of all eight release
 candidates remains a post-push release gate, registry and Marketplace
 publication remain separate approval-gated actions, and JavaScript Oxlint
-plugins stay blocked on a stable public host API.
+plugins stay blocked on a released custom-parser or language-plugin host API.

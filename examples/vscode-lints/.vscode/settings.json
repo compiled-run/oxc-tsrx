@@ -1,0 +1,16 @@
+{
+  "oxcTsrx.lint.configPath": ".oxlintrc.json",
+  "oxcTsrx.format.configPath": ".oxfmtrc.json",
+  "[markless-tsrx]": {
+    "editor.defaultFormatter": "thejackshelton.oxc-tsrx-vscode",
+    "editor.formatOnSave": true
+  },
+  "[ripple]": {
+    "editor.defaultFormatter": "thejackshelton.oxc-tsrx-vscode",
+    "editor.formatOnSave": true
+  },
+  "[tsrx]": {
+    "editor.defaultFormatter": "thejackshelton.oxc-tsrx-vscode",
+    "editor.formatOnSave": true
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "TSRX: lint demo",
+      "type": "extensionHost",
+      "request": "launch",
+      "runtimeExecutable": "${execPath}",
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/vscode",
+        "${workspaceFolder}/examples/vscode-lints",
+        "${workspaceFolder}/examples/vscode-lints/LintDemo.tsrx"
+      ],
+      "env": {
+        "OXC_TSRX_LSP_BIN": "${workspaceFolder}/target/release/oxc-tsrx-lsp"
+      },
+      "preLaunchTask": "build TSRX lint demo"
+    }
+  ]
+}

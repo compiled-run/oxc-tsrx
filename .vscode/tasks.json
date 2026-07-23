@@ -1,0 +1,41 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build TSRX lint demo server",
+      "type": "process",
+      "command": "cargo",
+      "args": [
+        "build",
+        "--release",
+        "--locked",
+        "-p",
+        "oxc_tsrx_cli",
+        "--bin",
+        "oxc-tsrx-lsp"
+      ],
+      "problemMatcher": "$rustc",
+      "group": "build"
+    },
+    {
+      "label": "build TSRX lint demo extension",
+      "type": "process",
+      "command": "npm",
+      "args": [
+        "run",
+        "build:editor"
+      ],
+      "problemMatcher": [],
+      "group": "build"
+    },
+    {
+      "label": "build TSRX lint demo",
+      "dependsOrder": "parallel",
+      "dependsOn": [
+        "build TSRX lint demo server",
+        "build TSRX lint demo extension"
+      ],
+      "problemMatcher": []
+    }
+  ]
+}

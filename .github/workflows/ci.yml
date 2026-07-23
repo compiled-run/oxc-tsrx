@@ -73,8 +73,11 @@ jobs:
           cargo clippy --workspace --all-targets --locked -- -D warnings
           cargo test --workspace --all-targets --locked
 
-      - name: Build the three distributable native executables
-        run: cargo build --release --locked -p oxc_tsrx_cli --bins
+      - name: Build the distributable native executables and parser addon
+        shell: bash
+        run: |
+          cargo build --release --locked -p oxc_tsrx_cli --bins
+          npm run build:parser-native
 
       - name: Test the product and package contracts
         shell: bash

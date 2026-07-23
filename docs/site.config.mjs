@@ -33,6 +33,7 @@ export default {
         { text: 'Configuration', link: '/integrations/configuration' },
         { text: 'Vite and Vite+', link: '/integrations/vite-plus' },
         { text: 'Editor', link: '/integrations/editor' },
+        { text: 'Custom JS Plugins', link: '/integrations/custom-js-plugins' },
       ],
     },
     {

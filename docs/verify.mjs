@@ -179,7 +179,7 @@ await page.waitForFunction(() => document.querySelectorAll('.sidebar nav a').len
 const sidebarLinks = await page
   .locator('.sidebar nav a')
   .evaluateAll((anchors) => anchors.map((a) => ({ href: a.href, text: a.textContent.trim() })))
-check(sidebarLinks.length === 14, 'walkthrough: sidebar lists 14 pages', String(sidebarLinks.length))
+check(sidebarLinks.length === 15, 'walkthrough: sidebar lists 15 pages', String(sidebarLinks.length))
 
 for (const link of sidebarLinks) {
   await page.goto(link.href, { waitUntil: 'load' })

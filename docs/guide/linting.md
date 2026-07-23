@@ -76,7 +76,8 @@ front instead of half-working. Type-aware lint is supported only through an
 explicit flag and the exact verified `oxlint-tsgolint` 0.24.0 executable; a
 missing or mismatched tool fails without silently falling back. See
 [Configuration](/integrations/configuration) for the exact support matrix
-and [Limitations](/reference/limitations) for the remaining boundaries.
+and [Custom JavaScript plugins](/integrations/custom-js-plugins) for the
+tested parser adapters and remaining host boundary.
 
 ## What is tested
 
