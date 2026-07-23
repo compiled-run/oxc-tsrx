@@ -165,7 +165,9 @@ These fail before a source parse or write; they are not silently disabled:
 
 - JavaScript plugins (`jsPlugins`). The official JS-plugin host currently
   lives behind private OXC application code, which this project does not
-  import or copy.
+  import or copy. The source-only VS Code experiment instead routes the
+  official OXC extension through a Node-enabled Oxlint draft; it does not make
+  `jsPlugins` valid for the native CLI.
 - JavaScript/TypeScript config modules passed to the direct native command.
 - Alternate reporters and nested per-directory config discovery.
 

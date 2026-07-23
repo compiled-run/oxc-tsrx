@@ -30,13 +30,15 @@ skipped file or a wrong-but-plausible result.
 
 ## Linting
 
-- **JavaScript lint plugins do not run in the native TSRX CLI or companion
-  language server yet.** Released Oxlint 1.74 supports JS rules but explicitly
+- **JavaScript lint plugins do not run in the native TSRX CLI or native
+  language server.** Released Oxlint 1.74 supports JS rules but explicitly
   does not support custom parsers/file formats, and the native Rust path does
-  not embed Oxlint's Node host. The retained AST-only ESLint adapter and Vite
-  parser-service prototype prove the parser-facing contracts; token APIs,
-  framework scope semantics, and a released upstream host seam remain. See
-  [Custom JavaScript plugins](/integrations/custom-js-plugins).
+  not embed Oxlint's Node host. A source-only VS Code experiment runs them in
+  the official OXC extension through a small LSP launcher and a Node-enabled
+  Oxlint build from the upstream custom-parser draft; it is tested but not a
+  released product path. Token APIs, framework scope semantics, and a
+  released upstream host seam remain. See [Custom JavaScript
+  plugins](/integrations/custom-js-plugins).
 - **Type-aware rules** require an explicit `--type-aware` or `--type-check`
   opt-in and the exact supported `oxlint-tsgolint` executable. Missing or
   mismatched tooling fails instead of silently downgrading. The editor

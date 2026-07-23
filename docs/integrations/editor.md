@@ -102,13 +102,19 @@ release binary.
 
 The repository contains an intentionally lint-broken workspace at
 `examples/vscode-lints`. Open the repository in Visual Studio Code, choose
-**Run and Debug → TSRX: lint demo**, and press **F5**. The launch task builds
-the local server and extension, opens `LintDemo.tsrx`, and shows five real
-authored-span diagnostics plus the validated `no-var` quick fix.
+**Run and Debug → TSRX: lint demo**, and press **F5**. The launch task checks
+the two local servers, rebuilds the extension, opens `LintDemo.tsrx`, and
+shows five native authored-span diagnostics plus the validated `no-var` quick
+fix.
 
-Those are built-in Oxlint rules. JavaScript plugin rules need an additional
-host/parser seam; the current prototypes and upstream status are documented
-under [Custom JavaScript plugins](/integrations/custom-js-plugins).
+It also shows `tsrx-demo(no-tsrx-if)` on the authored `@if … @else` block.
+That rule is available without the companion: open `examples/vscode-lints`
+as its own workspace with the official OXC extension, open
+`oxlint-custom-parser.json` once to activate OXC, then open `LintDemo.tsrx`.
+Its configured LSP launcher dynamically registers `.tsrx` and forwards to a
+Node-enabled Oxlint build from the upstream custom-parser draft. The
+source-only setup and upstream status are documented under [Custom JavaScript
+plugins](/integrations/custom-js-plugins).
 
 ## Reproducible proof
 

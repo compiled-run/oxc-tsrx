@@ -36,6 +36,7 @@
     "test:editor": "node --test tests/editor/lsp.test.mjs tests/editor/demo-workspace.test.mjs tests/editor/package.test.mjs",
     "test:plugins": "node --test tests/plugins/parser-integrations.test.mjs",
     "test:editor:vscode": "node tests/editor/vscode-run.mjs",
+    "test:editor:js-plugins": "node tests/editor/official-oxc-js-plugins-run.mjs",
     "test:packaging:unit": "node --test tests/packaging/native-version.test.mjs tests/packaging/native-package.test.mjs tests/packaging/runtime-contract.test.mjs tests/packaging/public-package-metadata.test.mjs tests/packaging/boundary.test.mjs tests/packaging/css-boundary.test.mjs tests/packaging/compliance.test.mjs tests/packaging/vscode-build-freshness.test.mjs tests/packaging/vsix-archive.test.mjs tests/packaging/vscode-artifact.test.mjs",
     "test:packaging:clean": "node --test tests/packaging/clean-install.test.mjs",
     "test:packaging:matrix": "node --test tests/packaging/vite-plus-matrix.test.mjs",

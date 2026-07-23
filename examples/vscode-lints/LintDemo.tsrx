@@ -4,7 +4,7 @@ type Props = { ready: boolean; items: Item[] };
 export function LintDemo({ ready, items }: Props) @{
   var legacyCount = 0;
   const neverRead = 'hover over my warning';
-  console.log('the lint demo is running');
+  console.log();
 
   @if (ready == true) {
     debugger;

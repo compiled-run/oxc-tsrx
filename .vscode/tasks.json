@@ -2,19 +2,25 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "build TSRX lint demo server",
+      "label": "check TSRX lint demo server",
       "type": "process",
-      "command": "cargo",
+      "command": "/usr/bin/test",
       "args": [
-        "build",
-        "--release",
-        "--locked",
-        "-p",
-        "oxc_tsrx_cli",
-        "--bin",
-        "oxc-tsrx-lsp"
+        "-x",
+        "${workspaceFolder}/target/release/oxc-tsrx-lsp"
       ],
-      "problemMatcher": "$rustc",
+      "problemMatcher": [],
+      "group": "build"
+    },
+    {
+      "label": "check TSRX JavaScript-plugin host",
+      "type": "process",
+      "command": "/usr/bin/test",
+      "args": [
+        "-f",
+        "${workspaceFolder}/target/oxlint-custom-parser/cli.js"
+      ],
+      "problemMatcher": [],
       "group": "build"
     },
     {
@@ -32,7 +38,8 @@
       "label": "build TSRX lint demo",
       "dependsOrder": "parallel",
       "dependsOn": [
-        "build TSRX lint demo server",
+        "check TSRX lint demo server",
+        "check TSRX JavaScript-plugin host",
         "build TSRX lint demo extension"
       ],
       "problemMatcher": []

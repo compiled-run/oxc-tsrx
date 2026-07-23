@@ -5,11 +5,13 @@ description: What works today for TSRX AST consumers in Vite and ESLint, and the
 
 # Custom JavaScript plugins
 
-There are three different plugin boundaries, and they should not be conflated:
+There are four different integration boundaries, and they should not be
+conflated:
 
 | Host | Released status | Practical TSRX path |
 | --- | --- | --- |
-| Visual Studio Code companion | Built-in Oxlint rules work now | Native `oxc-tsrx-lsp`; use the committed lint demo |
+| Official OXC extension | Custom JS rules work against the upstream parser draft | Point `oxc.path.oxlint` at the TSRX LSP launcher; no companion extension required |
+| OXC-for-TSRX companion | Native rules, formatting, and validated fixes work now | Optional native `oxc-tsrx-lsp` client |
 | Vite 8 plugins | Raw-source transforms work now; no custom bundler-parser hook | Parse before the framework transform and share the authored AST with other plugins |
 | Oxlint 1.74 JS plugins | JavaScript rules work, custom parsers/file formats do not | Target the upstream custom-parser draft; use ESLint as the executable proof meanwhile |
 
@@ -17,21 +19,26 @@ The runnable prototypes live in `examples/custom-js-plugins`, and their
 retained tests use the real parser, ESLint 10, Vite 8.1.5, and
 `@tsrx/vite-plugin-react` 0.0.72.
 
-## See native lint diagnostics in VS Code
+## See the custom JavaScript rule in VS Code
 
-The fastest visible demo uses current production behavior:
+The custom-rule proof uses only the official OXC extension:
 
-1. Open this repository in Visual Studio Code.
-2. Select **Run and Debug → TSRX: lint demo**.
-3. Press **F5**.
+1. Open `examples/vscode-lints` as the VS Code workspace.
+2. Install or enable `oxc.oxc-vscode`.
+3. Open `oxlint-custom-parser.json` once to activate official OXC, then open
+   `LintDemo.tsrx`.
 
-The launch target builds the language server and companion extension, opens
-`examples/vscode-lints/LintDemo.tsrx`, and publishes five real diagnostics:
-`no-var`, `no-unused-vars`, `no-console`, `eqeqeq`, and `no-debugger`.
-`no-var` also exposes the validated safe quick fix.
+`tsrx-demo(no-tsrx-if)` underlines the authored `@if … @else` block. The
+committed parser adapter returns `JSXIfExpression`, and
+`demo-lint-plugin.mjs` reports it. A workspace-local launcher forwards the
+official extension to `target/oxlint-custom-parser/cli.js`, dynamically
+registering `.tsrx` document sync and pull diagnostics.
 
-This demo intentionally uses built-in rules. JavaScript plugin diagnostics
-cannot enter the current in-process Rust language server yet.
+The retained Extension Host test explicitly asserts that the companion
+extension is absent, activates official OXC through its JSON config, checks
+the diagnostic and authored range, applies an unsaved edit, and checks the
+updated diagnostic. F5 from the repository root remains available when the
+five native rules, formatting, and validated `no-var` fix are also wanted.
 
 ## Add the parser beside an existing Vite plugin
 
@@ -104,9 +111,11 @@ of retokenizing in JavaScript or returning projected placeholder tokens.
 ## What Oxlint needs
 
 Released Oxlint documents custom parsers and file formats as unsupported.
-That means adding `jsPlugins` to the native TSRX config cannot work: the
-JavaScript rule host receives only ASTs produced by Oxlint's supported
-language loaders, while `oxc-tsrx-lsp` is a separate in-process Rust host.
+Adding `jsPlugins` to the native TSRX config still cannot work:
+`oxc-tsrx-lsp` is a separate in-process Rust host and does not embed Node.
+The editor experiment instead points the official OXC extension at a
+Node-enabled Oxlint draft through an LSP launcher. The launcher dynamically
+registers `.tsrx` with VS Code, avoiding another editor extension.
 
 Two active upstream designs provide the right seams:
 
@@ -139,10 +148,11 @@ configuration becomes:
 }
 ```
 
-That JSON is deliberately forward-looking and is not accepted by Oxlint
-1.74. Once upstream ships it, direct VS Code support still needs the companion
-extension to start or connect to the Oxlint JS host for `.tsrx` and merge that
-diagnostic lifecycle with native formatting. Until then, built-in rules remain
-the honest editor path and ESLint/Vite remain the runnable custom-rule proofs.
+That JSON is not accepted by released Oxlint 1.74. It is accepted by the
+upstream draft and is now covered by an isolated VS Code Extension Host test
+that contains only the official OXC extension and asserts the `oxc`
+diagnostic through an unsaved edit. The launcher supplies the `.tsrx`
+registrations missing from the official client, while the rule itself runs in
+Oxlint—not ESLint. Publication still waits for the upstream contract to ship.
 
 Last audited: 2026-07-23.

@@ -1,6 +1,11 @@
 {
-  "oxcTsrx.lint.configPath": ".oxlintrc.json",
+  "oxcTsrx.lint.configPath": ".oxlintrc.native.json",
   "oxcTsrx.format.configPath": ".oxfmtrc.json",
+  "oxc.path.oxlint": "oxlint-custom-parser-lsp.mjs",
+  "oxc.configPath": "oxlint-custom-parser.json",
+  "oxc.requireConfig": false,
+  "oxc.enable.oxlint": true,
+  "oxc.enable.oxfmt": false,
   "[markless-tsrx]": {
     "editor.defaultFormatter": "thejackshelton.oxc-tsrx-vscode",
     "editor.formatOnSave": true

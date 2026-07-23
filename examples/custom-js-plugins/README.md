@@ -42,7 +42,7 @@ authored token stream before this can become a production parser package.
 Framework-aware scope semantics also need a static scope contract instead of
 assuming every custom node behaves like ordinary ESTree.
 
-## Oxlint: adapter ready, host seam not released
+## Oxlint: runnable against the upstream draft
 
 Oxlint 1.74 supports JavaScript rules but its current documentation explicitly
 lists custom file formats and parsers as unsupported. A draft upstream change,
@@ -67,20 +67,19 @@ lands, the adapter shape above fits the proposed configuration:
 }
 ```
 
-That syntax is a forward-looking prototype, not valid released Oxlint
-configuration. The broader
+That syntax is not valid released Oxlint configuration. It is now exercised
+by the VS Code lint demo against a local build of the draft: a small LSP
+launcher lets the official OXC extension register `.tsrx`, the parser returns
+the authored TSRX AST, and `tsrx-demo/no-tsrx-if` appears as an `oxc` editor
+diagnostic. The broader
 [Oxlint language-plugins RFC](https://github.com/oxc-project/oxc/discussions/21936)
 is the production-grade destination for cached parsing, typed visitor schemas,
 faithful virtual TS, source mappings, and type-aware rules.
 
-The native `oxc-tsrx-lsp` cannot show these JavaScript-plugin diagnostics in
-VS Code yet because it is an in-process Rust host. Direct editor support needs
-one of:
-
-1. released Oxlint custom-parser/language-plugin support exposed through its
-   LSP, with the `.tsrx` selector handled by the companion extension; or
-2. a public OXC JS-plugin host callable from the native TSRX path.
-
-Until then, the VS Code demo next door shows real built-in Oxlint rules, while
-these prototypes exercise the custom JavaScript rule and Vite parser-sharing
-contracts independently.
+The native `oxc-tsrx-lsp` remains an in-process Rust host and does not execute
+JavaScript. For the source-only experiment,
+`scripts/oxlint-custom-parser-lsp-proxy.mjs` forwards the official extension's
+LSP stream to draft Oxlint and dynamically registers `.tsrx` document sync
+and pull diagnostics. No companion VS Code extension is present in the
+retained proof. Shipping this lane waits for upstream custom-parser support to
+be released.

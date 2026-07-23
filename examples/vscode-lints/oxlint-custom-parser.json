@@ -1,0 +1,22 @@
+{
+  "rules": {
+    "eqeqeq": "warn",
+    "no-console": "warn",
+    "no-debugger": "error",
+    "no-unused-vars": "warn",
+    "no-var": "error"
+  },
+  "overrides": [
+    {
+      "files": ["**/*.tsrx"],
+      "languageOptions": {
+        "parser": "../custom-js-plugins/tsrx-eslint-parser.mjs"
+      },
+      "jsPlugins": ["../custom-js-plugins/demo-lint-plugin.mjs"],
+      "rules": {
+        "tsrx-demo/no-tsrx-if": "warn",
+        "tsrx-demo/require-keyed-for": "warn"
+      }
+    }
+  ]
+}

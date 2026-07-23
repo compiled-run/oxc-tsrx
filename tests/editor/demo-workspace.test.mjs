@@ -15,7 +15,7 @@ const server = resolve(
 test("the committed VS Code demo publishes all intentional authored diagnostics", async () => {
   const [source, config, settings, launch, tasks] = await Promise.all([
     readFile(sourcePath, "utf8"),
-    readFile(join(workspace, ".oxlintrc.json"), "utf8").then(JSON.parse),
+    readFile(join(workspace, ".oxlintrc.native.json"), "utf8").then(JSON.parse),
     readFile(join(workspace, ".vscode/settings.json"), "utf8").then(JSON.parse),
     readFile(join(root, ".vscode/launch.json"), "utf8").then(JSON.parse),
     readFile(join(root, ".vscode/tasks.json"), "utf8").then(JSON.parse),
@@ -28,7 +28,14 @@ test("the committed VS Code demo publishes all intentional authored diagnostics"
     "no-unused-vars",
     "no-var",
   ]);
-  assert.equal(settings["oxcTsrx.lint.configPath"], ".oxlintrc.json");
+  assert.equal(settings["oxcTsrx.lint.configPath"], ".oxlintrc.native.json");
+  assert.equal(
+    settings["oxc.path.oxlint"],
+    "oxlint-custom-parser-lsp.mjs",
+  );
+  assert.equal(settings["oxc.configPath"], "oxlint-custom-parser.json");
+  assert.equal(settings["oxc.requireConfig"], false);
+  assert.equal(settings["oxc.enable.oxlint"], true);
   assert.ok(launch.configurations.some((item) => item.name === "TSRX: lint demo"));
   assert.ok(tasks.tasks.some((item) => item.label === "build TSRX lint demo"));
 
@@ -39,7 +46,10 @@ test("the committed VS Code demo publishes all intentional authored diagnostics"
     await client.initialize(rootUri, [
       {
         workspaceUri: rootUri,
-        options: { lintConfigPath: ".oxlintrc.json", formatConfigPath: ".oxfmtrc.json" },
+        options: {
+          lintConfigPath: ".oxlintrc.native.json",
+          formatConfigPath: ".oxfmtrc.json",
+        },
       },
     ]);
     client.notify("textDocument/didOpen", {
