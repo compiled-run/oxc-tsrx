@@ -76,6 +76,11 @@ jobs:
       - name: Build the distributable native executables and parser addon
         shell: bash
         run: |
+          # build:parser-native builds parser_napi_binding with --offline, and
+          # cc is a build-dependency of napi-build rather than of oxc_tsrx_cli,
+          # so building the CLI alone never populates it. Fetch the whole
+          # workspace first or the offline build fails on a clean runner.
+          cargo fetch --locked
           cargo build --release --locked -p oxc_tsrx_cli --bins
           npm run build:parser-native
 
@@ -136,6 +141,9 @@ jobs:
       - name: Build the distributable native executables and parser addon
         shell: bash
         run: |
+          # See the correctness job: the parser addon builds --offline, so the
+          # whole workspace must be fetched first on a clean runner.
+          cargo fetch --locked
           npm run build:native
           npm run build:parser-native
 
