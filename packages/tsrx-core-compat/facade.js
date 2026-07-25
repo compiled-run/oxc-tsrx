@@ -935,7 +935,7 @@ function compatibleComment(comment, positionAt) {
 }
 
 function missingProgramError(filename) {
-  const error = new SyntaxError(`@oxc-tsrx/parser did not return a Program for ${filename}`);
+  const error = new SyntaxError(`oxc-tsrx/parser did not return a Program for ${filename}`);
   error.code = undefined;
   error.pos = undefined;
   error.raisedAt = undefined;

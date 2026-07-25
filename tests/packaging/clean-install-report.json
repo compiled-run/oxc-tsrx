@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "startedAt": "2026-07-17T20:07:27.666Z",
-  "completedAt": "2026-07-17T20:07:43.789Z",
+  "startedAt": "2026-07-25T22:28:08.432Z",
+  "completedAt": "2026-07-25T22:28:28.700Z",
   "host": {
     "platform": "darwin",
     "arch": "arm64",
@@ -11,36 +11,27 @@
     "packageManager": "npm 11.12.1",
     "ignoreScripts": true,
     "environmentOverrides": false,
-    "localResolutionOnly": true
+    "oneDirectTsrxPackage": true,
+    "explicitCompatibilitySetup": true
   },
   "packages": {
-    "runtime": {
-      "name": "@oxc-tsrx/runtime",
+    "toolchain": {
+      "name": "oxc-tsrx",
       "version": "0.1.0",
-      "integrity": "sha512-NBtHJGxS9YIambOoj4Cw0bCFgI4XX+gKDXuTkd/o3Ax8Xn6hXqlDNZme70gBf4pbyi96fs1v7ltTX2yca/pZtg=="
+      "integrity": "sha512-bWqKycxHylEi4rdAj0aQiMy8dMChnXFNtYaCI8k70iughm2/tPg/h5gC7kMAxx1ripQTScLvliMwZHnPJZ2P1w=="
     },
     "native": {
       "name": "@oxc-tsrx/native-darwin-arm64",
       "version": "0.1.0",
       "target": "aarch64-apple-darwin",
-      "integrity": "sha512-GUKon4BAqYo9NKpvnwAJ15ODfR2cBhV162tz+vl9pe00hqz5S70qgNUzXIDQenhvRItoHm3tg/3iskhdsdD9wA=="
-    },
-    "oxlint": {
-      "name": "oxlint-tsrx",
-      "version": "0.1.0",
-      "integrity": "sha512-mFOsZYJa7+8bam0NtdgmylfWVNBDvyfpiESmYNpaB9oyyOs2pah9DLI7I+EqgbRsLvFNShxDSvlZMuBEjtJqOQ=="
-    },
-    "oxfmt": {
-      "name": "oxfmt-tsrx",
-      "version": "0.1.0",
-      "integrity": "sha512-Nz3OwO6iKNxeW0u3HTabQUpUny7HwY7i05MrmTT+DD8DfIkRaHNUJBcS3/sZt6SYEAANCP8z8rwemWW/6g0uWQ=="
+      "integrity": "sha512-8l4974bH7QFvWHaxDs2WNR/TTGOZNc/FU1gaCpQlJuSdomfOdlr+vz+PwKj+8Vto1ttGMzb3B/p5KKOzAP2x1w=="
     },
     "vitePlus": "0.2.4"
   },
   "resolutions": {
     "lint": "node_modules/@oxc-tsrx/native-darwin-arm64/bin/oxc-tsrx",
-    "format": "node_modules/@oxc-tsrx/native-darwin-arm64/bin/oxc-tsrx-fmt",
-    "server": "node_modules/@oxc-tsrx/native-darwin-arm64/bin/oxc-tsrx-lsp"
+    "format": "node_modules/@oxc-tsrx/native-darwin-arm64/bin/oxc-tsrx",
+    "server": "node_modules/@oxc-tsrx/native-darwin-arm64/bin/oxc-tsrx"
   },
   "audit": {
     "info": 0,
@@ -59,6 +50,8 @@
     "vitePlusCheckFix": true,
     "missingNativeMixedWritesFailClosed": true,
     "noSourceTreeBinaryOverride": true,
-    "noInstallScripts": true
+    "noInstallScripts": true,
+    "oneDirectTsrxPackage": true,
+    "compatibilitySetupIdempotent": true
   }
 }

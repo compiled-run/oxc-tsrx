@@ -32,7 +32,9 @@ SHA and enable Actions. No later approval implies this one.
 Manually dispatch `.github/workflows/release-candidate.yml` on `COMMIT_SHA`.
 Record `RUN_ID`, download the single assembled candidate, verify
 `SHA256SUMS`, and follow [the release runbook](README.md). The expected set is
-11 npm tarballs and eight platform VSIX files.
+9 npm tarballs and eight optional legacy-client platform VSIX files. The
+workflow asserts that count itself, so a run producing any other number of
+`.tgz` files has already failed.
 
 ## 3. npm publication
 
@@ -41,10 +43,26 @@ Obtain this exact approval:
 > Approve npm publication of 0.1.0 from COMMIT_SHA and candidate run RUN_ID.
 
 The first publication is performed from the reviewed candidate bytes in the
-order recorded in `v0.1.0-launch.json`: eight native packages, runtime,
-`oxlint-tsrx`, then `oxfmt-tsrx`. Publish the complete set under `next`, verify
-exact clean installs and provenance, and only then request a separate promotion
-to `latest`. Never rebuild between review and publication.
+order recorded in `npm.publishOrder` in `v0.1.0-launch.json`. That is nine
+packages, natives first:
+
+1. `@oxc-tsrx/native-darwin-arm64`
+2. `@oxc-tsrx/native-darwin-x64`
+3. `@oxc-tsrx/native-linux-arm64-gnu`
+4. `@oxc-tsrx/native-linux-x64-gnu`
+5. `@oxc-tsrx/native-linux-arm64-musl`
+6. `@oxc-tsrx/native-linux-x64-musl`
+7. `@oxc-tsrx/native-win32-arm64-msvc`
+8. `@oxc-tsrx/native-win32-x64-msvc`
+9. `oxc-tsrx`
+
+`@oxc-tsrx/runtime`, `@oxc-tsrx/parser`, `oxlint-tsrx`, and `oxfmt-tsrx` were
+folded into `oxc-tsrx` on 2026-07-25. Do not publish them and do not expect
+tarballs for them. The JSON file is authoritative if this list ever drifts.
+
+Publish the complete set under `next`, verify exact one-package clean installs
+and provenance, and only then request a separate promotion to `latest`. Never
+rebuild between review and publication.
 
 ## 4. VS Code Marketplace
 
@@ -53,9 +71,11 @@ Obtain this exact approval:
 > Approve VS Code Marketplace publication of OXC for TSRX 0.1.0 from
 > COMMIT_SHA and candidate run RUN_ID.
 
-Upload the eight reviewed target-specific VSIX files under the single extension
-ID `thejackshelton.oxc-tsrx-vscode`. Stop if one target, checksum, version, or
-embedded source identity differs.
+The primary editor workflow uses the already released official OXC extension
+and does not require this publication. If the owner separately approves the
+optional legacy client, upload the eight reviewed target-specific VSIX files
+under `thejackshelton.oxc-tsrx-vscode`. Stop if one target, checksum, version,
+or embedded source identity differs.
 
 ## 5. Website deployment
 

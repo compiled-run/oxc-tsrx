@@ -45,8 +45,8 @@ let node_fs = require("node:fs");
 let fs = require("fs");
 fs = __toESM(fs, 1);
 let path = require("path");
-let node_module = require("node:module");
 let node_fs_promises = require("node:fs/promises");
+let node_module = require("node:module");
 let node_os = require("node:os");
 let node_url = require("node:url");
 let node_child_process = require("node:child_process");
@@ -21849,12 +21849,734 @@ var require_main = /* @__PURE__ */ __commonJSMin(((exports) => {
 	}
 }));
 //#endregion
-//#region packages/runtime/dist/targets.js
+//#region packages/toolchain/dist/provider-resolve.js
+var provider_resolve_exports = /* @__PURE__ */ __exportAll({
+	CAPABILITY_NAMES: () => CAPABILITY_NAMES,
+	DEPENDENCY_FIELDS: () => DEPENDENCY_FIELDS,
+	PROTOCOL_VERSION: () => 1,
+	ProviderProtocolError: () => ProviderProtocolError,
+	RESERVED_EXTENSIONS: () => RESERVED_EXTENSIONS,
+	SUPPORTED_PROTOCOLS: () => SUPPORTED_PROTOCOLS,
+	dependencyNames: () => dependencyNames,
+	discoverProviders: () => discoverProviders$1,
+	extensionOf: () => extensionOf,
+	findProjectRoot: () => findProjectRoot,
+	hasProviderErrors: () => hasProviderErrors,
+	isFatalDiagnostic: () => isFatalDiagnostic,
+	isReservedExtension: () => isReservedExtension,
+	providerDeclaration: () => providerDeclaration,
+	providerExtensions: () => providerExtensions,
+	resolveCapability: () => resolveCapability
+});
+function defaultReadFile(path) {
+	return (0, node_fs_promises.readFile)(path, "utf8");
+}
+/**
+* Issuer-aware Node resolution. A host with a different module map (Yarn PnP)
+* injects `pnp.resolveRequest`, which has the same `(request, issuer)` shape.
+*/
+function createDefaultResolver() {
+	const requires = /* @__PURE__ */ new Map();
+	return (request, issuer) => {
+		let resolver = requires.get(issuer);
+		if (resolver === void 0) {
+			resolver = (0, node_module.createRequire)(issuer);
+			requires.set(issuer, resolver);
+		}
+		return resolver.resolve(request);
+	};
+}
+function isPlainObject(value) {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function parseJson(text, path) {
+	try {
+		return JSON.parse(String(text));
+	} catch (error) {
+		throw new Error(`${path} is not valid JSON: ${error instanceof Error ? error.message : String(error)}`);
+	}
+}
+function diagnostic(severity, code, message, details = {}) {
+	return {
+		severity,
+		code,
+		message,
+		...details
+	};
+}
+function isInside(directory, path) {
+	const offset = (0, node_path.relative)(directory, path);
+	return offset.length > 0 && !offset.startsWith("..") && !offset.startsWith(`${node_path.sep}`);
+}
+/** Union of the direct dependency fields, sorted for deterministic output. */
+function dependencyNames(manifest) {
+	const names = /* @__PURE__ */ new Set();
+	for (const field of DEPENDENCY_FIELDS) {
+		const declared = manifest?.[field];
+		if (!isPlainObject(declared)) continue;
+		for (const name of Object.keys(declared)) names.add(name);
+	}
+	return [...names].sort();
+}
+function providerDeclaration(manifest) {
+	const declaration = manifest?.oxc?.provider;
+	return isPlainObject(declaration) ? declaration : null;
+}
+function extensionOf(filePath) {
+	if (typeof filePath !== "string") return null;
+	const name = filePath.split(/[/\\]/u).at(-1) ?? "";
+	const dot = name.lastIndexOf(".");
+	if (dot <= 0) return null;
+	return name.slice(dot).toLowerCase();
+}
+function isReservedExtension(extension) {
+	return typeof extension === "string" && RESERVED.has(extension.toLowerCase());
+}
+/** The nearest ancestor directory of `start` that contains a package.json. */
+async function findProjectRoot(start = process.cwd(), options = {}) {
+	const readFile = options.readFile ?? defaultReadFile;
+	const from = (0, node_path.resolve)(start);
+	const filesystemRoot = (0, node_path.parse)(from).root;
+	let directory = from;
+	for (;;) try {
+		await readFile((0, node_path.join)(directory, "package.json"), "utf8");
+		return directory;
+	} catch {
+		if (directory === filesystemRoot) throw new Error(`no package.json was found at or above ${from}`);
+		directory = (0, node_path.dirname)(directory);
+	}
+}
+function normalizeBinMap(manifest) {
+	if (typeof manifest.bin === "string") return typeof manifest.name === "string" ? { [manifest.name]: manifest.bin } : {};
+	return isPlainObject(manifest.bin) ? manifest.bin : {};
+}
+function moduleSpecifier(name, subpath) {
+	if (subpath === ".") return name;
+	return `${name}/${subpath.replace(/^\.\/?/u, "")}`;
+}
+function readCapabilities(declared, context) {
+	const capabilities = {};
+	if (!isPlainObject(declared)) return capabilities;
+	for (const capability of CAPABILITY_NAMES) {
+		const value = declared[capability];
+		if (value === void 0) continue;
+		const target = readCapabilityTarget(capability, value, context);
+		if (target !== null) capabilities[capability] = target;
+	}
+	return capabilities;
+}
+function readCapabilityTarget(capability, value, context) {
+	const { name, providerRoot, manifest, diagnostics, resolve, issuer } = context;
+	if (!isPlainObject(value)) {
+		diagnostics.push(diagnostic("warning", "invalid-capability", `package ${name} declares a non-object ${capability} capability`, {
+			packages: [name],
+			capability
+		}));
+		return null;
+	}
+	if (typeof value.bin === "string" && value.bin.length > 0) {
+		const declared = normalizeBinMap(manifest)[value.bin];
+		if (typeof declared !== "string" || declared.length === 0) {
+			diagnostics.push(diagnostic("warning", "invalid-capability", `package ${name} declares the ${capability} capability as bin "${value.bin}", which is not a key of its own bin map`, {
+				packages: [name],
+				capability
+			}));
+			return null;
+		}
+		const path = (0, node_path.resolve)(providerRoot, declared);
+		if (!isInside(providerRoot, path)) {
+			diagnostics.push(diagnostic("warning", "invalid-capability", `package ${name} declares the ${capability} capability outside its own package directory`, {
+				packages: [name],
+				capability
+			}));
+			return null;
+		}
+		return {
+			kind: "bin",
+			bin: value.bin,
+			path
+		};
+	}
+	if (typeof value.module === "string" && value.module.startsWith(".")) {
+		const specifier = moduleSpecifier(name, value.module);
+		let path = null;
+		try {
+			path = resolve(specifier, issuer);
+		} catch {
+			diagnostics.push(diagnostic("warning", "unresolved-capability", `package ${name} declares the ${capability} capability at ${specifier}, which its exports map does not resolve for this host`, {
+				packages: [name],
+				capability
+			}));
+		}
+		return {
+			kind: "module",
+			subpath: value.module,
+			specifier,
+			path
+		};
+	}
+	diagnostics.push(diagnostic("warning", "invalid-capability", `package ${name} declares a ${capability} capability that is neither an export subpath nor an own bin key`, {
+		packages: [name],
+		capability
+	}));
+	return null;
+}
+function readLanguages(declared, context) {
+	const { name, diagnostics } = context;
+	if (!Array.isArray(declared) || declared.length === 0) {
+		diagnostics.push(diagnostic("warning", "invalid-provider", `package ${name} declares no provider languages`, { packages: [name] }));
+		return [];
+	}
+	const languages = [];
+	for (const entry of declared) {
+		if (!isPlainObject(entry) || typeof entry.id !== "string" || !IDENTIFIER.test(entry.id)) {
+			diagnostics.push(diagnostic("warning", "invalid-provider", `package ${name} declares a language without a valid id`, { packages: [name] }));
+			continue;
+		}
+		const extensions = [];
+		for (const extension of Array.isArray(entry.extensions) ? entry.extensions : []) {
+			if (typeof extension !== "string" || extension.length < 2 || !extension.startsWith(".") || extension !== extension.toLowerCase() || /[\s/\\]/u.test(extension)) {
+				diagnostics.push(diagnostic("warning", "invalid-provider", `package ${name} declares the malformed extension ${JSON.stringify(extension)} for language ${entry.id}`, { packages: [name] }));
+				continue;
+			}
+			if (RESERVED.has(extension)) {
+				diagnostics.push(diagnostic("error", "reserved-extension", `package ${name} claims the reserved ${extension} extension, which protocol 1 keeps on the core toolchain`, {
+					packages: [name],
+					extension
+				}));
+				continue;
+			}
+			if (!extensions.includes(extension)) extensions.push(extension);
+		}
+		if (extensions.length === 0) continue;
+		languages.push({
+			id: entry.id,
+			extensions,
+			capabilities: readCapabilities(entry.capabilities, context)
+		});
+	}
+	return languages;
+}
+function readProvider(name, record, declaration, context) {
+	const { diagnostics, protocols } = context;
+	const { protocol, id } = declaration;
+	if (!Number.isInteger(protocol)) {
+		diagnostics.push(diagnostic("warning", "invalid-provider", `package ${name} declares a non-integer provider protocol`, { packages: [name] }));
+		return null;
+	}
+	if (!protocols.has(protocol)) {
+		diagnostics.push(diagnostic("warning", "unsupported-protocol", `package ${name} declares provider protocol ${protocol}, which this host does not support; it is ignored`, {
+			packages: [name],
+			protocol
+		}));
+		return null;
+	}
+	if (typeof id !== "string" || !IDENTIFIER.test(id)) {
+		diagnostics.push(diagnostic("warning", "invalid-provider", `package ${name} declares an invalid provider id ${JSON.stringify(id ?? null)}`, { packages: [name] }));
+		return null;
+	}
+	const languages = readLanguages(declaration.languages, {
+		...context,
+		name,
+		manifest: record.manifest,
+		providerRoot: record.root
+	});
+	if (languages.length === 0) return null;
+	return {
+		name,
+		version: typeof record.manifest.version === "string" ? record.manifest.version : null,
+		root: record.root,
+		manifest: record.manifestPath,
+		protocol,
+		id,
+		languages
+	};
+}
+/**
+* Read one candidate dependency's manifest.
+*
+* The two failure modes below look alike and are not alike. Resolution failing
+* means the package is simply not installed, which is ordinary and stays quiet;
+* an uninstalled optional dependency must never warn. A manifest that resolves
+* and then cannot be read or parsed is different: resolution already proved the
+* package is there, so failing to read it is a host or environment fault, and it
+* must never be mistaken for "this package is not a provider".
+*/
+async function readDependencyManifest(name, issuer, resolve, readFile, diagnostics) {
+	let manifestPath;
+	try {
+		manifestPath = resolve(`${name}/package.json`, issuer);
+	} catch {
+		return null;
+	}
+	let manifest;
+	try {
+		manifest = JSON.parse(String(await readFile(manifestPath, "utf8")));
+	} catch (error) {
+		diagnostics?.push(diagnostic("warning", "unreadable-manifest", `package ${name} resolved to ${manifestPath}, which this host could not read or parse: ${error instanceof Error ? error.message : String(error)}; a host with its own module map must supply a readFile that reads through the same layer`, {
+			packages: [name],
+			manifest: manifestPath
+		}));
+		return null;
+	}
+	if (!isPlainObject(manifest)) {
+		diagnostics?.push(diagnostic("warning", "unreadable-manifest", `package ${name} resolved to ${manifestPath}, which does not contain a JSON object`, {
+			packages: [name],
+			manifest: manifestPath
+		}));
+		return null;
+	}
+	return {
+		manifestPath,
+		root: (0, node_path.dirname)(manifestPath),
+		manifest
+	};
+}
+async function inspectAncestors(root, directNames, context) {
+	const { readFile, resolve, diagnostics } = context;
+	const filesystemRoot = (0, node_path.parse)(root).root;
+	let directory = root;
+	while (directory !== filesystemRoot) {
+		directory = (0, node_path.dirname)(directory);
+		const manifestPath = (0, node_path.join)(directory, "package.json");
+		let manifest;
+		try {
+			manifest = JSON.parse(String(await readFile(manifestPath, "utf8")));
+		} catch {
+			continue;
+		}
+		for (const name of dependencyNames(manifest)) {
+			if (directNames.has(name)) continue;
+			const record = await readDependencyManifest(name, manifestPath, resolve, readFile, diagnostics);
+			if (record === null || providerDeclaration(record.manifest) === null) continue;
+			diagnostics.push(diagnostic("warning", "ancestor-provider", `package ${name} declares a language provider and is a dependency of ${manifestPath}, but it is not a direct dependency of ${(0, node_path.join)(root, "package.json")}; it is not activated`, {
+				packages: [name],
+				manifest: manifestPath,
+				root: (0, node_path.join)(root, "package.json")
+			}));
+		}
+	}
+}
+/**
+* Build the provider index for one project root.
+*
+* `resolve(request, issuer)` and `readFile(path, encoding)` are injectable so a
+* host with a non-filesystem module map can supply its own. Fatal protocol
+* violations (a reserved extension, two providers claiming one extension, two
+* providers claiming one id) throw unless `throwOnError` is `false`; a report
+* command uses `false` to show every violation at once.
+*/
+async function discoverProviders$1(options = {}) {
+	const root = (0, node_path.resolve)(options.root ?? process.cwd());
+	const readFile = options.readFile ?? defaultReadFile;
+	const resolve = options.resolve ?? createDefaultResolver();
+	const protocols = new Set(options.protocols ?? SUPPORTED_PROTOCOLS);
+	const throwOnError = options.throwOnError !== false;
+	const manifestPath = (0, node_path.join)(root, "package.json");
+	const diagnostics = [];
+	const names = dependencyNames(parseJson(await readFile(manifestPath, "utf8"), manifestPath));
+	const context = {
+		diagnostics,
+		protocols,
+		resolve,
+		readFile,
+		issuer: manifestPath
+	};
+	const declared = [];
+	for (const name of names) {
+		const record = await readDependencyManifest(name, manifestPath, resolve, readFile, diagnostics);
+		if (record === null) continue;
+		const declaration = providerDeclaration(record.manifest);
+		if (declaration === null) continue;
+		const provider = readProvider(name, record, declaration, context);
+		if (provider !== null) declared.push(provider);
+	}
+	const byIdentifier = /* @__PURE__ */ new Map();
+	for (const provider of declared) {
+		const group = byIdentifier.get(provider.id);
+		if (group === void 0) byIdentifier.set(provider.id, [provider]);
+		else group.push(provider);
+	}
+	const rejectedIdentifiers = /* @__PURE__ */ new Set();
+	for (const [id, group] of byIdentifier) {
+		if (group.length < 2) continue;
+		rejectedIdentifiers.add(id);
+		const packages = group.map((provider) => provider.name);
+		diagnostics.push(diagnostic("error", "duplicate-id", `packages ${packages.join(" and ")} both declare the provider id "${id}"`, {
+			packages,
+			id
+		}));
+	}
+	const providers = declared.filter((provider) => !rejectedIdentifiers.has(provider.id));
+	const claims = /* @__PURE__ */ new Map();
+	for (const provider of providers) for (const language of provider.languages) for (const extension of language.extensions) {
+		const claim = {
+			provider,
+			language
+		};
+		const group = claims.get(extension);
+		if (group === void 0) claims.set(extension, [claim]);
+		else group.push(claim);
+	}
+	const extensions = {};
+	for (const extension of [...claims.keys()].sort()) {
+		const group = claims.get(extension);
+		if (group.length > 1) {
+			const packages = group.map((claim) => claim.provider.name);
+			diagnostics.push(diagnostic("error", "extension-conflict", `packages ${packages.join(" and ")} both claim the ${extension} extension; protocol 1 never picks a winner`, {
+				packages,
+				extension
+			}));
+			continue;
+		}
+		const [{ provider, language }] = group;
+		extensions[extension] = {
+			extension,
+			package: provider.name,
+			providerId: provider.id,
+			providerRoot: provider.root,
+			language: language.id,
+			capabilities: language.capabilities
+		};
+	}
+	if (options.inspectAncestors !== false) await inspectAncestors(root, new Set(names), context);
+	const index = {
+		root,
+		providers,
+		extensions,
+		diagnostics
+	};
+	if (throwOnError && diagnostics.some((entry) => entry.severity === "error")) throw new ProviderProtocolError(diagnostics);
+	return index;
+}
+function providerExtensions(index) {
+	return Object.keys(index?.extensions ?? {}).sort();
+}
+function hasProviderErrors(index) {
+	return (index?.diagnostics ?? []).some((entry) => entry.severity === "error");
+}
+function isFatalDiagnostic(entry) {
+	return FATAL_CODES.has(entry?.code);
+}
+/**
+* Look up one capability for one file. Returns `null` for every extension the
+* index does not own, which is the fast path for ordinary source files.
+*/
+function resolveCapability(index, filePath, capability) {
+	const extension = extensionOf(filePath);
+	if (extension === null) return null;
+	const entry = index?.extensions?.[extension];
+	if (entry === void 0) return null;
+	const target = entry.capabilities?.[capability];
+	if (target === void 0) return null;
+	return {
+		package: entry.package,
+		providerId: entry.providerId,
+		providerRoot: entry.providerRoot,
+		language: entry.language,
+		extension,
+		capability,
+		...target
+	};
+}
+var SUPPORTED_PROTOCOLS, CAPABILITY_NAMES, DEPENDENCY_FIELDS, RESERVED_EXTENSIONS, RESERVED, IDENTIFIER, FATAL_CODES, ProviderProtocolError;
+var init_provider_resolve = __esmMin((() => {
+	SUPPORTED_PROTOCOLS = Object.freeze([1]);
+	CAPABILITY_NAMES = Object.freeze([
+		"parse",
+		"lint",
+		"format",
+		"lsp"
+	]);
+	DEPENDENCY_FIELDS = Object.freeze([
+		"dependencies",
+		"devDependencies",
+		"optionalDependencies"
+	]);
+	RESERVED_EXTENSIONS = Object.freeze([
+		".astro",
+		".cjs",
+		".cts",
+		".js",
+		".json",
+		".json5",
+		".jsonc",
+		".jsx",
+		".mjs",
+		".mts",
+		".svelte",
+		".ts",
+		".tsx",
+		".vue"
+	]);
+	RESERVED = new Set(RESERVED_EXTENSIONS);
+	IDENTIFIER = /^[a-z][a-z0-9-]*$/u;
+	FATAL_CODES = /* @__PURE__ */ new Set([
+		"duplicate-id",
+		"extension-conflict",
+		"reserved-extension"
+	]);
+	ProviderProtocolError = class extends Error {
+		constructor(diagnostics) {
+			const failures = diagnostics.filter((diagnostic) => diagnostic.severity === "error");
+			super(`the declared language providers cannot be indexed:\n${failures.map((diagnostic) => `- ${diagnostic.message}`).join("\n")}`);
+			this.name = "ProviderProtocolError";
+			this.diagnostics = diagnostics;
+		}
+	};
+}));
+//#endregion
+//#region packages/vscode/dist/provider-client.cjs
+var require_provider_client = /* @__PURE__ */ __commonJSMin(((exports, module) => {
+	/**
+	* Provider-driven language client decisions for an editor host.
+	*
+	* This module is the transposable half of the editor integration: it turns one
+	* workspace folder plus an injected provider-discovery function into pure data
+	* — a per-folder index, a document selector, and one language client descriptor
+	* per discovered provider that declares a language-server capability.
+	*
+	* It deliberately knows nothing about any individual provider, imports no
+	* editor API, and spawns nothing. Everything it touches is injectable, so it is
+	* unit-testable in-process and can be dropped into an unrelated editor host
+	* unchanged.
+	*
+	* Two rules are structural rather than conventional:
+	*
+	* - Discovery runs once per workspace folder and indexes are never merged. A
+	*   document is only ever matched against the index of the folder that contains
+	*   it, so one folder's dependencies can never route another folder's files.
+	* - A client descriptor exists only for an extension the folder's index owns.
+	*   Ordinary source files whose extensions the discovery protocol reserves for
+	*   the core toolchain never produce a descriptor, so they can never start a
+	*   provider process.
+	*/
+	const { closeSync, existsSync: existsSync$2, openSync, readSync } = require("node:fs");
+	const { createRequire: createRequire$3 } = require("node:module");
+	const { join: join$2, relative: relative$1, sep: sep$2 } = require("node:path");
+	/** Yarn Plug'n'Play manifests, in the order a host should prefer them. */
+	const PLUG_AND_PLAY_FILES = Object.freeze([".pnp.cjs", ".pnp.js"]);
+	/** The capability a language client is built from. */
+	const LANGUAGE_SERVER_CAPABILITY = "lsp";
+	/** Arguments every discovered language server is started with. */
+	const LANGUAGE_SERVER_ARGUMENTS = Object.freeze(["--stdio"]);
+	const SHEBANG_BYTES = 128;
+	function isInside(directory, path) {
+		if (typeof directory !== "string" || typeof path !== "string") return false;
+		const offset = relative$1(directory, path);
+		return offset.length > 0 && !offset.startsWith("..") && !offset.startsWith(sep$2);
+	}
+	/** The lowercased extension of a document path, or `null` when it has none. */
+	function documentExtension(filePath) {
+		if (typeof filePath !== "string") return null;
+		const name = filePath.split(/[/\\]/u).at(-1) ?? "";
+		const dot = name.lastIndexOf(".");
+		if (dot <= 0) return null;
+		return name.slice(dot).toLowerCase();
+	}
+	/**
+	* Read the first line of an executable to decide whether it is a Node script.
+	* This is a static file read: the file is never executed to find out.
+	*/
+	function readShebangFromDisk(path) {
+		let descriptor;
+		try {
+			descriptor = openSync(path, "r");
+			const buffer = Buffer.alloc(SHEBANG_BYTES);
+			const read = readSync(descriptor, buffer, 0, SHEBANG_BYTES, 0);
+			return buffer.subarray(0, read).toString("utf8").split("\n", 1)[0];
+		} catch {
+			return "";
+		} finally {
+			if (descriptor !== void 0) closeSync(descriptor);
+		}
+	}
+	function isInterpretedScript(shebang) {
+		return typeof shebang === "string" && shebang.startsWith("#!") && /\bnode\b/u.test(shebang);
+	}
+	/** A document selector matching exactly the given extensions, and nothing else. */
+	function providerDocumentSelector(extensions) {
+		return [...new Set(extensions ?? [])].filter((extension) => typeof extension === "string" && extension.startsWith(".")).sort().map((extension) => ({
+			scheme: "file",
+			pattern: `**/*${extension}`
+		}));
+	}
+	function indexExtensions(index) {
+		return Object.keys(index?.extensions ?? {}).sort();
+	}
+	/**
+	* Turn one folder's index into language client descriptors.
+	*
+	* Only providers that declare a language-server capability contribute, and a
+	* descriptor claims only the extensions the index actually routed to that
+	* package — a conflicting or reserved claim was already dropped upstream, so it
+	* can never reach a client. The executable must live inside the declaring
+	* package: a descriptor is never built from a bin shim directory or a lookup
+	* path.
+	*/
+	function providerLanguageClients(index, options = {}) {
+		const capability = options.capability ?? LANGUAGE_SERVER_CAPABILITY;
+		const readShebang = options.readShebang ?? readShebangFromDisk;
+		const interpreter = options.interpreter ?? process.execPath;
+		const serverArguments = [...options.serverArguments ?? LANGUAGE_SERVER_ARGUMENTS];
+		const clients = [];
+		for (const provider of index?.providers ?? []) {
+			let executable = null;
+			const extensions = [];
+			for (const language of provider?.languages ?? []) {
+				const declared = language?.capabilities?.[capability];
+				if (declared?.kind !== "bin" || typeof declared.path !== "string") continue;
+				if (!isInside(provider.root, declared.path)) continue;
+				executable = declared.path;
+				for (const extension of language.extensions ?? []) if (index?.extensions?.[extension]?.package === provider.name) extensions.push(extension);
+			}
+			if (executable === null || extensions.length === 0) continue;
+			const interpreted = isInterpretedScript(readShebang(executable));
+			const claimed = [...new Set(extensions)].sort();
+			clients.push({
+				id: provider.id,
+				package: provider.name,
+				providerRoot: provider.root,
+				capability,
+				extensions: claimed,
+				executable,
+				command: interpreted ? interpreter : executable,
+				args: interpreted ? [executable, ...serverArguments] : serverArguments,
+				selector: providerDocumentSelector(claimed)
+			});
+		}
+		return clients.sort((left, right) => left.id.localeCompare(right.id));
+	}
+	function defaultRequire(path) {
+		return createRequire$3(path)(path);
+	}
+	/**
+	* A folder that ships a Plug'n'Play manifest answers module resolution from
+	* that manifest rather than from a directory walk. `resolveRequest(request,
+	* issuer)` has exactly the shape the discovery protocol injects, so the manifest
+	* is loaded once per folder and handed straight through.
+	*/
+	function loadFolderResolver(folder, options = {}) {
+		const exists = options.existsSync ?? existsSync$2;
+		const load = options.requireModule ?? defaultRequire;
+		for (const name of PLUG_AND_PLAY_FILES) {
+			const path = join$2(folder, name);
+			if (!exists(path)) continue;
+			let api;
+			try {
+				api = load(path);
+			} catch {
+				continue;
+			}
+			if (typeof api?.resolveRequest === "function") return (request, issuer) => api.resolveRequest(request, issuer);
+		}
+	}
+	function emptyIndex(root) {
+		return {
+			root,
+			providers: [],
+			extensions: {},
+			diagnostics: []
+		};
+	}
+	/**
+	* Discover the providers of exactly one workspace folder.
+	*
+	* Discovery never throws at the host: protocol violations come back as
+	* diagnostics so the editor can report them and still serve every other folder.
+	* A folder whose discovery fails outright degrades to an empty index, which is
+	* the host's pre-existing behavior by construction.
+	*/
+	async function discoverWorkspaceFolder(folder, options = {}) {
+		const { discover } = options;
+		if (typeof discover !== "function") throw new TypeError("discoverWorkspaceFolder requires a discover(options) function");
+		const resolve = options.resolve ?? loadFolderResolver(folder, options);
+		let index = emptyIndex(folder);
+		let failure = null;
+		try {
+			index = await discover({
+				root: folder,
+				resolve,
+				readFile: options.readFile,
+				throwOnError: false
+			}) ?? emptyIndex(folder);
+		} catch (error) {
+			failure = error instanceof Error ? error : new Error(String(error));
+		}
+		const extensions = indexExtensions(index);
+		return {
+			folder,
+			index,
+			extensions,
+			selector: providerDocumentSelector(extensions),
+			clients: providerLanguageClients(index, options),
+			diagnostics: index?.diagnostics ?? [],
+			failure
+		};
+	}
+	/** One independent state per folder. Indexes are never combined. */
+	async function discoverWorkspaceFolders(folders, options = {}) {
+		const states = [];
+		for (const folder of folders ?? []) states.push(await discoverWorkspaceFolder(folder, options));
+		return states;
+	}
+	/** The client that owns a document, or `null` when the folder's index does not. */
+	function clientForDocument(state, documentPath) {
+		const extension = documentExtension(documentPath);
+		if (extension === null) return null;
+		const owner = state?.index?.extensions?.[extension];
+		if (owner === void 0) return null;
+		return (state.clients ?? []).find((client) => client.package === owner.package && client.extensions.includes(extension)) ?? null;
+	}
+	/**
+	* The clients a host should have running for a set of open documents.
+	*
+	* Each document carries the folder it belongs to; a document is only ever
+	* matched against that folder's state. A document that belongs to no folder, or
+	* whose extension its folder's index does not own, contributes nothing — which
+	* is why a session of ordinary source files starts no provider process at all.
+	*/
+	function plannedClientStarts(states, documents) {
+		const byFolder = new Map((states ?? []).map((state) => [state.folder, state]));
+		const started = /* @__PURE__ */ new Set();
+		const starts = [];
+		for (const document of documents ?? []) {
+			const state = byFolder.get(document?.folder);
+			if (state === void 0) continue;
+			const client = clientForDocument(state, document?.path);
+			if (client === null) continue;
+			const key = `${state.folder} ${client.id}`;
+			if (started.has(key)) continue;
+			started.add(key);
+			starts.push({
+				folder: state.folder,
+				client,
+				document: document.path
+			});
+		}
+		return starts;
+	}
+	module.exports = {
+		LANGUAGE_SERVER_ARGUMENTS,
+		LANGUAGE_SERVER_CAPABILITY,
+		PLUG_AND_PLAY_FILES,
+		clientForDocument,
+		discoverWorkspaceFolder,
+		discoverWorkspaceFolders,
+		documentExtension,
+		loadFolderResolver,
+		plannedClientStarts,
+		providerDocumentSelector,
+		providerLanguageClients
+	};
+}));
+//#endregion
+//#region packages/toolchain/dist/native-targets.js
 function nativeTargetForHost(os, cpu, libc = void 0) {
 	const target = NATIVE_TARGETS.find((candidate) => candidate.os === os && candidate.cpu === cpu && (candidate.os !== "linux" || candidate.libc === libc));
-	if (!target) {
+	if (target === void 0) {
 		const identity = `${os}-${cpu}${libc ? `-${libc}` : ""}`;
-		throw new Error(`OXC for TSRX has no native package for ${identity}`);
+		throw new RangeError(`OXC for TSRX has no native package for ${identity}`);
 	}
 	return target;
 }
@@ -21862,7 +22584,7 @@ function nativePackageName(target) {
 	return `@oxc-tsrx/native-${target.packageSuffix}`;
 }
 var NATIVE_TARGETS;
-var init_targets = __esmMin((() => {
+var init_native_targets = __esmMin((() => {
 	NATIVE_TARGETS = Object.freeze([
 		Object.freeze({
 			target: "aarch64-apple-darwin",
@@ -21927,7 +22649,7 @@ var init_targets = __esmMin((() => {
 	]);
 }));
 //#endregion
-//#region packages/runtime/dist/package-binary.js
+//#region packages/toolchain/dist/package-binary.js
 /** Resolve the executable declared by an installed npm package's `bin` field. */
 function resolvePackageBinary(packageName, binaryName, fromUrl) {
 	const localRequire = (0, node_module.createRequire)(fromUrl);
@@ -21947,7 +22669,7 @@ function resolvePackageBinary(packageName, binaryName, fromUrl) {
 }
 var init_package_binary = __esmMin((() => {}));
 //#endregion
-//#region packages/runtime/dist/process.js
+//#region packages/toolchain/dist/process.js
 function traceRunStart(trace, started, executable, args) {
 	(0, node_fs.appendFileSync)(trace, `${JSON.stringify({
 		event: "start",
@@ -22150,7 +22872,7 @@ function sync(root, options) {
 	return new Walker(root, options).start();
 }
 var __require, SLASHES_REGEX, WINDOWS_ROOT_DIR_REGEX, pushDirectory, pushDirectoryFilter, empty$2, pushFileFilterAndCount, pushFileFilter, pushFileCount, pushFile, empty$1, getArray, getArrayGroup, groupFiles, empty, resolveSymlinksAsync, resolveSymlinks, onlyCountsSync, groupsSync, defaultSync, limitFilesSync, onlyCountsAsync, defaultAsync, limitFilesAsync, groupsAsync, readdirOpts, walkAsync, walkSync, Queue, Counter, Aborter, Walker, APIBuilder, pm, Builder;
-var init_dist$2 = __esmMin((() => {
+var init_dist$1 = __esmMin((() => {
 	__require = /* @__PURE__ */ (0, module$1.createRequire)(require("url").pathToFileURL(__filename).href);
 	SLASHES_REGEX = /[\\/]/g;
 	WINDOWS_ROOT_DIR_REGEX = /^[a-z]:[\\/]$/i;
@@ -24441,7 +25163,7 @@ var require_picomatch = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 }));
 //#endregion
 //#region node_modules/tinyglobby/dist/index.mjs
-var dist_exports$1 = /* @__PURE__ */ __exportAll({
+var dist_exports = /* @__PURE__ */ __exportAll({
 	convertPathToPattern: () => convertPathToPattern,
 	escapePath: () => escapePath,
 	glob: () => glob,
@@ -24540,7 +25262,7 @@ function isDynamicPattern(pattern, options) {
 	const scan = import_picomatch.default.scan(pattern);
 	return scan.isGlob || scan.negated;
 }
-function log(...tasks) {
+function log$1(...tasks) {
 	console.log(`[tinyglobby ${(/* @__PURE__ */ new Date()).toLocaleTimeString("es")}]`, ...tasks);
 }
 function ensureStringArray(value) {
@@ -24614,7 +25336,7 @@ function buildCrawler(options, patterns) {
 		depthOffset: 0
 	};
 	const processed = processPatterns(options, patterns, props);
-	if (options.debug) log("internal processing patterns:", processed);
+	if (options.debug) log$1("internal processing patterns:", processed);
 	const { absolute, caseSensitiveMatch, debug, dot, followSymbolicLinks, onlyDirectories } = options;
 	const root = props.root.replace(BACKSLASHES, "");
 	const matchOptions = {
@@ -24640,7 +25362,7 @@ function buildCrawler(options, patterns) {
 		filters: [debug ? (p, isDirectory) => {
 			const path$9 = format(p, isDirectory);
 			const matches = matcher(path$9) && !ignore(path$9);
-			if (matches) log(`matched ${path$9}`);
+			if (matches) log$1(`matched ${path$9}`);
 			return matches;
 		} : (p, isDirectory) => {
 			const path$10 = format(p, isDirectory);
@@ -24648,7 +25370,7 @@ function buildCrawler(options, patterns) {
 		}],
 		exclude: debug ? (_, p) => {
 			const skipped = excludePredicate(_, p);
-			log(`${skipped ? "skipped" : "crawling"} ${p}`);
+			log$1(`${skipped ? "skipped" : "crawling"} ${p}`);
 			return skipped;
 		} : excludePredicate,
 		fs: options.fs,
@@ -24663,7 +25385,7 @@ function buildCrawler(options, patterns) {
 		maxDepth,
 		signal: options.signal
 	}).crawl(root);
-	if (options.debug) log("internal properties:", {
+	if (options.debug) log$1("internal properties:", {
 		...props,
 		root
 	});
@@ -24686,7 +25408,7 @@ function getOptions(options) {
 		stat: opts.fs.stat || fs.stat,
 		statSync: opts.fs.statSync || fs.statSync
 	});
-	if (opts.debug) log("globbing with options:", opts);
+	if (opts.debug) log$1("globbing with options:", opts);
 	return opts;
 }
 function getCrawler(globInput, inputOptions = {}) {
@@ -24706,8 +25428,8 @@ function globSync(globInput, options) {
 	return crawler ? formatPaths(crawler.sync(), relative) : [];
 }
 var import_picomatch, isReadonlyArray, BACKSLASHES, DRIVE_RELATIVE_PATH, isWin, ONLY_PARENT_DIRECTORIES, WIN32_ROOT_DIR, isRoot, splitPatternOptions, ESCAPED_WIN32_BACKSLASHES, convertPathToPattern, POSIX_UNESCAPED_GLOB_SYMBOLS, WIN32_UNESCAPED_GLOB_SYMBOLS, escapePosixPath, escapeWin32Path, escapePath, PARENT_DIRECTORY, ESCAPING_BACKSLASHES, defaultOptions;
-var init_dist$1 = __esmMin((() => {
-	init_dist$2();
+var init_dist = __esmMin((() => {
+	init_dist$1();
 	import_picomatch = /* @__PURE__ */ __toESM(require_picomatch(), 1);
 	isReadonlyArray = Array.isArray;
 	BACKSLASHES = /\\/g;
@@ -24735,13 +25457,14 @@ var init_dist$1 = __esmMin((() => {
 	};
 }));
 //#endregion
-//#region packages/runtime/dist/index.js
-var dist_exports = /* @__PURE__ */ __exportAll({
+//#region packages/toolchain/dist/runtime.js
+var runtime_exports = /* @__PURE__ */ __exportAll({
 	argumentValue: () => argumentValue,
 	canonicalToolEnvironment: () => canonicalToolEnvironment,
 	discoverTsrxFiles: () => discoverTsrxFiles,
 	ensureSupportedOutput: () => ensureSupportedOutput,
 	isViteConfigPath: () => isViteConfigPath,
+	nativeSubcommand: () => nativeSubcommand,
 	pathExists: () => pathExists,
 	platformPackage: () => platformPackage,
 	positionalIndices: () => positionalIndices,
@@ -24750,6 +25473,7 @@ var dist_exports = /* @__PURE__ */ __exportAll({
 	replaceConfigArgument: () => replaceConfigArgument,
 	requestedOutputFormat: () => requestedOutputFormat,
 	resolveNativeBinary: () => resolveNativeBinary,
+	resolveNativeCommand: () => resolveNativeCommand,
 	resolvePackageBinary: () => resolvePackageBinary,
 	runCaptured: () => runCaptured,
 	runPassthrough: () => runPassthrough
@@ -24783,21 +25507,39 @@ function validateNativeManifest(manifest, packageName, executable) {
 }
 function resolveNativeBinary(kind) {
 	const environment = ENVIRONMENTS[kind];
-	const executable = EXECUTABLES[kind];
-	if (!environment || !executable) throw new Error(`unknown native binary kind: ${kind}`);
+	if (!environment || !SUBCOMMANDS[kind]) throw new Error(`unknown native binary kind: ${kind}`);
 	const explicit = process.env[environment];
 	if (explicit) return assertExecutable((0, node_path.resolve)(explicit), environment);
 	const packageName = platformPackage();
 	let packageRoot;
 	try {
 		const manifestPath = require$1.resolve(`${packageName}/package.json`);
-		validateNativeManifest(require$1(manifestPath), packageName, executable);
+		validateNativeManifest(require$1(manifestPath), packageName, EXECUTABLE);
 		packageRoot = (0, node_path.dirname)(manifestPath);
 	} catch (error) {
 		const detail = error instanceof Error ? error.message : String(error);
 		throw new Error(`OXC for TSRX native package ${packageName} is unavailable; install it or set ${environment}. ${detail}`);
 	}
-	return assertExecutable((0, node_path.join)(packageRoot, "bin", executable), packageName);
+	return assertExecutable((0, node_path.join)(packageRoot, "bin", EXECUTABLE), packageName);
+}
+/**
+* The subcommand arguments a native invocation of `kind` must lead with. Every
+* caller that spawns a native binary prepends these to its own argument vector.
+*/
+function nativeSubcommand(kind) {
+	const subcommand = SUBCOMMANDS[kind];
+	if (!subcommand) throw new Error(`unknown native binary kind: ${kind}`);
+	return [...subcommand];
+}
+/**
+* The complete native invocation for `kind`: the multi-call executable plus the
+* caller's arguments behind the subcommand that selects the tool.
+*/
+function resolveNativeCommand(kind, args = []) {
+	return {
+		executable: resolveNativeBinary(kind),
+		args: [...nativeSubcommand(kind), ...args]
+	};
 }
 function findViteConfig(cwd) {
 	let directory = (0, node_path.resolve)(cwd);
@@ -24983,7 +25725,7 @@ async function discoverTsrxFiles(positionals, cwd = process.cwd()) {
 	const patterns = [];
 	await classifyPatterns(positionals.length === 0 ? ["."] : positionals, cwd, positives, patterns);
 	if (patterns.length > 0) {
-		const { glob } = await Promise.resolve().then(() => (init_dist$1(), dist_exports$1));
+		const { glob } = await Promise.resolve().then(() => (init_dist(), dist_exports));
 		const matches = await glob(patterns, {
 			cwd,
 			absolute: true,
@@ -25023,24 +25765,25 @@ function ensureSupportedOutput(format, files) {
 function pathExists(path) {
 	return (0, node_fs.existsSync)(path);
 }
-var require$1, runtimeManifest, NATIVE_PROTOCOL_VERSION, OXC_REVISION, ENVIRONMENTS, EXECUTABLES, VITE_CONFIG_FILES;
-var init_dist = __esmMin((() => {
-	init_targets();
+var require$1, runtimeManifest, NATIVE_PROTOCOL_VERSION, OXC_REVISION, ENVIRONMENTS, EXECUTABLE, SUBCOMMANDS, VITE_CONFIG_FILES;
+var init_runtime = __esmMin((() => {
+	init_native_targets();
 	init_package_binary();
 	init_process();
 	require$1 = (0, node_module.createRequire)(require("url").pathToFileURL(__filename).href);
 	runtimeManifest = require$1("../package.json");
-	NATIVE_PROTOCOL_VERSION = 1;
+	NATIVE_PROTOCOL_VERSION = 2;
 	OXC_REVISION = "8e0ed2ebb96137fb1611cdbd5742d5cb46037d40";
 	ENVIRONMENTS = {
 		lint: "OXC_TSRX_LINT_BIN",
 		format: "OXC_TSRX_FORMAT_BIN",
 		server: "OXC_TSRX_LSP_BIN"
 	};
-	EXECUTABLES = {
-		lint: process.platform === "win32" ? "oxc-tsrx.exe" : "oxc-tsrx",
-		format: process.platform === "win32" ? "oxc-tsrx-fmt.exe" : "oxc-tsrx-fmt",
-		server: process.platform === "win32" ? "oxc-tsrx-lsp.exe" : "oxc-tsrx-lsp"
+	EXECUTABLE = process.platform === "win32" ? "oxc-tsrx.exe" : "oxc-tsrx";
+	SUBCOMMANDS = {
+		lint: [],
+		format: ["fmt"],
+		server: ["lsp"]
 	};
 	VITE_CONFIG_FILES = [
 		"vite.config.ts",
@@ -25056,8 +25799,39 @@ var init_dist = __esmMin((() => {
 const { isAbsolute, join, resolve } = require("node:path");
 const { existsSync, statSync } = require("node:fs");
 const vscode = require("vscode");
-const { LanguageClient, TransportKind } = require_main();
-let client;
+const { LanguageClient } = require_main();
+const { discoverProviders } = (init_provider_resolve(), __toCommonJS(provider_resolve_exports));
+const { LANGUAGE_SERVER_ARGUMENTS, clientForDocument, discoverWorkspaceFolders, documentExtension, providerDocumentSelector } = require_provider_client();
+/**
+* This extension is a provider-driven host, not a client for one language.
+*
+* Every decision below comes from `./provider-client.cjs`, which knows nothing
+* about any particular provider: discovery runs once per workspace folder, one
+* language client exists per discovered provider that declares a language
+* server, and a client is created only when a document whose extension that
+* folder's index owns is actually opened. A workspace of ordinary JavaScript and
+* TypeScript files therefore starts no process at all.
+*
+* The `oxcTsrx.server.path` / `OXC_TSRX_LSP_BIN` / bundled-binary /
+* toolchain-runtime chain below is a **compatibility-only** fallback for a
+* folder in which discovery finds no provider language server — for example a
+* platform VSIX used against a project that has not declared the toolchain as a
+* dependency. It is lazy in exactly the same way: it starts nothing until a
+* document it claims is opened.
+*/
+/** Extensions the compatibility fallback serves when nothing was discovered. */
+const COMPATIBILITY_EXTENSIONS = Object.freeze([".tsrx"]);
+const COMPATIBILITY_CLIENT_ID = "compatibility";
+const CLIENT_NAME = "OXC for TSRX";
+/** One independent discovery state per workspace folder; never merged. */
+let folderStates = [];
+/** folder path -> (client id -> LanguageClient). */
+const running = /* @__PURE__ */ new Map();
+let channel;
+let extensionRoot;
+function log(message) {
+	channel?.appendLine(message);
+}
 function assertServerPath(path, source) {
 	let metadata;
 	try {
@@ -25068,21 +25842,39 @@ function assertServerPath(path, source) {
 	if (!metadata.isFile()) throw new Error(`OXC for TSRX language server is not a file at ${path} (${source})`);
 	return path;
 }
-function workspaceOptions() {
-	return (vscode.workspace.workspaceFolders ?? []).map((folder) => {
-		const config = vscode.workspace.getConfiguration("oxcTsrx", folder.uri);
-		return {
-			workspaceUri: folder.uri.toString(),
-			options: {
-				typeAware: config.get("typeAware", false) || config.get("typeCheck", false),
-				typeCheck: config.get("typeCheck", false),
-				lintConfigPath: config.get("lint.configPath", ""),
-				formatConfigPath: config.get("format.configPath", "")
-			}
-		};
-	});
+function folderOptions(folderUri) {
+	const config = vscode.workspace.getConfiguration("oxcTsrx", folderUri);
+	return {
+		workspaceUri: folderUri.toString(),
+		options: {
+			typeAware: config.get("typeAware", false) || config.get("typeCheck", false),
+			typeCheck: config.get("typeCheck", false),
+			lintConfigPath: config.get("lint.configPath", ""),
+			formatConfigPath: config.get("format.configPath", "")
+		}
+	};
 }
-async function resolveServer(context) {
+/**
+* Initialization options stay scoped to the folder the client serves, so two
+* workspace folders never see each other's configuration.
+*/
+function workspaceOptions(folderPath) {
+	return (vscode.workspace.workspaceFolders ?? []).filter((folder) => folder.uri.fsPath === folderPath).map((folder) => folderOptions(folder.uri));
+}
+/**
+* The subcommand that selects the language server inside the native
+* multi-call executable. One `oxc-tsrx` binary replaced the three separate
+* release binaries, and it dispatches on `argv[0]` as well, but a VSIX-embedded
+* or configured path is spawned under its real file name, so the compatibility
+* fallback always asks for the tool explicitly. Discovered provider servers are
+* unaffected: they keep the plain provider-protocol argument vector.
+*/
+const NATIVE_SERVER_SUBCOMMAND = Object.freeze(["lsp"]);
+/**
+* Compatibility-only resolution chain. Unchanged from the pre-discovery host
+* except for the native artifact it names.
+*/
+async function resolveCompatibilityServer() {
 	const configured = vscode.workspace.getConfiguration("oxcTsrx").get("server.path", "");
 	if (configured) {
 		if (!isAbsolute(configured)) throw new Error("oxcTsrx.server.path must be an absolute trusted machine path");
@@ -25090,52 +25882,139 @@ async function resolveServer(context) {
 	}
 	const environment = process.env.OXC_TSRX_LSP_BIN;
 	if (environment) return assertServerPath(resolve(environment), "OXC_TSRX_LSP_BIN");
-	const executable = process.platform === "win32" ? "oxc-tsrx-lsp.exe" : "oxc-tsrx-lsp";
-	const bundled = join(context.extensionPath, "dist", "native", executable);
+	const executable = process.platform === "win32" ? "oxc-tsrx.exe" : "oxc-tsrx";
+	const bundled = join(extensionRoot ?? "", "dist", "native", executable);
 	if (existsSync(bundled)) return assertServerPath(bundled, "platform VSIX");
-	const { resolveNativeBinary } = await Promise.resolve().then(() => (init_dist(), dist_exports));
+	const { resolveNativeBinary } = await Promise.resolve().then(() => (init_runtime(), runtime_exports));
 	return resolveNativeBinary("server");
 }
+async function compatibilityDescriptor(documentPath) {
+	const extension = documentExtension(documentPath);
+	if (extension === null || !COMPATIBILITY_EXTENSIONS.includes(extension)) return null;
+	return {
+		id: COMPATIBILITY_CLIENT_ID,
+		package: null,
+		extensions: [...COMPATIBILITY_EXTENSIONS],
+		command: await resolveCompatibilityServer(),
+		args: [...NATIVE_SERVER_SUBCOMMAND, ...LANGUAGE_SERVER_ARGUMENTS],
+		selector: providerDocumentSelector(COMPATIBILITY_EXTENSIONS)
+	};
+}
+/**
+* The descriptor that owns a document, or `null`. A folder with at least one
+* discovered provider language server is served exclusively by discovery; the
+* compatibility chain is consulted only when discovery produced no client.
+*/
+async function descriptorForDocument(state, documentPath) {
+	if (state.clients.length > 0) return clientForDocument(state, documentPath);
+	return compatibilityDescriptor(documentPath);
+}
+/**
+* A provider bin with a Node shebang is started under this editor's own runtime,
+* which `provider-client.cjs` reports as `process.execPath`. In an Electron host
+* that path is the editor binary, and it only behaves as Node when
+* `ELECTRON_RUN_AS_NODE` is set. That is host knowledge, so the host supplies it
+* here instead of the vendor-neutral decision module guessing at it. Any other
+* command is spawned with this process's environment unchanged.
+*/
+function serverEnvironment(descriptor) {
+	if (descriptor.command !== process.execPath) return void 0;
+	return {
+		...process.env,
+		ELECTRON_RUN_AS_NODE: "1",
+		ELECTRON_NO_ASAR: "1"
+	};
+}
+async function startClient(state, descriptor) {
+	const clients = running.get(state.folder) ?? /* @__PURE__ */ new Map();
+	running.set(state.folder, clients);
+	if (clients.has(descriptor.id)) return;
+	const executable = {
+		command: descriptor.command,
+		args: descriptor.args,
+		options: {
+			cwd: state.folder,
+			env: serverEnvironment(descriptor)
+		}
+	};
+	const client = new LanguageClient(`oxc-provider-${descriptor.id}`, descriptor.package ? `${CLIENT_NAME} (${descriptor.package})` : CLIENT_NAME, {
+		run: executable,
+		debug: executable
+	}, {
+		documentSelector: descriptor.selector,
+		workspaceFolder: vscode.workspace.getWorkspaceFolder(vscode.Uri.file(state.folder)),
+		initializationOptions: workspaceOptions(state.folder)
+	});
+	clients.set(descriptor.id, client);
+	try {
+		await client.start();
+		log(`started ${descriptor.id} for ${descriptor.extensions.join(", ")} in ${state.folder}`);
+	} catch (error) {
+		clients.delete(descriptor.id);
+		log(`could not start ${descriptor.id} in ${state.folder}: ${error instanceof Error ? error.message : String(error)}`);
+	}
+}
+/**
+* Lazy start. A document that no folder index claims never reaches `startClient`,
+* which is what keeps ordinary source files off every provider path.
+*/
+async function ensureClientForDocument(document) {
+	if (document?.uri?.scheme !== "file") return;
+	const folder = vscode.workspace.getWorkspaceFolder(document.uri);
+	if (!folder) return;
+	const folderPath = folder.uri.fsPath;
+	const state = folderStates.find((entry) => entry.folder === folderPath);
+	if (state === void 0) return;
+	let descriptor;
+	try {
+		descriptor = await descriptorForDocument(state, document.uri.fsPath);
+	} catch (error) {
+		log(`no language server is available in ${folderPath}: ${error instanceof Error ? error.message : String(error)}`);
+		return;
+	}
+	if (descriptor === null) return;
+	await startClient(state, descriptor);
+}
+async function stopFolder(folderPath) {
+	const clients = running.get(folderPath);
+	if (clients === void 0) return;
+	running.delete(folderPath);
+	for (const client of clients.values()) await client.stop().catch(() => {});
+}
+function reportDiagnostics(state) {
+	for (const entry of state.diagnostics) if (entry.severity === "error" || entry.severity === "warning") log(`${entry.severity}: ${entry.message}`);
+	if (state.failure) log(`provider discovery failed in ${state.folder}: ${state.failure.message}`);
+}
+async function refreshWorkspace() {
+	const folders = (vscode.workspace.workspaceFolders ?? []).map((folder) => folder.uri.fsPath);
+	folderStates = await discoverWorkspaceFolders(folders, { discover: discoverProviders });
+	for (const state of folderStates) reportDiagnostics(state);
+	const known = new Set(folders);
+	for (const folderPath of [...running.keys()]) if (!known.has(folderPath)) await stopFolder(folderPath);
+	for (const document of vscode.workspace.textDocuments) await ensureClientForDocument(document);
+}
 function synchronizeWorkspaceOptions() {
-	if (!client) return;
-	client.sendNotification("workspace/didChangeConfiguration", { settings: workspaceOptions() }).catch((error) => {
+	for (const [folderPath, clients] of running) for (const client of clients.values()) client.sendNotification("workspace/didChangeConfiguration", { settings: workspaceOptions(folderPath) }).catch((error) => {
 		console.error("OXC for TSRX could not apply workspace settings", error);
 	});
 }
 async function activate(context) {
 	if (!vscode.workspace.getConfiguration("oxcTsrx").get("enable", true)) return;
-	const command = await resolveServer(context);
-	const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-	const serverOptions = {
-		run: {
-			command,
-			transport: TransportKind.stdio,
-			options: { cwd }
-		},
-		debug: {
-			command,
-			transport: TransportKind.stdio,
-			options: { cwd }
-		}
-	};
-	const clientOptions = {
-		documentSelector: [{
-			scheme: "file",
-			pattern: "**/*.tsrx"
-		}],
-		initializationOptions: workspaceOptions()
-	};
-	client = new LanguageClient("oxc-tsrx", "OXC for TSRX", serverOptions, clientOptions);
-	context.subscriptions.push(client);
-	await client.start();
-	context.subscriptions.push(vscode.workspace.onDidChangeConfiguration((event) => {
+	extensionRoot = context.extensionPath;
+	channel = vscode.window.createOutputChannel(CLIENT_NAME);
+	context.subscriptions.push(channel);
+	await refreshWorkspace();
+	context.subscriptions.push(vscode.workspace.onDidOpenTextDocument((document) => {
+		ensureClientForDocument(document);
+	}), vscode.workspace.onDidChangeWorkspaceFolders(() => {
+		refreshWorkspace();
+	}), vscode.workspace.onDidChangeConfiguration((event) => {
 		if (event.affectsConfiguration("oxcTsrx")) synchronizeWorkspaceOptions();
-	}), vscode.workspace.onDidChangeWorkspaceFolders(synchronizeWorkspaceOptions));
+	}));
 }
 async function deactivate() {
-	if (!client) return;
-	await client.stop();
-	client = void 0;
+	for (const folderPath of [...running.keys()]) await stopFolder(folderPath);
+	folderStates = [];
 }
 module.exports = {
 	activate,

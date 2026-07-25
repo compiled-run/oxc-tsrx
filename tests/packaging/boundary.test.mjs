@@ -155,7 +155,7 @@ test("canonical OXC crates resolve through one exact adapter revision", async ()
       readFile(adapterManifestPath, "utf8"),
       readFile(adapterSourcePath, "utf8"),
       readFile(join(root, "Cargo.lock"), "utf8"),
-      readFile(join(root, "packages/runtime/dist/index.js"), "utf8"),
+      readFile(join(root, "packages/toolchain/dist/runtime.js"), "utf8"),
       readFile(join(root, "scripts/package-native.mjs"), "utf8"),
       readFile(join(root, "scripts/package-vscode.mjs"), "utf8"),
     ]);

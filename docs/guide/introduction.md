@@ -8,7 +8,7 @@ description: What OXC for TSRX is, how it works in plain terms, and what it prom
 OXC for TSRX lets you lint and format `.tsrx` files with [OXC](https://oxc.rs),
 the same fast Rust tools behind Oxlint and Oxfmt, without forking or
 patching OXC in any way. The parser behind those tools is also available as
-a library, [`@oxc-tsrx/parser`](/guide/parsing), for building your own
+a library, [`oxc-tsrx/parser`](/guide/parsing), for building your own
 tooling.
 
 ## The problem it solves
@@ -48,8 +48,10 @@ straight to OXC, byte-for-byte identical to running the stock tools.
 - 🧠 **Opt-in type-aware rules.** `--type-aware` adds the official tsgolint
   rules, `--type-check` adds full TypeScript diagnostics. The default lane
   starts zero type processes. See [Linting](/guide/linting).
-- ✏️ **Editor support.** A native language server plus a thin VS Code
-  companion: live diagnostics, format-on-save, and validated quick fixes. See
+- ✏️ **Editor support.** The released official OXC extension selects the
+  project-local `oxlint` command that `oxc-tsrx` supplies, by that literal name,
+  not by reading provider metadata. That command multiplexes canonical JS/TS
+  plus native TSRX live diagnostics, formatting, and validated quick fixes. See
   [Editor integration](/integrations/editor).
 - 🔗 **No fork.** Every OXC call lives in one adapter crate pinned to a single
   upstream commit. Upgrading OXC means updating that one crate.
@@ -58,22 +60,24 @@ straight to OXC, byte-for-byte identical to running the stock tools.
 
 ## The commands
 
-Install the npm packages `oxlint-tsrx` and `oxfmt-tsrx` and you get the
-familiar commands, now with TSRX support:
+Install `oxc-tsrx` and you get the familiar commands, now with TSRX support:
 
 <!-- terminal-demo:introduction-commands -->
 
 Both read your normal Oxlint/Oxfmt JSON config once per run and reuse it for
-every file. Each command runs a native Rust binary (`oxc-tsrx` and
-`oxc-tsrx-fmt`; a third one, `oxc-tsrx-lsp`, serves the same engines to
-editors). See [Getting Started](/guide/getting-started) to install or
-build them, and the [CLI reference](/reference/cli) for every flag.
+every file. Every command runs the same native Rust binary, `oxc-tsrx`, which
+carries the linter, the formatter, and the editor language server and picks one
+by subcommand. You download it once instead of three near-copies. See
+[Getting Started](/guide/getting-started) to install or build it, and the
+[CLI reference](/reference/cli) for every flag.
 
 ## What it deliberately is not
 
-- **Not a Vite plugin.** Your framework plugin keeps owning compilation, CSS,
-  source maps, and HMR. This project adds nothing to your build or dev
-  server. See [Vite and Vite+](/integrations/vite-plus).
+- **Not a required Vite compiler plugin.** Your framework plugin keeps owning
+  compilation, CSS, source maps, and HMR, and this project adds nothing to your
+  build or dev server. (There is an optional, in-repo example that lets one of
+  your own Vite plugins read the authored TSRX AST, but it is not required and
+  not part of compilation.) See [Vite and Vite+](/integrations/vite-plus).
 - **Not a CSS formatter.** Whatever is inside a raw `<style>` block is kept
   byte-for-byte, never reformatted or validated.
 - **Not finished.** Some syntax and config features aren't supported yet, and

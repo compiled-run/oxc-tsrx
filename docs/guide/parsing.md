@@ -1,11 +1,11 @@
 ---
 title: Parsing
-description: Parse .tsrx and ordinary JS/TS into a real AST with @oxc-tsrx/parser, the oxc-parser style API with TSRX support.
+description: Parse .tsrx and ordinary JS/TS into a real AST with oxc-tsrx/parser, the oxc-parser style API with TSRX support.
 ---
 
 # Parsing
 
-`@oxc-tsrx/parser` is the parser behind the lint and format tools, packaged
+`oxc-tsrx/parser` is the parser behind the lint and format tools, exposed
 as a library you can call yourself. It has the same API shape as
 [`oxc-parser`](https://www.npmjs.com/package/oxc-parser), OXC's official npm
 parser, and it handles ordinary JavaScript and TypeScript (`js`, `jsx`, `ts`,
@@ -21,7 +21,7 @@ You need Node.js 20.19 or newer:
 
 <!-- pm-install -->
 ```sh
-npm install @oxc-tsrx/parser
+npm install oxc-tsrx
 ```
 
 Like the CLI tools, the parser is native Rust code. Your package manager
@@ -52,7 +52,7 @@ tree looking for the `@for` node:
 
 ```js
 import { readFileSync } from "node:fs";
-import { parseSync } from "@oxc-tsrx/parser";
+import { parseSync } from "oxc-tsrx/parser";
 
 const source = readFileSync("src/View.tsrx", "utf8");
 const result = parseSync("src/View.tsrx", source);
@@ -148,7 +148,7 @@ JavaScript AST.
 There is also an async entry point with the same signature:
 
 ```js
-import { parse } from "@oxc-tsrx/parser";
+import { parse } from "oxc-tsrx/parser";
 
 const result = await parse("src/View.tsrx", source);
 ```
@@ -188,7 +188,7 @@ installed native build can do, including the pinned OXC revision it was
 built from:
 
 ```js
-import { capabilities } from "@oxc-tsrx/parser";
+import { capabilities } from "oxc-tsrx/parser";
 
 console.log(capabilities.languages);    // ["js", "jsx", "ts", "tsx", "dts", "tsrx"]
 console.log(capabilities.oxcRevision);  // the exact OXC commit

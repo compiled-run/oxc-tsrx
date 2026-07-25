@@ -8,7 +8,9 @@ import test from "node:test";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, "../..");
-const binary = resolve(process.env.OXFMT_BIN ?? join(root, "target/release/oxc-tsrx-fmt"));
+// One multi-call native binary carries the linter, the formatter, and the
+// language server; `fmt` selects the formatter.
+const binary = resolve(process.env.OXFMT_BIN ?? join(root, "target/release/oxc-tsrx"));
 const stock = resolve(join(root, "node_modules/oxfmt-current/bin/oxfmt"));
 
 function run(executable, cwd, args, input = null) {
@@ -28,6 +30,10 @@ function run(executable, cwd, args, input = null) {
     child.once("close", (code, signal) => resolvePromise({ code, signal, stdout, stderr }));
     child.stdin.end(input ?? undefined);
   });
+}
+
+function runFormat(cwd, args, input = null) {
+  return run(binary, cwd, ["fmt", ...args], input);
 }
 
 test("discovers JSONC Oxfmt options for TSRX and preserves ordinary TSX parity", async () => {
@@ -52,8 +58,8 @@ test("discovers JSONC Oxfmt options for TSRX and preserves ordinary TSX parity",
     'export function View({label}:{label:string}) { const message="hello"; return <button title="world">{label}{message}</button>; }\n';
 
   const [tsrxResult, candidateTsx, stockTsx] = await Promise.all([
-    run(binary, cwd, ["--stdin-filepath=View.tsrx"], tsrx),
-    run(binary, cwd, ["--stdin-filepath=View.tsx"], tsx),
+    runFormat(cwd, ["--stdin-filepath=View.tsrx"], tsrx),
+    runFormat(cwd, ["--stdin-filepath=View.tsx"], tsx),
     run(stock, cwd, ["--stdin-filepath=View.tsx"], tsx),
   ]);
   assert.equal(tsrxResult.code, 0, tsrxResult.stderr || tsrxResult.stdout);
@@ -66,7 +72,7 @@ test("discovers JSONC Oxfmt options for TSRX and preserves ordinary TSX parity",
   assert.equal(stockTsx.code, 0, stockTsx.stderr || stockTsx.stdout);
   assert.equal(candidateTsx.stdout, stockTsx.stdout);
 
-  const converged = await run(binary, cwd, ["--stdin-filepath=View.tsrx"], tsrxResult.stdout);
+  const converged = await runFormat(cwd, ["--stdin-filepath=View.tsrx"], tsrxResult.stdout);
   assert.equal(converged.code, 0, converged.stderr || converged.stdout);
   assert.equal(converged.stdout, tsrxResult.stdout);
 });
@@ -91,8 +97,8 @@ test("an explicit config applies per-file TSRX overrides without changing ordina
     'export function View() { const label="hello"; return <p title="world">{label}</p>; }\n';
 
   const [tsrxResult, candidateTsx, stockTsx] = await Promise.all([
-    run(binary, cwd, ["--config", config, "--stdin-filepath=src/View.tsrx"], tsrx),
-    run(binary, cwd, ["--config", config, "--stdin-filepath=src/View.tsx"], tsx),
+    runFormat(cwd, ["--config", config, "--stdin-filepath=src/View.tsrx"], tsrx),
+    runFormat(cwd, ["--config", config, "--stdin-filepath=src/View.tsx"], tsx),
     run(stock, cwd, ["--config", config, "--stdin-filepath=src/View.tsx"], tsx),
   ]);
   assert.equal(tsrxResult.code, 0, tsrxResult.stderr || tsrxResult.stdout);
@@ -131,7 +137,7 @@ test("a materialized Vite format config keeps overrides and ignores rooted at it
   await writeFile(active, source);
   await writeFile(ignored, source);
 
-  const result = await run(binary, cwd, [
+  const result = await runFormat(cwd, [
     "--write",
     "--config",
     config,
@@ -148,7 +154,7 @@ test("a materialized Vite format config keeps overrides and ignores rooted at it
 
   const outside = join(materialized, "outside.tsrx");
   await writeFile(outside, source);
-  const outsideResult = await run(binary, cwd, [
+  const outsideResult = await runFormat(cwd, [
     "--check",
     "--config",
     config,
@@ -183,9 +189,9 @@ test("remaining public JS/TSX layout options retain stock parity and apply in on
     'const data={plain:1,"needs-dash":2}; export function View({first,second}:{first:string;second:string}) @{ const props={plain:data.plain}; <section alpha="one" beta="two" gamma="three"><span>{first}</span> <span>{second}</span>{props.plain}</section>; }\n';
 
   const [candidateTsx, stockTsx, candidateTsrx] = await Promise.all([
-    run(binary, cwd, ["--stdin-filepath=View.tsx"], tsx),
+    runFormat(cwd, ["--stdin-filepath=View.tsx"], tsx),
     run(stock, cwd, ["--stdin-filepath=View.tsx"], tsx),
-    run(binary, cwd, ["--stdin-filepath=View.tsrx"], tsrx),
+    runFormat(cwd, ["--stdin-filepath=View.tsrx"], tsrx),
   ]);
   assert.equal(candidateTsx.code, 0, candidateTsx.stderr || candidateTsx.stdout);
   assert.equal(stockTsx.code, 0, stockTsx.stderr || stockTsx.stdout);
@@ -209,7 +215,7 @@ test("ignorePatterns leave ignored files byte-identical while formatting the res
   await writeFile(included, source);
   await writeFile(ignored, source);
 
-  const result = await run(binary, cwd, ["--write", included, ignored]);
+  const result = await runFormat(cwd, ["--write", included, ignored]);
   assert.equal(result.code, 0, result.stderr || result.stdout);
   assert.notEqual(await readFile(included, "utf8"), source);
   assert.match(await readFile(included, "utf8"), /'hello'/);
@@ -248,7 +254,7 @@ test("unsupported callback-backed options, editorconfig, and JS config modules f
     const cwd = await mkdtemp(join(tmpdir(), `oxc-tsrx-format-${fixture.name}-`));
     const source = 'export function View() @{const value="hello";<p>{value}</p>}\n';
     await writeFile(join(cwd, fixture.configName), fixture.config);
-    const result = await run(binary, cwd, ["--stdin-filepath=View.tsrx"], source);
+    const result = await runFormat(cwd, ["--stdin-filepath=View.tsrx"], source);
     assert.equal(result.code, 2, `${fixture.name}: ${result.stderr || result.stdout}`);
     assert.equal(result.stdout, "", fixture.name);
     assert.match(result.stderr, fixture.pattern, fixture.name);

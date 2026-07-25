@@ -12,6 +12,23 @@ const escapeHtml = (text) =>
     .replaceAll("'", '&#39;')
 const validRuleName = (rule) => typeof rule === 'string' && /^[\w@/-]+$/u.test(rule)
 
+// The "Type error" example: a self-contained snippet plus the real
+// --type-check report for it, from docs/type-error-example.json. The type lane
+// needs tsgolint, which the in-browser wasm engine cannot host, so there the
+// example replays this committed report instead of going silently dead.
+// Carrying its own snippet (rather than patching whatever source the page
+// shows) is what keeps it working on both the hero and the playground.
+// Fetched on click, so the budgeted home page pays nothing for it at load.
+const typeExampleUrl = new URL('../type-error-example.json', import.meta.url)
+let typeExamplePromise = null
+const loadTypeExample = () =>
+  (typeExamplePromise ??= fetch(typeExampleUrl)
+    .then((response) => (response.ok ? response.json() : null))
+    .then((parsed) =>
+      typeof parsed?.tsrx === 'string' && Array.isArray(parsed.diagnostics) ? parsed : null,
+    )
+    .catch(() => null))
+
 // The API lives under the site's base path (e.g. /oxc-tsrx/api/...); this
 // module lives at <base>/assets/, so resolve relative to the module URL.
 const apiUrl = (endpoint) => new URL(`../api/${endpoint}`, import.meta.url)
@@ -118,6 +135,10 @@ export async function initDemo(panel) {
   const shareButton = panel.querySelector('#demo-share')
   const sidePanel = document.getElementById('pg-side')
   const original = pre.textContent
+  // A committed report standing in for a result the live engine cannot
+  // produce. Applies only to the exact source it was generated from, so any
+  // edit falls straight back to the engine.
+  let pinnedReport = null
 
   if (wasmMode) {
     if (typeof SharedArrayBuffer === 'undefined') {
@@ -561,10 +582,10 @@ export async function initDemo(panel) {
           const options = lintOptions()
           const useJson =
             options.typeAware || options.typeCheck || options.config || options.filters
-          const result = await api(
-            'lint',
-            useJson ? JSON.stringify({ source: text, ...options }) : text,
-          )
+          const result =
+            pinnedReport && text === pinnedReport.source
+              ? pinnedReport.result
+              : await api('lint', useJson ? JSON.stringify({ source: text, ...options }) : text)
           if (generation !== lintGeneration || textarea.value !== text) return
           if (result.error) {
             renderDiagnostics(text, [])
@@ -617,7 +638,8 @@ export async function initDemo(panel) {
             const bits = [`${result.parseCount} canonical parse`]
             if (result.ruleCount) bits.push(`${result.ruleCount} rules`)
             bits.push(result.typeAware ? 'type-aware' : 'diagnostics on original bytes')
-            if (engineState.typeCheck) bits.push('--type-check')
+            if (result.pregenerated) bits.push('--type-check', 'pre-generated report')
+            else if (engineState.typeCheck) bits.push('--type-check')
             else if (engineState.typeAware) bits.push('--type-aware')
             if (engineState.config) bits.push('--config')
             for (const filter of engineState.filters) {
@@ -1201,9 +1223,15 @@ export async function initDemo(panel) {
       autoFormat: true,
     },
     types: {
-      make: () => original.replace('{task.label}', '{task.titel}'),
+      // Not derived from `original`: the hero snippet has no task.label to
+      // patch, and references components it never declares, so type-checking
+      // it buries the real error under "Cannot find name".
+      typeLane: true,
       state: { typeAware: true, typeCheck: true },
       note: 'task.titel is a typo. Ran with --type-check: the real TypeScript compiler flags it.',
+      // Shown when the live engine has no type lane (the published wasm build).
+      pregeneratedNote:
+        'task.titel is a typo. tsgolint cannot run in the browser, so this is the real --type-check report, replayed from the build.',
     },
     silence: {
       make: lintVariant,
@@ -1222,28 +1250,61 @@ export async function initDemo(panel) {
       note: 'console.log becomes an error via --config { "rules": { "no-console": "error" } }.',
     },
   }
+  // The hero keeps its note hidden until an example is clicked.
   const scenarioNote = document.getElementById('pg-scenario-note')
+  const showScenarioNote = (text) => {
+    if (!scenarioNote) return
+    scenarioNote.textContent = text
+    scenarioNote.hidden = false
+  }
   let autoFormatTimer = null
   for (const [name, scenario] of Object.entries(scenarios)) {
-    document.getElementById(`pg-scenario-${name}`)?.addEventListener('click', () => {
+    const button = document.getElementById(`pg-scenario-${name}`)
+    if (!button) continue
+    button.addEventListener('click', async () => {
       clearTimeout(autoFormatTimer)
       engineState.typeAware = false
       engineState.typeCheck = false
       engineState.config = undefined
       engineState.filters = []
+      pinnedReport = null
       let note = scenario.note
-      if (scenario.state) {
-        if ((scenario.state.typeAware || scenario.state.typeCheck) && !health.typeAware) {
-          note = 'Type-aware runs need oxlint-tsgolint on the local server; loaded the variant with syntax lint only.'
-        } else {
-          Object.assign(engineState, scenario.state)
+      let source
+
+      if (scenario.typeLane) {
+        const example = await loadTypeExample()
+        if (!example) {
+          showScenarioNote('The type-error example could not be loaded.')
+          return
         }
+        source = example.tsrx
+        if (health.typeAware) {
+          Object.assign(engineState, scenario.state)
+        } else {
+          // No live type lane here. Replay the committed real report so the
+          // example still shows the underline it promises.
+          note = scenario.pregeneratedNote
+          pinnedReport = {
+            source: example.tsrx,
+            result: {
+              diagnostics: example.diagnostics,
+              parseCount: example.parseCount ?? null,
+              ruleCount: example.ruleCount ?? null,
+              typeAware: true,
+              pregenerated: true,
+            },
+          }
+        }
+      } else {
+        source = scenario.make()
+        if (scenario.state) Object.assign(engineState, scenario.state)
       }
-      applySource(scenario.make())
+
+      applySource(source)
       if (scenario.autoFormat) {
         autoFormatTimer = setTimeout(doFormat, 900)
       }
-      if (scenarioNote) scenarioNote.textContent = note
+      showScenarioNote(note)
     })
   }
 

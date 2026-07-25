@@ -85,6 +85,69 @@ jobs:
           npm test
           npm run test:packaging:unit
 
+  install-arbitration:
+    # The install-only route reaches a released host through `node_modules/.bin`,
+    # and every step of it is platform shaped: npm links a symlink on POSIX and
+    # generates `.cmd`/`.ps1` shims on Windows, an extensionless Node wrapper is
+    # executable on POSIX and not on Windows, and a drive-lettered path is not a
+    # module specifier. These lanes had never run outside one developer's macOS
+    # machine, so a Windows runner is what makes the claim checkable at all.
+    name: Install and arbitration (${{ matrix.runner }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            expected_platform: linux
+          - runner: windows-latest
+            expected_platform: win32
+    steps:
+      - name: Check out the exact source revision
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Install Node.js 24.15.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.15.0
+          cache: npm
+
+      - name: Prove the runner is the platform this lane claims to cover
+        shell: bash
+        env:
+          EXPECTED_PLATFORM: ${{ matrix.expected_platform }}
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+          assert.equal(process.platform, process.env.EXPECTED_PLATFORM);
+          NODE
+
+      - name: Install Rust 1.95.0
+        shell: bash
+        run: |
+          rustup toolchain install 1.95.0 --profile minimal
+          rustup default 1.95.0
+          rustc -Vv
+
+      - name: Install the locked JavaScript graph without lifecycle scripts
+        run: npm ci --ignore-scripts
+
+      - name: Build the distributable native executables and parser addon
+        shell: bash
+        run: |
+          npm run build:native
+          npm run build:parser-native
+
+      - name: Exercise a plain install against released hosts
+        run: npm run test:packaging:released-hosts
+
+      - name: Exercise the package-manager provider matrix
+        run: npm run test:packaging:providers
+
+      - name: Test the package contracts
+        run: npm run test:packaging:unit
+
   supported-vite-plus:
     name: Clean install / Vite+ 0.1.24 and 0.2.4
     runs-on: ubuntu-24.04

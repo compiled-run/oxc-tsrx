@@ -12,7 +12,7 @@
         "${workspaceFolder}/examples/vscode-lints/LintDemo.tsrx"
       ],
       "env": {
-        "OXC_TSRX_LSP_BIN": "${workspaceFolder}/target/release/oxc-tsrx-lsp"
+        "OXC_TSRX_LSP_BIN": "${workspaceFolder}/target/release/oxc-tsrx"
       },
       "preLaunchTask": "build TSRX lint demo"
     }

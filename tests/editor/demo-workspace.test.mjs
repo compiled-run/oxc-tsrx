@@ -3,13 +3,13 @@ import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import test from "node:test";
 
-import { LspClient, pathToFileUri } from "./lsp-client.mjs";
+import { LspClient, pathToFileUri, SERVER_ARGUMENTS } from "./lsp-client.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 const workspace = join(root, "examples/vscode-lints");
 const sourcePath = join(workspace, "LintDemo.tsrx");
 const server = resolve(
-  process.env.OXC_TSRX_LSP_BIN ?? join(root, "target/release/oxc-tsrx-lsp"),
+  process.env.OXC_TSRX_LSP_BIN ?? join(root, "target/release/oxc-tsrx"),
 );
 
 test("the committed VS Code demo publishes all intentional authored diagnostics", async () => {
@@ -41,7 +41,7 @@ test("the committed VS Code demo publishes all intentional authored diagnostics"
 
   const uri = pathToFileUri(sourcePath);
   const rootUri = pathToFileUri(workspace);
-  const client = new LspClient(server, { cwd: workspace });
+  const client = new LspClient(server, { args: SERVER_ARGUMENTS, cwd: workspace });
   try {
     await client.initialize(rootUri, [
       {

@@ -1,11 +1,26 @@
+/**
+ * Clean-install compatibility matrix for published Vite+ releases: it installs
+ * real Vite+ versions from a local registry, runs the compatibility activation
+ * step, and drives `vp lint`, `vp fmt`, `vp check`, `vp build`, and `vp dev`
+ * end to end.
+ *
+ * This file covers the *compatibility* route, where TSRX owns the `oxlint` and
+ * `oxfmt` package names. The provider-discovery route, where Vite+ is asked to
+ * reach a wrapper it did not install, is a separate lane in
+ * tests/packaging/vite-plus-provider.test.mjs. That lane also records the
+ * `"oxlint": "=1.72.0"` exact pin that bounds what Vite+ 0.2.4 can resolve.
+ */
+
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { delimiter, join, resolve } from "node:path";
+import { delimiter, dirname, join, relative, resolve } from "node:path";
 import { createServer as createNetServer } from "node:net";
+import { pathToFileURL } from "node:url";
 import test from "node:test";
+import { startLocalRegistry } from "./local-registry.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 const npm = process.platform === "win32" ? "npm.cmd" : "npm";
@@ -225,7 +240,13 @@ async function pack(packageRoot, artifacts, environment) {
   );
   const report = JSON.parse(result.stdout);
   assert.equal(report.length, 1);
-  return join(artifacts, report[0].filename);
+  return {
+    ...report[0],
+    manifest: JSON.parse(
+      await readFile(join(root, packageRoot, "package.json"), "utf8"),
+    ),
+    tarball: join(artifacts, report[0].filename),
+  };
 }
 
 async function readResolvedManifest(consumer, parent, packageName) {
@@ -250,9 +271,7 @@ async function installArtifacts(artifacts, environment) {
   const native = JSON.parse(nativeResult.stdout);
   return {
     native,
-    runtime: await pack("packages/runtime", artifacts, environment),
-    lint: await pack("packages/oxlint", artifacts, environment),
-    format: await pack("packages/oxfmt", artifacts, environment),
+    toolchain: await pack("packages/toolchain", artifacts, environment),
   };
 }
 
@@ -265,10 +284,7 @@ async function exerciseLane(lane, artifacts, environment) {
       type: "module",
       dependencies: {
         "@tsrx/vite-plugin-react": "0.0.72",
-        "@oxc-tsrx/runtime": `file:${artifacts.runtime}`,
-        [artifacts.native.packageName]: `file:${artifacts.native.tarball}`,
-        oxfmt: `file:${artifacts.format}`,
-        oxlint: `file:${artifacts.lint}`,
+        "oxc-tsrx": "0.1.0",
         react: "19.2.7",
         "react-dom": "19.2.7",
         "vite-plus": lane.vitePlusVersion,
@@ -281,6 +297,17 @@ async function exerciseLane(lane, artifacts, environment) {
       { cwd: consumer, env: environment },
     );
     await mustRun(npm, ["ls", "--all"], { cwd: consumer, env: environment });
+    const toolchainRoot = join(consumer, "node_modules/oxc-tsrx");
+    const activation = await mustRun(
+      process.execPath,
+      [join(toolchainRoot, "bin/oxc-tsrx"), "setup", "--json"],
+      { cwd: consumer, env: environment },
+    );
+    assert.deepEqual(JSON.parse(activation.stdout).changed, [
+      "oxc-parser",
+      "oxlint",
+      "oxfmt",
+    ]);
     let audit = null;
     if (lane.name !== "legacy") {
       const auditResult = await run(
@@ -295,12 +322,18 @@ async function exerciseLane(lane, artifacts, environment) {
     }
 
     const consumerRoot = await realpath(consumer);
+    const toolchainRequire = createRequire(join(toolchainRoot, "package.json"));
+    const runtime = await import(
+      pathToFileURL(join(toolchainRoot, "dist/runtime.js")).href
+    );
+    const nativeRoot = dirname(
+      toolchainRequire.resolve(`${runtime.platformPackage()}/package.json`),
+    );
     for (const packagePath of [
       "node_modules/vite-plus",
+      "node_modules/oxc-tsrx",
       "node_modules/oxlint",
       "node_modules/oxfmt",
-      "node_modules/@oxc-tsrx/runtime",
-      join("node_modules", ...artifacts.native.packageName.split("/")),
     ]) {
       assert.equal(
         (await realpath(join(consumer, packagePath))).startsWith(consumerRoot),
@@ -308,6 +341,13 @@ async function exerciseLane(lane, artifacts, environment) {
         `${packagePath} escaped the clean consumer`,
       );
     }
+    assert.equal((await realpath(nativeRoot)).startsWith(consumerRoot), true);
+    assert.deepEqual(
+      Object.keys(packageJson.dependencies).filter((name) =>
+        name.includes("tsrx") || ["oxlint", "oxfmt", "oxc-parser"].includes(name),
+      ),
+      ["@tsrx/vite-plugin-react", "oxc-tsrx"],
+    );
 
     await writeFile(
       join(consumer, "vite.config.mjs"),
@@ -397,13 +437,26 @@ export default {
     const formatCompanion = JSON.parse(
       await readFile(join(consumer, "node_modules/oxfmt/package.json"), "utf8"),
     );
+    // The lint and format implementations are the toolchain package itself now,
+    // and it pins the official delegates by npm alias from its own root.
+    const toolchainManifestPath = join(toolchainRoot, "package.json");
     const [officialLint, officialFormat] = await Promise.all([
-      readResolvedManifest(consumer, "oxlint", "oxlint-current"),
-      readResolvedManifest(consumer, "oxfmt", "oxfmt-current"),
+      readResolvedManifest(
+        consumer,
+        relative(join(consumer, "node_modules"), dirname(toolchainManifestPath)),
+        "oxlint-current",
+      ),
+      readResolvedManifest(
+        consumer,
+        relative(join(consumer, "node_modules"), dirname(toolchainManifestPath)),
+        "oxfmt-current",
+      ),
     ]);
     assert.equal(vitePlus.version, lane.vitePlusVersion);
-    assert.equal(lintCompanion.name, "oxlint-tsrx");
-    assert.equal(formatCompanion.name, "oxfmt-tsrx");
+    assert.equal(lintCompanion.name, "oxlint");
+    assert.equal(formatCompanion.name, "oxfmt");
+    assert.equal(lintCompanion.oxcTsrxCompatibility.provider, "oxc-tsrx");
+    assert.equal(formatCompanion.oxcTsrxCompatibility.provider, "oxc-tsrx");
 
     return {
       lane: lane.name,
@@ -415,8 +468,8 @@ export default {
         bundledTsgolint: vitePlus.dependencies?.["oxlint-tsgolint"],
       },
       companions: {
-        oxlintTsrx: lintCompanion.version,
-        oxfmtTsrx: formatCompanion.version,
+        provider: "oxc-tsrx",
+        providerVersion: artifacts.toolchain.manifest.version,
         delegatedOxlint: officialLint.version,
         delegatedOxfmt: officialFormat.version,
       },
@@ -449,8 +502,22 @@ test(
     const cache = join(directory, "npm-cache");
     await mkdir(artifactsDirectory, { recursive: true });
     const environment = cleanEnvironment(cache);
+    let registry;
     try {
       const artifacts = await installArtifacts(artifactsDirectory, environment);
+      registry = await startLocalRegistry([
+        artifacts.toolchain,
+        {
+          manifest: {
+            name: artifacts.native.packageName,
+            version: artifacts.native.version,
+          },
+          tarball: artifacts.native.tarball,
+          integrity: artifacts.native.integrity,
+          shasum: artifacts.native.shasum,
+        },
+      ]);
+      environment.npm_config_registry = registry.url;
       const results = [];
       for (const lane of lanes) {
         results.push(await exerciseLane(lane, artifacts, environment));
@@ -502,6 +569,7 @@ test(
         );
       }
     } finally {
+      await registry?.close();
       await rm(directory, { recursive: true, force: true });
     }
   },

@@ -14,7 +14,7 @@ const docsDir = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.join(docsDir, '..')
 const projectionBin = path.join(docsDir, 'tools', 'projection-dump', 'target', 'release', 'projection-dump')
 const lintBin = path.join(repoRoot, 'target', 'release', 'oxc-tsrx')
-const formatBin = path.join(repoRoot, 'target', 'release', 'oxc-tsrx-fmt')
+const formatBin = path.join(repoRoot, 'target', 'release', 'oxc-tsrx')
 const npmLintBin = path.join(repoRoot, 'packages', 'oxlint', 'bin', 'oxlint')
 
 const tsrx = `export function Cart({ items }: Props) @{
@@ -77,7 +77,7 @@ try {
     },
     {
       command: 'npx oxfmt --check src/Cart.tsrx',
-      output: runForTranscript(formatBin, ['--check', relativeFile]),
+      output: runForTranscript(formatBin, ['fmt', '--check', relativeFile]),
     },
   ]
 } finally {

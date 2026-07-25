@@ -260,7 +260,7 @@ test("cross-file component inference remains usable from ordinary TSX", async ()
   assert.equal(output.oxcTsrx.parseCount, 2);
 });
 
-test("the oxlint-tsrx package enables type awareness from resolved Vite+ config", async () => {
+test("the oxc-tsrx lint bridge enables type awareness from resolved Vite+ config", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "oxc-tsrx-type-vite-plus-"));
   const source = join(cwd, "View.tsrx");
   const modules = join(cwd, "node_modules");

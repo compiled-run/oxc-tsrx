@@ -1,10 +1,22 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { cp, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { access, cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { delimiter, dirname, join, resolve } from "node:path";
 import { runTests } from "@vscode/test-electron";
+import { startLocalRegistry } from "../packaging/local-registry.mjs";
+import {
+  DECOY_STATUS,
+  assertMissing,
+  cleanEnvironment,
+  hostTarget,
+  mustRun,
+  pack,
+  run,
+  writePathDecoys,
+  writeWorkspaceFixtures,
+} from "./official-oxc-toolchain-run.mjs";
 
 await import("../../packages/vscode/build.mjs");
 
@@ -18,7 +30,8 @@ const marklessSource = join(
 );
 const marklessExtension = join(markless, "packages/vscode-plugin");
 const extension = join(root, "packages/vscode");
-const server = join(root, "target/release/oxc-tsrx-lsp");
+// The one multi-call native binary; the extension starts it with `lsp`.
+const server = join(root, "target/release/oxc-tsrx");
 const executable =
   process.env.VSCODE_EXECUTABLE_PATH ??
   "/Applications/Visual Studio Code.app/Contents/MacOS/Electron";
@@ -83,6 +96,183 @@ await writeFile(
   )}\n`,
 );
 
+/**
+ * Session 2: this repository's own VS Code client, with no pointer at all.
+ *
+ * The workspace above hands the extension `OXC_TSRX_LSP_BIN`, so it only ever
+ * exercises the compatibility fallback in `packages/vscode/dist/extension.cjs`.
+ * This second session removes every pointer: the packed toolchain is installed
+ * as an ordinary dependency from a local registry, `node_modules/.bin` is
+ * deleted, every tool name is shadowed on `PATH` by a decoy proven to fire
+ * beforehand, `oxc-tsrx setup` never runs, and neither `OXC_TSRX_LSP_BIN` nor
+ * `oxcTsrx.server.path` nor any `oxc.path.*` setting exists. The only way a
+ * language server can exist is the `discoverProviders` branch reading the
+ * installed package's own `oxc.provider` block, and the process table has to
+ * agree.
+ *
+ * This proves our own client and the provider protocol. It proves nothing about
+ * any released OXC build: no released Oxlint, Oxfmt, Vite+, or `oxc.oxc-vscode`
+ * reads `oxc.provider`.
+ */
+async function runInstallOnlyDiscoverySession() {
+  const npm = process.platform === "win32" ? "npm.cmd" : "npm";
+  const temporary = await mkdtemp(join(tmpdir(), "oxc-tsrx-vscode-discovery-"));
+  const artifacts = join(temporary, "artifacts");
+  const discovery = join(temporary, "workspace");
+  const decoys = join(temporary, "path-decoys");
+  const decoyMarker = join(temporary, "path-decoy-invocations.log");
+  const cache = join(temporary, ".pack-cache");
+  await Promise.all([
+    mkdir(artifacts, { recursive: true }),
+    mkdir(discovery, { recursive: true }),
+  ]);
+
+  let registry;
+  try {
+    const nativeResult = await mustRun(
+      process.execPath,
+      [
+        "scripts/package-native.mjs",
+        "--target",
+        hostTarget(),
+        "--bin-dir",
+        "target/release",
+        "--out-dir",
+        artifacts,
+      ],
+      { cwd: root, env: { ...process.env, npm_config_cache: cache } },
+    );
+    const native = JSON.parse(nativeResult.stdout);
+    const packages = await Promise.all([pack("packages/toolchain", artifacts, cache)]);
+    registry = await startLocalRegistry([
+      ...packages,
+      {
+        manifest: { name: native.packageName, version: native.version },
+        tarball: native.tarball,
+        integrity: native.integrity,
+        shasum: native.shasum,
+      },
+    ]);
+
+    const environment = cleanEnvironment(discovery, registry.url);
+    await writeFile(
+      join(discovery, "package.json"),
+      `${JSON.stringify(
+        {
+          name: "oxc-tsrx-own-client-discovery-proof",
+          private: true,
+          type: "module",
+          dependencies: { "oxc-tsrx": "0.1.0" },
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    await mustRun(npm, ["install", "--ignore-scripts", "--no-audit", "--no-fund"], {
+      cwd: discovery,
+      env: environment,
+    });
+
+    // Nothing else runs in this workspace. `.bin` is deleted outright and
+    // `oxc-tsrx setup` is never invoked, so none of its facades exist.
+    await rm(join(discovery, "node_modules/.bin"), { recursive: true, force: true });
+    await assertMissing(
+      join(discovery, "node_modules/.bin"),
+      "node_modules/.bin survived in the pointer-free workspace",
+    );
+    for (const facade of ["oxlint", "oxfmt", "oxc-parser"]) {
+      await assertMissing(
+        join(discovery, "node_modules", facade),
+        `${facade} exists without oxc-tsrx setup`,
+      );
+    }
+    await access(join(discovery, "node_modules/oxc-tsrx/bin/oxc-tsrx-lsp"));
+
+    await writePathDecoys(decoys, decoyMarker);
+    const search = [
+      decoys,
+      dirname(process.execPath),
+      "/usr/bin",
+      "/bin",
+      "/usr/sbin",
+      "/sbin",
+    ].join(delimiter);
+
+    // Contrast: prove the decoys really do answer a lookup by tool name, so the
+    // "no decoy ran" assertion below cannot pass vacuously.
+    const control = await run("/bin/sh", ["-c", "oxc-tsrx-lsp --stdio"], {
+      cwd: discovery,
+      env: { PATH: search },
+    });
+    assert.equal(control.status, DECOY_STATUS, control.stderr || control.stdout);
+    assert.ok(
+      (await readFile(decoyMarker, "utf8")).includes(
+        `${join(decoys, "oxc-tsrx-lsp")} --stdio`,
+      ),
+      "the PATH decoy did not record its own invocation",
+    );
+    await rm(decoyMarker, { force: true });
+
+    // No settings at all: no `oxcTsrx.server.path`, no `oxc.path.*`, nothing.
+    const fixtures = await writeWorkspaceFixtures(discovery, {});
+
+    const manifestBefore = await readFile(join(discovery, "package.json"), "utf8");
+    const lockfileBefore = await readFile(join(discovery, "package-lock.json"), "utf8");
+
+    await runTests({
+      vscodeExecutablePath: executable,
+      reuseMachineInstall: false,
+      extensionDevelopmentPath: extension,
+      extensionTestsPath: join(root, "tests/editor/vscode-suite.cjs"),
+      extensionTestsEnv: cleanEnvironment(discovery, registry.url, {
+        PATH: search,
+        // VS Code otherwise replaces the extension host environment with a login
+        // shell's, which would discard the shadowed `PATH` above. Pointing
+        // `SHELL` at a path that does not exist makes it keep this one.
+        SHELL: join(temporary, "absent-login-shell"),
+        OXC_TSRX_SUITE_MODE: "discovery",
+        OXC_TSRX_DISCOVERY_ROOT: discovery,
+        OXC_TSRX_PATH_DECOY_DIR: decoys,
+        OXC_TSRX_PATH_DECOY_MARKER: decoyMarker,
+        OXC_TSRX_EDITOR_FILE: fixtures.tsrxPath,
+        OXC_TSRX_ORDINARY_EDITOR_FILE: fixtures.ordinaryPath,
+      }),
+      launchArgs: [
+        discovery,
+        `--extensions-dir=${join(temporary, "extensions")}`,
+        `--user-data-dir=${join(temporary, "user")}`,
+        "--disable-extensions",
+        "--disable-workspace-trust",
+        "--skip-welcome",
+        "--skip-release-notes",
+      ],
+    });
+
+    await assertMissing(
+      decoyMarker,
+      "a tool name was resolved from PATH during the pointer-free session",
+    );
+    await assertMissing(
+      join(discovery, "node_modules/.bin"),
+      "node_modules/.bin was recreated during the pointer-free session",
+    );
+    for (const facade of ["oxlint", "oxfmt", "oxc-parser"]) {
+      await assertMissing(
+        join(discovery, "node_modules", facade),
+        `${facade} was installed during the pointer-free session`,
+      );
+    }
+    assert.equal(await readFile(join(discovery, "package.json"), "utf8"), manifestBefore);
+    assert.equal(
+      await readFile(join(discovery, "package-lock.json"), "utf8"),
+      lockfileBefore,
+    );
+  } finally {
+    await registry?.close();
+    await rm(temporary, { recursive: true, force: true });
+  }
+}
+
 let passed = false;
 try {
   await runTests({
@@ -92,6 +282,7 @@ try {
     extensionTestsPath: join(root, "tests/editor/vscode-suite.cjs"),
     extensionTestsEnv: {
       ...process.env,
+      OXC_TSRX_SUITE_MODE: "markless",
       OXC_TSRX_LSP_BIN: server,
       OXC_TSRX_EDITOR_FILE: sourcePath,
     },
@@ -134,7 +325,7 @@ try {
           extension: {
             id: "thejackshelton.oxc-tsrx-vscode",
             frameworkLanguageId: "markless-tsrx",
-            nativeServer: "target/release/oxc-tsrx-lsp",
+            nativeServer: "target/release/oxc-tsrx lsp",
             bundledClient: true,
           },
           assertions: {
@@ -152,3 +343,5 @@ try {
     );
   }
 }
+
+await runInstallOnlyDiscoverySession();

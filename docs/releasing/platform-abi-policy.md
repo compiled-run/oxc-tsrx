@@ -49,14 +49,14 @@ where possible, and a semver decision before release.
 
 Each `@oxc-tsrx/native-*` tarball contains:
 
-- `oxc-tsrx`;
-- `oxc-tsrx-fmt`;
-- `oxc-tsrx-lsp`;
+- `oxc-tsrx`, one multi-call executable that carries the linter, the formatter,
+  and the language server and selects one by subcommand (`fmt`, `lsp`, or the
+  default `lint`) or by the name it was invoked under;
 - a machine-readable checksum/target/OXC manifest; and
 - the project, OXC, and locked dependency legal material.
 
-Each platform VSIX embeds only `oxc-tsrx-lsp` plus its manifest, checksum, and
-legal material. It must not embed the lint CLI, format CLI, `node_modules`, a
+Each platform VSIX embeds only `oxc-tsrx` plus its manifest, checksum, and
+legal material, and starts it with the `lsp` subcommand. It must not embed the lint CLI, format CLI, `node_modules`, a
 second platform binary, a Cargo checkout, or an OXC source tree.
 
 The platform-independent packages contain only their declared JavaScript
@@ -68,8 +68,8 @@ archive.
 ## Verification rules
 
 The release workflow builds on a matching OS and CPU. The packager executes all
-three binaries on a matching native target and checks their exact version/OXC
-identity. A musl target is also executed on its same-architecture Linux host
+three tool identities of the single binary on a matching native target and
+checks each one's exact version/OXC identity. A musl target is also executed on its same-architecture Linux host
 after static-link verification. Every output receives SHA-256 metadata, and the
 assembled candidate receives a deterministic sorted checksum list.
 

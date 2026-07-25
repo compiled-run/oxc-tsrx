@@ -31,13 +31,22 @@ skipped file or a wrong-but-plausible result.
 ## Linting
 
 - **JavaScript lint plugins do not run in the native TSRX CLI or native
-  language server.** Released Oxlint 1.74 supports JS rules but explicitly
-  does not support custom parsers/file formats, and the native Rust path does
-  not embed Oxlint's Node host. A source-only VS Code experiment runs them in
-  the official OXC extension through a small LSP launcher and a Node-enabled
-  Oxlint build from the upstream custom-parser draft; it is tested but not a
-  released product path. Token APIs, framework scope semantics, and a
-  released upstream host seam remain. See [Custom JavaScript
+  language server.** The native Rust path does not embed Oxlint's Node host, so
+  it runs no JavaScript rules. Which limits apply depends on which layer you
+  mean:
+  - *Released Oxlint* (tested/pinned 1.74.0) runs JS plugins on ordinary
+    `.js`/`.ts`, but its released docs list custom parsers/file formats as
+    unsupported, so it cannot read `.tsrx` at all.
+  - *The local ESLint adapter* is AST-only: the public parser v1 exposes no
+    token stream, so `SourceCode` token rules cannot be correct, and there is
+    no full framework scope contract.
+  - *The upstream custom-parser draft* is broader (it does provide `SourceCode`
+    and forces token/range/location options), but it is unmerged and built
+    locally, so it is not a released product path.
+
+  A source-only VS Code experiment runs a JS rule on `.tsrx` through the
+  official OXC extension, a small LSP launcher, and that Node-enabled draft
+  build; it is tested but not shipped. See [Custom JavaScript
   plugins](/integrations/custom-js-plugins).
 - **Type-aware rules** require an explicit `--type-aware` or `--type-check`
   opt-in and the exact supported `oxlint-tsgolint` executable. Missing or
@@ -52,9 +61,9 @@ skipped file or a wrong-but-plausible result.
 ## CLI and configuration
 
 - The native binaries take **explicit file paths only**. Directory walking
-  and globs come from the npm companions and Vite+.
+  and globs come from the `oxc-tsrx` npm commands and Vite+.
 - Config files must be JSON/JSONC. JS/TS config modules are rejected, except
-  through the Vite+ path, where the npm companion resolves your
+  through the Vite+ path, where the toolchain resolves your
   `vite.config.*` once via Vite+'s public API and hands both engines the same
   extracted `lint`/`fmt` settings. Values that cannot be serialized (like
   callbacks) fail with a clear error.
@@ -65,8 +74,49 @@ skipped file or a wrong-but-plausible result.
   native npm targets and the hosted release workflow are ready, and the host
   target has local build, install, and execution proof. npm availability is
   only claimed after an explicitly approved publication.
-- The language server, VS Code extension, and installed VSIX are proven
-  locally. Marketplace availability is a separate approval-gated action.
+- **Vite+ needs one command after install, permanently.** Vite+ finds its
+  lint/format tools by the literal *package* names `oxlint` and `oxfmt`, and it
+  pins its own `oxlint@=1.72.0`. A bin name cannot answer a package resolution,
+  and `oxc-tsrx` cannot legitimately publish a package under either name, so
+  `npx oxc-tsrx setup` writes those project-local slots instead.
+
+  Because `setup` works inside `node_modules`, a clean install wipes it and you
+  run it again. That rerun is real and it is not scheduled to go away.
+- **Everywhere except Vite+, the install is the whole step, and the `oxlint` /
+  `oxfmt` command names are how.** `oxc-tsrx` declares bins under those names,
+  which is exactly what released Vite+ and the released official OXC extension
+  select by. That is the shipped delivery mechanism, not a stopgap.
+
+  `oxc-tsrx` also declares a static `oxc.provider` block in its own
+  `package.json`, and a host that reads that block can find TSRX from the
+  install alone. Three separate facts hold at once here, and they are easy to
+  blur:
+  - discovery is implemented and proven locally from clean consumers on npm,
+    pnpm, Bun, and both Yarn Berry linkers;
+  - no released Oxlint, Oxfmt, Vite+, or `oxc.oxc-vscode` build reads
+    `oxc.provider`. Nothing has been submitted upstream, nothing has been
+    accepted, and upstream patching is not part of this project's plan, so no
+    released host is going to start reading it;
+  - so `oxc.provider` is a recorded proposal, and the command names plus
+    `setup` are what actually deliver the product. They stay.
+
+  Of the four capabilities that block declares, only the language server has a
+  host, and that host is the `oxlint --lsp` multiplexer inside `oxc-tsrx`. The
+  parser has no host at all: it is public, but you reach it by importing
+  `oxc-tsrx/parser` yourself, never through discovery.
+- **A project that pins official `oxlint` or `oxfmt` keeps official behavior
+  for those command names.** That is deliberate: breaking a pinned setup would
+  be worse. `.tsrx` is then reachable through `oxc-tsrx-lint` and
+  `oxc-tsrx-fmt`, which are always installed.
+- An earlier research design that would have had `setup` write project-owned
+  dependency aliases, overrides, and a lockfile once is **not** the roadmap. It
+  would put permanent rewrites in your own manifest to satisfy one host's
+  resolution, which is worse than one explicit, reversible command. That design
+  is superseded, not pending.
+- The native language server and released-official-extension integration are
+  proven locally. The optional legacy VSIX is also proven, but its Marketplace
+  availability is a separate approval-gated action and it is not required for
+  the primary editor workflow.
 - OXC upgrades are manual: bump the adapter crate and lockfile, then pass the
   full behavior and performance suites.
 
@@ -76,8 +126,11 @@ skipped file or a wrong-but-plausible result.
   code: 179/179 valid files format, re-parse, and converge; 12/12
   known-invalid fixtures are rejected; every `<style>` payload survives
   byte-for-byte. It does not test Markless's own compiler or runtime.
-- The Vite and Vite+ build/dev/command matrices pass for both the supported
-  minimum Vite+ release and the release current when the matrix was frozen.
+- The Vite and Vite+ build/dev/command matrices pass for the tested minimum
+  Vite+ 0.1.24 and the pinned current Vite+ 0.2.4. The end-to-end `vp` command
+  matrix runs on npm only; pnpm, Yarn, and Bun are not claimed for those
+  commands. The package-manager facade proof and the npm `vp` command proof are
+  separate axes, not one combined guarantee.
 - A disposable-copy editor walkthrough proves automatic activation, live
   diagnostics, real format-on-save, and one validated safe action without
   changing the external worktree.

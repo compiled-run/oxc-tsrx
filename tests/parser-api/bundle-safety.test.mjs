@@ -22,7 +22,7 @@ test("the parser can be bundled without a runtime package.json dependency", asyn
   try {
     const entry = join(temporary, "entry.mjs");
     const bundle = join(temporary, "parser-bundle.cjs");
-    const parser = join(root, "packages/parser/index.js");
+    const parser = join(root, "packages/toolchain/dist/parser.js");
     await writeFile(
       entry,
       `import { createRequire } from "node:module";\n` +

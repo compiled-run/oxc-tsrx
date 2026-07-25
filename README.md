@@ -42,45 +42,132 @@ release.
 
 ## Install
 
-You need Node.js 20.19 or newer. Install both packages as dev dependencies.
-The npm package names are project-specific, but the commands you get are the
-familiar `oxlint` and `oxfmt`:
+You need Node.js 20.19 or newer. Install the one public toolchain package:
 
 ```sh
-npm install --save-dev oxlint-tsrx oxfmt-tsrx
+npm install --save-dev oxc-tsrx
 npx oxlint --format=json src/Counter.tsrx src/View.tsx
 npx oxfmt --check src/Counter.tsrx src/View.tsx
 ```
 
-For Vite+, install the same packages under the project-local names Vite+
-resolves:
+The package also exposes the parser as `oxc-tsrx/parser`, lint and format APIs,
+helpers for authoring custom JavaScript lint plugins (helpers to write one, not
+a native host that runs one against `.tsrx`; see
+[Custom JavaScript plugins](docs/integrations/custom-js-plugins.md)), and
+`oxc-tsrx-lsp`.
 
-```sh
-npm install --save-dev vite-plus \
-  oxlint@npm:oxlint-tsrx \
-  oxfmt@npm:oxfmt-tsrx
-```
-
-That is the whole setup. The tools are written in Rust; a normal npm install
-pulls in `@oxc-tsrx/runtime`, which picks the one prebuilt native binary that
-matches your platform out of eight exact native packages. You do not need
-Rust on your machine, the packages run no install scripts, and the commands
-never download anything later. There is no JavaScript/Wasm fallback. Until
-npm shows the complete 0.1.0 set from the approval-gated registry launch,
-follow the source-build path in the
+The tools are written in Rust. `oxc-tsrx` is one package that carries the
+parser, lint, format, and language-server entry points itself, and it lists
+eight platform packages as `optionalDependencies` so that a normal install
+downloads exactly one prebuilt native binary, the one matching your platform.
+You do not need Rust, no package runs an install script, and no command
+downloads anything later. There is no JavaScript/Wasm
+fallback. Until npm shows the complete 0.1.0 set from the approval-gated
+registry launch, follow the source-build path in the
 [getting-started guide](docs/guide/getting-started.md); local candidate files
 do not prove registry publication.
 
+### Install-only provider discovery
+
+That install is the whole consumer action. `oxc-tsrx` declares a static
+`oxc.provider` block in its own `package.json`, and a host that performs
+provider discovery reads that JSON to find which files this package owns
+(`.tsrx`) plus the parser, linter, formatter, and language server to use for
+them.
+
+There is no second step. No activation command, no dependency alias, no root
+`overrides` block, no install script, no `PATH` entry, and nothing written into
+`node_modules` after the install finishes. Delete `node_modules`, run a frozen
+reinstall, and discovery works again for the same reason it worked the first
+time: `oxc-tsrx` is still a direct dependency in your `package.json`. Nothing is
+imported or spawned to be discovered; a host only resolves and reads
+`package.json` files.
+
+Inspect what a host would find in your project, without changing anything:
+
+```sh
+npx oxc-tsrx providers --json
+```
+
+**Status: local reference implementation and proof.** The hosts that read this
+metadata are the ones in this repository: the `oxlint --lsp` multiplexer
+`oxc-tsrx` ships, and this repository's own VS Code client. Of the four declared
+capabilities only `lsp` has a host today, so do not read the declaration as four
+working integrations.
+
+Discovery itself is proven from clean consumers on npm 11.12.1, pnpm 10.33.2,
+Bun 1.3.14, and Yarn Berry 4.9.2 on both the node-modules and Plug'n'Play
+linkers, in `tests/packaging/provider-matrix.test.mjs`. Every lane deletes its
+install tree, reinstalls frozen, and must reproduce a byte-identical index.
+Windows and Yarn Classic are not covered.
+
+**`oxc.provider` is a protocol proposed to OXC.** It is a source-complete
+proposal and nothing more: nothing has been submitted upstream, nothing has been
+accepted, and no released Oxlint, Oxfmt, Vite+, or `oxc.oxc-vscode` build reads
+`oxc.provider` metadata. It is recorded because it is the right long-term shape,
+not because anything depends on it. The full contract, for TSRX or for any other
+provider, is in [the package README](packages/toolchain/README.md).
+
+### How the install actually reaches released OXC tools
+
+The command names are the mechanism, not a stopgap.
+
+**The `oxlint` and `oxfmt` command names.** `oxc-tsrx` declares bins under those
+names because released Vite+ and the released OXC editor extension select tools
+by literal package and binary name. That name ownership is how `npx oxlint` and
+`npx oxfmt` above reach TSRX from a plain install, and it is what the released
+official OXC extension follows too.
+
+This is deliberate and it is what ships. Earlier drafts of this README described
+those names as debt to delete once a released host discovered providers. That is
+no longer an honest description. Upstream patching was retired as a premise, so
+no released host is going to start reading `oxc.provider`, and the command names
+are what delivers the product.
+
+One consequence to know about: a project that pins official `oxlint` itself gets
+official Oxlint for that command name. `.tsrx` is then reachable through
+`oxc-tsrx-lint` and `oxc-tsrx-fmt`, which are always installed. Breaking a
+pinned setup would be worse than that extra name.
+
+**Editors need no setup step.** With `oxc-tsrx` installed and nothing else done,
+the released `oxc.oxc-vscode` extension (measured at 1.59.0) gives `.tsrx`
+diagnostics that refresh on unsaved edits, formatting, and applied native quick
+fixes, while ordinary TypeScript stays on canonical Oxlint. Measured on
+darwin-arm64 in a real editor session.
+
+**`npx oxc-tsrx setup` is only for Vite+.** Vite+ resolves the *package* name
+`oxlint`, not a command, and a bin cannot satisfy that. This project cannot
+legitimately publish a package under that name, so Vite+ users install normally
+and then run one explicit command:
+
+```sh
+npm install --save-dev vite-plus oxc-tsrx
+npx oxc-tsrx setup
+```
+
+`setup` is explicit, idempotent, reversible with `npx oxc-tsrx remove`, and
+never edits `package.json`. Because `node_modules` is disposable, run it again
+after a clean dependency install. This one command is a real limitation of the
+Vite+ path, and it is the only place an install alone is not enough.
+
 ## Current proof
+
+Run `npm run build:native` before the lanes that need a release binary. It runs
+the same `cargo build --release --locked -p oxc_tsrx_cli --bins` and then writes
+`target/release/oxc-tsrx-fmt` as a verified copy of it. The crate builds one
+executable named `oxc-tsrx`, which picks its tool from `argv[0]` or a leading
+subcommand, so that copy is how a caller that can only name a file still reaches
+the formatter. A bare `cargo build` does not create it.
 
 ```sh
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo test --workspace --all-targets --locked
-cargo build --release --locked -p oxc_tsrx_cli --bins
+npm run build:native
 npm test
 npm run build:editor
 npm run test:editor
+npm run test:editor:official-toolchain
 npm run test:editor:vscode
 npm run test:packaging:unit
 npm run test:packaging:clean
@@ -134,8 +221,9 @@ load, two files/two parses, and observed quote/semicolon changes.
 
 The Vite/Vite+ command-boundary report is
 [`benchmarks/vite/results-1784321678410.json`](benchmarks/vite/results-1784321678410.json):
-ordinary `oxfmt-tsrx` is 103.26 ms median / 113.44 ms p95 versus canonical
-Oxfmt's 100.99 / 103.01 ms (1.101× p95). Mixed companion lint is 57.91 ms
+the ordinary `oxfmt` command supplied by `oxc-tsrx` is 103.26 ms median /
+113.44 ms p95 versus canonical Oxfmt's 100.99 / 103.01 ms (1.101× p95).
+Mixed toolchain lint is 57.91 ms
 p95 (1.813× canonical two-file TSX), mixed format-check is 127.11 ms p95
 (1.234× canonical), and complete Vite+ 0.2.4 mixed lint is 237.08 ms p95.
 Metadata proves one native parse for the TSRX file and zero ordinary files
@@ -161,7 +249,8 @@ explicit file list, and zero-diagnostic default output, with every lane
 launched through its npm CLI entry point the way projects invoke it. After
 five warmups and twenty measured processes the medians were 609.06 ms for
 ESLint + typescript-eslint, 40.68 ms for official Oxlint, and 45.92 ms for the
-`oxlint-tsrx` command. The ordinary-only command imports the exact declared
+public `oxlint` command supplied by `oxc-tsrx`. The ordinary-only command
+imports the exact declared
 official Oxlint launcher in the same Node process, without entering the TSRX
 dispatch path. A separately labeled mixed-file-types workload (20% TSRX by
 file count) measured 68.38 ms (1.489× the product's all-TSX lane); exactly one public canonical
@@ -175,7 +264,7 @@ fastest sample.
 
 The commands discover JSON or JSONC Oxlint/Oxfmt configuration once per
 session and reuse the compiled state across explicit `.tsrx` and ordinary JS/TS
-files. With the `oxlint-tsrx` and `oxfmt-tsrx` npm packages installed:
+files. With `oxc-tsrx` installed:
 
 ```sh
 npx oxlint --format=json src/Counter.tsrx src/View.tsx
@@ -188,12 +277,13 @@ npx oxfmt --check src/Counter.tsrx src/View.tsx
 npx oxfmt --write --config config/format.json src/Counter.tsrx
 ```
 
-The same invocations work against the native Rust binaries directly (an
-internal detail useful when building from source):
+The same invocations work against the native Rust binary directly (an internal
+detail useful when building from source). One executable carries all three
+tools, and a leading `fmt` or `lsp` selects one; with neither, it lints:
 
 ```sh
 target/release/oxc-tsrx --format=json src/Counter.tsrx src/View.tsx
-target/release/oxc-tsrx-fmt --check src/Counter.tsrx src/View.tsx
+target/release/oxc-tsrx fmt --check src/Counter.tsrx src/View.tsx
 ```
 
 Lint supports built-in rules/plugins and their options, `env`, `globals`,
@@ -205,9 +295,9 @@ import semantics. Formatting supports the public core JS/TSX layout options,
 overrides, ignores, stdin, check, and transactional writes. Unsupported JS
 plugins, direct-native JS/TS config modules,
 `.editorconfig`, and callback-backed formatter features fail loudly instead of
-being ignored. The thin npm companions additionally resolve serializable
-Vite+ `lint` and `fmt` fields and preserve the authored base for object extends,
-overrides, and ignores. See
+being ignored. The toolchain's thin internal command adapters additionally
+resolve serializable Vite+ `lint` and `fmt` fields and preserve the authored
+base for object extends, overrides, and ignores. See
 [the exact configuration matrix](docs/integrations/configuration.md) and
 [Vite/Vite+ integration](docs/integrations/vite-plus.md).
 
@@ -218,42 +308,54 @@ source maps, and HMR. OXC for TSRX deliberately adds no Vite transform or
 parser. Real Vite 8.1.5 build/dev/HMR tests pass with the published TSRX React
 plugin.
 
-Project-local `oxlint` and `oxfmt` npm aliases can point to `oxlint-tsrx` and
-`oxfmt-tsrx`. Vite+ then routes ordinary files to canonical
-Oxlint/Oxfmt and `.tsrx` to the native Rust commands. Untouched tarballs now
-pass empty-consumer matrices on the supported Vite+ minimum 0.1.24 and current
-0.2.4 for literal `vp build`, `vp dev` retransform, lint, format-check, and
-`check --fix`, with no source-tree binary override. Markless-pinned 0.1.20
-remains an isolated legacy compatibility control and is not part of the
-supported or audited dependency graph.
+Vite+ is the one integration an install alone cannot serve. Released Vite+
+resolves its lint and format tools by literal *package* name and reads no
+`oxc.provider` metadata, so `npx oxc-tsrx setup` creates exact, reversible
+project-local facades for its current `oxlint` and `oxfmt` resolvers. Vite+ then
+routes ordinary files to canonical Oxlint/Oxfmt and `.tsrx` to the native Rust
+commands. Rerun `setup` after a clean dependency install, because `node_modules`
+is disposable. The step would stop being needed only if Vite+ resolved tools by
+command name or read provider metadata, and neither is something this project
+controls.
 
-The release manifest defines `oxlint-tsrx`, `oxfmt-tsrx`,
-`@oxc-tsrx/runtime`, and one exact `@oxc-tsrx/native-*` optional package for
-each of eight macOS, Linux glibc/musl, and Windows targets. Artifact contracts
-are checked for all eight targets; the host package and VSIX are built and
-executed locally, while the hosted eight-runner candidate build remains a
-post-push release gate. Native packages contain the three stripped Rust
-commands, checksums, the exact OXC revision, and a generated locked license
-inventory; they have no install script. Local package and clean-install
-evidence is retained under `tests/packaging`. Registry availability is not
-claimed until an approval-gated publication.
+Untouched tarballs pass empty-consumer matrices on the supported
+Vite+ minimum 0.1.24 and current 0.2.4 for literal `vp build`, `vp dev`
+retransform, lint, format-check, and `check --fix`, with `oxc-tsrx` as the only
+direct TSRX dependency and no source-tree binary override.
+
+The release manifest defines nine npm packages: the public `oxc-tsrx` package
+and one `@oxc-tsrx/native-*` package for each of eight macOS, Linux glibc/musl,
+and Windows targets. Artifact contracts are checked for all eight targets;
+hosted candidate production remains a post-push release gate. Each native
+package contains one stripped multi-call Rust executable that serves lint,
+format, and the language server, plus checksums, the exact OXC revision, and a
+generated locked license inventory; they have no install script. Registry
+availability is not claimed until an approval-gated publication. The publish
+procedure is [the publish runbook](docs/releasing/publish-runbook.md).
 
 ## Visual Studio Code
 
-`oxc-tsrx-lsp` hosts the existing Rust lint and format sessions behind
-canonical OXC's language-server transport. The thin `packages/vscode`
-companion launches that native process and attaches to file-backed `.tsrx`
-documents without registering a competing framework language.
+Install the released official OXC extension (`oxc.oxc-vscode`). It selects the
+project-local `oxlint` command supplied by `oxc-tsrx` by that literal name, not
+by reading provider metadata. That name selection is how this path works, and it
+is what ships.
 
-The companion also coexists with the official OXC VS Code extension. It
-attaches only to `.tsrx` documents and talks to the project-owned
-`oxc-tsrx-lsp` server, while the official extension keeps serving ordinary
-JS/TS files. That split holds even when a project aliases `oxlint`/`oxfmt` to
-the `oxlint-tsrx`/`oxfmt-tsrx` wrapper packages, because the wrappers load the
-packages' declared canonical launchers in the same Node process for `--lsp`,
-preserving the upstream stdio session. The official extension still cannot
-select `.tsrx` files; the
-companion exists to close exactly that gap.
+For `oxlint --lsp`, the public package multiplexes canonical Oxlint for ordinary
+JS/TS and the native `oxc-tsrx-lsp` server for `.tsrx`, then dynamically
+registers TSRX
+document sync, diagnostics, formatting, and quick fixes with the official
+client. Request IDs and document traffic remain isolated between the two
+servers. No companion or forked extension is required.
+
+That multiplexer is one of the hosts that does read `oxc.provider`: it registers
+only the extensions discovered from your installed providers, and with no
+provider installed it is a plain passthrough to canonical Oxlint. So the
+released extension reaches it by name, and it routes by discovery.
+
+The current official extension does not include `.tsrx` in its activation
+events. In a TSRX-only workspace, open any JavaScript, TypeScript, or JSON file
+once to activate it. The older `packages/vscode` client remains an optional
+legacy path for automatic `.tsrx`-only activation, not the primary install.
 
 In a Markless workspace it coexists with the real `markless-tsrx` extension:
 Markless keeps its grammar, TypeScript plugins, completions, navigation, and
@@ -263,11 +365,12 @@ source publishes a parse diagnostic, returns no formatting edit, and recovers
 when the buffer becomes valid. Fix-all, suggestions, and dangerous actions are
 not advertised.
 
-The real VS Code 1.128 Extension Host walkthrough uses a disposable exact copy
-of a Markless control-flow fixture. A second packaging walkthrough installs the
-actual platform-targeted VSIX, clears native overrides, and proves that its
-embedded Rust server supplies authored diagnostics, real format-on-save, and a
-safe quick fix. Both record zero external writes in
+The released-official-extension proof installs untouched tarballs into a clean
+consumer that declares only `oxc-tsrx`; it verifies canonical TypeScript
+diagnostics plus native TSRX diagnostics, unsaved edits, formatting, and a safe
+quick fix with the legacy companion absent. Separate retained legacy-client
+walkthroughs use a disposable Markless fixture and record zero external writes
+in
 [`tests/editor/markless-vscode-walkthrough.json`](tests/editor/markless-vscode-walkthrough.json)
 and
 [`tests/packaging/installed-vsix-report.json`](tests/packaging/installed-vsix-report.json).
@@ -276,7 +379,7 @@ proof commands, and current packaging boundaries.
 
 ## Formatter use
 
-With the `oxfmt-tsrx` npm package installed:
+With `oxc-tsrx` installed:
 
 ```sh
 # Editor/stdin boundary: formatted source is written to stdout.
@@ -289,8 +392,8 @@ npx oxfmt --check src/Counter.tsrx
 npx oxfmt --write src/Counter.tsrx src/View.tsx
 ```
 
-The native binary accepts the same flags directly, for example
-`target/release/oxc-tsrx-fmt --check src/Counter.tsrx`.
+The native binary accepts the same flags directly under its `fmt` subcommand,
+for example `target/release/oxc-tsrx fmt --check src/Counter.tsrx`.
 
 Ordinary JavaScript and TypeScript files use the exact manifest-declared
 canonical Oxfmt launcher in the wrapper's Node process, and the black-box
@@ -310,10 +413,18 @@ mode stages every successful output before replacing any original.
 - `crates/tsrx_format`: reusable configured formatting session and
   filesystem-free formatting boundary;
 - `crates/tsrx_lint`: lint orchestration, diagnostic translation, and safe fixes;
-- `crates/oxc_tsrx_cli`: native `oxc-tsrx`, `oxc-tsrx-fmt`, and
-  `oxc-tsrx-lsp` commands;
-- `packages/{runtime,oxlint,oxfmt,vscode}`: thin project-local npm, Vite+, and
-  editor shells;
+- `crates/oxc_tsrx_cli`: one native executable, `oxc-tsrx`, that carries the
+  linter, formatter, and language server and selects one from `argv[0]` or a
+  leading `lint`/`fmt`/`lsp` subcommand;
+- `packages/toolchain`: the single public `oxc-tsrx` package. It owns the
+  parser, lint, format, and language-server entry points, every published
+  command name, and the compatibility `setup` command;
+- `packages/native`: the source of the eight `@oxc-tsrx/native-*` platform
+  packages, which are the only other published names;
+- `packages/tsrx-core-compat`: an unpublished `@tsrx/core` facade used by the
+  Markless drop-in tests;
+- `packages/vscode`: optional legacy editor client; the primary path uses the
+  released official OXC extension;
 - `crates/oxc_tsrx_{benchmark,format_benchmark}`: release performance gates;
 - `tests/fixtures/{lint,format,control,editor}`, `tests/native-*.test.mjs`, and
   `tests/editor`: black-box and real Extension Host contracts;

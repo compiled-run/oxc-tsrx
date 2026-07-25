@@ -59,7 +59,7 @@
     "THIRD_PARTY_NOTICES.md"
   ],
   "dependencies": {
-    "@oxc-tsrx/runtime": "0.1.0",
+    "oxc-tsrx": "0.1.0",
     "vscode-languageclient": "10.1.0"
   },
   "contributes": {

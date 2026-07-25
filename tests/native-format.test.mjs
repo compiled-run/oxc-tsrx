@@ -8,7 +8,9 @@ import test from 'node:test';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '..');
-const binary = process.env.OXFMT_BIN ?? join(root, 'target/release/oxc-tsrx-fmt');
+// One multi-call native binary carries the linter, the formatter, and the
+// language server. `fmt` selects the formatter.
+const binary = process.env.OXFMT_BIN ?? join(root, 'target/release/oxc-tsrx');
 const stockBinary = join(root, 'node_modules/oxfmt-current/bin/oxfmt');
 const fixtures = join(root, 'tests/fixtures/format');
 
@@ -33,6 +35,10 @@ function run(executable, args, input = null) {
   });
 }
 
+function runFormat(args, input = null) {
+  return run(binary, ['fmt', ...args], input);
+}
+
 async function fixture(name) {
   return readFile(join(fixtures, name), 'utf8');
 }
@@ -40,7 +46,7 @@ async function fixture(name) {
 test('formats a Markless-derived TSRX component from stdin and is idempotent', async () => {
   const source = await fixture('markless-counter.unformatted.tsrx');
   const expected = await fixture('markless-counter.formatted.tsrx');
-  const first = await run(binary, ['--stdin-filepath=Counter.tsrx'], source);
+  const first = await runFormat(['--stdin-filepath=Counter.tsrx'], source);
 
   assert.equal(first.signal, null);
   assert.equal(first.code, 0, first.stderr || first.stdout);
@@ -48,7 +54,7 @@ test('formats a Markless-derived TSRX component from stdin and is idempotent', a
   assert.equal(first.stderr, '');
   assert.match(first.stdout, /export function Counter\(\) @\{/);
 
-  const second = await run(binary, ['--stdin-filepath=Counter.tsrx'], first.stdout);
+  const second = await runFormat(['--stdin-filepath=Counter.tsrx'], first.stdout);
   assert.equal(second.code, 0, second.stderr || second.stdout);
   assert.equal(second.stdout, first.stdout);
 });
@@ -56,7 +62,7 @@ test('formats a Markless-derived TSRX component from stdin and is idempotent', a
 test('preserves lexical @ text while formatting nested statement control flow', async () => {
   const source = await fixture('conditional.unformatted.tsrx');
   const expected = await fixture('conditional.formatted.tsrx');
-  const result = await run(binary, ['--stdin-filepath', 'conditional.tsrx'], source);
+  const result = await runFormat(['--stdin-filepath', 'conditional.tsrx'], source);
 
   assert.equal(result.code, 0, result.stderr || result.stdout);
   assert.equal(result.stdout, expected);
@@ -76,16 +82,16 @@ test('check and write converge without touching an unformatted file during check
   const expected = await fixture('markless-counter.formatted.tsrx');
   await writeFile(path, before);
 
-  const checkBefore = await run(binary, ['--check', path]);
+  const checkBefore = await runFormat(['--check', path]);
   assert.equal(checkBefore.code, 1, checkBefore.stderr || checkBefore.stdout);
   assert.match(checkBefore.stdout, new RegExp(`${basename(path)}|${path.replaceAll('\\', '\\\\')}`));
   assert.equal(await readFile(path, 'utf8'), before);
 
-  const write = await run(binary, ['--write', path]);
+  const write = await runFormat(['--write', path]);
   assert.equal(write.code, 0, write.stderr || write.stdout);
   assert.equal(await readFile(path, 'utf8'), expected);
 
-  const checkAfter = await run(binary, ['--check', path]);
+  const checkAfter = await runFormat(['--check', path]);
   assert.equal(checkAfter.code, 0, checkAfter.stderr || checkAfter.stdout);
 });
 
@@ -98,7 +104,7 @@ test('a multi-file write is fail-atomic when one file contains malformed TSRX', 
   await writeFile(validPath, validBefore);
   await writeFile(malformedPath, malformedBefore);
 
-  const result = await run(binary, ['--write', validPath, malformedPath]);
+  const result = await runFormat(['--write', validPath, malformedPath]);
   assert.equal(result.code, 2, result.stderr || result.stdout);
   assert.match(result.stderr, /unterminated|closing|style|structural/i);
   assert.equal(await readFile(validPath, 'utf8'), validBefore);
@@ -107,7 +113,7 @@ test('a multi-file write is fail-atomic when one file contains malformed TSRX', 
 
 test('invalid TSRX returns no formatted output', async () => {
   const source = 'export function Broken() @{ const value = ; }\n';
-  const result = await run(binary, ['--stdin-filepath=broken.tsrx'], source);
+  const result = await runFormat(['--stdin-filepath=broken.tsrx'], source);
   assert.equal(result.code, 2, result.stderr || result.stdout);
   assert.equal(result.stdout, '');
   assert.match(result.stderr, /parse|expected|unexpected/i);
@@ -122,7 +128,7 @@ test('ordinary JS, JSX, TS, and TSX take the canonical format path byte-for-byte
   };
   for (const [name, source] of Object.entries(cases)) {
     const [candidate, stock] = await Promise.all([
-      run(binary, [`--stdin-filepath=${name}`], source),
+      runFormat([`--stdin-filepath=${name}`], source),
       run(stockBinary, [`--stdin-filepath=${name}`], source),
     ]);
     assert.equal(candidate.code, 0, candidate.stderr || candidate.stdout);
@@ -140,8 +146,8 @@ test('Unicode decorator identifiers format identically through TSRX and canonica
 
   for (const [name, source] of Object.entries(cases)) {
     const [tsrx, tsx] = await Promise.all([
-      run(binary, [`--stdin-filepath=${name}.tsrx`], source),
-      run(binary, [`--stdin-filepath=${name}.tsx`], source),
+      runFormat([`--stdin-filepath=${name}.tsrx`], source),
+      runFormat([`--stdin-filepath=${name}.tsx`], source),
     ]);
     assert.equal(tsx.code, 0, tsx.stderr || tsx.stdout);
     assert.equal(tsrx.code, 0, tsrx.stderr || tsrx.stdout);

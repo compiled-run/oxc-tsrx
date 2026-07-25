@@ -73,7 +73,7 @@ export default {
       icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M10 9.5 12.5 8v8"/></svg>',
       title: 'Exactly one parse',
       details:
-        'A byte-oriented scan, one legal-TSX projection allocation, and a single canonical OXC parse. That same parse is yours to call as a library through <code>@oxc-tsrx/parser</code>.',
+        'A byte-oriented scan, one legal-TSX projection allocation, and a single canonical OXC parse. That same parse is yours to call as a library through <code>oxc-tsrx/parser</code>.',
     },
     {
       icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="0.5" fill="currentColor"/></svg>',

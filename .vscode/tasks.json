@@ -7,7 +7,7 @@
       "command": "/usr/bin/test",
       "args": [
         "-x",
-        "${workspaceFolder}/target/release/oxc-tsrx-lsp"
+        "${workspaceFolder}/target/release/oxc-tsrx"
       ],
       "problemMatcher": [],
       "group": "build"

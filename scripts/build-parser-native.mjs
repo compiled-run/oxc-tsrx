@@ -3,14 +3,14 @@ import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import { copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve } from "node:path";
-import { nativeTargetForHost } from "../packages/parser/targets.js";
+import { nativeTargetForHost } from "../packages/toolchain/dist/native-targets.js";
 
 const root = resolve(import.meta.dirname, "..");
 const OXC_REVISION = "8e0ed2ebb96137fb1611cdbd5742d5cb46037d40";
 
 function parseArguments(argv) {
   const options = {
-    out: "packages/parser/parser.node",
+    out: "packages/toolchain/parser.node",
     record: null,
     "target-dir": "target",
     "skip-build": false,
@@ -96,7 +96,7 @@ await mkdir(dirname(destination), { recursive: true });
 await copyFile(source, destination, constants.COPYFILE_FICLONE);
 const contents = await readFile(destination);
 const parserManifest = JSON.parse(
-  await readFile(resolve(root, "packages/parser/package.json"), "utf8"),
+  await readFile(resolve(root, "packages/toolchain/package.json"), "utf8"),
 );
 const target = nativeTargetForHost(process.platform, process.arch, linuxLibc());
 const record = {

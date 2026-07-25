@@ -4,13 +4,13 @@ import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
-import { NATIVE_TARGETS, nativePackageName } from "../../packages/runtime/dist/targets.js";
+import { NATIVE_TARGETS, nativePackageName } from "../../packages/toolchain/dist/native-targets.js";
 import { resolveNpmInvocation } from "../../scripts/npm-invocation.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 const repository = "https://github.com/markless-dev/oxc-tsrx";
 const homepage = "https://oxc-tsrx-docs.vercel.app/";
-const publicDirectories = ["runtime", "oxlint", "oxfmt"];
+const publicDirectories = ["toolchain"];
 
 const readJson = async (path) => JSON.parse(await readFile(path, "utf8"));
 
@@ -71,18 +71,21 @@ test("launch manifest names every byte set and keeps external actions approval-g
 
   const nativeNames = NATIVE_TARGETS.map(nativePackageName);
   assert.deepEqual(launch.npm.publishOrder.slice(0, nativeNames.length), nativeNames);
-  assert.deepEqual(launch.npm.publishOrder.slice(nativeNames.length), [
-    "@oxc-tsrx/runtime",
-    "oxlint-tsrx",
-    "oxfmt-tsrx",
-  ]);
+  // One published host package plus the eight platform packages a user never
+  // names: nine names, and no first-party wrapper between the user and the
+  // toolchain.
+  assert.deepEqual(launch.npm.publishOrder.slice(nativeNames.length), ["oxc-tsrx"]);
+  assert.equal(launch.npm.publishOrder.length, nativeNames.length + 1);
+  assert.equal(new Set(launch.npm.publishOrder).size, launch.npm.publishOrder.length);
   assert.deepEqual(
     launch.vscode.targets,
     NATIVE_TARGETS.map(({ vscodeTarget }) => vscodeTarget),
   );
+  assert.equal(launch.vscode.role, "optional-legacy-activation-client");
+  assert.equal(launch.vscode.requiredForPrimaryEditorWorkflow, false);
   assert.match(launch.social.text, /OXC for TSRX/u);
-  assert.match(launch.social.text, /oxlint-tsrx/u);
-  assert.match(launch.social.text, /oxfmt-tsrx/u);
+  assert.match(launch.social.text, /Install oxc-tsrx/u);
+  assert.doesNotMatch(launch.social.text, /Install oxlint-tsrx|Install oxfmt-tsrx/u);
   assert.match(launch.social.text, new RegExp(homepage.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.deepEqual(launch.requiredApprovals, [
     "repository-push",
@@ -160,6 +163,13 @@ test("all platform-independent npm payloads pass pack dry-run", async () => {
     );
     assert.equal(
       result.files.some(({ path }) => path.startsWith("test")),
+      false,
+      directory,
+    );
+    // The host package is platform-independent. The parser addon built into the
+    // source tree for local development must never reach the payload.
+    assert.equal(
+      result.files.some(({ path }) => path.endsWith(".node")),
       false,
       directory,
     );

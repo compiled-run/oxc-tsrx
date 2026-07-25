@@ -5,8 +5,8 @@ from Rolldown's module-region markers, the committed npm lockfile, and each
 installed package's actual license text. Do not edit it by hand.
 
 - Bundle: `packages/vscode/dist/extension.bundle.cjs`
-- Bundle SHA-256: `3ac3475a4ba2ac6613620c93d847f39f20f80eb53e8addbbcf1e75b9a43d6b36`
-- package-lock.json SHA-256: `73989b177ce731b21f1f0bb5e7448587340f52634d1b37b4c60594bf7cbed646`
+- Bundle SHA-256: `9fee2053b9244f91187ff97ccf8e0a3d9365c2e668d40a536f2ae7ac5e509822`
+- package-lock.json SHA-256: `6e7080b68c03874bb0d7a14936d336bd11c55ebc5e0a693f033053ccac44fa4e`
 - Bundled third-party packages: 12
 
 Every listed license/copyright text is shipped byte-exactly below

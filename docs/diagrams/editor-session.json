@@ -3,10 +3,12 @@
   "caption": "How a keystroke in VS Code becomes native diagnostics, quick fixes, and formatting without any extension fighting over your file type.",
   "nodes": {
     "buffer": "Everything runs on the in-memory buffer you are typing in. Unsaved changes are analyzed live, and code actions never touch disk.",
-    "framework": "Your framework extension keeps its language ID, grammar, completions, and compilation. The companion registers no competing .tsrx language.",
-    "companion": "The companion only attaches to file-backed .tsrx documents, launches the Rust server, and forwards workspace settings. Rust owns everything else.",
+    "framework": "Your framework extension keeps its language ID, grammar, completions, and compilation. OXC registers tooling capabilities without competing for the language.",
+    "official": "The released official OXC extension discovers the project's oxc-tsrx-provided oxlint command. No TSRX-specific editor extension is required.",
+    "mux": "Only oxlint --lsp enters the multiplexer. It dynamically registers .tsrx and keeps canonical and native document traffic plus request IDs isolated.",
     "server": "One long-lived native process per workspace. It parses, lints, formats, maps sources, and validates fixes.",
-    "oxc": "Canonical OXC parses the projected TSX copy exactly once per change, then Oxlint rules and Oxfmt layout run on that single parse.",
+    "canonical": "Ordinary JavaScript and TypeScript stay on the released canonical Oxlint language server.",
+    "oxc": "The native TSRX server parses the projected TSX copy exactly once per change, then Oxlint rules and Oxfmt layout run on that single parse.",
     "tsgo": "Type-aware and type-check diagnostics start one TypeScript-Go process only when you opt in through settings.",
     "diagnostics": "Every diagnostic maps back to the exact TSRX you typed. On the recorded machine, open to first diagnostics measured 2.40 ms median.",
     "edits": "A quick fix or format edit applies only with an exact authored mapping and a clean reparse. Malformed input returns no edit instead of a guess."
@@ -14,8 +16,8 @@
   "steps": [
     {
       "label": "Attach",
-      "nodes": ["buffer", "framework", "companion"],
-      "caption": "You open a .tsrx file. Your framework extension keeps owning the language while the companion quietly starts the native server."
+      "nodes": ["buffer", "framework", "official", "mux"],
+      "caption": "You open a .tsrx file after official OXC activates. Your framework keeps owning the language while oxc-tsrx dynamically attaches native tooling."
     },
     {
       "label": "Diagnose",
@@ -30,7 +32,7 @@
     {
       "label": "Opt into types",
       "nodes": ["tsgo"],
-      "caption": "Turning on oxcTsrx.typeAware or oxcTsrx.typeCheck adds TypeScript-Go diagnostics through the same authored-byte mapping."
+      "caption": "Enabling type-aware or type-check options in lint configuration adds TypeScript-Go diagnostics through the same authored-byte mapping."
     }
   ]
 }

@@ -1,4 +1,4 @@
-import { parseSync } from "../../packages/parser/index.js";
+import { parseSync } from "../../packages/toolchain/dist/parser.js";
 
 export const meta = Object.freeze({
   name: "@oxc-tsrx/eslint-parser-prototype",
@@ -115,7 +115,7 @@ export function parseForESLint(sourceText, options = {}) {
     visitorKeys,
     services: {
       isTsrx: true,
-      parser: "@oxc-tsrx/parser",
+      parser: "oxc-tsrx/parser",
     },
   };
 }

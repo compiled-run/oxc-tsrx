@@ -69,7 +69,7 @@ test("platform VSIX embeds exactly the matching native language server and notic
   const executable = join(
     root,
     "target/release",
-    process.platform === "win32" ? "oxc-tsrx-lsp.exe" : "oxc-tsrx-lsp",
+    process.platform === "win32" ? "oxc-tsrx.exe" : "oxc-tsrx",
   );
   const result = await run(process.execPath, [
     "scripts/package-vscode.mjs",
@@ -125,8 +125,11 @@ test("platform VSIX embeds exactly the matching native language server and notic
     ),
   );
   const suffix = process.platform === "win32" ? ".exe" : "";
-  assert.equal(packaged.vsixVerification.nativeBinary, `oxc-tsrx-lsp${suffix}`);
-  const nativePath = `extension/dist/native/oxc-tsrx-lsp${suffix}`;
+  // One multi-call executable, started with the `lsp` subcommand, replaced the
+  // three separate release binaries. The VSIX embeds that one file and nothing
+  // under the retired per-tool names.
+  assert.equal(packaged.vsixVerification.nativeBinary, `oxc-tsrx${suffix}`);
+  const nativePath = `extension/dist/native/oxc-tsrx${suffix}`;
   assert.ok(entries.has(nativePath));
   assert.ok(entries.has("extension/dist/native/manifest.json"));
   assert.ok(entries.has("extension/dist/native/LICENSE"));
@@ -137,12 +140,12 @@ test("platform VSIX embeds exactly the matching native language server and notic
     false,
   );
   assert.equal(
-    [...entries.keys()].some((name) => /dist\/native\/oxc-tsrx-fmt/.test(name)),
+    [...entries.keys()].some((name) => /dist\/native\/oxc-tsrx-(?:fmt|lsp)/.test(name)),
     false,
   );
-  assert.equal(
-    [...entries.keys()].some((name) => /dist\/native\/oxc-tsrx(?:\.exe)?$/.test(name)),
-    false,
+  assert.deepEqual(
+    [...entries.keys()].filter((name) => /dist\/native\/oxc-tsrx[^/]*$/.test(name)),
+    [nativePath],
   );
   assert.match(
     entries.get("extension.vsixmanifest").toString("utf8"),
@@ -162,7 +165,7 @@ test("platform VSIX embeds exactly the matching native language server and notic
   const manifest = JSON.parse(entries.get("extension/dist/native/manifest.json"));
   assert.equal(manifest.target, hostTarget());
   assert.equal(manifest.oxcRevision, "8e0ed2ebb96137fb1611cdbd5742d5cb46037d40");
-  assert.equal(manifest.binary, `oxc-tsrx-lsp${suffix}`);
+  assert.equal(manifest.binary, `oxc-tsrx${suffix}`);
   const sourceHash = createHash("sha256")
     .update(await readFile(executable))
     .digest("hex");

@@ -7,7 +7,7 @@ import test from "node:test";
 import {
   nativePackageName,
   nativeTargetForHost,
-} from "../../packages/parser/targets.js";
+} from "../../packages/toolchain/dist/native-targets.js";
 
 const root = resolve(import.meta.dirname, "../..");
 const npm = process.platform === "win32" ? "npm.cmd" : "npm";
@@ -80,7 +80,7 @@ test("untouched packed parser and host-native tarballs load, parse, and preserve
       await run(
         npm,
         ["pack", "--json", "--pack-destination", artifacts],
-        { cwd: join(root, "packages/parser"), env: npmEnvironment },
+        { cwd: join(root, "packages/toolchain"), env: npmEnvironment },
       )
     ).stdout,
     );
@@ -92,7 +92,7 @@ test("untouched packed parser and host-native tarballs load, parse, and preserve
         npm,
         ["pack", "--json", "--pack-destination", artifacts],
         {
-          cwd: join(root, "packages/parser/node_modules/@oxc-project/types"),
+          cwd: join(root, "node_modules/@oxc-project/types"),
           env: npmEnvironment,
         },
       )
@@ -117,7 +117,7 @@ test("untouched packed parser and host-native tarballs load, parse, and preserve
     { cwd: consumer, env: npmEnvironment },
     );
 
-    const parserRoot = join(consumer, "node_modules", "@oxc-tsrx", "parser");
+    const parserRoot = join(consumer, "node_modules", "oxc-tsrx");
     const nativeRoot = join(
     consumer,
     "node_modules",
@@ -133,7 +133,7 @@ test("untouched packed parser and host-native tarballs load, parse, and preserve
 
     const childSource = String.raw`
     import { createRequire } from "node:module";
-    import { capabilities, parse, parseSync } from "@oxc-tsrx/parser";
+    import { capabilities, parse, parseSync } from "oxc-tsrx/parser";
     const require = createRequire(import.meta.url);
     const ordinary = parseSync("entry.tsx", "export const value = <main>{1n}</main>");
     const source = "function View() @{ @if(ok){<main/>}@else{<aside/>} }";

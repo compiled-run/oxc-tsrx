@@ -1,4 +1,4 @@
-import { resolvePackageBinary } from "../packages/runtime/dist/package-binary.js";
+import { resolvePackageBinary } from "../packages/toolchain/dist/package-binary.js";
 
 /**
  * Resolve VSCE through its public npm manifest and execute that JavaScript entry with Node.

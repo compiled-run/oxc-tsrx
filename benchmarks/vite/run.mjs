@@ -14,9 +14,9 @@ const fixture = join(root, "tests/fixtures/vite/toolchain/diagnostics");
 const budgetsPath = join(root, "benchmarks/vite/budgets.json");
 const budgets = JSON.parse(await readFile(budgetsPath, "utf8"));
 const lintBin = join(root, "target/release/oxc-tsrx");
-const formatBin = join(root, "target/release/oxc-tsrx-fmt");
-const productLintBin = join(root, "node_modules/oxlint-tsrx/bin/oxlint");
-const productFormatBin = join(root, "node_modules/oxfmt-tsrx/bin/oxfmt");
+const formatBin = join(root, "target/release/oxc-tsrx");
+const productLintBin = join(root, "node_modules/oxc-tsrx/bin/oxlint");
+const productFormatBin = join(root, "node_modules/oxc-tsrx/bin/oxfmt");
 const canonicalOxfmtBin = join(root, "node_modules/oxfmt-current/bin/oxfmt");
 const warmups = 5;
 // Twenty samples make nearest-rank p95 the second-highest observation instead
@@ -241,9 +241,9 @@ const summary = {
   build: {
     profile: "release",
     lintBinary: "target/release/oxc-tsrx",
-    formatBinary: "target/release/oxc-tsrx-fmt",
-    lintLauncher: "node_modules/oxlint-tsrx/bin/oxlint",
-    formatLauncher: "node_modules/oxfmt-tsrx/bin/oxfmt",
+    formatBinary: "target/release/oxc-tsrx",
+    lintLauncher: "node_modules/oxc-tsrx/bin/oxlint",
+    formatLauncher: "node_modules/oxc-tsrx/bin/oxfmt",
     oxcRevision: lintMetadata.oxcRevision,
   },
   corpus: await corpusIdentity(),

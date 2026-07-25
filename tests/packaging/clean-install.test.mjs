@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { createRequire } from "node:module";
 import { mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
+import { startLocalRegistry } from "./local-registry.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 const npm = process.platform === "win32" ? "npm.cmd" : "npm";
@@ -58,14 +60,21 @@ async function pack(packageRoot, artifacts, cache) {
   );
   const report = JSON.parse(result.stdout);
   assert.equal(report.length, 1);
-  return { ...report[0], tarball: join(artifacts, report[0].filename) };
+  return {
+    ...report[0],
+    manifest: JSON.parse(
+      await readFile(join(root, packageRoot, "package.json"), "utf8"),
+    ),
+    tarball: join(artifacts, report[0].filename),
+  };
 }
 
-function cleanEnvironment(consumer) {
+function cleanEnvironment(consumer, registry) {
   const environment = {
     ...process.env,
     NO_COLOR: "1",
     npm_config_cache: join(consumer, ".npm-cache"),
+    npm_config_registry: registry,
   };
   for (const key of Object.keys(environment)) {
     if (
@@ -79,7 +88,7 @@ function cleanEnvironment(consumer) {
   return environment;
 }
 
-test("untouched tarballs run the complete supported workflow from an empty consumer", async () => {
+test("untouched tarballs run the complete supported workflow from an empty consumer", async (context) => {
   const startedAt = new Date().toISOString();
   const npmVersion = (await mustRun(npm, ["--version"], { cwd: root })).stdout.trim();
   const artifacts = await mkdtemp(join(tmpdir(), "oxc-tsrx-clean-artifacts-"));
@@ -98,11 +107,17 @@ test("untouched tarballs run the complete supported workflow from an empty consu
     { cwd: root, env: { ...process.env, npm_config_cache: cache } },
   );
   const native = JSON.parse(nativeResult.stdout);
-  const [runtimePackage, lintPackage, formatPackage] = await Promise.all([
-    pack("packages/runtime", artifacts, cache),
-    pack("packages/oxlint", artifacts, cache),
-    pack("packages/oxfmt", artifacts, cache),
+  const toolchainPackage = await pack("packages/toolchain", artifacts, cache);
+  const registry = await startLocalRegistry([
+    toolchainPackage,
+    {
+      manifest: { name: native.packageName, version: native.version },
+      tarball: native.tarball,
+      integrity: native.integrity,
+      shasum: native.shasum,
+    },
   ]);
+  context.after(() => registry.close());
 
   const consumer = await mkdtemp(join(tmpdir(), "oxc-tsrx-clean-consumer-"));
   const packageJson = {
@@ -110,15 +125,12 @@ test("untouched tarballs run the complete supported workflow from an empty consu
     private: true,
     type: "module",
     dependencies: {
-      "@oxc-tsrx/runtime": `file:${runtimePackage.tarball}`,
-      [native.packageName]: `file:${native.tarball}`,
-      oxlint: `file:${lintPackage.tarball}`,
-      oxfmt: `file:${formatPackage.tarball}`,
+      "oxc-tsrx": "0.1.0",
       "vite-plus": "0.2.4",
     },
   };
   await writeFile(join(consumer, "package.json"), `${JSON.stringify(packageJson, null, 2)}\n`);
-  const environment = cleanEnvironment(consumer);
+  const environment = cleanEnvironment(consumer, registry.url);
   await mustRun(
     npm,
     ["install", "--ignore-scripts", "--no-audit", "--no-fund"],
@@ -138,12 +150,36 @@ test("untouched tarballs run the complete supported workflow from an empty consu
   assert.equal(auditReport.metadata.vulnerabilities.high, 0);
   assert.equal(auditReport.metadata.vulnerabilities.critical, 0);
 
-  const runtimeRoot = join(consumer, "node_modules/@oxc-tsrx/runtime");
-  const nativeRoot = join(consumer, "node_modules", ...native.packageName.split("/"));
+  assert.deepEqual(Object.keys(packageJson.dependencies), ["oxc-tsrx", "vite-plus"]);
+  const toolchainRoot = join(consumer, "node_modules/oxc-tsrx");
+  const activate = await mustRun(
+    process.execPath,
+    [join(toolchainRoot, "bin/oxc-tsrx"), "setup", "--json"],
+    { cwd: consumer, env: environment },
+  );
+  assert.deepEqual(JSON.parse(activate.stdout).changed, [
+    "oxc-parser",
+    "oxlint",
+    "oxfmt",
+  ]);
+  const reactivate = await mustRun(
+    process.execPath,
+    [join(toolchainRoot, "bin/oxc-tsrx"), "setup", "--json"],
+    { cwd: consumer, env: environment },
+  );
+  assert.deepEqual(JSON.parse(reactivate.stdout).changed, []);
+  const toolchainRequire = createRequire(join(toolchainRoot, "package.json"));
   const consumerRoot = await realpath(consumer);
-  assert.equal((await realpath(runtimeRoot)).startsWith(consumerRoot), true);
+  // The native resolution logic is the installed package's own, and it is the
+  // only first-party code under `oxc-tsrx` now: there is no wrapper package
+  // between the toolchain and its platform artifact.
+  const runtime = await import(pathToFileURL(join(toolchainRoot, "dist/runtime.js")).href);
+  const nativeRoot = resolve(
+    toolchainRequire.resolve(`${runtime.platformPackage()}/package.json`),
+    "..",
+  );
+  assert.equal((await realpath(toolchainRoot)).startsWith(consumerRoot), true);
   assert.equal((await realpath(nativeRoot)).startsWith(consumerRoot), true);
-  const runtime = await import(pathToFileURL(join(runtimeRoot, "dist/index.js")).href);
   const resolutions = {};
   for (const kind of ["lint", "format", "server"]) {
     const resolved = await realpath(runtime.resolveNativeBinary(kind));
@@ -207,7 +243,7 @@ test("untouched tarballs run the complete supported workflow from an empty consu
   });
 
   const formatter = await import(
-    pathToFileURL(join(consumer, "node_modules/oxfmt/dist/index.js")).href
+    pathToFileURL(join(toolchainRoot, "dist/format.js")).href
   );
   const api = await formatter.format(
     "Api.tsrx",
@@ -303,29 +339,20 @@ test("untouched tarballs run the complete supported workflow from an empty consu
           packageManager: `npm ${npmVersion}`,
           ignoreScripts: true,
           environmentOverrides: false,
-          localResolutionOnly: true,
+          oneDirectTsrxPackage: true,
+          explicitCompatibilitySetup: true,
         },
         packages: {
-          runtime: {
-            name: runtimePackage.name,
-            version: runtimePackage.version,
-            integrity: runtimePackage.integrity,
+          toolchain: {
+            name: toolchainPackage.name,
+            version: toolchainPackage.version,
+            integrity: toolchainPackage.integrity,
           },
           native: {
             name: native.packageName,
             version: native.version,
             target: native.target,
             integrity: native.integrity,
-          },
-          oxlint: {
-            name: lintPackage.name,
-            version: lintPackage.version,
-            integrity: lintPackage.integrity,
-          },
-          oxfmt: {
-            name: formatPackage.name,
-            version: formatPackage.version,
-            integrity: formatPackage.integrity,
           },
           vitePlus: installed.dependencies["vite-plus"].version,
         },
@@ -341,6 +368,8 @@ test("untouched tarballs run the complete supported workflow from an empty consu
           missingNativeMixedWritesFailClosed: true,
           noSourceTreeBinaryOverride: true,
           noInstallScripts: true,
+          oneDirectTsrxPackage: true,
+          compatibilitySetupIdempotent: true,
         },
       },
       null,

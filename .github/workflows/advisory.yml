@@ -66,7 +66,7 @@ jobs:
           const files = [
             "crates/oxc_adapter/Cargo.toml",
             "crates/oxc_adapter/src/lib.rs",
-            "packages/runtime/dist/index.js",
+            "packages/toolchain/dist/runtime.js",
             "scripts/package-native.mjs",
             "scripts/package-vscode.mjs",
           ];

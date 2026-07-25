@@ -11,7 +11,8 @@ const projectRoot = resolve(here, '..');
 const marklessRoot = resolve(
   process.env.MARKLESS_ROOT ?? '/Users/jacksm5pro/dev/open-source/markless',
 );
-const binary = resolve(process.env.OXFMT_BIN ?? resolve(projectRoot, 'target/release/oxc-tsrx-fmt'));
+// The formatter is the `fmt` tool inside the one multi-call native binary.
+const binary = resolve(process.env.OXFMT_BIN ?? resolve(projectRoot, 'target/release/oxc-tsrx'));
 const revision = '76d0e6a07fa728b9343cc0d342fbe03813c43703';
 
 const invalidFiles = [
@@ -38,7 +39,7 @@ function git(args, options = {}) {
 }
 
 function format(path, source) {
-  return spawnSync(binary, [`--stdin-filepath=${path}`], {
+  return spawnSync(binary, ['fmt', `--stdin-filepath=${path}`], {
     cwd: projectRoot,
     encoding: 'utf8',
     input: source,

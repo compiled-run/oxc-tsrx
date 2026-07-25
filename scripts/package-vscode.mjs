@@ -13,7 +13,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
-import { NATIVE_TARGETS } from "../packages/runtime/dist/targets.js";
+import { NATIVE_TARGETS } from "../packages/toolchain/dist/native-targets.js";
 import { resolveVsceInvocation } from "./vsce-invocation.mjs";
 import { verifyAndPromoteVsix } from "./vsix-archive.mjs";
 
@@ -81,7 +81,10 @@ if (!lspMetadata?.isFile()) throw new Error(`language server is missing: ${lspSo
 const lspContents = await readFile(lspSource);
 const lspSha256 = sha256(lspContents);
 const lspBytes = lspMetadata.size;
-const executable = platform.os === "win32" ? "oxc-tsrx-lsp.exe" : "oxc-tsrx-lsp";
+// The VSIX embeds the one multi-call native executable, which the extension
+// starts with the `lsp` subcommand. It replaced three separate binaries built
+// from the same crate.
+const executable = platform.os === "win32" ? "oxc-tsrx.exe" : "oxc-tsrx";
 const expectedVsix = {
   bundleSha256: sha256(sourceBundle),
   inventorySha256: sha256(sourceInventory),
@@ -99,7 +102,7 @@ const expectedVsix = {
 };
 const rustc = await run("rustc", ["-vV"]);
 if (rustHost(rustc.stdout) === platform.target) {
-  const version = await run(lspSource, ["--version"]);
+  const version = await run(lspSource, ["lsp", "--version"]);
   const expected = `oxc-tsrx-lsp ${sourceManifest.version} (OXC ${revision})\n`;
   if (version.stderr || version.stdout !== expected) {
     throw new Error(`unexpected language-server identity: ${version.stdout}${version.stderr}`);

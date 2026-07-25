@@ -351,7 +351,7 @@ try {
       cwd: cleanRoot,
       env: {
         ...environment,
-        OXFMT_BIN: path.join(cleanRoot, 'target', 'release', 'oxc-tsrx-fmt'),
+        OXFMT_BIN: path.join(cleanRoot, 'target', 'release', 'oxc-tsrx'),
       },
       label: 'read-only 179-file Markless format/reparse/convergence corpus',
     },

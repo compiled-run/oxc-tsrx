@@ -1,6 +1,7 @@
-import { cp, mkdir, readFile, stat, symlink } from "node:fs/promises";
+import { cp, mkdir, readFile, stat, symlink, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
+import { setupCompatibility } from "../../packages/toolchain/dist/compat.js";
 
 const require = createRequire(import.meta.url);
 const root = resolve(import.meta.dirname, "../..");
@@ -87,42 +88,25 @@ export async function installPhysicalToolPackages(modules, vitePlusPackage) {
     await resolvePackageRoot(vitePlusRequire, vitePlusBinding),
   );
 
-  const runtimeDestination = join(modules, "@oxc-tsrx/runtime");
-  const lintDestination = join(modules, "oxlint-tsrx");
-  const formatDestination = join(modules, "oxfmt-tsrx");
-  await Promise.all([
-    copyPackageEntries(join(root, "packages/runtime"), runtimeDestination, [
-      "package.json",
-      "dist",
-      "LICENSE",
-    ]),
-    copyPackageEntries(join(root, "packages/oxlint"), lintDestination, [
-      "package.json",
-      "bin",
-      "dist",
-      "LICENSE",
-    ]),
-    copyPackageEntries(join(root, "packages/oxfmt"), formatDestination, [
-      "package.json",
-      "bin",
-      "dist",
-      "LICENSE",
-    ]),
+  const toolchainDestination = join(modules, "oxc-tsrx");
+  await copyPackageEntries(join(root, "packages/toolchain"), toolchainDestination, [
+    "package.json",
+    "bin",
+    "dist",
+    "LICENSE",
   ]);
-  await linkPackage(modules, "oxlint", lintDestination);
-  await linkPackage(modules, "oxfmt", formatDestination);
 
   const canonicalLint = dirname(require.resolve("oxlint-current/package.json"));
   const canonicalFormat = dirname(require.resolve("oxfmt-current/package.json"));
   await Promise.all([
-    copyPackageEntries(canonicalLint, join(lintDestination, "node_modules/oxlint-current"), [
+    copyPackageEntries(canonicalLint, join(toolchainDestination, "node_modules/oxlint-current"), [
       "package.json",
       "bin",
       "dist",
       "configuration_schema.json",
       "LICENSE",
     ]),
-    copyPackageEntries(canonicalFormat, join(formatDestination, "node_modules/oxfmt-current"), [
+    copyPackageEntries(canonicalFormat, join(toolchainDestination, "node_modules/oxfmt-current"), [
       "package.json",
       "bin",
       "dist",
@@ -152,4 +136,14 @@ export async function installPhysicalToolPackages(modules, vitePlusPackage) {
     ),
     linkPackage(modules, "oxlint-tsgolint", await resolvePackageRoot(require, "oxlint-tsgolint")),
   ]);
+
+  const projectRoot = dirname(modules);
+  const projectManifestPath = join(projectRoot, "package.json");
+  const projectManifest = JSON.parse(await readFile(projectManifestPath, "utf8"));
+  projectManifest.devDependencies = {
+    ...projectManifest.devDependencies,
+    "oxc-tsrx": "0.1.0",
+  };
+  await writeFile(projectManifestPath, `${JSON.stringify(projectManifest, null, 2)}\n`);
+  await setupCompatibility({ projectRoot });
 }

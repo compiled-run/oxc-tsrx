@@ -209,7 +209,7 @@ test("platform VSIX ships the exact native legal tree", async () => {
   const executable = join(
     root,
     "target/release",
-    process.platform === "win32" ? "oxc-tsrx-lsp.exe" : "oxc-tsrx-lsp",
+    process.platform === "win32" ? "oxc-tsrx.exe" : "oxc-tsrx",
   );
   const packaged = JSON.parse(
     (

@@ -6,13 +6,13 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
-import { resolveOxlintBytePositions } from "../../packages/oxlint/dist/cli.js";
+import { resolveOxlintBytePositions } from "../../packages/toolchain/dist/lint-cli.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, "../..");
 const binary = resolve(process.env.OXLINT_BIN ?? join(root, "target/release/oxc-tsrx"));
 const stock = resolve(join(root, "node_modules/oxlint-current/bin/oxlint"));
-const companion = resolve(join(root, "packages/oxlint/bin/oxlint"));
+const companion = resolve(join(root, "packages/toolchain/bin/oxlint"));
 
 function run(cwd, args, executable = binary, environment = process.env) {
   return new Promise((resolvePromise, reject) => {

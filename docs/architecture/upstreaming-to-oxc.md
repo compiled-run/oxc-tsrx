@@ -1,6 +1,6 @@
 ---
 title: Upstreaming to OXC
-description: A maintainer-first review map for upstreaming a projected-source TSRX front end into OXC, with pinned source audits, a transplant matrix, and reproducible evidence.
+description: A parked, source-complete proposal for upstreaming a projected-source TSRX front end into OXC, with pinned source audits, a transplant matrix, and reproducible evidence. Not submitted and not being pursued.
 ---
 
 # Upstreaming TSRX to OXC
@@ -10,19 +10,37 @@ endorsed by, or a product of VoidZero or the OXC team. No OXC maintainer
 interest or endorsement is claimed here. This page is a technical review map,
 not an accepted OXC design or a copy-and-submit contribution.
 
-## Why this page exists
+## Status: a proposal that is not being pursued
 
-This project wants to upstream TSRX support into OXC. That is the goal, stated
-plainly. TSRX is the `.tsrx` template syntax this repository lints and formats
-today by projecting it into legal TSX and running the canonical OXC toolchain
-on that projection.
+Read this first, because it changes what the rest of the page means.
 
-Everything on this page is built to make an eventual OXC review as cheap as
-possible. It maps what exists, classifies what could move upstream and what
-could not, names the seams that are closed at an exact audited commit, and
-lists the commands that reproduce every performance and correctness claim. The
-intent is that a maintainer can evaluate the design from evidence, not from
-promises.
+On 2026-07-25 the owner retired upstreaming as a premise for this project and
+declined to submit anything. Nothing here has been sent to OXC, and nothing is
+planned to be. This page and the patches it describes are a source-complete,
+locally verified proposal that is deliberately parked.
+
+Why keep it, then? Because writing it down was already paid for, and throwing it
+away would destroy the only honest answer to "what would this take upstream?"
+If OXC ever wants a projected-source TSRX front end, the audit, the transplant
+matrix, and the reproducible commands are here and pinned to exact revisions.
+Until then, this is a record, not a roadmap.
+
+Nothing on this page is how the product works today. OXC for TSRX ships as one
+npm package that owns the `oxlint` and `oxfmt` command names, and that name
+ownership is the delivery mechanism. See
+[Getting Started](../guide/getting-started.md) for what actually runs.
+
+## What TSRX is, and what this page maps
+
+TSRX is the `.tsrx` template syntax this repository lints and formats today by
+projecting it into legal TSX and running the canonical OXC toolchain on that
+projection.
+
+This page maps what exists, classifies what could move upstream and what could
+not, names the seams that are closed at an exact audited commit, and lists the
+commands that reproduce every performance and correctness claim. It is written
+so that a maintainer could evaluate the design from evidence rather than from
+promises, if one ever chose to.
 
 ## TL;DR for OXC maintainers
 
@@ -45,18 +63,19 @@ through the buttons to walk the proposed landing order:
 
 <!-- diagram:upstream-map -->
 
-What we are asking:
+What this page would support, if it were ever taken up:
 
 - a design review of a projected-source TSRX front end, using the pinned
-  source audit, transplant matrix, and reproducible evidence on this page to
-  evaluate it.
+  source audit, transplant matrix, and reproducible evidence below.
 
 What we are not asking or claiming:
 
+- We are not asking for that review. Submission was declined by the owner on
+  2026-07-25, and no request has been made of anyone.
 - We do not claim OXC maintainer interest, endorsement, or acceptance.
 - We are not presenting a merge-ready patch, and this page is not a request
-  to merge one. Whether and how TSRX lands upstream is entirely an OXC
-  maintainer decision.
+  to merge one. Whether and how TSRX lands upstream, if ever, is entirely an
+  OXC maintainer decision.
 
 ## Audit provenance
 
@@ -195,7 +214,7 @@ and conventions. Use the chips to show one classification at a time.
 | Error construction | **Adapt or replace** | `oxc_diagnostics` at parser/front-end boundaries | Preserve authored spans and failure conditions while adopting upstream diagnostics. |
 | Syntax, formatter, corpus, mapping, Unicode, and layout tests | **Direct reuse** as evidence; adapt harnesses | Parser coverage, formatter conformance, allocation snapshots, and app integration tests | Keep pass/fail inputs and invariants; express them through OXC's fixture/snapshot systems. |
 | `oxc_adapter`, config discovery, TypeScript-Go process protocol, and CLI orchestration | **Standalone product glue** | Usually none; small pieces may become Oxlint/Oxfmt app routing | In-tree code calls workspace APIs directly. Keep npm compatibility and release policy outside the grammar core. |
-| Vite/Vite+, npm platform packages, and the VS Code selector companion | **Standalone product glue** | Separate ecosystem packages | These integrations remain useful even if OXC gains a native front end. |
+| Vite/Vite+, npm platform packages, and the official-extension LSP multiplexer | **Standalone product glue** | Separate ecosystem packages | These integrations remain useful until OXC exposes shared provider discovery and native `.tsrx` selection. |
 | New TSRX AST node kinds, generated visitors, semantic traversal, and a native formatter over those nodes | **Upstream-only redesign** | `oxc_ast`, AST generators, `oxc_semantic`, `oxc_traverse`, and formatter crates | This is a larger alternative to projection, not work this repository can honestly pre-implement. |
 | `.tsrx` source dispatch, linter loading, Oxfmt file/LSP routing, and official editor selection | **Upstream-only redesign** | OXC application and editor layers | These closed routes require maintainer-approved APIs and UX; adding an extension alone is insufficient. |
 
@@ -225,15 +244,143 @@ There is relevant design activity, but the
 [Language Plugins RFC #21936](https://github.com/oxc-project/oxc/discussions/21936),
 [Oxlint custom-template research issue #19918](https://github.com/oxc-project/oxc/issues/19918),
 and [draft custom-parser PR #24262](https://github.com/oxc-project/oxc/pull/24262)
-are unmerged research, not runtime dependencies. The draft parser route is
-Oxlint-specific and does not by itself solve Oxfmt, type-aware linting, or
-editor selection. This repository must continue to use released,
-capability-probed seams until upstream chooses and ships something else.
+are unmerged research, not runtime dependencies. As of 2026-07-24 that draft
+has grown well past a bare AST hook: it now covers `parseForESLint`/`parse`
+routing, `SourceCode` and token behavior, parser services and scope-manager
+integration, fixes and disable directives, editor/LSP routing, and native-rule
+coverage through an offset-preserving shadow source, all behind explicit
+per-glob opt-in. Even so, it is Oxlint-specific and still does not solve Oxfmt,
+type-aware framework files, parse/load caching, generated typed walkers, full
+module-graph participation, or first-class language identity. This repository
+must continue to use released, capability-probed seams until upstream chooses
+and ships something else.
+
+## Provider discovery patches, built locally
+
+The seams above are about the language front end, which is a large design
+question. There is a second, much smaller question that can be answered
+separately: how does an OXC tool find out that a project has installed a
+third-party language provider at all?
+
+This project's answer is a static `oxc.provider` block in the provider
+package's own `package.json`, described on the
+[editor integration page](../integrations/editor.md). Three adoption patches for
+that protocol now exist as source, and two of them have been built and run.
+
+Read the status labels carefully, because they are not the same thing:
+
+- **built and verified locally** means the patch was applied to a clone at a
+  pinned public revision, compiled, and exercised by tests on this machine.
+- **submitted** would mean sent to an upstream repository. Nothing is submitted,
+  and submission was declined by the owner on 2026-07-25.
+- **accepted** would mean merged upstream. Nothing is accepted.
+- **released** would mean shipped to users. Nothing is released.
+
+| Target | Pinned revision | Size | Diff | Status |
+| --- | --- | --- | --- | --- |
+| [`oxc-project/oxc`](https://github.com/oxc-project/oxc) Oxlint npm wrapper | [`a065946`](https://github.com/oxc-project/oxc/commit/a065946a8ce95eb3374e08242cd9086ab050314b) | +1463 / -10, of which 43 lines touch existing code | `docs/architecture/patches/oxlint-provider-dispatch.patch` | built, verified locally |
+| [`oxc-project/oxc-vscode`](https://github.com/oxc-project/oxc-vscode) document selector | [`beaffb9`](https://github.com/oxc-project/oxc-vscode/commit/beaffb967b06db53907723cbb61712c0fa9d9dea) | +106 / -1 | `docs/architecture/patches/oxc-vscode-provider-selector.patch` | built, verified locally |
+| [`voidzero-dev/vite-plus`](https://github.com/voidzero-dev/vite-plus) | [`a24eede`](https://github.com/voidzero-dev/vite-plus/commit/a24eede77ebec23b3e942437bda34f6d34a95cd3) | zero lines | none needed | verified, with a version pin caveat below |
+
+The two diffs are committed in this repository under
+`docs/architecture/patches/`, next to a short index at
+`docs/architecture/patches/README.md` that repeats the pinned revisions and the
+exact `git apply` commands. Each `.patch` file also carries its own target
+repository and revision in a plain-text preamble, which `git apply` skips, so a
+file that is copied out of the tree on its own is still reproducible.
+
+No upstream source is vendored into this repository. A patch is a diff, not the
+source it applies to, and every clone the diffs were built in lives outside this
+repository and is temporary.
+
+### What the Oxlint patch does
+
+The npm wrapper does not spawn a native binary. It loads a NAPI addon into the
+same Node process and calls `lint(args, ...callbacks)` once, at the end of
+`apps/oxlint/src-js/cli.ts`. The patch sits directly above that one call.
+
+When no provider is installed, the wrapper runs that exact statement, unchanged.
+When a provider is installed, the wrapper splits the command line: paths Oxlint
+already owns stay on the same call, and paths a provider claims are handed to
+the capability binary the provider declares. In `--lsp` mode the wrapper instead
+composes the canonical language server with each provider's server behind the
+one stdio connection the editor opened.
+
+Nothing crosses into Rust. The `lint(...)` signature is untouched, which is what
+makes this a JavaScript-only change a reviewer can evaluate on its own.
+
+The patch runs a provider's capability binary in pass-through mode: it hands the
+binary the file paths and lets that binary's own output reach the user, then
+takes the worst exit code. It does not ask for a machine-readable format and it
+merges no reports, because the canonical half is rendered and printed inside
+Rust, so the wrapper never holds it as data. That is the contract written down
+in `packages/toolchain/README.md` under "Capability calling convention", and the
+two now say the same thing.
+
+### Why Vite+ needs nothing, and what that is worth today
+
+Vite+ resolves the `oxlint` package, walks up to the package root, joins
+`bin/oxlint`, and executes that path. It never reads file extensions. Its
+LSP-only wrapper at `packages/cli/bin/oxlint` does the same and then imports the
+result. Both therefore inherit whatever the resolved Oxlint wrapper does, so a
+patch to the wrapper reaches Vite+ users with no Vite+ change at all.
+
+That is a claim about Vite+'s code, and it holds. It is not a claim that a
+released Vite+ can pick up a provider-aware wrapper today, and it does not
+become one. `tests/packaging/vite-plus-provider.test.mjs` runs the real
+installed Vite+ 0.2.4 binary against a project holding a provider and records
+three things:
+
+1. **Vite+ 0.2.4 pins `"oxlint": "=1.72.0"`, exactly.** An exact pin accepts one
+   version and no other, so the Oxlint copy Vite+ installs for itself is frozen
+   at 1.72.0. Provider dispatch exists only as a local build at 1.74.0. A
+   project that installs Vite+ and nothing else therefore reaches a wrapper that
+   has never heard of providers, whatever else it has installed. This is the
+   qualification the zero-line claim needs, and it stays true until Vite+ moves
+   its pin to a release that carries dispatch.
+2. **`vp lint` prefers the project's own Oxlint.** Vite+ resolves with the
+   project directory first and its own package second, so a project that
+   declares its own `oxlint` is served by that copy even while Vite+'s pinned
+   1.72.0 sits nested inside the Vite+ package. In the test the real `vp lint`
+   binary lands on the project's wrapper, hands it every named file including
+   one with a provider-claimed extension, passes its output straight through,
+   and propagates its exit code. So the pass-through shape is real.
+3. **The LSP wrapper does not agree with `vp lint`.** `bin/oxlint` resolves
+   relative to its own package rather than to the project, so in the same
+   layout it runs the pinned 1.72.0 copy while `vp lint` runs the project's.
+   An editor reaching Oxlint through Vite+ therefore keeps the pinned wrapper
+   even when the command line does not. Anyone proposing this upstream should
+   expect that seam to need attention even though the linting seam does not.
+
+The test also records the honest limit of a JavaScript-only dispatch patch:
+when the user names a directory rather than files, the wrapper receives the
+directory and the native file walker decides what to open, so provider
+extensions are never enumerated.
+
+### The strongest evidence so far, and its limit
+
+In a workspace whose only dependency is this project's package, with
+`node_modules/.bin` deleted, every tool name shadowed on `PATH`, and no
+`oxc.path.*` editor setting of any kind, the released official OXC extension
+found the patched Oxlint wrapper by ordinary Node resolution. That wrapper then
+read the provider block and started the language server the provider declares,
+confirmed against the operating system's own process table.
+
+The limit is exactly one sentence long, and it matters. The wrapper doing the
+discovering is a local source build of a patch no OXC maintainer has seen, and
+none will, because submission was declined.
+
+So treat that result as a proof that the protocol is implementable, not as a
+step toward anything shipping. No released OXC tool reads `oxc.provider`, and on
+current plans none will. What ships instead is the `oxlint` and `oxfmt` command
+names owned by `oxc-tsrx`, which is a permanent delivery mechanism rather than a
+placeholder.
 
 ## Credible landing sequence
 
-This is a recommended review sequence, not a claim that OXC has accepted the
-shape.
+This is the review sequence the proposal would recommend. It is not a claim that
+OXC has accepted the shape, and it is not scheduled work: nothing here is being
+pursued.
 
 1. **Review the language core and evidence first.** Start with `model.rs`, the
    scanner domains, public grammar fixtures, Unicode boundary tests, and the
@@ -254,10 +401,14 @@ shape.
    TSRX nodes over projection, scope generated AST, visitor, traversal,
    semantic, formatter, and ecosystem consequences as a redesign. Do not hide
    that work inside a “parser support” patch.
-6. **Retire companion surfaces only after released parity.** The npm commands
-   and editor selector remain necessary until official binaries cover lint,
-   format, source mappings, and document selection without losing performance
-   or fail-closed behavior.
+6. **Assume the delivery surfaces stay.** Earlier drafts of this page called the
+   explicit package-name facades, the LSP multiplexer, and the optional legacy
+   activation client compatibility surfaces that would retire once official
+   tools reached parity. That retirement cannot happen now. With upstreaming
+   retired as a premise, no official tool is going to cover provider discovery,
+   lint, format, source mappings, and `.tsrx` activation on this project's
+   behalf, so those surfaces are how the product is delivered and they are
+   permanent.
 
 ## Performance invariants
 

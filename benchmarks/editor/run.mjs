@@ -5,10 +5,10 @@ import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { cpus, release as osRelease, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { performance } from "node:perf_hooks";
-import { LspClient, pathToFileUri } from "../../tests/editor/lsp-client.mjs";
+import { LspClient, pathToFileUri, SERVER_ARGUMENTS } from "../../tests/editor/lsp-client.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
-const server = join(root, "target/release/oxc-tsrx-lsp");
+const server = join(root, "target/release/oxc-tsrx");
 const fixture = join(root, "tests/fixtures/editor/markless-arm-try-events.tsrx");
 const budgets = JSON.parse(
   await readFile(join(root, "benchmarks/editor/budgets.json"), "utf8"),
@@ -84,7 +84,7 @@ const uri = pathToFileUri(sourcePath);
 const rootUri = pathToFileUri(workspace);
 
 async function measureInitialOpenOnce() {
-  const probe = new LspClient(server, { cwd: workspace });
+  const probe = new LspClient(server, { args: SERVER_ARGUMENTS, cwd: workspace });
   const started = performance.now();
   try {
     await probe.initialize(rootUri);
@@ -120,7 +120,7 @@ for (let index = 0; index < samplePolicy.initialOpenSamples; index += 1) {
   initialOpenMs.push(await measureInitialOpenOnce());
 }
 
-const client = new LspClient(server, { cwd: workspace });
+const client = new LspClient(server, { args: SERVER_ARGUMENTS, cwd: workspace });
 let version = 1;
 let current = withDebugger;
 try {
@@ -215,11 +215,11 @@ try {
     },
     build: {
       profile: "release",
-      binary: "target/release/oxc-tsrx-lsp",
+      binary: "target/release/oxc-tsrx",
       oxcRevision: "8e0ed2ebb96137fb1611cdbd5742d5cb46037d40",
     },
     server: {
-      binary: "target/release/oxc-tsrx-lsp",
+      binary: "target/release/oxc-tsrx",
       name: initialized.serverInfo?.name,
       version: initialized.serverInfo?.version,
       transport: "canonical OXC language server over stdio",

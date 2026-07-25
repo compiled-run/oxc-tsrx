@@ -9,17 +9,17 @@ import test from "node:test";
 import {
   NATIVE_TARGETS,
   nativePackageName,
-} from "../../packages/runtime/dist/targets.js";
+} from "../../packages/toolchain/dist/native-targets.js";
 import {
   canRunCanonicalOxlint,
   parseOxlintInvocation,
   planCanonicalOxlintComposition,
-} from "../../packages/oxlint/dist/invocation.js";
+} from "../../packages/toolchain/dist/lint-invocation.js";
 import {
   canRunCanonicalOxfmt,
   parseOxfmtInvocation,
-} from "../../packages/oxfmt/dist/invocation.js";
-import { resolvePackageBinary } from "../../packages/runtime/dist/index.js";
+} from "../../packages/toolchain/dist/format-invocation.js";
+import { resolvePackageBinary } from "../../packages/toolchain/dist/runtime.js";
 
 const root = resolve(import.meta.dirname, "../..");
 
@@ -51,16 +51,18 @@ function withoutRuntimeTiming(result) {
   };
 }
 
-test("runtime owns one exact optional native package for every supported target", async () => {
-  const runtime = JSON.parse(await readFile(join(root, "packages/runtime/package.json"), "utf8"));
-  const expected = Object.fromEntries(
-    NATIVE_TARGETS.map((platform) => [nativePackageName(platform), runtime.version]),
+test("the toolchain owns one exact optional native package for every supported target", async () => {
+  const toolchain = JSON.parse(
+    await readFile(join(root, "packages/toolchain/package.json"), "utf8"),
   );
-  assert.deepEqual(runtime.optionalDependencies, expected);
-  assert.equal(runtime.publishConfig.access, "public");
-  assert.equal(runtime.publishConfig.provenance, true);
-  assert.ok(runtime.files.includes("README.md"));
-  assert.ok(runtime.files.includes("THIRD_PARTY_NOTICES.md"));
+  const expected = Object.fromEntries(
+    NATIVE_TARGETS.map((platform) => [nativePackageName(platform), toolchain.version]),
+  );
+  assert.deepEqual(toolchain.optionalDependencies, expected);
+  assert.equal(toolchain.publishConfig.access, "public");
+  assert.equal(toolchain.publishConfig.provenance, true);
+  assert.ok(toolchain.files.includes("README.md"));
+  assert.ok(toolchain.files.includes("THIRD_PARTY_NOTICES.md"));
 });
 
 test("the platform matrix is unique and covers the eight launch targets", async () => {
@@ -79,7 +81,7 @@ test("explicit ordinary files take the zero-wrapper canonical Oxlint route", asy
   const source = join(directory, "ordinary.tsx");
   const trace = join(directory, "trace.jsonl");
   const config = join(directory, "oxlint.config.mjs");
-  const candidate = join(root, "packages/oxlint/bin/oxlint");
+  const candidate = join(root, "packages/toolchain/bin/oxlint");
   const stock = join(root, "node_modules/oxlint-current/bin/oxlint");
   const environment = {
     ...process.env,
@@ -240,26 +242,22 @@ test("mixed routing does not depend on private Oxlint modules or descriptor capt
 
   const files = (
     await Promise.all(
-      [
-        "packages/runtime/dist",
-        "packages/oxlint/bin",
-        "packages/oxlint/dist",
-        "packages/oxfmt/bin",
-        "packages/oxfmt/dist",
-      ].map((directory) => productionSources(join(root, directory))),
+      ["packages/toolchain/bin", "packages/toolchain/dist"].map((directory) =>
+        productionSources(join(root, directory)),
+      ),
     )
   ).flat();
   const requiredFiles = [
-    "packages/runtime/dist/index.js",
-    "packages/runtime/dist/process.js",
-    "packages/runtime/dist/package-binary.js",
-    "packages/oxlint/bin/oxlint",
-    "packages/oxlint/dist/cli.js",
-    "packages/oxlint/dist/prestart.js",
-    "packages/oxlint/dist/invocation.js",
-    "packages/oxfmt/bin/oxfmt",
-    "packages/oxfmt/dist/cli.js",
-    "packages/oxfmt/dist/invocation.js",
+    "packages/toolchain/dist/runtime.js",
+    "packages/toolchain/dist/process.js",
+    "packages/toolchain/dist/package-binary.js",
+    "packages/toolchain/bin/oxlint",
+    "packages/toolchain/dist/lint-cli.js",
+    "packages/toolchain/dist/lint-prestart.js",
+    "packages/toolchain/dist/lint-invocation.js",
+    "packages/toolchain/bin/oxfmt",
+    "packages/toolchain/dist/format-cli.js",
+    "packages/toolchain/dist/format-invocation.js",
   ].map((pathname) => join(root, pathname));
   assert.ok(
     requiredFiles.every((pathname) => files.includes(pathname)),
@@ -286,18 +284,18 @@ test("mixed routing does not depend on private Oxlint modules or descriptor capt
   }
 
   assert.match(
-    sources.get(join(root, "packages/oxlint/bin/oxlint")),
-    /importDeclaredPackageBinary\('oxlint-current', 'oxlint'/u,
+    sources.get(join(root, "packages/toolchain/bin/oxlint")),
+    /importDeclaredPackageBinary\("oxlint-current", "oxlint"/u,
   );
   assert.match(
-    sources.get(join(root, "packages/oxfmt/bin/oxfmt")),
-    /importDeclaredPackageBinary\('oxfmt-current', 'oxfmt'/u,
+    sources.get(join(root, "packages/toolchain/bin/oxfmt")),
+    /importDeclaredPackageBinary\("oxfmt-current", "oxfmt"/u,
   );
-  const prestart = sources.get(join(root, "packages/oxlint/dist/prestart.js"));
+  const prestart = sources.get(join(root, "packages/toolchain/dist/lint-prestart.js"));
   assert.match(prestart, /resolvePackageBinary\("oxlint-current", "oxlint"/u);
   assert.match(prestart, /runCaptured\(process\.execPath/u);
   assert.match(
-    sources.get(join(root, "packages/runtime/dist/process.js")),
+    sources.get(join(root, "packages/toolchain/dist/process.js")),
     /from "node:child_process"/u,
   );
 });
@@ -306,7 +304,7 @@ test("ordinary Oxfmt stdin and explicit files take the zero-wrapper canonical ro
   const directory = await mkdtemp(join(tmpdir(), "oxc-tsrx-ordinary-format-route-"));
   const source = join(directory, "ordinary.tsx");
   const trace = join(directory, "trace.jsonl");
-  const candidate = join(root, "packages/oxfmt/bin/oxfmt");
+  const candidate = join(root, "packages/toolchain/bin/oxfmt");
   const stock = join(root, "node_modules/oxfmt-current/bin/oxfmt");
   const environment = {
     ...process.env,
