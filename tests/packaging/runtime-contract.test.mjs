@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
-import { mkdir, mkdtemp, readdir, realpath, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
@@ -20,6 +19,7 @@ import {
   parseOxfmtInvocation,
 } from "../../packages/toolchain/dist/format-invocation.js";
 import { resolvePackageBinary } from "../../packages/toolchain/dist/runtime.js";
+import { temporaryDirectory } from "./temporary-directory.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 
@@ -92,7 +92,7 @@ test("the platform matrix is unique and covers the eight launch targets", async 
 });
 
 test("explicit ordinary files take the zero-wrapper canonical Oxlint route", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "oxc-tsrx-ordinary-route-"));
+  const directory = await temporaryDirectory("oxc-tsrx-ordinary-route-");
   const source = join(directory, "ordinary.tsx");
   const trace = join(directory, "trace.jsonl");
   const config = join(directory, "oxlint.config.mjs");
@@ -157,7 +157,7 @@ test("explicit ordinary files take the zero-wrapper canonical Oxlint route", asy
 });
 
 test("the canonical Oxlint router is conservative around ambiguous paths and options", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "oxc-tsrx-route-contract-"));
+  const directory = await temporaryDirectory("oxc-tsrx-route-contract-");
   const ordinary = join(directory, "ordinary.tsx");
   const disguisedDirectory = join(directory, "components.tsx");
   const nestedTsrx = join(disguisedDirectory, "View.tsrx");
@@ -209,7 +209,7 @@ test("the canonical Oxlint router is conservative around ambiguous paths and opt
 });
 
 test("canonical package binaries resolve from the manifest bin declaration", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "oxc-tsrx-package-bin-"));
+  const directory = await temporaryDirectory("oxc-tsrx-package-bin-");
   const packageRoot = join(directory, "node_modules", "mock-canonical-tool");
   const entry = join(directory, "consumer.mjs");
   const declaredBin = join(packageRoot, "commands", "canonical.js");
@@ -320,7 +320,7 @@ test("mixed routing does not depend on private Oxlint modules or descriptor capt
 });
 
 test("ordinary Oxfmt stdin and explicit files take the zero-wrapper canonical route", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "oxc-tsrx-ordinary-format-route-"));
+  const directory = await temporaryDirectory("oxc-tsrx-ordinary-format-route-");
   const source = join(directory, "ordinary.tsx");
   const trace = join(directory, "trace.jsonl");
   const candidate = join(root, "packages/toolchain/bin/oxfmt");
@@ -374,7 +374,7 @@ test("ordinary Oxfmt stdin and explicit files take the zero-wrapper canonical ro
 });
 
 test("the canonical Oxfmt router keeps ambiguous and TSRX work in the bridge", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "oxc-tsrx-format-route-contract-"));
+  const directory = await temporaryDirectory("oxc-tsrx-format-route-contract-");
   const ordinary = join(directory, "ordinary.tsx");
   const disguisedDirectory = join(directory, "format.tsx");
   const nestedTsrx = join(disguisedDirectory, "View.tsrx");

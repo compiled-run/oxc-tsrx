@@ -1,19 +1,10 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import {
-  cp,
-  mkdir,
-  mkdtemp,
-  readFile,
-  readdir,
-  realpath,
-  rm,
-  writeFile,
-} from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { cp, mkdir, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
+import { temporaryDirectory } from "./temporary-directory.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 const packageRoot = join(root, "packages", "toolchain");
@@ -176,7 +167,16 @@ test("every capability executor is a leaf: no discovery, no extension dispatch",
   }
 });
 
-test("a capability executor reports a child killed by a signal as exit 2", async () => {
+test("a capability executor reports a child killed by a signal as exit 2", {
+  // Windows has no POSIX signals: `process.kill(process.pid, "SIGTERM")` there
+  // is an unconditional `TerminateProcess`, and the parent is told only an exit
+  // status. A child cannot report a termination signal for itself, so the input
+  // this assertion needs does not exist on that host, and every other host in
+  // CI covers it.
+  skip: process.platform === "win32"
+    ? "a child cannot be killed by a signal on Windows, which has no POSIX signals"
+    : false,
+}, async () => {
   // The convention promises hosts that 2 means "the executor or its tool
   // broke". A child that dies from a signal has no exit status of its own, so
   // the runtime the executors share has to supply one.
@@ -218,7 +218,7 @@ test("the capability calling convention is documented where an adopting host wil
  * artifact.
  */
 test("an isolated consumer resolves every public export and bin from the package alone", async () => {
-  const temporary = await mkdtemp(join(tmpdir(), "oxc-tsrx-toolchain-"));
+  const temporary = await temporaryDirectory("oxc-tsrx-toolchain-");
   const consumer = join(temporary, "consumer");
   const installed = join(consumer, "node_modules", "oxc-tsrx");
   const nested = join(installed, "node_modules");
@@ -493,7 +493,7 @@ test("the canonical command names arbitrate from the project manifest alone", as
   const { decideCanonicalCommand, deferralNotice, providedArguments } = await import(
     pathToFileURL(join(packageRoot, "dist/canonical-command.js"))
   );
-  const temporary = await mkdtemp(join(tmpdir(), "oxc-tsrx-canonical-"));
+  const temporary = await temporaryDirectory("oxc-tsrx-canonical-");
 
   const project = async (name, dependencies, modules = {}) => {
     const directory = join(temporary, name);
@@ -639,7 +639,7 @@ test("the official binary is executed the way each host requires", async (contex
   const { runOfficialCommand, usesNodeInterpreter } = await import(
     pathToFileURL(join(packageRoot, "dist/canonical-command.js"))
   );
-  const temporary = await mkdtemp(join(tmpdir(), "oxc-tsrx-official-run-"));
+  const temporary = await temporaryDirectory("oxc-tsrx-official-run-");
   context.after(() => rm(temporary, { recursive: true, force: true }));
 
   // Windows cannot execute a `.cmd` launcher directly, and `npm` writes exactly

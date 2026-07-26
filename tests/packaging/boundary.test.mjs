@@ -1,20 +1,11 @@
 import assert from "node:assert/strict";
-import {
-  mkdir,
-  mkdtemp,
-  readdir,
-  readFile,
-  realpath,
-  rm,
-  symlink,
-  writeFile,
-} from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, readdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
 import { resolveNpmInvocation } from "../../scripts/npm-invocation.mjs";
 import { resolveVsceInvocation } from "../../scripts/vsce-invocation.mjs";
+import { temporaryDirectory } from "./temporary-directory.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 const adapterManifestPath = join(root, "crates/oxc_adapter/Cargo.toml");
@@ -41,26 +32,6 @@ const expectedAdapterDependencies = [
   "oxc_span",
   "oxc_syntax",
 ];
-
-/**
- * A temporary fixture directory named the way the filesystem itself names it.
- *
- * On Windows CI `os.tmpdir()` reports the 8.3 short form of the user's profile
- * (`C:\Users\RUNNER~1\AppData\Local\Temp`), and the two realpath implementations
- * in Node disagree about it. `fs.realpathSync`, which the invocation resolvers
- * use, walks the path in JavaScript and keeps whatever spelling it was handed,
- * so it returns the short form. `fs.promises.realpath` is the libuv call, which
- * asks Windows for the final name and returns `C:\Users\runneradmin\...`. Both
- * name the same file, but comparing them as strings fails.
- *
- * Anchoring every fixture on its real path resolves the alias once, at the only
- * point where it is introduced, so the assertions below stay exact equality on
- * paths rather than being loosened into path matching. On POSIX this is the
- * `/var` -> `/private/var` resolution these tests already depended on.
- */
-async function temporaryDirectory(prefix) {
-  return realpath(await mkdtemp(join(tmpdir(), prefix)));
-}
 
 async function writeNpmFixture(
   packageRoot,

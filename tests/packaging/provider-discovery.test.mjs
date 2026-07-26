@@ -3,7 +3,6 @@ import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 import {
   mkdir,
-  mkdtemp,
   readFile,
   readdir,
   realpath,
@@ -12,7 +11,6 @@ import {
   symlink,
   writeFile,
 } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { basename, extname, isAbsolute, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
@@ -21,6 +19,7 @@ import {
   spawnCommand,
 } from "../../packages/toolchain/dist/spawn-command.js";
 import { startLocalRegistry } from "./local-registry.mjs";
+import { temporaryDirectory } from "./temporary-directory.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 const toolchainRoot = join(root, "packages/toolchain");
@@ -261,7 +260,7 @@ test(
   "a plain install is the only step a consumer takes to register a language provider",
   { timeout: 420_000 },
   async (context) => {
-    const temporary = await mkdtemp(join(tmpdir(), "oxc-tsrx-provider-"));
+    const temporary = await temporaryDirectory("oxc-tsrx-provider-");
     const artifacts = join(temporary, "artifacts");
     const sources = join(temporary, "sources");
     const cache = join(temporary, "pack-cache");
@@ -556,7 +555,7 @@ test(
 );
 
 test("the providers report is a read-only audit that fails loudly", async (context) => {
-  const temporary = await mkdtemp(join(tmpdir(), "oxc-tsrx-provider-report-"));
+  const temporary = await temporaryDirectory("oxc-tsrx-provider-report-");
   context.after(() => rm(temporary, { recursive: true, force: true }));
 
   const fixture = async (name, dependencies, packages) => {
