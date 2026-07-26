@@ -53,9 +53,20 @@ function json(result) {
   return JSON.parse(result.stdout.slice(start));
 }
 
-function diagnostic(output, filename, rule) {
+// Stock Oxlint prints a diagnostic filename relative to its working directory
+// whenever the linted file sits under it, while the TSRX binary echoes back the
+// path it was handed. Passing `base` compares the two spellings as the same
+// file instead of as the same string. macOS hides the difference because
+// `mkdtemp` returns a symlinked `/var/folders/...` path that Oxlint cannot
+// strip its real `/private/var/folders/...` working directory from, so it falls
+// back to the absolute argument; on Linux CI `/tmp` is real and the same run
+// reports `view.tsx`.
+function diagnostic(output, filename, rule, base) {
+  const sameFile = base
+    ? (candidate) => resolve(base, candidate) === resolve(base, filename)
+    : (candidate) => candidate === filename;
   return output.diagnostics.find(
-    (item) => item.filename === filename && (item.rule === rule || item.code.includes(`(${rule})`)),
+    (item) => sameFile(item.filename) && (item.rule === rule || item.code.includes(`(${rule})`)),
   );
 }
 
@@ -203,7 +214,7 @@ test("npm wrapper matches canonical Oxlint across CR, LF, and CRLF line starts",
 });
 
 test("discovers one JSONC Oxlint config and applies rules, severities, and per-file overrides", async () => {
-  const cwd = await mkdtemp(join(tmpdir(), "oxc-tsrx-lint-config-"));
+  const cwd = await realpath(await mkdtemp(join(tmpdir(), "oxc-tsrx-lint-config-")));
   const tsrx = join(cwd, "view.tsrx");
   const tsx = join(cwd, "view.tsx");
   const config = join(cwd, ".oxlintrc.jsonc");
@@ -264,10 +275,11 @@ test("discovers one JSONC Oxlint config and applies rules, severities, and per-f
   const stockTsxResult = await run(cwd, ["--format=json", tsx], stock);
   assert.equal(stockTsxResult.code, 1, stockTsxResult.stderr || stockTsxResult.stdout);
   const stockTsx = json(stockTsxResult);
-  assert.equal(diagnostic(stockTsx, tsx, "no-debugger"), undefined);
+  assert.equal(diagnostic(stockTsx, tsx, "no-debugger", cwd), undefined);
   for (const rule of ["no-console", "eqeqeq", "no-undef", "jsx-no-undef"]) {
     const candidate = diagnostic(output, tsx, rule);
-    const control = diagnostic(stockTsx, tsx, rule);
+    const control = diagnostic(stockTsx, tsx, rule, cwd);
+    assert.ok(control, `${rule}: stock Oxlint control diagnostic`);
     assert.equal(candidate?.severity, control?.severity, rule);
     assert.equal(candidate?.labels[0]?.span.offset, control?.labels[0]?.span.offset, rule);
     assert.equal(candidate?.labels[0]?.span.length, control?.labels[0]?.span.length, rule);
