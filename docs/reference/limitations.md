@@ -60,6 +60,33 @@ skipped file or a wrong-but-plausible result.
 
 ## CLI and configuration
 
+- **A bare `npx oxlint` lints `node_modules` too, and that is upstream
+  behavior.** With no path argument and nothing else narrowing the run, Oxlint
+  walks the whole current directory. Measured in a scratch project created with
+  `npm init -y`: 9260 warnings, 9257 of them from `node_modules`. Official
+  Oxlint from the same install reproduces it, so this is parity with canonical
+  Oxlint and not something the TSRX drop-in adds.
+
+  A `.gitignore` containing `node_modules` removes it completely, and no git
+  repository is needed for that file to count. Naming a path
+  (`npx oxlint src`) avoids it as well. This project ships no ignore file, no
+  default config, and no postinstall that would write one for you, so an empty
+  scratch folder is the one place you will meet it.
+- **`npx oxlint --fix` will rewrite files inside `node_modules` if they are in
+  scope.** Measured in a project with no source files of its own: 15 files
+  changed under `node_modules`, exit code 0, no warning. Official Oxlint changed
+  13 in the same folder, so again this is upstream parity. Point `--fix` at a
+  path you own, or make sure `node_modules` is ignored first. `oxfmt` is not
+  affected; it skips `node_modules` unless you pass `--with-node-modules`.
+- **`npx oxc-tsrx status` reports `missing` three times in a healthy project.**
+  It only inspects the Vite+ compatibility facades, so `oxc-parser: missing`,
+  `oxlint: missing`, and `oxfmt: missing` are the correct state for every
+  command-line and editor user. It exits 0. Use `npx oxc-tsrx providers` to
+  check that TSRX support is wired up.
+- **A seventh command, `tsgolint`, appears in `node_modules/.bin`.** It is not
+  part of this project. It comes from the `oxlint-tsgolint` dependency, which is
+  the official type-aware runner behind `--type-aware` and `--type-check`. You
+  never invoke it yourself.
 - The native binaries take **explicit file paths only**. Directory walking
   and globs come from the `oxc-tsrx` npm commands and Vite+.
 - Config files must be JSON/JSONC. JS/TS config modules are rejected, except
@@ -83,7 +110,12 @@ skipped file or a wrong-but-plausible result.
   Because `setup` works inside `node_modules`, a clean install wipes it and you
   run it again. That rerun is real and it is not scheduled to go away.
 - **Everywhere except Vite+, the install is the whole step, and the `oxlint` /
-  `oxfmt` command names are how.** `oxc-tsrx` declares bins under those names,
+  `oxfmt` command names are how.** Counted out: one step for the command line,
+  one step for the editor, two for Vite+, and the second Vite+ step repeats
+  after every clean dependency install. The full table is in
+  [Getting Started](/guide/getting-started#the-minimum-steps-per-host).
+
+  `oxc-tsrx` declares bins under those names,
   which is exactly what released Vite+ and the released official OXC extension
   select by. That is the shipped delivery mechanism, not a stopgap.
 

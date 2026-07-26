@@ -67,6 +67,42 @@ registry launch, follow the source-build path in the
 [getting-started guide](docs/guide/getting-started.md); local candidate files
 do not prove registry publication.
 
+### The minimum steps, per host
+
+Measured against the published `oxc-tsrx` 0.1.0 installed from the registry into
+a clean project on darwin-arm64:
+
+| Where you use it | Steps | What you run |
+| --- | --- | --- |
+| Command line (`oxlint`, `oxfmt`) | 1 | `npm install --save-dev oxc-tsrx` |
+| Editor, through released `oxc.oxc-vscode` | 1 | the same install, and nothing else |
+| Vite+ (`vp lint`, `vp fmt`) | 2 | the same install, then `npx oxc-tsrx setup` |
+
+The Vite+ second step repeats after every clean dependency install. No row asks
+for a config file, an ignore file, or a lifecycle script.
+
+Three things a first run is likely to raise, none of which is a broken install:
+
+- **A bare `npx oxlint` also lints `node_modules`.** In a scratch project made
+  with `npm init -y` that measured 9260 warnings, 9257 of them from
+  `node_modules`. Official Oxlint from the same install produces the same wall,
+  so this is canonical Oxlint parity. A `.gitignore` containing `node_modules`
+  removes it completely with no git repository required, and naming a path
+  (`npx oxlint src`) avoids it too. The same scope decides what `--fix` may
+  rewrite: measured at 15 files inside `node_modules` for this package and 13
+  for official Oxlint. `oxfmt` skips `node_modules` unless you pass
+  `--with-node-modules`.
+- **`npx oxc-tsrx status` prints three `missing` lines and exits 0.** It
+  inspects the Vite+ compatibility facades only, so that is the correct state
+  for command-line and editor users. Use `npx oxc-tsrx providers` to check that
+  TSRX support is wired up.
+- **A `tsgolint` command appears in `node_modules/.bin`.** It is not this
+  project's. It comes with the `oxlint-tsgolint` dependency, the official
+  type-aware runner behind `--type-aware`, and you never call it directly.
+
+[Getting Started](docs/guide/getting-started.md) has the same material with the
+full transcripts.
+
 ### Install-only provider discovery
 
 That install is the whole consumer action. `oxc-tsrx` declares a static

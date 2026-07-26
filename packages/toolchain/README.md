@@ -43,6 +43,58 @@ reads `oxc.provider` metadata.** If you read a sentence below that sounds like
 "OXC discovers providers", read it as "the reference implementation in this
 repository discovers providers, and we would like OXC to do the same".
 
+## What you actually have to run
+
+**Status: released behavior**, measured against the published `oxc-tsrx` 0.1.0
+installed from the registry into a clean project on darwin-arm64.
+
+| Where you use it | Steps | What you run |
+| --- | --- | --- |
+| Command line (`oxlint`, `oxfmt`) | 1 | `npm install --save-dev oxc-tsrx` |
+| Editor, through released `oxc.oxc-vscode` | 1 | the same install, and nothing else |
+| Vite+ (`vp lint`, `vp fmt`) | 2 | the same install, then `npx oxc-tsrx setup` |
+
+The Vite+ step repeats after every clean dependency install, because `setup`
+writes inside `node_modules`. Nothing in this table asks you to create a config
+file, add an ignore file, or run a lifecycle script.
+
+### The install links seven commands
+
+`oxlint`, `oxfmt`, and `oxc-tsrx` are the ones you type. `oxc-tsrx-lint`,
+`oxc-tsrx-fmt`, and `oxc-tsrx-lsp` are the leaf executors those first two
+dispatch to, and they are the exact bins the provider block names.
+
+The seventh is `tsgolint`, and it is not this project's command. It arrives with
+the `oxlint-tsgolint` dependency, the official type-aware runner behind
+`--type-aware` and `--type-check`. You never call it yourself, and calling it
+prints upstream's own "unsupported entrypoint" warning.
+
+### Two facts about lint scope, both inherited from canonical Oxlint
+
+`npx oxlint` with no path walks the current directory, and `node_modules` is
+part of it. In a scratch project created with `npm init -y` that measured 9260
+warnings, 9257 of them from `node_modules`. Official Oxlint from the same
+install produces the same wall, so this is parity rather than a TSRX regression.
+
+A `.gitignore` containing `node_modules` removes it completely, and no git
+repository is needed for that file to count. Naming a path (`npx oxlint src`)
+avoids it too. This package ships no ignore file and no default config, and it
+writes nothing into your project.
+
+The same scope decides what `--fix` is allowed to touch. In a project with no
+sources of its own, `npx oxlint --fix` changed 15 files inside `node_modules`
+and exited 0; official Oxlint changed 13 in the same folder. Fix a path you own,
+or make sure `node_modules` is ignored first. `oxfmt` is unaffected: it skips
+`node_modules` unless you pass `--with-node-modules`.
+
+### `oxc-tsrx status` reporting `missing` is the healthy state
+
+`status` inspects the Vite+ compatibility facades and nothing else, so a
+command-line or editor project prints `oxc-parser: missing`, `oxlint: missing`,
+and `oxfmt: missing`, and exits 0. Nothing is broken and `setup` is not the
+answer unless you use Vite+. `npx oxc-tsrx providers` is the command that tells
+you whether TSRX is wired up.
+
 ## Install-only provider discovery
 
 **Status: local reference implementation and proof.**

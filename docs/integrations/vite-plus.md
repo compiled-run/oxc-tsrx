@@ -39,6 +39,27 @@ Use `npx oxc-tsrx status` to inspect it and `npx oxc-tsrx remove` to restore
 transitive official packages. Run `setup` again after a clean dependency
 install.
 
+So Vite+ is two steps: the install, then `setup`. Every other host is one step,
+the install on its own. The table of all three is in
+[Getting Started](/guide/getting-started#the-minimum-steps-per-host).
+
+`status` is about these facades and nothing else, which matters if you read it
+before running `setup` or in a project that does not use Vite+ at all:
+
+```text
+$ npx oxc-tsrx status
+oxc-tsrx 0.1.0 compatibility (npm)
+- oxc-parser: missing
+- oxlint: missing
+- oxfmt: missing
+```
+
+Three `missing` lines with exit code 0 mean the facades are not installed. On
+this page that is the state `setup` is about to change. Anywhere else it is the
+correct, healthy state and there is nothing to fix. To confirm that TSRX support
+itself is wired up, run `npx oxc-tsrx providers` and look for
+`routed extensions: .tsrx -> oxc-tsrx`.
+
 **This step is permanent.** It is not a shim waiting to be deleted, and it is
 not something a future `oxc-tsrx` release removes. Two facts about Vite+ make it
 structural:

@@ -9,6 +9,84 @@ Both native commands take **explicit source files**; directory walking and glob
 expansion belong to the `oxc-tsrx` npm toolchain and Vite+, not the native binaries. Any
 unsupported option is rejected with an actionable error rather than ignored.
 
+## What a plain install puts on your path
+
+`npm install --save-dev oxc-tsrx` is the whole setup for the command line and
+for the editor. Vite+ needs one more command; see
+[the minimum steps per host](/guide/getting-started#the-minimum-steps-per-host).
+
+The install links seven commands into `node_modules/.bin`:
+
+| Command | Kind | What it is |
+| --- | --- | --- |
+| `oxlint` | you type it | The linter. Sends `.tsrx` to the TSRX engine and everything else to canonical Oxlint. |
+| `oxfmt` | you type it | The formatter, with the same split. |
+| `oxc-tsrx` | you type it | `providers`, `status`, `setup`, `remove`. Described in the next section. |
+| `oxc-tsrx-lint` | leaf executor | The native linter, given explicit files only. `oxlint` dispatches to it. It prints JSON, and it has no `--help`. |
+| `oxc-tsrx-fmt` | leaf executor | The native formatter. `oxfmt` dispatches to it. `--help` works here. |
+| `oxc-tsrx-lsp` | leaf executor | The native language server. Editors launch it through `oxlint --lsp`. |
+| `tsgolint` | not this project | It arrives with the `oxlint-tsgolint` dependency, the official type-aware runner used by `--type-aware` and `--type-check`. You never call it directly, and calling it prints upstream's own "unsupported entrypoint" warning. |
+
+Reach for a leaf executor directly only when your project pins official `oxlint`
+or `oxfmt`, because those command names then belong to the pinned package.
+
+The `oxc-tsrx` sections further down this page describe the **native binary** of
+the same name, which is what you get from a source build. It is a different
+program from the `oxc-tsrx` npm command above.
+
+### `npx oxlint` with no path also lints `node_modules`
+
+A bare `npx oxlint` walks the current directory, and `node_modules` is part of
+it unless something narrows the run. Measured in a scratch project made with
+`npm init -y`: 9260 warnings, 9257 of them from `node_modules`. Official Oxlint
+from the same install produces the same wall, so this is upstream parity and not
+something TSRX introduces.
+
+A `.gitignore` containing `node_modules` removes it completely, with no git
+repository required, and naming a path (`npx oxlint src`) avoids it too. The
+same scope rule applies to `--fix`, which will rewrite files inside
+`node_modules` if you let it reach them. `oxfmt` is unaffected; it skips
+`node_modules` unless you pass `--with-node-modules`. There is more detail, with
+the measured numbers, in
+[Getting Started](/guide/getting-started#give-the-linter-a-path-or-an-empty-folder-will-bury-you).
+
+## `oxc-tsrx` (npm command)
+
+```text
+Usage: oxc-tsrx providers [--project <directory>] [--json]
+       oxc-tsrx setup     [--project <directory>] [--dry-run] [--json]
+       oxc-tsrx status    [--project <directory>] [--json]
+       oxc-tsrx remove    [--project <directory>] [--dry-run] [--json]
+```
+
+| Subcommand | What it does |
+| --- | --- |
+| `providers` | Reads the `oxc.provider` block of your direct dependencies and prints the index. It writes nothing and spawns nothing. `routed extensions: .tsrx -> oxc-tsrx` is the line that proves your install works. |
+| `setup` | Writes the project-local `oxlint`, `oxfmt`, and `oxc-parser` facades that Vite+ resolves. Only Vite+ needs it. |
+| `status` | Reports whether those facades are present. |
+| `remove` | Removes them and restores any transitive official package it displaced. |
+
+Run it with no subcommand for the same usage block. A wrong subcommand names the
+bad word and exits 2. Note that `--help` and `--version` are not accepted here;
+use no arguments, or `help`.
+
+### `status` says `missing` three times in a healthy project
+
+```text
+$ npx oxc-tsrx status
+oxc-tsrx 0.1.0 compatibility (npm)
+- oxc-parser: missing
+- oxlint: missing
+- oxfmt: missing
+```
+
+That output is correct, and the exit code is 0. `status` only ever talks about
+the Vite+ compatibility facades, so `missing` means "no facades installed",
+which is the right state for every command-line and editor user. There is
+nothing to fix, and running `setup` is not the answer unless you use Vite+.
+
+Use `npx oxc-tsrx providers` to check that TSRX support is actually wired up.
+
 ## `oxc-tsrx` (lint)
 
 ```text

@@ -32,6 +32,38 @@ this normal install. You do not need Rust on your machine, the package runs
 no install scripts, and the commands never download anything later. If your
 CI blocks postinstall scripts, this install still works.
 
+### The minimum steps, per host
+
+This is the complete list of things you have to run. Each row was measured
+against the published `oxc-tsrx` 0.1.0 installed from the registry into a clean
+project on darwin-arm64.
+
+| Where you use it | Steps | What you run |
+| --- | --- | --- |
+| Command line (`oxlint`, `oxfmt`) | 1 | `npm install --save-dev oxc-tsrx` |
+| Editor, through released `oxc.oxc-vscode` | 1 | the same install, and nothing else |
+| [Vite+](/integrations/vite-plus) (`vp lint`, `vp fmt`) | 2 | the same install, then `npx oxc-tsrx setup` |
+
+The Vite+ second step is permanent, and you run it again after every clean
+dependency install. Vite+ resolves a *package* named `oxlint` and pins
+`oxlint@=1.72.0`, and a command name cannot answer a package resolution. See
+[Vite and Vite+](/integrations/vite-plus) for the full reasoning.
+
+No row asks you to create a config file, add an ignore file, or add a lifecycle
+script. `oxc-tsrx` writes nothing into your project during install.
+
+### What the install adds to `node_modules/.bin`
+
+A clean install links seven commands. Only the first three are ones you type:
+
+| Command | What it is |
+| --- | --- |
+| `oxlint` | the linter you run. Handles `.tsrx` plus ordinary files |
+| `oxfmt` | the formatter you run. Same split |
+| `oxc-tsrx` | `providers`, `status`, `setup`, and `remove`. See the [CLI reference](/reference/cli) |
+| `oxc-tsrx-lint`, `oxc-tsrx-fmt`, `oxc-tsrx-lsp` | the native leaf commands `oxlint` and `oxfmt` dispatch to. Useful directly only if your project pins official `oxlint` |
+| `tsgolint` | not part of this project. It comes from the `oxlint-tsgolint` dependency, the official type-aware runner behind `--type-aware`. You never call it yourself, and calling it prints its own "unsupported entrypoint" warning |
+
 ### Installing is the activation step
 
 `oxc-tsrx` declares a static `oxc.provider` block in its own `package.json`. A
@@ -112,6 +144,25 @@ full quick start.
 Vite+ is the only place an install alone is not enough. Every other route in
 this guide works with no command at all.
 
+#### `oxc-tsrx status` is about those facades only
+
+`status` reports on the Vite+ compatibility facades and on nothing else. In a
+command-line or editor project it prints this, exit code 0:
+
+```text
+oxc-tsrx 0.1.0 compatibility (npm)
+- oxc-parser: missing
+- oxlint: missing
+- oxfmt: missing
+```
+
+Three `missing` lines are the correct result there. They mean the Vite+ facades
+are not installed, which is what you want when you do not use Vite+. Nothing is
+broken and there is nothing to fix.
+
+To check that your install is working, run `npx oxc-tsrx providers` instead. The
+line to look for is `routed extensions: .tsrx -> oxc-tsrx`.
+
 ## Create a TSRX file
 
 Save this as `src/Cart.tsrx`. On this site, the "Try in playground" button
@@ -155,6 +206,43 @@ Two things to know:
   while ordinary `.js`/`.ts`/`.tsx` files go straight to OXC.
 - **You can tune rule severity inline.** For example
   `npx oxlint --warn no-console --deny no-debugger src/Cart.tsrx`.
+
+### Give the linter a path, or an empty folder will bury you
+
+The commands above name a file on purpose. `npx oxlint` with no path at all
+lints everything it can find under the current directory, and that includes
+`node_modules`.
+
+In a scratch folder created with `mkdir demo && npm init -y`, a measured bare
+run reported **9260 warnings, 9257 of them from `node_modules`**. The three
+warnings from `src/` were the ones the user wanted.
+
+This is canonical Oxlint behavior, not something TSRX adds. Running the official
+`oxlint` binary from the same install produces the same wall. Two things keep it
+away from you:
+
+- **A `.gitignore` listing `node_modules` fixes it completely.** Oxlint honors
+  that file even when the folder is not a git repository, so the measured run
+  above drops straight to its 3 real warnings once the file exists. Almost every
+  real project already has one. A brand new scratch folder does not, and that is
+  the only place this bites.
+- **Naming a path works either way.** `npx oxlint src` lints your sources and
+  nothing else.
+
+`oxc-tsrx` ships no ignore file and no config of its own, and it never writes one
+into your project. Your own `.gitignore` and `.oxlintrc.json` are the only
+inputs.
+
+> **Do not run `npx oxlint --fix` where `node_modules` is still in scope.** With
+> nothing narrowing the run, `--fix` rewrites files inside your dependency tree.
+> A measured run in a project with no source files at all changed 15 files under
+> `node_modules` and still exited 0. Official Oxlint changed 13 in the same
+> folder, so this is upstream parity rather than a TSRX defect, but your
+> dependency tree is modified either way. Fix a path you own
+> (`npx oxlint --fix src`), or make sure `node_modules` is ignored first.
+
+`oxfmt` is not affected. It skips `node_modules` unless you pass
+`--with-node-modules`.
 
 ## Configuration
 
