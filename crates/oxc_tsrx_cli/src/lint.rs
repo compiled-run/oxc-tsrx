@@ -5,6 +5,31 @@ use std::{env, path::PathBuf, process::ExitCode};
 use oxc_adapter::OXC_REVISION;
 use tsrx_lint::{ConfigRuleFilter, ConfigRuleSeverity, LintSession};
 
+const HELP: &str = "\
+OXC for TSRX linter
+
+Usage: oxc-tsrx-lint [--fix] [--format=json] [-D RULE] PATH...
+
+Options:
+    --fix                   Apply the safe fixes and write the changed files
+    -A, --allow RULE        Report RULE at the allow severity
+    -W, --warn RULE         Report RULE at the warn severity
+    -D, --deny RULE         Report RULE at the deny severity
+    -c, --config PATH       Use an explicit JSON/JSONC Oxlint configuration
+    --type-aware            Enable the type-aware rules
+    --type-check            Enable the type-aware rules and type checking
+    --format json           Output format; json is the only value, and the default
+    -h, --help              Show this help
+    -V, --version           Show the package and canonical OXC revision
+
+This is the internal capability target the oxc.provider metadata names for
+linting .tsrx files. It takes explicit file paths only, never a directory or a
+glob, and always prints one JSON report to stdout. Run `oxlint` instead for the
+drop-in command a project installs: it discovers files, honours ignore files,
+prints human-readable diagnostics, and covers .tsrx and ordinary files in one
+run.
+";
+
 pub fn run_cli(arguments: Vec<String>) -> ExitCode {
     match run(arguments.into_iter()) {
         Ok(code) => ExitCode::from(code),
@@ -17,6 +42,13 @@ pub fn run_cli(arguments: Vec<String>) -> ExitCode {
 
 fn run(arguments: impl Iterator<Item = String>) -> Result<u8, String> {
     let arguments = arguments.collect::<Vec<_>>();
+    if arguments
+        .iter()
+        .any(|argument| matches!(argument.as_str(), "-h" | "--help"))
+    {
+        print!("{HELP}");
+        return Ok(0);
+    }
     if arguments
         .iter()
         .any(|argument| matches!(argument.as_str(), "-V" | "--version"))
@@ -153,6 +185,7 @@ fn parse_arguments(arguments: impl Iterator<Item = String>) -> Result<ParsedArgu
                 type_aware = true;
                 type_check = true;
             }
+            "-h" | "--help" | "-V" | "--version" => unreachable!("handled before parsing"),
             value if value.starts_with('-') => {
                 return Err(format!(
                     "unsupported option in the current native CLI: {value}"

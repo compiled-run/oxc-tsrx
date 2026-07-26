@@ -65,6 +65,26 @@ function runCompanion(cwd, args) {
   });
 }
 
+// The same command with stdin attached, which is the editor format-on-save path.
+function runCompanionStdin(cwd, args, input) {
+  return new Promise((resolvePromise, reject) => {
+    const child = spawn(process.execPath, [companion, ...args], {
+      cwd,
+      env: { ...process.env, OXC_TSRX_FORMAT_BIN: binary },
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => (stdout += chunk));
+    child.stderr.on("data", (chunk) => (stderr += chunk));
+    child.once("error", reject);
+    child.once("close", (code, signal) => resolvePromise({ code, signal, stdout, stderr }));
+    child.stdin.end(input);
+  });
+}
+
 // --- Comparing a TSRX report against a live stock Oxfmt control -----------
 //
 // Nothing below hardcodes a canonical sentence. Every fixture is written twice,
@@ -518,4 +538,95 @@ test("unsupported callback-backed options, editorconfig, and JS config modules f
     assert.equal(result.stdout, "", fixture.name);
     assert.match(result.stderr, fixture.pattern, fixture.name);
   }
+});
+
+// --- Saying what actually happened, to the command the user actually typed ---
+//
+// Every expectation below is taken from a live stock Oxfmt run over the same
+// fixture, never from a sentence written into this file.
+
+test("a flag canonical Oxfmt does not know reads as unknown beside a .tsrx path too", async () => {
+  const names = { a: "clean" };
+  const control = await fixtureDirectory("unknown-option-control", names);
+  const candidate = await fixtureDirectory("unknown-option-candidate", names, ["a"]);
+
+  const expected = await run(stock, control.cwd, ["--frobnicate", control.paths.a]);
+  assert.equal(expected.code, 1, expected.stderr || expected.stdout);
+  assert.match(expected.stderr, /--frobnicate/u, expected.stderr);
+  assert.doesNotMatch(expected.stderr, /not yet supported/u, expected.stderr);
+
+  const tsrx = await runCompanion(candidate.cwd, ["--frobnicate", candidate.paths.a]);
+  assert.equal(tsrx.stderr, expected.stderr, `stderr diverged:\n${tsrx.stderr}`);
+  assert.equal(tsrx.code, expected.code, tsrx.stderr || tsrx.stdout);
+  assert.equal(tsrx.stdout, "", tsrx.stdout);
+
+  const directory = await runCompanion(candidate.cwd, ["--frobnicate", "src"]);
+  assert.equal(directory.stderr, expected.stderr, directory.stderr);
+  assert.equal(directory.code, expected.code, directory.stderr || directory.stdout);
+
+  // The stdin route is the editor's, and it reached the native leaf without
+  // ever checking the option against the tool it stands in for.
+  const expectedStdin = await run(stock, control.cwd, ["--stdin", "--stdin-filepath=a.ts"], "");
+  assert.equal(expectedStdin.code, 1, expectedStdin.stderr || expectedStdin.stdout);
+  const stdin = await runCompanionStdin(
+    candidate.cwd,
+    ["--stdin", "--stdin-filepath=a.tsrx"],
+    FIXTURES.clean.tsrx,
+  );
+  assert.equal(stdin.stderr, expectedStdin.stderr, stdin.stderr);
+  assert.equal(stdin.code, expectedStdin.code, stdin.stderr || stdin.stdout);
+
+  // The ordinary-only route still reaches canonical Oxfmt itself, so its
+  // rejection cannot drift from the tool that produces it.
+  const ordinary = await runCompanion(control.cwd, ["--frobnicate", control.paths.a]);
+  assert.equal(ordinary.stderr, expected.stderr, ordinary.stderr);
+  assert.equal(ordinary.code, expected.code, ordinary.stderr || ordinary.stdout);
+});
+
+test("a real Oxfmt flag the TSRX lane has not implemented still says so", async () => {
+  const names = { a: "clean" };
+  const control = await fixtureDirectory("unsupported-option-control", names);
+  const candidate = await fixtureDirectory("unsupported-option-candidate", names, ["a"]);
+
+  // Prove against the live control that `--disable-nested-config` really is an
+  // Oxfmt option rather than a typo.
+  const expected = await run(stock, control.cwd, [
+    "--check",
+    "--disable-nested-config",
+    control.paths.a,
+  ]);
+  assert.equal(expected.code, 0, expected.stderr || expected.stdout);
+  assert.doesNotMatch(expected.stderr, /is not expected in this context/u, expected.stderr);
+
+  const unsupported = await runCompanion(candidate.cwd, [
+    "--check",
+    "--disable-nested-config",
+    candidate.paths.a,
+  ]);
+  assert.equal(unsupported.code, 2, unsupported.stderr || unsupported.stdout);
+  assert.match(unsupported.stderr, /--disable-nested-config is not yet supported for \.tsrx/u);
+  assert.doesNotMatch(unsupported.stderr, /is not expected in this context/u);
+});
+
+test("a native format failure is attributed to the command the user ran", async () => {
+  const names = { a: "clean", b: "broken" };
+  const candidate = await fixtureDirectory("error-attribution", names, ["b"]);
+
+  // The leaf labels itself `oxc-tsrx-fmt:`, which is correct when it is run
+  // directly as the capability target the provider metadata names. Reached
+  // through this command the user typed `oxfmt`.
+  const batch = await runCompanion(candidate.cwd, ["--check", "src"]);
+  assert.equal(batch.code, 2, batch.stdout);
+  assert.match(batch.stderr, /unterminated/u, batch.stderr);
+  assert.doesNotMatch(batch.stderr, /^oxc-tsrx-fmt: /mu, batch.stderr);
+  assert.match(batch.stderr, /^oxfmt \(oxc-tsrx\): /mu, batch.stderr);
+
+  const stdin = await runCompanionStdin(
+    candidate.cwd,
+    ["--stdin-filepath=Broken.tsrx"],
+    FIXTURES.broken.tsrx,
+  );
+  assert.equal(stdin.code, 2, stdin.stdout);
+  assert.doesNotMatch(stdin.stderr, /^oxc-tsrx-fmt: /mu, stdin.stderr);
+  assert.match(stdin.stderr, /^oxfmt \(oxc-tsrx\): /mu, stdin.stderr);
 });

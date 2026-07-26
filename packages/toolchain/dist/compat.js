@@ -63,7 +63,13 @@ export async function findProjectRoot(start = process.cwd()) {
     if (await exists(join(directory, "package.json"))) return directory;
     const parent = dirname(directory);
     if (parent === directory) {
-      throw new Error(`could not find package.json from ${resolve(start)}`);
+      // The same condition provider-resolve.js reports, in its wording, so
+      // `oxc-tsrx status` and `oxc-tsrx providers` no longer describe one
+      // failure two ways, plus the next step neither of them offered. `--project`
+      // is already a documented flag on every subcommand that reaches here.
+      throw new Error(
+        `no package.json was found at or above ${resolve(start)}; run oxc-tsrx from your project root, or pass --project <directory>`,
+      );
     }
     directory = parent;
   }

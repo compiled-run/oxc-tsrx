@@ -238,3 +238,47 @@ test('ordinary JS, JSX, TS, and TSX match canonical Oxlint and bypass every TSRX
     assert.equal(candidate.oxcTsrx.projectionBytes, 0, name);
   }
 });
+
+test('the lint leaf answers --help in the shape its formatter sibling already does', async () => {
+  // The live control is the sibling in the same binary. Its help is the one the
+  // CLI walkthrough called good, so its shape, not a sentence copied into this
+  // file, is what the linter's help is held to.
+  const sibling = await run(['fmt', '--help']);
+  assert.equal(sibling.code, 0, sibling.stderr || sibling.stdout);
+  assert.equal(sibling.stderr, '', sibling.stderr);
+
+  for (const args of [['lint', '--help'], ['--help'], ['-h'], ['lint', '-h']]) {
+    const help = await run(args);
+    const label = args.join(' ');
+    assert.equal(help.code, 0, `${label}: ${help.stderr || help.stdout}`);
+    assert.equal(help.stderr, '', label);
+    // It used to print `unsupported option in the current native CLI: --help`
+    // and exit 2, or a wall of machine JSON with no help at all.
+    assert.doesNotMatch(help.stdout, /^\{/u, label);
+    assert.doesNotMatch(help.stdout, /"diagnostics"/u, label);
+
+    const firstLine = (text) => text.split('\n', 1)[0];
+    const shape = (text) => ({
+      titled: /^OXC for TSRX \w+$/u.test(firstLine(text)),
+      usage: /^Usage: oxc-tsrx-\w+ /mu.test(text),
+      help: /^ {4}-h, --help {2,}\S/mu.test(text),
+      version: /^ {4}-V, --version {2,}\S/mu.test(text),
+      trailingNewline: text.endsWith('\n'),
+    });
+    assert.deepEqual(shape(help.stdout), shape(sibling.stdout), `${label}:\n${help.stdout}`);
+    assert.deepEqual(
+      shape(sibling.stdout),
+      { titled: true, usage: true, help: true, version: true, trailingNewline: true },
+      sibling.stdout,
+    );
+    // The one thing the sibling does not have to say: this bin is the internal
+    // capability target, and `oxlint` is the command a user wants.
+    assert.match(help.stdout, /\boxlint\b/u, label);
+  }
+
+  // `--help` is answered before "at least one explicit source file is required",
+  // which is the error that used to greet a bare run.
+  const bare = await run([]);
+  assert.equal(bare.code, 2, bare.stdout);
+  assert.match(bare.stderr, /at least one explicit source file is required/u, bare.stderr);
+});

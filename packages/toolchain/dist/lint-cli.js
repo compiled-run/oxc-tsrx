@@ -48,6 +48,53 @@ const NATIVE_VALUE_OPTIONS = new Map([
 const UNMATCHED_PATTERN_MESSAGE =
   "No files found to lint. Please check your paths and ignore patterns.";
 
+// Canonical Oxlint's own wording for an option it has never heard of,
+// reproduced verbatim, on the same stream and with the same exit code. A flag
+// canonical Oxlint does not know is not a TSRX gap: telling the user it "is not
+// yet supported for .tsrx" sends them to the Oxlint docs looking for an option
+// that does not exist. Only a flag canonical Oxlint really does accept gets
+// that message.
+function unknownOptionMessage(name) {
+  return `Error: \`${name}\` is not expected in this context`;
+}
+
+// The first option in the command line that canonical Oxlint's own option set
+// does not contain, or null when every option is one it knows. `VALUE_OPTIONS`
+// consume their value so an option-looking argument such as
+// `--ignore-pattern -foo` is never mistaken for an option of its own.
+function unknownCanonicalOption(args) {
+  let positionalOnly = false;
+  for (let index = 0; index < args.length; index += 1) {
+    const argument = args[index];
+    if (positionalOnly) continue;
+    if (argument === "--") {
+      positionalOnly = true;
+      continue;
+    }
+    if (!argument.startsWith("-") || argument === "-") continue;
+    const { name, value } = parseOxlintOption(argument);
+    if (VALUE_OPTIONS.has(name)) {
+      if (value === null) index += 1;
+      continue;
+    }
+    if (!parseOxlintInvocation([name]).known) return name;
+  }
+  return null;
+}
+
+// The native leaf prefixes its errors with its own name because that is correct
+// when it is run directly as the capability target the provider manifest names.
+// Relayed through this command the user typed `oxlint`, so the lines this
+// wrapper passes on are re-labelled with the name they ran, using the same
+// prefix `bin/oxlint` already puts on its own errors.
+function attributeNativeErrors(stderr) {
+  return stderr.replace(/^oxc-tsrx(?:-lint)?: /gmu, "oxlint (oxc-tsrx): ");
+}
+
+function hasTsrxPositional(positionals) {
+  return positionals.some((argument) => argument.split("?")[0].endsWith(".tsrx"));
+}
+
 const WRAPPER_OPTIONS = new Set([
   "--quiet",
   "--silent",
@@ -281,6 +328,16 @@ export async function runCli(args, options = {}) {
 
   const positions = parseOxlintInvocation(args).positionals;
   const files = await discoverTsrxFiles(positions, cwd);
+  // Only this route answers for a `.tsrx` path. An ordinary-only invocation
+  // keeps reaching canonical Oxlint, which prints its own rejection itself, so
+  // nothing here can drift from the tool it is reproducing on that path.
+  if (files.length > 0 || hasTsrxPositional(positions)) {
+    const unknown = unknownCanonicalOption(args);
+    if (unknown !== null) {
+      process.stderr.write(`${unknownOptionMessage(unknown)}\n`);
+      return 1;
+    }
+  }
   const format = requestedOutputFormat(args);
   ensureSupportedOutput(format, files);
   const explicitConfig = argumentValue(args, new Set(["-c", "--config"]));
@@ -372,7 +429,7 @@ export async function runCli(args, options = {}) {
             ? `${JSON.stringify(report)}\n`
             : renderDefault(report, cwd);
       process.stdout.write(upstreamHalf.passthrough + nativeHalf.passthrough + rendered);
-      process.stderr.write(upstreamResult.stderr + nativeResult.stderr);
+      process.stderr.write(upstreamResult.stderr + attributeNativeErrors(nativeResult.stderr));
       return Math.max(upstreamResult.status, nativeResult.status);
     }
 
@@ -388,7 +445,7 @@ export async function runCli(args, options = {}) {
     }
 
     if (!args.includes("--silent")) {
-      process.stderr.write(upstreamResult.stderr + nativeResult.stderr);
+      process.stderr.write(upstreamResult.stderr + attributeNativeErrors(nativeResult.stderr));
       process.stdout.write(
         format === "json" ? `${JSON.stringify(result)}\n` : renderDefault(result, cwd),
       );

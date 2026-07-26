@@ -27,11 +27,11 @@
   "transcript": [
     {
       "command": "npx oxlint src/Cart.tsrx",
-      "output": "src/Cart.tsrx:2:7: warning eslint(no-unused-vars) Variable 'total' is declared but never used. Unused variables should start with a '_'.\nsrc/Cart.tsrx:3:3: warning eslint(no-debugger) `debugger` statement is not allowed\nFound 0 error(s) and 2 warning(s).\n"
+      "output": "src/Cart.tsrx:2:7: warning eslint(no-unused-vars): Variable 'total' is declared but never used. Unused variables should start with a '_'.\nsrc/Cart.tsrx:3:3: warning eslint(no-debugger): `debugger` statement is not allowed\nFound 0 error(s) and 2 warning(s).\n"
     },
     {
       "command": "npx oxfmt --check src/Cart.tsrx",
-      "output": "src/Cart.tsrx\n"
+      "output": "Checking formatting...\n\nsrc/Cart.tsrx (0ms)\n\nFormat issues found in above 1 files. Run without `--check` to fix.\nFinished in 0ms on 1 files using 18 threads.\n"
     }
   ],
   "diagnostics": [

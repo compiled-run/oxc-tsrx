@@ -20,6 +20,8 @@ const stock = join(
   "bin/oxlint",
 );
 const companion = resolve(join(root, "packages/toolchain/bin/oxlint"));
+// The `oxc-tsrx` command itself: providers, status, and the standard flags.
+const provider = resolve(join(root, "packages/toolchain/bin/oxc-tsrx"));
 
 function run(cwd, args, executable = binary, environment = process.env) {
   return new Promise((resolvePromise, reject) => {
@@ -624,4 +626,106 @@ test("a nonexistent .tsrx positional reports canonical Oxlint's unmatched-patter
   assert.equal(controlMixed.code, 0, controlMixed.stderr || controlMixed.stdout);
   assert.equal(mixed.code, controlMixed.code, mixed.stderr || mixed.stdout);
   assert.match(mixed.stdout, /src\/util\.ts:2:7: warning eslint\(no-unused-vars\): /u, mixed.stdout);
+});
+
+// --- Saying what actually happened, to the command the user actually typed ---
+//
+// Every expectation below is taken from a live stock Oxlint run in the same
+// fixture, never from a sentence written into this file, so the day canonical
+// Oxlint rewords one of them these fail instead of silently drifting.
+
+test("a flag canonical Oxlint does not know reads as unknown beside a .tsrx path too", async () => {
+  const cwd = await mixedProject("unknown-option");
+
+  // The control: the same bogus flag on the ordinary path a user would have
+  // typed before adopting TSRX.
+  const control = await run(cwd, ["--frobnicate", "src/util.ts"], stock);
+  assert.equal(control.code, 1, control.stderr || control.stdout);
+  assert.match(control.stderr, /--frobnicate/u, control.stderr);
+  assert.doesNotMatch(control.stderr, /not yet supported/u, control.stderr);
+
+  const tsrx = await runCompanion(cwd, ["--frobnicate", "src/Counter.tsrx"]);
+  assert.equal(tsrx.stderr, control.stderr, `stderr diverged:\n${tsrx.stderr}`);
+  assert.equal(tsrx.code, control.code, tsrx.stderr || tsrx.stdout);
+  assert.equal(tsrx.stdout, "", tsrx.stdout);
+
+  // A directory that happens to contain a `.tsrx` file must answer the same way.
+  const directory = await runCompanion(cwd, ["--frobnicate", "src"]);
+  assert.equal(directory.stderr, control.stderr, directory.stderr);
+  assert.equal(directory.code, control.code, directory.stderr || directory.stdout);
+
+  // An inline value names the option, not the whole token, exactly as the
+  // control does.
+  const controlInline = await run(cwd, ["--frobnicate=1", "src/util.ts"], stock);
+  const inline = await runCompanion(cwd, ["--frobnicate=1", "src/Counter.tsrx"]);
+  assert.equal(inline.stderr, controlInline.stderr, inline.stderr);
+  assert.equal(inline.code, controlInline.code, inline.stderr || inline.stdout);
+
+  // The ordinary-only route still reaches canonical Oxlint itself, so its
+  // rejection cannot drift from the tool that produces it.
+  const ordinary = await runCompanion(cwd, ["--frobnicate", "src/util.ts"]);
+  assert.equal(ordinary.stderr, control.stderr, ordinary.stderr);
+  assert.equal(ordinary.code, control.code, ordinary.stderr || ordinary.stdout);
+});
+
+test("a real Oxlint flag the TSRX lane has not implemented still says so", async () => {
+  const cwd = await mixedProject("unsupported-option");
+
+  // Prove against the live control that `--fix-suggestions` really is an Oxlint
+  // option: it is accepted, and it is not rejected the way `--frobnicate` is.
+  const control = await run(
+    cwd,
+    ["--fix-suggestions", "--no-error-on-unmatched-pattern", "src/Missing.ts"],
+    stock,
+  );
+  assert.equal(control.code, 0, control.stderr || control.stdout);
+  assert.doesNotMatch(control.stderr, /is not expected in this context/u, control.stderr);
+
+  const unsupported = await runCompanion(cwd, ["--fix-suggestions", "src/Counter.tsrx"]);
+  assert.equal(unsupported.code, 2, unsupported.stderr || unsupported.stdout);
+  assert.match(unsupported.stderr, /--fix-suggestions is not yet supported for \.tsrx/u);
+  assert.doesNotMatch(unsupported.stderr, /is not expected in this context/u);
+});
+
+test("a native lint failure is attributed to the command the user ran", async () => {
+  const cwd = await mixedProject("error-attribution");
+
+  const failure = await runCompanion(cwd, ["--config", "no-such-config.json", "src/Counter.tsrx"]);
+  assert.equal(failure.code, 2, failure.stdout);
+  // The leaf labels itself `oxc-tsrx:` because that is correct when it is run
+  // directly as the capability target. The user typed `oxlint`.
+  assert.doesNotMatch(failure.stderr, /^oxc-tsrx(?:-lint)?: /mu, failure.stderr);
+  assert.match(failure.stderr, /^oxlint \(oxc-tsrx\): /mu, failure.stderr);
+  assert.match(failure.stderr, /no-such-config\.json/u, failure.stderr);
+});
+
+test("oxc-tsrx accepts --help and --version instead of calling them unknown commands", async () => {
+  const cwd = await mixedProject("oxc-tsrx-flags");
+  const manifest = JSON.parse(
+    await readFile(join(root, "packages/toolchain/package.json"), "utf8"),
+  );
+  const runProvider = (args) => run(cwd, [provider, ...args], process.execPath);
+
+  const subcommand = await runProvider(["help"]);
+  assert.equal(subcommand.code, 0, subcommand.stderr);
+  assert.match(subcommand.stdout, /^oxc-tsrx\n\nUsage:/u, subcommand.stdout);
+
+  for (const flag of ["--help", "-h"]) {
+    const result = await runProvider([flag]);
+    assert.equal(result.code, 0, `${flag}: ${result.stderr}`);
+    assert.equal(result.stdout, subcommand.stdout, flag);
+    assert.equal(result.stderr, "", flag);
+  }
+
+  for (const flag of ["--version", "-V"]) {
+    const result = await runProvider([flag]);
+    assert.equal(result.code, 0, `${flag}: ${result.stderr}`);
+    assert.equal(result.stdout, `oxc-tsrx ${manifest.version}\n`, flag);
+    assert.equal(result.stderr, "", flag);
+  }
+
+  // A genuinely wrong subcommand keeps naming itself and exiting 2.
+  const unknown = await runProvider(["lint"]);
+  assert.equal(unknown.code, 2, unknown.stdout);
+  assert.match(unknown.stderr, /unknown command: lint/u, unknown.stderr);
 });

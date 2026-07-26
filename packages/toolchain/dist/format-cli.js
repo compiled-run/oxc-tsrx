@@ -14,6 +14,54 @@ import {
   runPassthrough,
 } from "./runtime.js";
 import { VALUE_OPTIONS, parseOxfmtInvocation, parseOxfmtOption } from "./format-invocation.js";
+
+// Canonical Oxfmt's own wording for an option it has never heard of, reproduced
+// verbatim, on the same stream and with the same exit code. A flag canonical
+// Oxfmt does not know is not a TSRX gap: telling the user it "is not yet
+// supported for .tsrx" sends them to the Oxfmt docs looking for an option that
+// does not exist. Only a flag canonical Oxfmt really does accept gets that
+// message.
+function unknownOptionMessage(name) {
+  return `Error: \`${name}\` is not expected in this context`;
+}
+
+// The first option in the command line that canonical Oxfmt's own option set
+// does not contain, or null when every option is one it knows. `VALUE_OPTIONS`
+// consume their value so an option-looking argument such as
+// `--ignore-path -foo` is never mistaken for an option of its own.
+function unknownCanonicalOption(args) {
+  let positionalOnly = false;
+  for (let index = 0; index < args.length; index += 1) {
+    const argument = args[index];
+    if (positionalOnly) continue;
+    if (argument === "--") {
+      positionalOnly = true;
+      continue;
+    }
+    if (!argument.startsWith("-") || argument === "-") continue;
+    const { name, value } = parseOxfmtOption(argument);
+    if (VALUE_OPTIONS.has(name)) {
+      if (value === null) index += 1;
+      continue;
+    }
+    if (!parseOxfmtInvocation([name]).known) return name;
+  }
+  return null;
+}
+
+// The native leaf prefixes its errors with its own name because that is correct
+// when it is run directly as the capability target the provider manifest names.
+// Relayed through this command the user typed `oxfmt`, so the lines this wrapper
+// passes on are re-labelled with the name they ran, using the same prefix
+// `bin/oxfmt` already puts on its own errors.
+function attributeNativeErrors(stderr) {
+  return stderr.replace(/^oxc-tsrx-fmt: /gmu, "oxfmt (oxc-tsrx): ");
+}
+
+function hasTsrxPositional(positionals) {
+  return positionals.some((argument) => argument.split("?")[0].endsWith(".tsrx"));
+}
+
 const NATIVE_VALUE_OPTIONS = new Map([
   ["-c", "--config"],
   ["--config", "--config"],
@@ -261,6 +309,11 @@ export async function runCli(args, options = {}) {
     // round trip. Programmatic callers can still provide an explicit input.
     const input = options.input ?? readFileSync(0);
     if (!requestedStdin.split("?")[0].endsWith(".tsrx")) return delegate(args, cwd, input);
+    const unknownStdinOption = unknownCanonicalOption(args);
+    if (unknownStdinOption !== null) {
+      process.stderr.write(`${unknownOptionMessage(unknownStdinOption)}\n`);
+      return 1;
+    }
     const explicitConfig = argumentValue(args, new Set(["-c", "--config"]));
     const bridgeViteConfig = explicitConfig === null || isViteConfigPath(explicitConfig);
     const viteConfig = bridgeViteConfig
@@ -282,7 +335,7 @@ export async function runCli(args, options = {}) {
         input,
       });
       process.stdout.write(result.stdout);
-      process.stderr.write(result.stderr);
+      process.stderr.write(attributeNativeErrors(result.stderr));
       return result.status;
     } finally {
       await viteConfig?.cleanup();
@@ -291,6 +344,16 @@ export async function runCli(args, options = {}) {
 
   const positions = invocation.positionals;
   const files = await discoverTsrxFiles(positions, cwd);
+  // Only this route answers for a `.tsrx` path. An ordinary-only invocation
+  // keeps reaching canonical Oxfmt, which prints its own rejection itself, so
+  // nothing here can drift from the tool it is reproducing on that path.
+  if (files.length > 0 || hasTsrxPositional(positions)) {
+    const unknown = unknownCanonicalOption(args);
+    if (unknown !== null) {
+      process.stderr.write(`${unknownOptionMessage(unknown)}\n`);
+      return 1;
+    }
+  }
   const explicitConfig = argumentValue(args, new Set(["-c", "--config"]));
   const bridgeViteConfig = explicitConfig === null || isViteConfigPath(explicitConfig);
   const viteConfig =
@@ -328,7 +391,9 @@ export async function runCli(args, options = {}) {
     ]);
     const stdout = mergeFormatStdout(fileMode(args), upstreamResult, nativeResult);
     process.stdout.write(stdout);
-    process.stderr.write(mergeFormatStderr(upstreamResult, nativeResult, stdout));
+    process.stderr.write(
+      attributeNativeErrors(mergeFormatStderr(upstreamResult, nativeResult, stdout)),
+    );
     return Math.max(upstreamResult.status, nativeResult.status);
   } finally {
     await viteConfig?.cleanup();

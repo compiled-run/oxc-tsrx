@@ -23,8 +23,20 @@ are preserved and restored; direct or unrecognized packages are never replaced.
 `;
 }
 
+// `--help` and `--version` are the first two flags anyone tries, and they are
+// not subcommands, so reaching the subcommand switch reported them as unknown
+// commands and exited 2. Accept them wherever they appear, exactly like the
+// `oxc-tsrx-fmt` and `oxc-tsrx-lsp` leaves already do.
+const HELP_FLAGS = new Set(["--help", "-h"]);
+const VERSION_FLAGS = new Set(["--version", "-V"]);
+
 function parseArguments(argv) {
-  const [command = "help", ...rest] = argv;
+  const [first = "help", ...rest] = argv;
+  const command = HELP_FLAGS.has(first)
+    ? "help"
+    : VERSION_FLAGS.has(first)
+      ? "version"
+      : first;
   const options = { command, projectRoot: undefined, dryRun: false, json: false };
   for (let index = 0; index < rest.length; index += 1) {
     const argument = rest[index];
@@ -37,8 +49,10 @@ function parseArguments(argv) {
       options.dryRun = true;
     } else if (argument === "--json") {
       options.json = true;
-    } else if (argument === "--help" || argument === "-h") {
+    } else if (HELP_FLAGS.has(argument)) {
       options.command = "help";
+    } else if (VERSION_FLAGS.has(argument)) {
+      options.command = "version";
     } else {
       throw new Error(`unknown option: ${argument}`);
     }
@@ -65,6 +79,13 @@ try {
   const options = parseArguments(process.argv.slice(2));
   if (options.command === "help") {
     process.stdout.write(usage());
+  } else if (options.command === "version") {
+    // `<command> <version>`, the shape the native `oxc-tsrx-fmt` and
+    // `oxc-tsrx-lint` leaves already print. Read from this package's own
+    // manifest so it can never drift from what is installed.
+    const { createRequire } = await import("node:module");
+    const manifest = createRequire(import.meta.url)("../package.json");
+    process.stdout.write(`oxc-tsrx ${manifest.version}\n`);
   } else if (options.command === "providers") {
     const { collectProviderReport, formatProviderReport } = await import(
       "../dist/providers-report.js"
