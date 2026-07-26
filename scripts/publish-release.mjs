@@ -83,7 +83,30 @@ if (!runId) {
     "--status", "success", "--limit", "1", "--json", "databaseId,headSha",
   ]);
   const [latest] = JSON.parse(stdout);
-  if (!latest) throw new Error("no successful release-candidate run found");
+  if (!latest) {
+    // Say which, because "no successful run" reads as permanent when the usual
+    // cause is simply that the build is still going.
+    const { stdout: recent } = await run("gh", [
+      "run", "list", "--workflow", "release-candidate.yml",
+      "--limit", "3", "--json", "headSha,status,conclusion,url",
+    ]);
+    const runs = JSON.parse(recent);
+    const running = runs.find((entry) => entry.status !== "completed");
+    if (running) {
+      throw new Error(
+        `the release build is still running, nothing to publish yet\n` +
+          `  ${running.headSha.slice(0, 7)} ${running.status}\n` +
+          `  ${running.url}\n` +
+          `Platform builds take about 30 minutes. Re-run this when it goes green.`,
+      );
+    }
+    throw new Error(
+      "no successful release-candidate run found. Most recent:\n" +
+        runs
+          .map((e) => `  ${e.headSha.slice(0, 7)}  ${e.conclusion ?? e.status}  ${e.url}`)
+          .join("\n"),
+    );
+  }
   runId = String(latest.databaseId);
   console.log(`using release-candidate run ${runId} (${latest.headSha.slice(0, 7)})`);
 }
