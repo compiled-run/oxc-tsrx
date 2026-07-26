@@ -15,6 +15,7 @@ import { tmpdir } from "node:os";
 import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runTests } from "@vscode/test-electron";
+import { parseNpmPackResponse } from "../../scripts/npm-pack-response.mjs";
 import { startLocalRegistry } from "../packaging/local-registry.mjs";
 
 /**
@@ -98,7 +99,7 @@ async function pack(packageRoot, artifacts, cache) {
     ["pack", "--json", "--pack-destination", artifacts, resolve(root, packageRoot)],
     { cwd: root, env: { ...process.env, npm_config_cache: cache } },
   );
-  const [packed] = JSON.parse(result.stdout);
+  const packed = parseNpmPackResponse(result.stdout);
   return {
     ...packed,
     manifest: JSON.parse(await readFile(join(root, packageRoot, "package.json"), "utf8")),

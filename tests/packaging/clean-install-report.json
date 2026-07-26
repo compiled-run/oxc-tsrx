@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
-  "startedAt": "2026-07-25T22:28:08.432Z",
-  "completedAt": "2026-07-25T22:28:28.700Z",
+  "startedAt": "2026-07-26T20:26:43.820Z",
+  "completedAt": "2026-07-26T20:27:02.228Z",
   "host": {
     "platform": "darwin",
     "arch": "arm64",
     "rustTarget": "aarch64-apple-darwin"
   },
   "install": {
-    "packageManager": "npm 11.12.1",
+    "packageManager": "npm 12.0.1",
     "ignoreScripts": true,
     "environmentOverrides": false,
     "oneDirectTsrxPackage": true,
@@ -18,13 +18,13 @@
     "toolchain": {
       "name": "oxc-tsrx",
       "version": "0.1.0",
-      "integrity": "sha512-bWqKycxHylEi4rdAj0aQiMy8dMChnXFNtYaCI8k70iughm2/tPg/h5gC7kMAxx1ripQTScLvliMwZHnPJZ2P1w=="
+      "integrity": "sha512-+0CXUndP63Oh3Rjz57Uu6z9wLcVGGV1b4b6+AcOqxNRwf8BNBZW7b5cmQ6XXEpmgkn3jq1Y0nRiylHJ1ZKsccw=="
     },
     "native": {
       "name": "@oxc-tsrx/native-darwin-arm64",
       "version": "0.1.0",
       "target": "aarch64-apple-darwin",
-      "integrity": "sha512-8l4974bH7QFvWHaxDs2WNR/TTGOZNc/FU1gaCpQlJuSdomfOdlr+vz+PwKj+8Vto1ttGMzb3B/p5KKOzAP2x1w=="
+      "integrity": "sha512-GJg/K6RBisFsT7o/DPRqbFuXZ5zxndiVDA8BPgoeMOoXx4sjlbyjUEN+gsSGJr8W+Nf9JGfteioXCwtokwTiUw=="
     },
     "vitePlus": "0.2.4"
   },

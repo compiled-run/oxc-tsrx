@@ -17,6 +17,7 @@ import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { NATIVE_TARGETS, nativePackageName } from "../packages/toolchain/dist/native-targets.js";
 import { resolveNpmInvocation } from "./npm-invocation.mjs";
+import { parseNpmPackResponse } from "./npm-pack-response.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const revision = "8e0ed2ebb96137fb1611cdbd5742d5cb46037d40";
@@ -454,11 +455,8 @@ try {
     cwd: stage,
     env: npmEnvironment,
   });
-  const packed = JSON.parse(stdout);
-  if (!Array.isArray(packed) || packed.length !== 1) {
-    throw new Error(`unexpected npm pack response: ${stdout}`);
-  }
-  const tarball = join(outDirectory, packed[0].filename);
+  const packed = parseNpmPackResponse(stdout);
+  const tarball = join(outDirectory, packed.filename);
   // The language server is the multi-call binary under its `lsp` subcommand, so
   // the identity the VSIX and the release assembly cross-check is that binary.
   const lsp = binaries[`oxc-tsrx${executableSuffix}`];
@@ -474,9 +472,9 @@ try {
       // filename is derived here, on the host that owns the native path.
       tarball: tarball.replaceAll("\\", "/"),
       filename: basename(tarball),
-      integrity: packed[0].integrity,
-      shasum: packed[0].shasum,
-      unpackedSize: packed[0].unpackedSize,
+      integrity: packed.integrity,
+      shasum: packed.shasum,
+      unpackedSize: packed.unpackedSize,
       parserAddon: addonRecord !== null,
     })}\n`,
   );

@@ -20,6 +20,7 @@ import { delimiter, dirname, join, relative, resolve } from "node:path";
 import { createServer as createNetServer } from "node:net";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
+import { parseNpmPackResponse } from "../../scripts/npm-pack-response.mjs";
 import { startLocalRegistry } from "./local-registry.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
@@ -238,14 +239,13 @@ async function pack(packageRoot, artifacts, environment) {
     ["pack", "--json", "--pack-destination", artifacts, resolve(root, packageRoot)],
     { cwd: root, env: environment },
   );
-  const report = JSON.parse(result.stdout);
-  assert.equal(report.length, 1);
+  const packed = parseNpmPackResponse(result.stdout);
   return {
-    ...report[0],
+    ...packed,
     manifest: JSON.parse(
       await readFile(join(root, packageRoot, "package.json"), "utf8"),
     ),
-    tarball: join(artifacts, report[0].filename),
+    tarball: join(artifacts, packed.filename),
   };
 }
 

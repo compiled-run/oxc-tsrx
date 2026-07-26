@@ -10,6 +10,7 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
+import { parseNpmPackResponse } from "../../scripts/npm-pack-response.mjs";
 import { startLocalRegistry } from "./local-registry.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
@@ -82,7 +83,7 @@ async function pack(packageRoot, artifacts, cache) {
       env: { ...process.env, npm_config_cache: cache },
     },
   );
-  const [packed] = JSON.parse(result.stdout);
+  const packed = parseNpmPackResponse(result.stdout);
   const manifest = JSON.parse(
     await readFile(join(root, packageRoot, "package.json"), "utf8"),
   );

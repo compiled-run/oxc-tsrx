@@ -23,7 +23,7 @@ that downstream would violate this project's no-patch/no-fork upgrade
 contract.
 
 The exact evidence hashes, pinned source links, shipping invariants, and
-requalification conditions live in `compliance/css-boundary.json`. The gate
+requalification conditions live in `docs/architecture/css-boundary.json`. The gate
 fails if CSS crates or a Cargo patch enter the product graph, if formatter
 source gains a subprocess path, if the constants stop reporting zero hidden
 CSS work, or if a real raw payload changes.

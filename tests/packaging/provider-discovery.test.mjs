@@ -18,6 +18,7 @@ import {
   resolveCommandInvocation,
   spawnCommand,
 } from "../../packages/toolchain/dist/spawn-command.js";
+import { parseNpmPackResponse } from "../../scripts/npm-pack-response.mjs";
 import { startLocalRegistry } from "./local-registry.mjs";
 import { temporaryDirectory } from "./temporary-directory.mjs";
 
@@ -101,7 +102,7 @@ async function pack(packageRoot, artifacts, cache) {
     ["pack", "--json", "--pack-destination", artifacts, packageRoot],
     { cwd: root, env: { ...process.env, npm_config_cache: cache } },
   );
-  const [packed] = JSON.parse(result.stdout);
+  const packed = parseNpmPackResponse(result.stdout);
   return {
     manifest: JSON.parse(await readFile(join(packageRoot, "package.json"), "utf8")),
     tarball: join(artifacts, packed.filename),

@@ -210,6 +210,14 @@ npm trust list oxc-tsrx     # confirm it saved
 access to each package. Granular access tokens with the "bypass 2FA" option do
 not work for it.
 
+`scripts/trust-publishers.sh` is that loop, kept in the tree so nobody retypes
+it. It reads the nine names from the launch contract rather than repeating them,
+stops early if you are not logged in or if npm is too old, skips any name that
+is not on the registry yet, and prints a per-package result.
+`sh scripts/trust-publishers.sh --check` reports the current configuration
+without changing anything. Nothing in CI runs it, and nothing should: it needs
+an interactive 2FA prompt, so it stays an owner-only manual step.
+
 **Option B, the website.** For each of the nine packages, in this order of
 clicks:
 

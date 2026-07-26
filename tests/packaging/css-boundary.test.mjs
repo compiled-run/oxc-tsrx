@@ -34,7 +34,7 @@ async function rustSources(directory) {
 
 test("KEEP RAW is a pinned, fail-closed CSS shipping decision", async () => {
   const decision = JSON.parse(
-    await readFile(join(root, "compliance/css-boundary.json"), "utf8"),
+    await readFile(join(root, "docs/architecture/css-boundary.json"), "utf8"),
   );
   assert.equal(decision.decision, "KEEP_RAW");
   assert.equal(decision.oxcRevision, revision);

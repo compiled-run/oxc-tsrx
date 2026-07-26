@@ -8,6 +8,7 @@ import {
   nativePackageName,
   nativeTargetForHost,
 } from "../../packages/toolchain/dist/native-targets.js";
+import { parseNpmPackResponse } from "../../scripts/npm-pack-response.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 const npm = process.platform === "win32" ? "npm.cmd" : "npm";
@@ -162,7 +163,7 @@ test("the packed parser loader rejects every frozen identity and integrity mutat
         ])
       ).stdout,
     );
-    const parserPack = JSON.parse(
+    const parserPack = parseNpmPackResponse(
       (
         await run(npm, ["pack", "--json", "--pack-destination", artifacts], {
           cwd: join(root, "packages/toolchain"),
@@ -170,9 +171,8 @@ test("the packed parser loader rejects every frozen identity and integrity mutat
         })
       ).stdout,
     );
-    assert.equal(parserPack.length, 1);
-    const parserTarball = join(artifacts, parserPack[0].filename);
-    const typesPack = JSON.parse(
+    const parserTarball = join(artifacts, parserPack.filename);
+    const typesPack = parseNpmPackResponse(
       (
         await run(npm, ["pack", "--json", "--pack-destination", artifacts], {
           cwd: join(root, "node_modules/@oxc-project/types"),
@@ -180,8 +180,7 @@ test("the packed parser loader rejects every frozen identity and integrity mutat
         })
       ).stdout,
     );
-    assert.equal(typesPack.length, 1);
-    const typesTarball = join(artifacts, typesPack[0].filename);
+    const typesTarball = join(artifacts, typesPack.filename);
     await run(
       npm,
       [

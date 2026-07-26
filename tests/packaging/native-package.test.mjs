@@ -5,6 +5,7 @@ import { mkdir, mkdtemp, readFile, readdir, realpath, stat, writeFile } from "no
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import test from "node:test";
+import { nativePackageName } from "../../packages/toolchain/dist/native-targets.js";
 import { resolveNpmInvocation } from "../../scripts/npm-invocation.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
@@ -112,6 +113,143 @@ async function sha256(path) {
     .update(await readFile(path))
     .digest("hex");
 }
+
+/**
+ * A stand-in for npm that prints one recorded `npm pack --json` response.
+ *
+ * `npm pack --json` has printed two different shapes: npm 11 and earlier printed
+ * an array of packed entries, npm 12 prints an object keyed by package name.
+ * Release runners and developer machines are split across that boundary, so the
+ * packager has to read both, and a test that only ever sees the npm this machine
+ * happens to have installed cannot say so.
+ *
+ * The stub is resolved the same way real npm is: `resolveNpmInvocation` follows
+ * `npm_execpath` to a package manifest named `npm` whose declared `bin` is a
+ * JavaScript file, and runs that file through Node. So this exercises the real
+ * script over the real invocation path, with only npm's stdout substituted.
+ */
+async function stubNpm(directory, { stdout, filename }) {
+  const binDirectory = join(directory, "bin");
+  await mkdir(binDirectory, { recursive: true });
+  await writeFile(
+    join(directory, "package.json"),
+    `${JSON.stringify({ name: "npm", version: "12.0.1", bin: { npm: "bin/npm-cli.js" } }, null, 2)}\n`,
+  );
+  await writeFile(join(directory, "pack-response.txt"), stdout);
+  const entry = join(binDirectory, "npm-cli.js");
+  await writeFile(
+    entry,
+    [
+      'const { readFileSync, writeFileSync } = require("node:fs");',
+      'const { join } = require("node:path");',
+      "const args = process.argv.slice(2);",
+      'if (args[0] !== "pack") {',
+      "  process.stderr.write(`stub npm was asked for ${JSON.stringify(args)}\\n`);",
+      "  process.exit(1);",
+      "}",
+      'const destination = args[args.indexOf("--pack-destination") + 1];',
+      // A placeholder, so the tarball path the packager reports names a real
+      // file. Nothing downstream of the pack step reads its bytes.
+      ...(filename ? [`writeFileSync(join(destination, ${JSON.stringify(filename)}), "");`] : []),
+      'process.stdout.write(readFileSync(join(__dirname, "..", "pack-response.txt"), "utf8"));',
+      "",
+    ].join("\n"),
+  );
+  return entry;
+}
+
+async function packWithStubbedNpm(response) {
+  const temporary = await mkdtemp(join(tmpdir(), "oxc-tsrx-pack-shape-"));
+  const target = fixtureTarget("linux");
+  const binaries = join(temporary, "bin-dir");
+  const artifacts = join(temporary, "artifacts");
+  await mkdir(artifacts, { recursive: true });
+  await writeExecutableFixtures(binaries, target, "elf");
+  const entry = await stubNpm(join(temporary, "npm"), response);
+  return {
+    artifacts,
+    target,
+    result: run(
+      process.execPath,
+      [
+        "scripts/package-native.mjs",
+        "--target",
+        target,
+        "--bin-dir",
+        binaries,
+        "--out-dir",
+        artifacts,
+      ],
+      { env: { ...process.env, npm_execpath: entry } },
+    ),
+  };
+}
+
+/** The per-entry fields are identical in both shapes; only the container moved. */
+function packedEntry(target) {
+  return {
+    id: `${nativePackageName(target)}@0.1.0`,
+    name: nativePackageName(target),
+    version: "0.1.0",
+    size: 6426070,
+    unpackedSize: 14097905,
+    shasum: "62e463f312886399ada17ae8cbbc6b0288856690",
+    integrity: "sha512-2dc/qYe+0lY6dzFWPYbUE/XcdnYBC548tMzjNXFBVC7AV5xVfJGDbAmgaZ2rJd3VJrf/tDi11ucXp974CRRQrw==",
+    filename: "oxc-tsrx-native-recorded-pack-0.1.0.tgz",
+    files: [{ path: "package.json", size: 1123, mode: 420 }],
+    entryCount: 13,
+    bundled: [],
+  };
+}
+
+test("the packager reads npm 11's array pack report and npm 12's package-keyed object", async () => {
+  for (const [npmMajor, container] of [
+    // npm 11 and earlier.
+    ["11", (entry) => [entry]],
+    // npm 12.0.1.
+    ["12", (entry) => ({ [entry.name]: entry })],
+  ]) {
+    const target = fixtureTarget("linux");
+    const entry = packedEntry(target);
+    const { artifacts, result } = await packWithStubbedNpm({
+      stdout: `${JSON.stringify(container(entry), null, 2)}\n`,
+      filename: entry.filename,
+    });
+    const packaged = JSON.parse((await result).stdout);
+    assert.equal(packaged.target, target, `npm ${npmMajor} pack report`);
+    assert.equal(packaged.filename, entry.filename, `npm ${npmMajor} pack report`);
+    assert.equal(
+      packaged.tarball,
+      join(artifacts, entry.filename).replaceAll("\\", "/"),
+      `npm ${npmMajor} pack report`,
+    );
+    assert.equal(packaged.integrity, entry.integrity, `npm ${npmMajor} pack report`);
+    assert.equal(packaged.shasum, entry.shasum, `npm ${npmMajor} pack report`);
+    assert.equal(packaged.unpackedSize, entry.unpackedSize, `npm ${npmMajor} pack report`);
+  }
+});
+
+test("a pack report that is not exactly one packed entry still fails with npm's own output", async () => {
+  const entry = packedEntry(fixtureTarget("linux"));
+  const second = { ...entry, name: `${entry.name}-2`, filename: "second-0.1.0.tgz" };
+  for (const stdout of [
+    // Neither container may be read as "take whatever came back".
+    "[]",
+    JSON.stringify([entry, second]),
+    "{}",
+    JSON.stringify({ [entry.name]: entry, [second.name]: second }),
+    // npm's own failure report is a one-key object that names no file.
+    JSON.stringify({ error: { summary: "Invalid package, must have name and version", detail: "" } }),
+    JSON.stringify({ [entry.name]: { ...entry, filename: undefined } }),
+    JSON.stringify("oxc-tsrx-native-recorded-pack-0.1.0.tgz"),
+    "not json at all",
+  ]) {
+    const { result } = await packWithStubbedNpm({ stdout });
+    await assert.rejects(result, /unexpected npm pack response/u, stdout);
+    // The raw stdout is the only evidence of what npm did, so it stays in the message.
+    await assert.rejects(result, new RegExp(stdout.slice(0, 24).replace(/[.*+?^${}()|[\]\\]/gu, "\\$&"), "u"));
+  }
+});
 
 test("current native release stages a complete, checksummed, npm-installable platform package", async () => {
   const artifacts = await mkdtemp(join(tmpdir(), "oxc-tsrx-native-artifacts-"));

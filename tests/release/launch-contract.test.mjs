@@ -6,6 +6,7 @@ import { join, resolve } from "node:path";
 import test from "node:test";
 import { NATIVE_TARGETS, nativePackageName } from "../../packages/toolchain/dist/native-targets.js";
 import { npmChildEnvironment, resolveNpmInvocation } from "../../scripts/npm-invocation.mjs";
+import { parseNpmPackResponse } from "../../scripts/npm-pack-response.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 const repository = "https://github.com/markless-dev/oxc-tsrx";
@@ -147,7 +148,7 @@ test("all platform-independent npm payloads pass pack dry-run", async () => {
       env: { ...npmChildEnvironment(), npm_config_cache: npmCache },
     });
     assert.equal(stderr, "", directory);
-    const [result] = JSON.parse(stdout);
+    const result = parseNpmPackResponse(stdout);
     assert.equal(
       result.name,
       (await readJson(join(root, "packages", directory, "package.json"))).name,
