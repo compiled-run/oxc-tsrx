@@ -15,10 +15,16 @@ To see the custom JavaScript rule with only the official OXC extension:
 
 Hover the yellow squiggle under `@if` to see
 `tsrx-demo(no-tsrx-if): Demo rule: prefer a declarative component over this
-TSRX @if block.` The official extension launches the workspace-local
-`oxlint-custom-parser-lsp.mjs`, which forwards to the custom-parser Oxlint
-draft and dynamically registers `.tsrx` document synchronization and pull
-diagnostics.
+TSRX @if block.`
+
+Be precise about who does what here. The official OXC extension is only the
+**client**: it displays diagnostics and starts a language server. It does not
+run your JavaScript rule. It launches the workspace-local
+`oxlint-custom-parser-lsp.mjs`, which forwards to a local build of the
+custom-parser Oxlint **draft** and dynamically registers `.tsrx` document
+synchronization and pull diagnostics. The draft Oxlint is what parses `.tsrx`
+(through the `parseForESLint` adapter) and runs the `tsrx-demo/no-tsrx-if`
+rule.
 
 The OXC-for-TSRX companion is not installed in the retained custom-plugin
 editor test. It remains optional for the five native diagnostics, TSRX

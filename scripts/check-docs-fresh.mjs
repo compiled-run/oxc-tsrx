@@ -51,7 +51,7 @@ try {
   const names = [...new Set([...expected.keys(), ...actual.keys()])].sort()
   const drift = names.filter((name) => expected.get(name) !== actual.get(name))
   if (drift.length > 0) {
-    console.error('docs/dist is stale; run npm run docs:build')
+    console.error('docs/dist is stale; run pnpm run docs:build')
     for (const name of drift) {
       const status = !actual.has(name) ? 'missing' : !expected.has(name) ? 'unexpected' : 'changed'
       console.error(`- ${status}: ${name}`)

@@ -6,7 +6,7 @@ mod tape_serializer;
 use std::{borrow::Cow, error::Error, fmt};
 
 use indexed_source::IndexedSource;
-use miette::{Diagnostic, GraphicalReportHandler, Labels, Related, SourceCode};
+use miette::{Diagnostic, GraphicalReportHandler, GraphicalTheme, Labels, Related, SourceCode};
 use oxc_allocator::Allocator;
 use oxc_ast::ast::Program;
 use oxc_diagnostics::{LabeledSpan, OxcDiagnostic, Severity};
@@ -367,7 +367,13 @@ pub fn render_diagnostic_codeframes(
         return Ok(());
     }
     let indexed_source = IndexedSource::new(filename, source);
-    let handler = GraphicalReportHandler::new();
+    // Pin the theme. `GraphicalReportHandler::new()` picks its theme from runtime
+    // terminal detection, and `supports-color` treats CI as colour capable, so the
+    // same source produced ANSI-escaped unicode under GitHub Actions and plain
+    // ASCII locally. These codeframes are stored in the diagnostic table and travel
+    // on to LSP and JSON consumers rather than to a terminal, so escape codes are
+    // never wanted and the bytes must not depend on the environment.
+    let handler = GraphicalReportHandler::new_themed(GraphicalTheme::none());
     for index in 0..diagnostics.len() {
         let record = diagnostics.records()[index];
         let diagnostic = rebuild_diagnostic(diagnostics, &record)?;

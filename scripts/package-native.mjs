@@ -15,14 +15,23 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
-import { createRequire } from "node:module";
-import { NATIVE_TARGETS, nativePackageName } from "../packages/runtime/dist/targets.js";
+import { NATIVE_TARGETS, nativePackageName } from "../packages/toolchain/dist/native-targets.js";
 import { resolveNpmInvocation } from "./npm-invocation.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const revision = "8e0ed2ebb96137fb1611cdbd5742d5cb46037d40";
-const binaryStems = ["oxc-tsrx", "oxc-tsrx-fmt", "oxc-tsrx-lsp"];
-const require = createRequire(import.meta.url);
+// One multi-call executable carries all three tools. Three separate binaries
+// linked the same oxc parser, linter, and formatter three times, so a platform
+// package was a little over twice the download it needed to be.
+const binaryStems = ["oxc-tsrx"];
+// Every tool the single binary still answers to, and the subcommand that
+// selects it. `--version` prints the old per-tool identity for each, so the
+// staged artifact is checked for all three before it is packed.
+const tools = [
+  { name: "oxc-tsrx", subcommand: [] },
+  { name: "oxc-tsrx-fmt", subcommand: ["fmt"] },
+  { name: "oxc-tsrx-lsp", subcommand: ["lsp"] },
+];
 
 function parseArguments(argv) {
   const options = {};
@@ -266,7 +275,7 @@ if (!platform) throw new Error(`unsupported Rust target: ${options.target}`);
 
 const rootManifest = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
 const runtimeManifest = JSON.parse(
-  await readFile(join(root, "packages/runtime/package.json"), "utf8"),
+  await readFile(join(root, "packages/toolchain/package.json"), "utf8"),
 );
 if (rootManifest.version !== runtimeManifest.version) {
   throw new Error(
@@ -307,12 +316,12 @@ try {
   }
 
   const host = rustHost(rustc.stdout);
+  const executable = join(stage, "bin", `oxc-tsrx${executableSuffix}`);
   if (host === platform.target) {
-    for (const stem of binaryStems) {
-      const name = `${stem}${executableSuffix}`;
-      const { stdout, stderr } = await run(join(stage, "bin", name), ["--version"]);
-      if (stderr || stdout !== `${stem} ${version} (OXC ${revision})\n`) {
-        throw new Error(`unexpected ${name} version identity: ${stdout}${stderr}`);
+    for (const tool of tools) {
+      const { stdout, stderr } = await run(executable, [...tool.subcommand, "--version"]);
+      if (stderr || stdout !== `${tool.name} ${version} (OXC ${revision})\n`) {
+        throw new Error(`unexpected ${tool.name} version identity: ${stdout}${stderr}`);
       }
     }
   }
@@ -351,13 +360,26 @@ try {
       transportAbi: 1,
     };
     if (host === platform.target) {
-      const binding = require(destination);
-      const keys = Object.keys(binding).sort();
+      // Load the addon in a child process, never in this one. Windows keeps a
+      // native module mapped for the lifetime of the process that required it,
+      // so requiring it here made the staging cleanup below fail with EPERM and
+      // Windows parser-addon packaging could never succeed. A child also means a
+      // broken addon cannot take the packager down with it.
+      const probe = [
+        "const binding = require(process.argv[1]);",
+        "process.stdout.write(JSON.stringify({",
+        "  keys: Object.keys(binding).sort(),",
+        "  nodeApi: binding.nodeApi(),",
+        "}));",
+      ].join("\n");
+      const { stdout } = await run(process.execPath, ["-e", probe, destination]);
+      const binding = JSON.parse(stdout);
+      const keys = binding.keys;
       if (JSON.stringify(keys) !== JSON.stringify(["nodeApi", "parse", "parseSync"])) {
         throw new Error(`unexpected parser.node exports: ${keys.join(",")}`);
       }
-      if (binding.nodeApi() !== addonRecord.nodeApi) {
-        throw new Error(`unexpected parser.node Node-API identity: ${binding.nodeApi()}`);
+      if (binding.nodeApi !== addonRecord.nodeApi) {
+        throw new Error(`unexpected parser.node Node-API identity: ${binding.nodeApi}`);
       }
     }
   }
@@ -392,7 +414,9 @@ try {
     publishConfig: { access: "public", provenance: true },
     oxcTsrx: {
       schemaVersion: addonRecord ? 2 : 1,
-      nativeProtocolVersion: 1,
+      // Protocol 2 is the single multi-call executable. A protocol-1 consumer
+      // would spawn `bin/oxc-tsrx-fmt`, which no longer exists.
+      nativeProtocolVersion: 2,
       target: platform.target,
       vscodeTarget: platform.vscodeTarget,
       oxcRevision: revision,
@@ -435,7 +459,9 @@ try {
     throw new Error(`unexpected npm pack response: ${stdout}`);
   }
   const tarball = join(outDirectory, packed[0].filename);
-  const lsp = binaries[`oxc-tsrx-lsp${executableSuffix}`];
+  // The language server is the multi-call binary under its `lsp` subcommand, so
+  // the identity the VSIX and the release assembly cross-check is that binary.
+  const lsp = binaries[`oxc-tsrx${executableSuffix}`];
   process.stdout.write(
     `${JSON.stringify({
       packageName,
@@ -444,7 +470,9 @@ try {
       vscodeTarget: platform.vscodeTarget,
       lspSha256: lsp.sha256,
       lspBytes: lsp.bytes,
-      tarball,
+      // POSIX separators, always: see the same note in package-vscode.mjs. The
+      // filename is derived here, on the host that owns the native path.
+      tarball: tarball.replaceAll("\\", "/"),
       filename: basename(tarball),
       integrity: packed[0].integrity,
       shasum: packed[0].shasum,

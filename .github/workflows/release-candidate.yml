@@ -81,11 +81,14 @@ jobs:
       - name: Check out the exact source revision
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
+      - name: Install the pinned pnpm
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+
       - name: Install Node.js 24.15.0
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24.15.0
-          cache: npm
+          cache: pnpm
 
       - name: Prove the runner matches the package ABI
         shell: bash
@@ -112,13 +115,13 @@ jobs:
           rustc -Vv
 
       - name: Install the locked JavaScript graph without lifecycle scripts
-        run: npm ci --ignore-scripts
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Build the editor bundle and native executables
         shell: bash
         run: |
-          npm run build:editor
-          npm run licenses:vscode:check
+          pnpm run build:editor
+          pnpm run licenses:vscode:check
           cargo build --release --locked --target "$TARGET" -p oxc_tsrx_cli --bins
 
       - name: Smoke the companion CLIs on this host
@@ -126,16 +129,22 @@ jobs:
         run: |
           suffix=""
           if [[ "$EXPECTED_PLATFORM" == "win32" ]]; then suffix=".exe"; fi
-          export OXC_TSRX_LINT_BIN="$GITHUB_WORKSPACE/target/$TARGET/release/oxc-tsrx$suffix"
-          export OXC_TSRX_FORMAT_BIN="$GITHUB_WORKSPACE/target/$TARGET/release/oxc-tsrx-fmt$suffix"
-          export OXC_TSRX_LSP_BIN="$GITHUB_WORKSPACE/target/$TARGET/release/oxc-tsrx-lsp$suffix"
+          # One multi-call executable now carries lint, fmt, and lsp. All three
+          # overrides point at the same file; the JavaScript launchers add the
+          # `fmt` and `lsp` subcommands themselves.
+          native="$GITHUB_WORKSPACE/target/$TARGET/release/oxc-tsrx$suffix"
+          export OXC_TSRX_LINT_BIN="$native"
+          export OXC_TSRX_FORMAT_BIN="$native"
+          export OXC_TSRX_LSP_BIN="$native"
           node --test tests/packaging/runtime-contract.test.mjs tests/vite/package-seam.test.mjs
 
       - name: Verify Linux ABI policy
         if: matrix.libc == 'gnu' || matrix.libc == 'musl'
         shell: bash
         run: |
-          bins=(oxc-tsrx oxc-tsrx-fmt oxc-tsrx-lsp)
+          # The crate builds one binary. `oxc-tsrx-fmt` and `oxc-tsrx-lsp` are
+          # names it answers to through argv[0], not separate files.
+          bins=(oxc-tsrx)
           if [[ "${{ matrix.libc }}" == "musl" ]]; then
             for name in "${bins[@]}"; do
               bin="target/$TARGET/release/$name"
@@ -170,7 +179,7 @@ jobs:
             | tee "release/$PACKAGE_SUFFIX/native-package-$PACKAGE_SUFFIX.json"
           node scripts/package-vscode.mjs \
             --target "$TARGET" \
-            --lsp-bin "target/$TARGET/release/oxc-tsrx-lsp$suffix" \
+            --lsp-bin "target/$TARGET/release/oxc-tsrx$suffix" \
             --out-dir "release/$PACKAGE_SUFFIX" \
             | tee "release/$PACKAGE_SUFFIX/vscode-package-$PACKAGE_SUFFIX.json"
 
@@ -192,11 +201,14 @@ jobs:
       - name: Check out the exact source revision
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
+      - name: Install the pinned pnpm
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+
       - name: Install Node.js 24.15.0
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24.15.0
-          cache: npm
+          cache: pnpm
 
       - name: Install Rust 1.97.0 for SBOM tooling
         shell: bash
@@ -205,7 +217,7 @@ jobs:
           rustup default 1.97.0
 
       - name: Install locked JavaScript dependencies
-        run: npm ci --ignore-scripts
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Download all target artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -217,9 +229,7 @@ jobs:
       - name: Pack the platform-independent npm packages
         shell: bash
         run: |
-          npm pack --pack-destination release ./packages/runtime
-          npm pack --pack-destination release ./packages/oxlint
-          npm pack --pack-destination release ./packages/oxfmt
+          npm pack --pack-destination release ./packages/toolchain
 
       - name: Verify the complete package and VSIX matrix
         shell: bash
@@ -231,7 +241,7 @@ jobs:
           import {
             NATIVE_TARGETS,
             nativePackageName,
-          } from "./packages/runtime/dist/targets.js";
+          } from "./packages/toolchain/dist/native-targets.js";
 
           const files = (await readdir("release")).sort();
           const version = JSON.parse(await readFile("package.json", "utf8")).version;
@@ -248,7 +258,9 @@ jobs:
           for (const name of [...expectedNative, ...expectedVsix]) {
             assert.ok(files.includes(name), `missing release artifact: ${name}`);
           }
-          assert.equal(files.filter((name) => name.endsWith(".tgz")).length, 11);
+          // Eight platform packages plus the one public package. The four
+          // internal packages that used to be here were folded into it.
+          assert.equal(files.filter((name) => name.endsWith(".tgz")).length, 9);
           assert.equal(files.filter((name) => name.endsWith(".vsix")).length, 8);
 
           const expectedReports = NATIVE_TARGETS.flatMap(({ packageSuffix }) => [
@@ -314,7 +326,7 @@ jobs:
       - name: Stage legal texts and locked dependency inventory
         shell: bash
         run: |
-          npm run licenses:check
+          pnpm run licenses:check
           mkdir -p release/legal
           cp LICENSE THIRD_PARTY_NOTICES.md release/legal/
           cp -R licenses release/legal/licenses
@@ -332,14 +344,12 @@ jobs:
           import {
             NATIVE_TARGETS,
             nativePackageName,
-          } from "./packages/runtime/dist/targets.js";
+          } from "./packages/toolchain/dist/native-targets.js";
 
           const version = JSON.parse(await readFile("package.json", "utf8")).version;
           const artifact = (name) => `file:${resolve("release", name)}`;
           const dependencies = {
-            "@oxc-tsrx/runtime": artifact(`oxc-tsrx-runtime-${version}.tgz`),
-            "oxlint-tsrx": artifact(`oxlint-tsrx-${version}.tgz`),
-            "oxfmt-tsrx": artifact(`oxfmt-tsrx-${version}.tgz`),
+            "oxc-tsrx": artifact(`oxc-tsrx-${version}.tgz`),
           };
           for (const target of NATIVE_TARGETS) {
             dependencies[nativePackageName(target)] = artifact(
@@ -360,16 +370,19 @@ jobs:
             )}\n`,
           );
           NODE
+          # A real install into the throwaway prefix, not --package-lock-only.
+          # `npm sbom` reports ESBOMPROBLEMS "missing: oxc-tsrx@file:..." when the
+          # tree is only locked and never materialised, so the lock-only pair
+          # produced an empty SBOM and a failed step. This prefix holds nothing
+          # but the nine release tarballs, so installing it costs about a second.
           npm install \
             --prefix "$npm_sbom_root" \
-            --package-lock-only \
             --ignore-scripts \
             --force \
             --no-audit \
             --no-fund
           npm sbom \
             --prefix "$npm_sbom_root" \
-            --package-lock-only \
             --force \
             --sbom-format=cyclonedx \
             --sbom-type=application \
@@ -380,15 +393,13 @@ jobs:
           import {
             NATIVE_TARGETS,
             nativePackageName,
-          } from "./packages/runtime/dist/targets.js";
+          } from "./packages/toolchain/dist/native-targets.js";
 
           const sbom = JSON.parse(await readFile("release/sbom/npm.cdx.json", "utf8"));
           assert.equal(sbom.bomFormat, "CycloneDX");
           const names = new Set((sbom.components ?? []).map(({ name }) => name));
           for (const name of [
-            "@oxc-tsrx/runtime",
-            "oxlint-tsrx",
-            "oxfmt-tsrx",
+            "oxc-tsrx",
             ...NATIVE_TARGETS.map(nativePackageName),
           ]) {
             assert.ok(names.has(name), `npm SBOM is missing ${name}`);
@@ -402,7 +413,23 @@ jobs:
             --spec-version 1.5
           find crates/oxc_tsrx_cli -maxdepth 1 -name '*.cdx.json' \
             -exec cp {} release/sbom/ \;
-          test "$(find release/sbom -name '*.cdx.json' | wc -l | tr -d ' ')" -ge 4
+          # `--describe binaries` writes one document per [[bin]] target, plus
+          # npm.cdx.json from the JavaScript half. The crate declared three
+          # binaries until they were merged into one multi-call executable, so
+          # this count was 4 and is now 2. Derived rather than hard-coded, so
+          # merging or adding a binary cannot silently pass an empty SBOM.
+          # Count only oxc_tsrx_cli's binaries. `cargo metadata --no-deps`
+          # returns every workspace member, and the two benchmark crates each
+          # declare a binary that cargo-cyclonedx is not asked to describe here.
+          bins=$(cargo metadata --no-deps --format-version 1 \
+            --manifest-path crates/oxc_tsrx_cli/Cargo.toml \
+            | node -e 'const m=JSON.parse(require("fs").readFileSync(0,"utf8"));const p=m.packages.find((x)=>x.name==="oxc_tsrx_cli");if(!p)throw new Error("oxc_tsrx_cli not found in cargo metadata");process.stdout.write(String(p.targets.filter((t)=>t.kind.includes("bin")).length))')
+          expected=$((bins + 1))
+          actual=$(find release/sbom -name '*.cdx.json' | wc -l | tr -d ' ')
+          if [ "$actual" -lt "$expected" ]; then
+            echo "expected at least $expected SBOM documents ($bins binaries plus npm), found $actual" >&2
+            exit 1
+          fi
 
       - name: Write the unsigned provenance staging statement
         shell: bash

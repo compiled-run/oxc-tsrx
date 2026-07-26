@@ -26,6 +26,15 @@ test("editor package is additive, workspace-native, bundled, and VSIX-packaged",
   assert.ok(manifest.activationEvents.includes("workspaceContains:**/*.tsrx"));
   assert.equal(manifest.contributes.languages, undefined);
   assert.equal(manifest.main, "./dist/extension.bundle.cjs");
+  // Generalising activation is a separate, contentious change; this slice
+  // generalises resolution only.
+  assert.deepEqual(manifest.activationEvents, [
+    "onLanguage:markless-tsrx",
+    "onLanguage:ripple",
+    "onLanguage:tsrx",
+    "workspaceContains:**/*.tsrx",
+  ]);
+  assert.equal(manifest.dependencies["oxc-tsrx"], "0.1.0");
 
   const directory = await mkdtemp(join(tmpdir(), "oxc-tsrx-vsix-"));
   const output = join(directory, "oxc-tsrx-vscode.vsix");
@@ -40,4 +49,41 @@ test("editor package is additive, workspace-native, bundled, and VSIX-packaged",
   assert.match(listing, /extension\/package\.json/);
   assert.match(listing, /extension\/README\.md/i);
   assert.doesNotMatch(listing, /node_modules/);
+});
+
+test("the extension host is provider-driven and never routes ordinary documents", async () => {
+  const [host, decisions] = await Promise.all([
+    readFile(join(packageRoot, "dist/extension.cjs"), "utf8"),
+    readFile(join(packageRoot, "dist/provider-client.cjs"), "utf8"),
+  ]);
+
+  // Resolution comes from the shipped provider protocol, per workspace folder.
+  assert.match(host, /require\("oxc-tsrx\/provider-resolve"\)/u);
+  assert.match(host, /require\("\.\/provider-client\.cjs"\)/u);
+  assert.match(host, /discoverWorkspaceFolders/u);
+  assert.doesNotMatch(
+    host,
+    /documentSelector:\s*\[\{[^}]*\*\*\/\*\.tsrx/u,
+    "the document selector must come from the index, not a literal",
+  );
+  assert.doesNotMatch(host, /node_modules[/\\]\.bin/u);
+  assert.doesNotMatch(host, /process\.env\.PATH/u);
+  assert.doesNotMatch(host, /\bsetup\b/u, "the editor must never invoke the compatibility bridge");
+
+  // The decision module is the transposable half and stays vendor-neutral.
+  assert.doesNotMatch(decisions, /tsrx/iu);
+  assert.doesNotMatch(decisions, /require\(\s*["']vscode/u);
+  assert.doesNotMatch(decisions, /child_process/u);
+
+  // Both files are part of the committed bundle the VSIX ships.
+  const bundle = await readFile(join(packageRoot, "dist/extension.bundle.cjs"), "utf8");
+  for (const region of ["packages/vscode/dist/extension.cjs", "packages/vscode/dist/provider-client.cjs"]) {
+    assert.ok(bundle.includes(`//#region ${region}`), region);
+  }
+  assert.ok(bundle.includes("//#region packages/toolchain/dist/provider-resolve.js"));
+  assert.equal(
+    /require\(["']oxc-tsrx\/provider-resolve["']\)/u.test(bundle),
+    false,
+    "the resolver must be bundled, not resolved from the user's workspace at runtime",
+  );
 });

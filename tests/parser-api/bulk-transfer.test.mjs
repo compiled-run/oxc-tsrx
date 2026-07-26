@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
 
-import { parseTsrxProgram } from "../../packages/parser/tsrx-transfer.js";
+import { parseTsrxProgram } from "../../packages/toolchain/dist/tsrx-transfer.js";
 
 const root = resolve(import.meta.dirname, "../..");
 const require = createRequire(import.meta.url);
@@ -59,7 +59,7 @@ test("TSRX crosses Node-API as one versioned Program payload", async () => {
     assert.equal(parseTsrxProgram(eagerResult).type, "Program");
 
     process.env.OXC_TSRX_PARSER_ADDON = addon;
-    const parser = await import(`../../packages/parser/index.js?bulk=${Date.now()}`);
+    const parser = await import(`../../packages/toolchain/dist/parser.js?bulk=${Date.now()}`);
     const result = parser.parseSync("Bulk.tsrx", source);
     const program = result.program;
     assert.equal(program.type, "Program");

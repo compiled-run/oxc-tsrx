@@ -467,6 +467,55 @@ if (liveDemo) {
   await page.waitForFunction(() => document.querySelectorAll('.demo-diag').length === 0)
   check(true, 'demo: "Clean" chip restores the converged snippet')
 
+  // The home hero's "Type error" chip must do something visible in EVERY mode.
+  // The type lane needs tsgolint, which the in-browser wasm engine does not
+  // ship, so on the published site the chip replays the pre-generated report
+  // instead of going quiet.
+  const beforeTypes = await page.inputValue('#demo-input')
+  await page.locator('#pg-scenario-types').click()
+  await page.waitForFunction(
+    (previous) => document.getElementById('demo-input').value !== previous,
+    beforeTypes,
+    { timeout: 15000 },
+  )
+  const typesSource = await page.inputValue('#demo-input')
+  check(
+    typesSource.includes('titel'),
+    'demo: "Type error" chip loads the snippet carrying the deliberate typo',
+  )
+  await page.waitForSelector('.demo-diag', { timeout: 20000 })
+  const typesDiagCount = await page.locator('.demo-diag').count()
+  const typesSegment = await page.locator('.demo-diag').first().boundingBox()
+  await page.mouse.move(
+    typesSegment.x + typesSegment.width / 2,
+    typesSegment.y + typesSegment.height / 2,
+  )
+  await page.waitForSelector('.demo-tooltip:not([hidden])', { timeout: 5000 })
+  const typesTip = (await page.locator('.demo-tooltip').textContent()).trim()
+  check(
+    /titel/.test(typesTip) && /TS\d+|typescript/i.test(typesTip),
+    'demo: "Type error" chip underlines the typo with the TypeScript diagnostic',
+    `${typesDiagCount} underlines · ${typesTip.slice(0, 90)}`,
+  )
+  // Every chip has to explain itself on the hero, not just on the playground.
+  const heroNote = (await page.locator('#pg-scenario-note').textContent()).trim()
+  check(
+    heroNote.length > 0 && /titel|type/i.test(heroNote),
+    'demo: the home hero shows the scenario note',
+    heroNote.slice(0, 90),
+  )
+  if (mode === 'wasm') {
+    const typesMeta = (await page.locator('#demo-meta').textContent()).trim()
+    check(
+      /pre-generated/i.test(typesMeta),
+      'wasm: the "Type error" chip labels the replayed report as pre-generated',
+      typesMeta,
+    )
+  }
+  await page.mouse.move(1, 1)
+  await page.locator('#pg-scenario-clean').click()
+  await page.waitForFunction(() => document.querySelectorAll('.demo-diag').length === 0)
+
   // Tab indents inside the editor instead of moving focus; Escape releases it.
   await page.click('#demo-input')
   await page.evaluate(() => {

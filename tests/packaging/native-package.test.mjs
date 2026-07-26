@@ -90,11 +90,7 @@ async function writeExecutableFixtures(directory, target, format, bits = 64) {
   const cpu = target.startsWith("aarch64-") ? "arm64" : "x64";
   const suffix = format === "pe" ? ".exe" : "";
   const contents = executableHeader(format, cpu, bits);
-  await Promise.all(
-    ["oxc-tsrx", "oxc-tsrx-fmt", "oxc-tsrx-lsp"].map((name) =>
-      writeFile(join(directory, `${name}${suffix}`), contents),
-    ),
-  );
+  await writeFile(join(directory, `oxc-tsrx${suffix}`), contents);
 }
 
 function run(executable, args, options = {}) {
@@ -157,13 +153,15 @@ test("current native release stages a complete, checksummed, npm-installable pla
   assert.equal(manifest.preferUnplugged, true);
 
   const checksums = JSON.parse(await readFile(join(packageRoot, "checksums.json"), "utf8"));
-  const expected =
-    process.platform === "win32"
-      ? ["oxc-tsrx.exe", "oxc-tsrx-fmt.exe", "oxc-tsrx-lsp.exe"]
-      : ["oxc-tsrx", "oxc-tsrx-fmt", "oxc-tsrx-lsp"];
-  const lsp = process.platform === "win32" ? "oxc-tsrx-lsp.exe" : "oxc-tsrx-lsp";
-  assert.equal(packaged.lspSha256, checksums.binaries[lsp].sha256);
-  assert.equal(packaged.lspBytes, checksums.binaries[lsp].bytes);
+  // One multi-call executable carries the linter, the formatter, and the
+  // language server. Three separate binaries linked the same oxc code three
+  // times, so this is the single largest item in the platform download.
+  const expected = process.platform === "win32" ? ["oxc-tsrx.exe"] : ["oxc-tsrx"];
+  const [server] = expected;
+  assert.equal(packaged.lspSha256, checksums.binaries[server].sha256);
+  assert.equal(packaged.lspBytes, checksums.binaries[server].bytes);
+  assert.equal(manifest.oxcTsrx.nativeProtocolVersion, 2);
+  assert.deepEqual(manifest.oxcTsrx.binaries, expected);
   assert.deepEqual((await readdir(join(packageRoot, "bin"))).sort(), expected.sort());
   for (const binary of expected) {
     const path = join(packageRoot, "bin", binary);

@@ -1,4 +1,4 @@
-import * as parser from "@oxc-tsrx/parser";
+import * as parser from "oxc-tsrx/parser";
 import { createTsrxCoreCompat } from "./facade.js";
 
 const facade = createTsrxCoreCompat(parser);

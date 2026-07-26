@@ -12,7 +12,7 @@
         {
           "comment": "Format .tsrx and ordinary JS/TS with real Oxfmt layout",
           "command": "npx oxfmt --check src/Counter.tsrx src/View.tsx",
-          "output": "Checking formatting...\n\nsrc/View.tsx (3ms)\n\nFormat issues found in above 1 files. Run without `--check` to fix.\nFinished in 65ms on 1 files using 18 threads.\nsrc/Counter.tsrx\nNo config found, using defaults. Please add a config file or try `oxfmt --init` if needed.\n"
+          "output": "Checking formatting...\n\nsrc/View.tsx (0ms)\n\nFormat issues found in above 1 files. Run without `--check` to fix.\nFinished in 65ms on 1 files using 18 threads.\nsrc/Counter.tsrx\nNo config found, using defaults. Please add a config file or try `oxfmt --init` if needed.\n"
         }
       ]
     },
@@ -157,7 +157,7 @@
       ]
     },
     "parsing-quickstart": {
-      "caption": "Real output, captured at build time. The sample project has the src/View.tsrx and parse.mjs from above, a Broken.tsrx with an unterminated closing tag, and @oxc-tsrx/parser installed.",
+      "caption": "Real output, captured at build time. The sample project has the src/View.tsrx and parse.mjs from above, a Broken.tsrx with an unterminated closing tag, and oxc-tsrx installed.",
       "transcript": [
         {
           "comment": "Run the parse script from above against the good file",

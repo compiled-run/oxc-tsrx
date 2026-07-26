@@ -6,18 +6,27 @@ with the owner immediately before adding a publication workflow.
 
 ## npm
 
-The owner must control:
+The release publishes **nine** npm packages, and the authoritative list is
+`npm.publishOrder` in [`v0.1.0-launch.json`](./v0.1.0-launch.json). The owner
+must control:
 
 - the `@oxc-tsrx` npm organization or scope;
-- `@oxc-tsrx/runtime`;
-- all eight `@oxc-tsrx/native-*` names listed in the platform policy;
-- the unscoped `oxlint-tsrx` name; and
-- the unscoped `oxfmt-tsrx` name.
+- all eight `@oxc-tsrx/native-*` names, in publish order:
+  `native-darwin-arm64`, `native-darwin-x64`, `native-linux-arm64-gnu`,
+  `native-linux-x64-gnu`, `native-linux-arm64-musl`, `native-linux-x64-musl`,
+  `native-win32-arm64-msvc`, `native-win32-x64-msvc`; and
+- the public unscoped `oxc-tsrx` name.
 
-At the 2026-07-16 packaging audit these names returned no published package.
-That observation is not a reservation. Recheck every name and resolve ownership
-before launch. Do not publish placeholders merely to claim names without a
-separate explicit approval.
+Nothing else is published. Earlier revisions of this page also listed
+`@oxc-tsrx/runtime`, `@oxc-tsrx/parser`, `oxlint-tsrx`, and `oxfmt-tsrx`. Those
+four JavaScript wrappers were folded into the single `oxc-tsrx` package, so
+they will never be published and no name needs securing for them.
+
+The 2026-07-16 packaging audit covered the then-planned names, so it predates
+both the public `oxc-tsrx` boundary and this collapse. No past observation is a
+reservation. Recheck every name and resolve ownership before launch. Do not
+publish placeholders merely to claim names without a separate explicit
+approval.
 
 Required account controls:
 
@@ -65,11 +74,11 @@ variants is also part of the same explicitly approved release operation; stop
 if any variant has a different version, target manifest, embedded checksum, or
 source SHA.
 
-This is a thin `.tsrx` document-selector/server bridge, not a replacement for
-the official OXC or framework extension. Before each editor release, recheck
-whether `oxc.oxc-vscode` has gained a configurable custom-language selector and
-compatible custom-server contract. If it has, qualify that route and retire the
-companion rather than maintaining redundant editor UI.
+This is now an optional legacy `.tsrx` document client, not a replacement for
+the official OXC or framework extension. The primary `oxc-tsrx` workflow
+dynamically registers through the released official extension. Before each
+legacy-client release, recheck whether official activation events cover
+`.tsrx`; retire the legacy client once TSRX-only activation has released parity.
 
 ## Vercel
 

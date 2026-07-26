@@ -33,7 +33,7 @@ async function withParser(callback) {
       addon,
     ]);
     process.env.OXC_TSRX_PARSER_ADDON = addon;
-    const parser = await import(`../../packages/parser/index.js?utf16=${Date.now()}`);
+    const parser = await import(`../../packages/toolchain/dist/parser.js?utf16=${Date.now()}`);
     return await callback(parser);
   } finally {
     if (previous === undefined) delete process.env.OXC_TSRX_PARSER_ADDON;

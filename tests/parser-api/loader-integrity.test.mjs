@@ -7,7 +7,7 @@ import test from "node:test";
 import {
   nativePackageName,
   nativeTargetForHost,
-} from "../../packages/parser/targets.js";
+} from "../../packages/toolchain/dist/native-targets.js";
 
 const root = resolve(import.meta.dirname, "../..");
 const npm = process.platform === "win32" ? "npm.cmd" : "npm";
@@ -89,7 +89,7 @@ async function observeLoader(consumer) {
     const require = createRequire(import.meta.url);
     let parser;
     try {
-      parser = await import("@oxc-tsrx/parser");
+      parser = await import("oxc-tsrx/parser");
       const result = parser.parseSync("entry.ts", "export const value: number = 1");
       process.stdout.write(JSON.stringify({
         ok: true,
@@ -165,7 +165,7 @@ test("the packed parser loader rejects every frozen identity and integrity mutat
     const parserPack = JSON.parse(
       (
         await run(npm, ["pack", "--json", "--pack-destination", artifacts], {
-          cwd: join(root, "packages/parser"),
+          cwd: join(root, "packages/toolchain"),
           env: npmEnvironment,
         })
       ).stdout,
@@ -175,7 +175,7 @@ test("the packed parser loader rejects every frozen identity and integrity mutat
     const typesPack = JSON.parse(
       (
         await run(npm, ["pack", "--json", "--pack-destination", artifacts], {
-          cwd: join(root, "packages/parser/node_modules/@oxc-project/types"),
+          cwd: join(root, "node_modules/@oxc-project/types"),
           env: npmEnvironment,
         })
       ).stdout,
@@ -198,7 +198,7 @@ test("the packed parser loader rejects every frozen identity and integrity mutat
       { cwd: consumer, env: npmEnvironment },
     );
 
-    const parserRoot = join(consumer, "node_modules", "@oxc-tsrx", "parser");
+    const parserRoot = join(consumer, "node_modules", "oxc-tsrx");
     const nativeRoot = join(
       consumer,
       "node_modules",

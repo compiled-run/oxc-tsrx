@@ -17,6 +17,9 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: "1"
+  # This repository installs its own graph with pnpm. These two stay because the
+  # packaging suites drive npm, Bun, and Yarn as real consumers, and the npm
+  # lanes are quieter without audit and funding output.
   npm_config_audit: "false"
   npm_config_fund: "false"
 
@@ -42,11 +45,17 @@ jobs:
       - name: Check out the exact source revision
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
+      # pnpm has to be on PATH before setup-node, because `cache: pnpm` asks
+      # pnpm where its store is. The version comes from `packageManager` in the
+      # root package.json, so there is exactly one place to bump it.
+      - name: Install the pinned pnpm
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+
       - name: Install the pinned Node.js lane
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ matrix.node }}
-          cache: npm
+          cache: pnpm
 
       - name: Install the pinned Rust lane
         shell: bash
@@ -56,18 +65,32 @@ jobs:
           rustc -Vv
           cargo -V
 
+      # Without this every job recompiles the whole oxc dependency graph from
+      # scratch, which is what pushed these lanes into the 50 minute timeout.
+      # Keyed by lane so the two Rust versions never share an incompatible
+      # target directory.
+      - name: Cache the Rust build
+        uses: Swatinem/rust-cache@f13886b937689c021905a6b90929199931d60db1 # v2.8.1
+        with:
+          key: ${{ matrix.lane }}
+          cache-all-crates: true
+
       - name: Install the locked JavaScript graph without lifecycle scripts
-        run: npm ci --ignore-scripts
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Verify lockfiles, source boundaries, licenses, and formatting
         shell: bash
         run: |
           cargo metadata --locked --format-version 1 > /dev/null
           cargo fmt --all -- --check
-          npm run licenses:check
+          pnpm run licenses:check
           node --test tests/packaging/boundary.test.mjs
 
+      # node-20-floor and node-22-floor both pin Rust 1.95.0, so running the
+      # workspace lint and test on both is the same work twice. These lanes vary
+      # the Node floor; Rust is covered once per distinct toolchain.
       - name: Lint and test the Rust workspace
+        if: matrix.lane != 'node-22-floor'
         shell: bash
         run: |
           cargo clippy --workspace --all-targets --locked -- -D warnings
@@ -76,14 +99,96 @@ jobs:
       - name: Build the distributable native executables and parser addon
         shell: bash
         run: |
+          # build:parser-native builds parser_napi_binding with --offline, and
+          # cc is a build-dependency of napi-build rather than of oxc_tsrx_cli,
+          # so building the CLI alone never populates it. Fetch the whole
+          # workspace first or the offline build fails on a clean runner.
+          cargo fetch --locked
           cargo build --release --locked -p oxc_tsrx_cli --bins
-          npm run build:parser-native
+          pnpm run build:parser-native
 
       - name: Test the product and package contracts
         shell: bash
         run: |
-          npm test
-          npm run test:packaging:unit
+          pnpm test
+          pnpm run test:packaging:unit
+
+  install-arbitration:
+    # The install-only route reaches a released host through `node_modules/.bin`,
+    # and every step of it is platform shaped: npm links a symlink on POSIX and
+    # generates `.cmd`/`.ps1` shims on Windows, an extensionless Node wrapper is
+    # executable on POSIX and not on Windows, and a drive-lettered path is not a
+    # module specifier. These lanes had never run outside one developer's macOS
+    # machine, so a Windows runner is what makes the claim checkable at all.
+    name: Install and arbitration (${{ matrix.runner }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            expected_platform: linux
+          - runner: windows-latest
+            expected_platform: win32
+    steps:
+      - name: Check out the exact source revision
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Install the pinned pnpm
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+
+      - name: Install Node.js 24.15.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.15.0
+          cache: pnpm
+
+      - name: Prove the runner is the platform this lane claims to cover
+        shell: bash
+        env:
+          EXPECTED_PLATFORM: ${{ matrix.expected_platform }}
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+          assert.equal(process.platform, process.env.EXPECTED_PLATFORM);
+          NODE
+
+      - name: Install Rust 1.95.0
+        shell: bash
+        run: |
+          rustup toolchain install 1.95.0 --profile minimal
+          rustup default 1.95.0
+          rustc -Vv
+
+      - name: Cache the Rust build
+        uses: Swatinem/rust-cache@f13886b937689c021905a6b90929199931d60db1 # v2.8.1
+        with:
+          key: ${{ matrix.runner }}
+          cache-all-crates: true
+
+      - name: Install the locked JavaScript graph without lifecycle scripts
+        # Verbose because a linking failure here exits 1 without naming the file
+        # it was writing, which is exactly the shape a MAX_PATH overrun takes.
+        run: pnpm install --frozen-lockfile --ignore-scripts --loglevel=debug
+
+      - name: Build the distributable native executables and parser addon
+        shell: bash
+        run: |
+          # See the correctness job: the parser addon builds --offline, so the
+          # whole workspace must be fetched first on a clean runner.
+          cargo fetch --locked
+          pnpm run build:native
+          pnpm run build:parser-native
+
+      - name: Exercise a plain install against released hosts
+        run: pnpm run test:packaging:released-hosts
+
+      - name: Exercise the package-manager provider matrix
+        run: pnpm run test:packaging:providers
+
+      - name: Test the package contracts
+        run: pnpm run test:packaging:unit
 
   supported-vite-plus:
     name: Clean install / Vite+ 0.1.24 and 0.2.4
@@ -93,11 +198,14 @@ jobs:
       - name: Check out the exact source revision
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
+      - name: Install the pinned pnpm
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+
       - name: Install Node.js 24.15.0
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24.15.0
-          cache: npm
+          cache: pnpm
 
       - name: Install Rust 1.95.0
         shell: bash
@@ -105,8 +213,14 @@ jobs:
           rustup toolchain install 1.95.0 --profile minimal
           rustup default 1.95.0
 
+      - name: Cache the Rust build
+        uses: Swatinem/rust-cache@f13886b937689c021905a6b90929199931d60db1 # v2.8.1
+        with:
+          key: vite-plus
+          cache-all-crates: true
+
       - name: Install locked development dependencies
-        run: npm ci --ignore-scripts
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Build release binaries
         run: cargo build --release --locked -p oxc_tsrx_cli --bins

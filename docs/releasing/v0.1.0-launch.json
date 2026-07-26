@@ -23,14 +23,14 @@
       "@oxc-tsrx/native-linux-x64-musl",
       "@oxc-tsrx/native-win32-arm64-msvc",
       "@oxc-tsrx/native-win32-x64-msvc",
-      "@oxc-tsrx/runtime",
-      "oxlint-tsrx",
-      "oxfmt-tsrx"
+      "oxc-tsrx"
     ],
-    "installPreview": "npm install -D oxlint-tsrx oxfmt-tsrx"
+    "installPreview": "npm install -D oxc-tsrx"
   },
   "vscode": {
     "extensionId": "thejackshelton.oxc-tsrx-vscode",
+    "role": "optional-legacy-activation-client",
+    "requiredForPrimaryEditorWorkflow": false,
     "targets": [
       "darwin-arm64",
       "darwin-x64",
@@ -45,7 +45,7 @@
   "social": {
     "channel": "X",
     "image": "docs/assets/social-card.png",
-    "text": "OXC for TSRX 0.1.0 is out: native Oxlint + Oxfmt for .tsrx, Vite/Vite+ commands, and format-on-save plus lint diagnostics in VS Code, all without forking OXC. Install oxlint-tsrx + oxfmt-tsrx: https://oxc-tsrx-docs.vercel.app/"
+    "text": "OXC for TSRX 0.1.0 is out: one oxc-tsrx package for native parsing, Oxlint + Oxfmt, Vite/Vite+, and .tsrx diagnostics, formatting, and quick fixes through the official OXC extension—all without forking OXC. Install oxc-tsrx: https://oxc-tsrx-docs.vercel.app/"
   },
   "requiredApprovals": [
     "repository-push",

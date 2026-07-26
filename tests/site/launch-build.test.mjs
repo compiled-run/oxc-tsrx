@@ -158,8 +158,8 @@ test("static launch build has a scoped base, crawl metadata, and no internal des
 
   assert.match(home, /href="\/guide\/getting-started"/u);
   assert.match(home, /href="https:\/\/github\.com\/markless-dev\/oxc-tsrx"/u);
-  assert.match(home, /href="https:\/\/www\.npmjs\.com\/package\/oxlint-tsrx"/u);
-  assert.match(home, /href="https:\/\/www\.npmjs\.com\/package\/oxfmt-tsrx"/u);
+  assert.match(home, /href="https:\/\/www\.npmjs\.com\/package\/oxc-tsrx"/u);
+  assert.doesNotMatch(home, /npmjs\.com\/package\/(?:oxlint-tsrx|oxfmt-tsrx)/u);
   assert.match(home, /href="\/assets\//u);
   assert.match(home, /src="\/assets\//u);
   assert.equal(/(?:href|src)="\/oxc-tsrx\//u.test(home), false);

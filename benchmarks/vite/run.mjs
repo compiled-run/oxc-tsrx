@@ -4,8 +4,9 @@ import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { cpus, release as osRelease, tmpdir } from "node:os";
-import { delimiter, join, resolve } from "node:path";
+import { delimiter, dirname, join, resolve } from "node:path";
 import { performance } from "node:perf_hooks";
+import { pathToFileURL } from "node:url";
 import { installPhysicalToolPackages } from "../../tests/vite/physical-consumer.mjs";
 
 const require = createRequire(import.meta.url);
@@ -14,10 +15,16 @@ const fixture = join(root, "tests/fixtures/vite/toolchain/diagnostics");
 const budgetsPath = join(root, "benchmarks/vite/budgets.json");
 const budgets = JSON.parse(await readFile(budgetsPath, "utf8"));
 const lintBin = join(root, "target/release/oxc-tsrx");
-const formatBin = join(root, "target/release/oxc-tsrx-fmt");
-const productLintBin = join(root, "node_modules/oxlint-tsrx/bin/oxlint");
-const productFormatBin = join(root, "node_modules/oxfmt-tsrx/bin/oxfmt");
-const canonicalOxfmtBin = join(root, "node_modules/oxfmt-current/bin/oxfmt");
+const formatBin = join(root, "target/release/oxc-tsrx");
+// pnpm keeps `oxlint-current` and `oxfmt-current` under the package that
+// declares them, so they are resolved from that manifest rather than from a
+// hoisted repository-root `node_modules`.
+const fromToolchain = createRequire(pathToFileURL(join(root, "packages/toolchain/package.json")).href);
+const toolchainPackage = (name) => dirname(fromToolchain.resolve(`${name}/package.json`));
+const productLintBin = join(root, "packages/toolchain/bin/oxlint");
+const productFormatBin = join(root, "packages/toolchain/bin/oxfmt");
+const canonicalOxfmtBin = join(toolchainPackage("oxfmt-current"), "bin/oxfmt");
+const canonicalOxlintBin = join(toolchainPackage("oxlint-current"), "bin/oxlint");
 const warmups = 5;
 // Twenty samples make nearest-rank p95 the second-highest observation instead
 // of the single maximum, so one scheduler outlier cannot decide a release.
@@ -117,7 +124,7 @@ const formatConfig = join(fixture, ".oxfmtrc.json");
 const canonicalLint = await measure(
   () =>
     run(
-      join(root, "node_modules/oxlint-current/bin/oxlint"),
+      canonicalOxlintBin,
       ["--format=json", "--config", lintConfig, ordinary, equivalent],
       { cwd: root, env: process.env },
     ),
@@ -241,9 +248,9 @@ const summary = {
   build: {
     profile: "release",
     lintBinary: "target/release/oxc-tsrx",
-    formatBinary: "target/release/oxc-tsrx-fmt",
-    lintLauncher: "node_modules/oxlint-tsrx/bin/oxlint",
-    formatLauncher: "node_modules/oxfmt-tsrx/bin/oxfmt",
+    formatBinary: "target/release/oxc-tsrx",
+    lintLauncher: "node_modules/oxc-tsrx/bin/oxlint",
+    formatLauncher: "node_modules/oxc-tsrx/bin/oxfmt",
     oxcRevision: lintMetadata.oxcRevision,
   },
   corpus: await corpusIdentity(),

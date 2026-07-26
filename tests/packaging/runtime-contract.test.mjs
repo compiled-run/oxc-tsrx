@@ -1,27 +1,35 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
-import { mkdir, mkdtemp, readdir, realpath, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
 import {
   NATIVE_TARGETS,
   nativePackageName,
-} from "../../packages/runtime/dist/targets.js";
+} from "../../packages/toolchain/dist/native-targets.js";
 import {
   canRunCanonicalOxlint,
   parseOxlintInvocation,
   planCanonicalOxlintComposition,
-} from "../../packages/oxlint/dist/invocation.js";
+} from "../../packages/toolchain/dist/lint-invocation.js";
 import {
   canRunCanonicalOxfmt,
   parseOxfmtInvocation,
-} from "../../packages/oxfmt/dist/invocation.js";
-import { resolvePackageBinary } from "../../packages/runtime/dist/index.js";
+} from "../../packages/toolchain/dist/format-invocation.js";
+import { resolvePackageBinary } from "../../packages/toolchain/dist/runtime.js";
+import { temporaryDirectory } from "./temporary-directory.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
+
+// The stock comparison binaries are the ones `packages/toolchain/bin/*` would
+// delegate to, so they are resolved from that package's own manifest. pnpm
+// installs them under `packages/toolchain/node_modules`, not at the repository
+// root, and only the declaring package is entitled to see them.
+const toolchainManifestUrl = pathToFileURL(join(root, "packages/toolchain/package.json")).href;
+const stockOxlint = resolvePackageBinary("oxlint-current", "oxlint", toolchainManifestUrl);
+const stockOxfmt = resolvePackageBinary("oxfmt-current", "oxfmt", toolchainManifestUrl);
 
 function run(executable, args, options = {}) {
   return new Promise((resolveRun, rejectRun) => {
@@ -44,23 +52,32 @@ function run(executable, args, options = {}) {
   });
 }
 
+// Both routes are compared byte for byte, so every measured duration has to be
+// normalised or the assertion becomes a race. `--format=json` reports
+// `start_time`; the human-readable format reports `Finished in <n>ms`. Only the
+// duration varies: the candidate and the stock binary run on the same machine,
+// so file, rule, and thread counts already match.
 function withoutRuntimeTiming(result) {
   return {
     ...result,
-    stdout: result.stdout.replace(/"start_time":\s*[0-9.]+/u, '"start_time": <runtime>'),
+    stdout: result.stdout
+      .replace(/"start_time":\s*[0-9.]+/u, '"start_time": <runtime>')
+      .replace(/Finished in [0-9.]+(?:ms|s|m)\b/u, "Finished in <runtime>"),
   };
 }
 
-test("runtime owns one exact optional native package for every supported target", async () => {
-  const runtime = JSON.parse(await readFile(join(root, "packages/runtime/package.json"), "utf8"));
-  const expected = Object.fromEntries(
-    NATIVE_TARGETS.map((platform) => [nativePackageName(platform), runtime.version]),
+test("the toolchain owns one exact optional native package for every supported target", async () => {
+  const toolchain = JSON.parse(
+    await readFile(join(root, "packages/toolchain/package.json"), "utf8"),
   );
-  assert.deepEqual(runtime.optionalDependencies, expected);
-  assert.equal(runtime.publishConfig.access, "public");
-  assert.equal(runtime.publishConfig.provenance, true);
-  assert.ok(runtime.files.includes("README.md"));
-  assert.ok(runtime.files.includes("THIRD_PARTY_NOTICES.md"));
+  const expected = Object.fromEntries(
+    NATIVE_TARGETS.map((platform) => [nativePackageName(platform), toolchain.version]),
+  );
+  assert.deepEqual(toolchain.optionalDependencies, expected);
+  assert.equal(toolchain.publishConfig.access, "public");
+  assert.equal(toolchain.publishConfig.provenance, true);
+  assert.ok(toolchain.files.includes("README.md"));
+  assert.ok(toolchain.files.includes("THIRD_PARTY_NOTICES.md"));
 });
 
 test("the platform matrix is unique and covers the eight launch targets", async () => {
@@ -75,12 +92,12 @@ test("the platform matrix is unique and covers the eight launch targets", async 
 });
 
 test("explicit ordinary files take the zero-wrapper canonical Oxlint route", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "oxc-tsrx-ordinary-route-"));
+  const directory = await temporaryDirectory("oxc-tsrx-ordinary-route-");
   const source = join(directory, "ordinary.tsx");
   const trace = join(directory, "trace.jsonl");
   const config = join(directory, "oxlint.config.mjs");
-  const candidate = join(root, "packages/oxlint/bin/oxlint");
-  const stock = join(root, "node_modules/oxlint-current/bin/oxlint");
+  const candidate = join(root, "packages/toolchain/bin/oxlint");
+  const stock = stockOxlint;
   const environment = {
     ...process.env,
     CI: "1",
@@ -122,7 +139,11 @@ test("explicit ordinary files take the zero-wrapper canonical Oxlint route", asy
       run(candidate, ["--fix", "--deny", "no-var", candidateFix], { env: environment }),
       run(stock, ["--fix", "--deny", "no-var", stockFix], { env: environment }),
     ]);
-    assert.deepEqual(actualFix, expectedFix, "--fix process result");
+    assert.deepEqual(
+      withoutRuntimeTiming(actualFix),
+      withoutRuntimeTiming(expectedFix),
+      "--fix process result",
+    );
     assert.equal(await readFile(candidateFix, "utf8"), await readFile(stockFix, "utf8"));
 
     await assert.rejects(
@@ -136,7 +157,7 @@ test("explicit ordinary files take the zero-wrapper canonical Oxlint route", asy
 });
 
 test("the canonical Oxlint router is conservative around ambiguous paths and options", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "oxc-tsrx-route-contract-"));
+  const directory = await temporaryDirectory("oxc-tsrx-route-contract-");
   const ordinary = join(directory, "ordinary.tsx");
   const disguisedDirectory = join(directory, "components.tsx");
   const nestedTsrx = join(disguisedDirectory, "View.tsrx");
@@ -188,7 +209,7 @@ test("the canonical Oxlint router is conservative around ambiguous paths and opt
 });
 
 test("canonical package binaries resolve from the manifest bin declaration", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "oxc-tsrx-package-bin-"));
+  const directory = await temporaryDirectory("oxc-tsrx-package-bin-");
   const packageRoot = join(directory, "node_modules", "mock-canonical-tool");
   const entry = join(directory, "consumer.mjs");
   const declaredBin = join(packageRoot, "commands", "canonical.js");
@@ -240,26 +261,22 @@ test("mixed routing does not depend on private Oxlint modules or descriptor capt
 
   const files = (
     await Promise.all(
-      [
-        "packages/runtime/dist",
-        "packages/oxlint/bin",
-        "packages/oxlint/dist",
-        "packages/oxfmt/bin",
-        "packages/oxfmt/dist",
-      ].map((directory) => productionSources(join(root, directory))),
+      ["packages/toolchain/bin", "packages/toolchain/dist"].map((directory) =>
+        productionSources(join(root, directory)),
+      ),
     )
   ).flat();
   const requiredFiles = [
-    "packages/runtime/dist/index.js",
-    "packages/runtime/dist/process.js",
-    "packages/runtime/dist/package-binary.js",
-    "packages/oxlint/bin/oxlint",
-    "packages/oxlint/dist/cli.js",
-    "packages/oxlint/dist/prestart.js",
-    "packages/oxlint/dist/invocation.js",
-    "packages/oxfmt/bin/oxfmt",
-    "packages/oxfmt/dist/cli.js",
-    "packages/oxfmt/dist/invocation.js",
+    "packages/toolchain/dist/runtime.js",
+    "packages/toolchain/dist/process.js",
+    "packages/toolchain/dist/package-binary.js",
+    "packages/toolchain/bin/oxlint",
+    "packages/toolchain/dist/lint-cli.js",
+    "packages/toolchain/dist/lint-prestart.js",
+    "packages/toolchain/dist/lint-invocation.js",
+    "packages/toolchain/bin/oxfmt",
+    "packages/toolchain/dist/format-cli.js",
+    "packages/toolchain/dist/format-invocation.js",
   ].map((pathname) => join(root, pathname));
   assert.ok(
     requiredFiles.every((pathname) => files.includes(pathname)),
@@ -286,28 +303,28 @@ test("mixed routing does not depend on private Oxlint modules or descriptor capt
   }
 
   assert.match(
-    sources.get(join(root, "packages/oxlint/bin/oxlint")),
-    /importDeclaredPackageBinary\('oxlint-current', 'oxlint'/u,
+    sources.get(join(root, "packages/toolchain/bin/oxlint")),
+    /importDeclaredPackageBinary\("oxlint-current", "oxlint"/u,
   );
   assert.match(
-    sources.get(join(root, "packages/oxfmt/bin/oxfmt")),
-    /importDeclaredPackageBinary\('oxfmt-current', 'oxfmt'/u,
+    sources.get(join(root, "packages/toolchain/bin/oxfmt")),
+    /importDeclaredPackageBinary\("oxfmt-current", "oxfmt"/u,
   );
-  const prestart = sources.get(join(root, "packages/oxlint/dist/prestart.js"));
+  const prestart = sources.get(join(root, "packages/toolchain/dist/lint-prestart.js"));
   assert.match(prestart, /resolvePackageBinary\("oxlint-current", "oxlint"/u);
   assert.match(prestart, /runCaptured\(process\.execPath/u);
   assert.match(
-    sources.get(join(root, "packages/runtime/dist/process.js")),
+    sources.get(join(root, "packages/toolchain/dist/process.js")),
     /from "node:child_process"/u,
   );
 });
 
 test("ordinary Oxfmt stdin and explicit files take the zero-wrapper canonical route", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "oxc-tsrx-ordinary-format-route-"));
+  const directory = await temporaryDirectory("oxc-tsrx-ordinary-format-route-");
   const source = join(directory, "ordinary.tsx");
   const trace = join(directory, "trace.jsonl");
-  const candidate = join(root, "packages/oxfmt/bin/oxfmt");
-  const stock = join(root, "node_modules/oxfmt-current/bin/oxfmt");
+  const candidate = join(root, "packages/toolchain/bin/oxfmt");
+  const stock = stockOxfmt;
   const environment = {
     ...process.env,
     CI: "1",
@@ -329,14 +346,22 @@ test("ordinary Oxfmt stdin and explicit files take the zero-wrapper canonical ro
         input: unformatted,
       }),
     ]);
-    assert.deepEqual(actualStdin, expectedStdin, "ordinary stdin");
+    assert.deepEqual(
+      withoutRuntimeTiming(actualStdin),
+      withoutRuntimeTiming(expectedStdin),
+      "ordinary stdin",
+    );
 
     await writeFile(source, unformatted);
     const [actualFile, expectedFile] = await Promise.all([
       run(candidate, ["--list-different", source], { env: environment }),
       run(stock, ["--list-different", source], { env: environment }),
     ]);
-    assert.deepEqual(actualFile, expectedFile, "explicit ordinary file");
+    assert.deepEqual(
+      withoutRuntimeTiming(actualFile),
+      withoutRuntimeTiming(expectedFile),
+      "explicit ordinary file",
+    );
 
     await assert.rejects(
       readFile(trace, "utf8"),
@@ -349,7 +374,7 @@ test("ordinary Oxfmt stdin and explicit files take the zero-wrapper canonical ro
 });
 
 test("the canonical Oxfmt router keeps ambiguous and TSRX work in the bridge", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "oxc-tsrx-format-route-contract-"));
+  const directory = await temporaryDirectory("oxc-tsrx-format-route-contract-");
   const ordinary = join(directory, "ordinary.tsx");
   const disguisedDirectory = join(directory, "format.tsx");
   const nestedTsrx = join(disguisedDirectory, "View.tsrx");

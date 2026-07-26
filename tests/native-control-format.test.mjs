@@ -7,12 +7,13 @@ import test from 'node:test';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '..');
-const binary = process.env.OXFMT_BIN ?? join(root, 'target/release/oxc-tsrx-fmt');
+// The formatter is the `fmt` tool inside the one multi-call native binary.
+const binary = process.env.OXFMT_BIN ?? join(root, 'target/release/oxc-tsrx');
 const fixtures = join(root, 'tests/fixtures/control');
 
 function run(args, input) {
   return new Promise((resolvePromise, reject) => {
-    const child = spawn(binary, args, {
+    const child = spawn(binary, ['fmt', ...args], {
       cwd: root,
       env: process.env,
       stdio: ['pipe', 'pipe', 'pipe'],

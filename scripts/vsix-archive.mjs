@@ -4,7 +4,7 @@ import { readFile, rename, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { basename, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { NATIVE_TARGETS, nativePackageName } from "../packages/runtime/dist/targets.js";
+import { NATIVE_TARGETS, nativePackageName } from "../packages/toolchain/dist/native-targets.js";
 
 const require = createRequire(import.meta.url);
 const yauzl = require("yauzl");
@@ -156,7 +156,7 @@ function validateExpectedIdentity(expected) {
     expected.target.length === 0 ||
     typeof expected?.vscodeTarget !== "string" ||
     expected.vscodeTarget.length === 0 ||
-    !/^oxc-tsrx-lsp(?:\.exe)?$/u.test(expected?.nativeBinary ?? "") ||
+    !/^oxc-tsrx(?:\.exe)?$/u.test(expected?.nativeBinary ?? "") ||
     !Number.isSafeInteger(expected?.nativeLspBytes) ||
     expected.nativeLspBytes < 1 ||
     !GIT_REVISION.test(expected?.oxcRevision ?? "")
@@ -248,7 +248,13 @@ function verifyNativeIdentity(mapped, expected) {
     throw new Error("VSIX native language server size does not match the expected source binary");
   }
   for (const path of mapped.keys()) {
-    if (path !== nativePath && /^extension\/dist\/native\/oxc-tsrx-lsp(?:\.exe)?$/u.test(path)) {
+    // One multi-call `oxc-tsrx` executable replaced the separate `-fmt` and
+    // `-lsp` binaries, so a VSIX carrying either retired name, or the same name
+    // twice under both executable suffixes, is a second language server.
+    if (
+      path !== nativePath &&
+      /^extension\/dist\/native\/oxc-tsrx(?:-fmt|-lsp)?(?:\.exe)?$/u.test(path)
+    ) {
       throw new Error(`VSIX contains a second native language server at ${path}`);
     }
   }
@@ -563,7 +569,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       `${platform.target} LSP size`,
     );
 
-    const nativeBinary = platform.os === "win32" ? "oxc-tsrx-lsp.exe" : "oxc-tsrx-lsp";
+    const nativeBinary = platform.os === "win32" ? "oxc-tsrx.exe" : "oxc-tsrx";
     const expected = {
       ...sourceExpected,
       target: platform.target,

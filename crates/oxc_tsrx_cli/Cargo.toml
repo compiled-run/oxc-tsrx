@@ -6,17 +6,11 @@ license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 
+# One multi-call executable for all three tools. `src/main.rs` documents how
+# `argv[0]` and the `lint` / `fmt` / `lsp` subcommands select one.
 [[bin]]
 name = "oxc-tsrx"
 path = "src/main.rs"
-
-[[bin]]
-name = "oxc-tsrx-fmt"
-path = "src/bin/oxc-tsrx-fmt.rs"
-
-[[bin]]
-name = "oxc-tsrx-lsp"
-path = "src/bin/oxc-tsrx-lsp.rs"
 
 [dependencies]
 oxc_adapter = { path = "../oxc_adapter" }

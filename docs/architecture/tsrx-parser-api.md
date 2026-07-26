@@ -5,8 +5,17 @@
 Covered criteria: UF-04, UF-05, UF-08, UF-12, UF-13.
 
 This document is the implementation contract for a JavaScript-callable TSRX parser in
-oxc-tsrx. Its status is **approved design input, not implemented behavior**. The design has
-two deliberately separate products:
+oxc-tsrx. Its status is **approved design input, not implemented behavior**.
+
+Two later refactors moved the shipped shape away from the package names below, and this
+document was deliberately not rewritten to match. Read it for the parser contract, not for
+package names. On 2026-07-25 the `@oxc-tsrx/parser` wrapper was folded into `oxc-tsrx` and is
+reachable as the `oxc-tsrx/parser` export; that name will never be published. The three native
+executables were merged into one. The published set is `oxc-tsrx` plus the eight
+`@oxc-tsrx/native-*` platform packages, and `docs/releasing/v0.1.0-launch.json` is
+authoritative.
+
+The design has two deliberately separate products:
 
 1. `@oxc-tsrx/parser`, the canonical OXC-shaped parser API; and
 2. `@oxc-tsrx/tsrx-core-compat`, an exact `@tsrx/core@0.1.32` compatibility facade for
@@ -60,14 +69,14 @@ compatibility requirement that is not presented as OXC behavior.
 | Own enumerable configurable lazy getters | OXC convention | The ordinary result uses the pinned object-literal descriptor shape and one cache per property; nullable TSRX values use explicit initialized sentinels. |
 | Allocator-contained serialization into an owned public representation | OXC convention | OXC serializes before its local allocator dies; the current adapter already contains OXC lifetimes in [its engine boundary](../../crates/oxc_adapter/src/lib.rs). |
 | Ordinary lazy transport plus explicitly experimental raw transfer | OXC convention | The pinned package capability-gates raw transfer and keeps one semantic AST; see [raw transfer](https://github.com/oxc-project/oxc/blob/8e0ed2ebb96137fb1611cdbd5742d5cb46037d40/napi/parser/src/raw_transfer.rs). |
-| Node-API ESM wrapper and target-specific optional packages | OXC convention | OXC's generated loader uses native target packages; the local eight-target contract is [enumerated here](../../packages/runtime/dist/targets.js). Canonical and compatibility roles use independent eight-package families so the canonical loader never installs or resolves compatibility code. |
+| Node-API ESM wrapper and target-specific optional packages | OXC convention | OXC's generated loader uses native target packages; the local eight-target contract is [enumerated here](../../packages/toolchain/dist/native-targets.js). Canonical and compatibility roles use independent eight-package families so the canonical loader never installs or resolves compatibility code. |
 | Authored TSRX nodes reconstructed from a compact indexed overlay | Deliberate divergence | OXC parses JavaScript and TypeScript, while TSRX projection contains synthetic scaffolding. Authored reconstruction is required to prevent that scaffolding from becoming API. |
 | `Program | null` on a canonical fail-closed syntax result | Deliberate divergence | `tsrx_syntax` can reject before an OXC program exists. Returning structured diagnostics without inventing a partial production AST preserves the [fail-closed core](rust-oxc-core.md). |
 | `tsrx` and explicit recovery/capability options | Deliberate divergence | These are local language/product controls absent from pinned OXC. Recovery is isolated from production/compiler acceptance; capability controls fail before parse when unavailable. |
 | One frozen `capabilities` object; no stable visitor API in v1 | Deliberate divergence | It replaces pinned `rawTransferSupported()` with complete validated native identity. `Visitor`, `visitorKeys`, and `experimentalGetLazyVisitor` are outside this parser tranche rather than falsely re-exported. |
 | Throwing synchronous `parseModule` facade | Deliberate divergence | It exactly matches the first consumer but remains above the canonical returned-error surface. |
 | Dedicated compatibility CSS implementation | Deliberate divergence | The shipping core remains `KEEP_RAW`. If separately approved, an isolated data-oriented Rust crate reproduces pinned CSS semantics for the facade, including the reference `TextEncoder` hash bytes; this does not reinterpret the current compliance record. |
-| Eight targets in version 1, with browser and WASI deferred | Deliberate divergence | OXC supports broader targets, but oxc-tsrx version 1 follows its existing [eight native targets](../../packages/runtime/dist/targets.js) because the first consumer is Node tooling. |
+| Eight targets in version 1, with browser and WASI deferred | Deliberate divergence | OXC supports broader targets, but oxc-tsrx version 1 follows its existing [eight native targets](../../packages/toolchain/dist/native-targets.js) because the first consumer is Node tooling. |
 | Prior issue or Discussion and small separable upstream proposals | OXC convention | Current official rules require discussion before architectural changes and favor small, measured contributions; see [contribution rules](https://oxc.rs/docs/contribute/rules) and [contribution introduction](https://oxc.rs/docs/contribute/introduction). |
 
 ## Requirements and ranked invariants
@@ -1244,7 +1253,9 @@ The package topology is:
 @oxc-tsrx/parser                 ESM API, declarations, lazy wrapper, loader
 @oxc-tsrx/tsrx-core-compat       ESM facade, helpers, compatibility declarations
 @oxc-tsrx/native-<target>        existing canonical optional family
-  three existing executables     oxc-tsrx, oxc-tsrx-fmt, oxc-tsrx-lsp
+  one existing executable        oxc-tsrx, which selects the linter, formatter,
+                                 or language server from argv[0] or a leading
+                                 lint/fmt/lsp subcommand
   parser.node                    canonical addon only
 @oxc-tsrx/tsrx-core-compat-native-<target>  separate compatibility optional family
   tsrx_core_compat.node          only binary; no bin, executables, or parser.node
@@ -1356,7 +1367,7 @@ revision, capability disagreement, legal-inventory drift, and a loader that reso
 family. Packed-artifact integrity is then verified again from a clean install before load.
 
 Size reporting is role-specific and additive. The **parser-only installed total** is exactly the
-parser wrapper plus its selected canonical package, including all three executables, `parser.node`,
+parser wrapper plus its selected canonical package, including the multi-call executable, `parser.node`,
 manifest/checksum growth, and legal files, with zero compatibility addon, CSS, or
 compatibility-recovery-crate bytes. The
 **facade installed total** is both wrappers plus the selected canonical and compatibility packages.
@@ -1616,7 +1627,7 @@ after its prerequisite gate is retained in a receipt.
 | 4. Canonical binding | Stage 3 green | `parser.node`, source-family dispatching ESM wrapper, exact declarations, configurable lazy getters with null sentinels, capabilities, sync/async | Canonical OXC-fidelity, module, diagnostics, descriptors, UTF-16/WTF-8, transport, memory, and size matrices pass on a host target; every ordinary extension/override takes the direct binding; separate branch/loader measurements and all ordinary metrics stay within frozen pinned-`oxc-parser` budgets | Ship nothing or later ship raw-only canonical parser after full target qualification; any ordinary regression blocks release; no facade dependency |
 | 5. Recovery and CSS compatibility | Stages 1F and 4 green, plus approved compatibility-only CSS decision | Source-fixed collect/loose recovery, completeness marker, isolated Rust CSS materializer and compatibility tape | Exact `View.tsrx` topology/error/comment/identity outcomes; compiler fail-closed invariant; CSS topology/hash/modes and every compatibility-only gate pass | Disable recovery or withhold only the compatibility addon/family; canonical parser remains raw and fail-closed |
 | 6. Facade and types | Stage 5 green | Direct `tsrx_core_compat.node` materialization, three-export bounded root, exact `./types` and augmentation-only `./types/estree`, helpers, 16 modes, alias trial | One outer parse and no addon call/pointer/JS graph walk; graph, errors/comments/arrays/helpers pass; fresh TS 5.9.3 strict/skipLibCheck-false isolated reference/candidate, negative, dependency, and unchanged Markless gates pass | Withhold compatibility package; no Markless compiler rewrite or AST adapter inside Markless |
-| 7C. Eight-target canonical qualification | Stage 4 green | Eight existing canonical packages, each with three executables plus `parser.node`, one canonical role manifest/checksum, pack/readback, provenance | Every tuple and canonical missing/extra/wrong-target/version/API/transport-ABI/OXC/checksum/object/load case passes; parser-only total contains zero compatibility/CSS bytes and meets cold-start/dependency/size budgets | Withhold canonical release on any tuple; this blocks both products; no partial canonical target set |
+| 7C. Eight-target canonical qualification | Stage 4 green | Eight existing canonical packages, each with one multi-call executable plus `parser.node`, one canonical role manifest/checksum, pack/readback, provenance | Every tuple and canonical missing/extra/wrong-target/version/API/transport-ABI/OXC/checksum/object/load case passes; parser-only total contains zero compatibility/CSS bytes and meets cold-start/dependency/size budgets | Withhold canonical release on any tuple; this blocks both products; no partial canonical target set |
 | 7F. Eight-target compatibility qualification | Stages 6 and 7C green | Eight compatibility packages, each with only `tsrx_core_compat.node`, one compatibility role manifest/checksum, pack/readback, provenance | Every tuple and compatibility missing/extra/swapped/wrong-target/version/parser-API/engine-schema/facade-ABI/OXC/checksum/object/load case passes; facade total and marginal duplicate engine/CSS bytes meet budgets | Withhold only facade and compatibility family on failure; canonical release remains viable; no partial compatibility target set |
 | 8. Optional upstream proposals | Stable local evidence from earlier stages and explicit authority to engage | Issue/Discussion, then invited small generic contributions | Maintainer-authored validation, benchmarks, compile-size evidence, AI disclosure, and normal OXC review pass | Decline or withdraw without changing local architecture; never bundle TSRX policy into an unsolicited patch |
 
@@ -1666,7 +1677,7 @@ Rejected alternatives are:
 | T005-R05 | Blocker resolved: acyclic ownership and bounded live state | Architecture; arena lifetime; performance | [Overlay model](../../crates/tsrx_syntax/src/model.rs), [scanner](../../crates/tsrx_syntax/src/scanner.rs), pinned OXC allocator-contained serializer | Dependency audit is acyclic; ordinary calls allocate no TSRX bridge/tape state; root/child sibling chains reconstruct exactly; release assertions and source/copy/transient-peak measurements satisfy frozen budgets; getter leaves no taken native table |
 | T005-R06 | High resolved: arbitrary JavaScript strings | Offset and coordinate domains; embedded CSS; arena lifetime; conformance oracle | Node UTF-16 semantics, installed Acorn-based 0.1.32 reference, pinned OXC UTF-16 conversion, and noble `TextEncoder` delegation | TSRX lone high/low surrogates, pairs, astral/CRLF, literals, regex/templates, JSX, comments, module values, errors, CSS, and strict positions match losslessly; CSS hash alone matches U+FFFD encoding; an unconsumed fixup or wrong hash byte fails closed and withholds release |
 | T005-R07 | High resolved: canonical oracle | Performance posture; conformance oracle; Stage 1 | Exact 0.1.32 capture, pinned `oxc-parser` baseline, plus [T005 critique](../goals/parser-upstream-design/notes/T005-adversarial-critique.md) | Two clean tagged graph captures and digests are identical; field/descriptor/order/hole/null/offset/hash-byte mutations fail; ordinary route/result parity and separately measured branch/loader budgets pass; identities, variance, corpora, and raw evidence exist before Stage 2 |
-| T005-R08 | Medium resolved: concrete independent native packaging | Packaging; performance; Stages 7C/7F; Appendix B | Existing [target table](../../packages/runtime/dist/targets.js), [runtime package](../../packages/runtime/package.json), and [native packager](../../scripts/package-native.mjs) | Eight canonical tarballs contain three executables plus only `parser.node`; eight compatibility tarballs contain only `tsrx_core_compat.node`; role manifests/checksums, exact entry sets, dependency/load isolation, version identities, integrity/readback failures, parser/facade totals, and family aggregates pass |
+| T005-R08 | Medium resolved: concrete independent native packaging | Packaging; performance; Stages 7C/7F; Appendix B | Existing [target table](../../packages/toolchain/dist/native-targets.js), [toolchain package](../../packages/toolchain/package.json), and [native packager](../../scripts/package-native.mjs) | Eight canonical tarballs contain one multi-call executable plus only `parser.node`; eight compatibility tarballs contain only `tsrx_core_compat.node`; role manifests/checksums, exact entry sets, dependency/load isolation, version identities, integrity/readback failures, parser/facade totals, and family aggregates pass |
 
 Concrete residual risks remain. The dedicated compatibility CSS parser may not satisfy fidelity,
 filename, dependency, compile, performance, or size gates; then the facade stays unreleased. Exact
@@ -1701,7 +1712,7 @@ Each row is binary and maps the criterion to concrete design and evidence.
 | UF-07 | TSRX-only original `Vec<u16>` authority, fast UTF-8 plus WTF-8/UTF-16 fixups, original/CSS domains, and explicit hash-only `TextEncoder` replacement semantics | Pinned conversion evidence in [T002](../goals/parser-upstream-design/notes/T002-oxc-upstream-conventions.md) plus installed noble source | No mixed domains, AST/source surrogate replacement, WTF-8 CSS hashing, or categorical rejection of reference-valid strings |
 | UF-08 | Unchanged canonical `KEEP_RAW`; separately packaged/approved CSS product; exact source/hash/modes and one-engine-parse static binding with zero canonical compatibility bytes | [CSS boundary](../../compliance/css-boundary.json) and installed style/hash sources via [T005](../goals/parser-upstream-design/notes/T005-adversarial-critique.md) | No global policy reversal, parser-user CSS cost, wrong surrogate hash, cross-addon pointer, or second parse |
 | UF-09 | Literal `View.tsrx` source verifies strict 48/55 throw, collect 48..49 error, closed outer/unclosed inner, loose suppression, successful marker export, sentinel identity, private sinks, plus exact V/M/U and 16 rows | Installed 0.1.32 parse/plugin behavior and direct probe via [T005](../goals/parser-upstream-design/notes/T005-adversarial-critique.md) | Strict, collect, loose, comments, plain Error, and unrecoverable behavior cannot substitute for one another |
-| UF-10 | Independent canonical/compatibility eight-package families, role-specific tar sets/manifests/checksums/APIs/ABIs, loaders, pack/readback, and install totals | [Target table](../../packages/runtime/dist/targets.js), [runtime package](../../packages/runtime/package.json), and [packager](../../scripts/package-native.mjs) | No cross-family dependency/load, partial family, missing/swapped role, transport/facade ABI substitution, parser-user compatibility cost, or hidden aggregate size |
+| UF-10 | Independent canonical/compatibility eight-package families, role-specific tar sets/manifests/checksums/APIs/ABIs, loaders, pack/readback, and install totals | [Target table](../../packages/toolchain/dist/native-targets.js), [toolchain package](../../packages/toolchain/package.json), and [packager](../../scripts/package-native.mjs) | No cross-family dependency/load, partial family, missing/swapped role, transport/facade ABI substitution, parser-user compatibility cost, or hidden aggregate size |
 | UF-11 | Tagged cyclic graph encoding, literal recovery, exact declaration isolation/negative gates, CSS hash vectors, ordinary-route parity, two clean captures, both package matrices, and preimplementation budgets | [Seam inventory corpus analysis](../goals/parser-upstream-design/notes/T001-parser-seam-inventory.md) and pinned declaration/runtime sources | Formatter convergence, ambient masking, vague JSON digest, ambiguous fixture, or aggregate benchmark cannot hide drift |
 | UF-12 | Acceptance disclaimer, prior issue/Discussion, separable evidence, human validation and AI disclosure | [OXC rules](https://oxc.rs/docs/contribute/rules) | No endorsement claim, contact in this tranche, or unsolicited architecture patch |
 | UF-13 | Independently receipted Stage 1C/1F oracles, canonical-only unlock through Stage 4, CSS/facade gates from Stage 5, and separate all-eight 7C/7F lanes | [T003 stage ruling](../goals/parser-upstream-design/notes/T003-design-tenets-and-rubric.md), corrected by [T005](../goals/parser-upstream-design/notes/T005-adversarial-critique.md) | No implementation-time semantic choice, compatibility-blocked canonical work, coupled package rollback, partial target family, or ungated phase |
@@ -1863,7 +1874,7 @@ Covered criteria: UF-01, UF-02, UF-03, UF-04, UF-05, UF-06, UF-07, UF-08, UF-09,
 - [Compact overlay model](../../crates/tsrx_syntax/src/model.rs)
 - [Projection and mapping implementation](../../crates/tsrx_syntax/src/projection.rs)
 - [Pinned OXC adapter](../../crates/oxc_adapter/src/lib.rs)
-- [Eight native targets](../../packages/runtime/dist/targets.js)
+- [Eight native targets](../../packages/toolchain/dist/native-targets.js)
 - [Native packaging and identity checks](../../scripts/package-native.mjs)
 - [Pinned OXC parser binding](https://github.com/oxc-project/oxc/tree/8e0ed2ebb96137fb1611cdbd5742d5cb46037d40/napi/parser)
 - [Official OXC contribution rules](https://oxc.rs/docs/contribute/rules)

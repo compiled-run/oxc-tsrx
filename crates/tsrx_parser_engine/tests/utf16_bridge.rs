@@ -311,6 +311,10 @@ fn semantic_labels_and_codeframes_use_utf16_after_astral_and_crlf() {
     ));
 }
 
+// One table-driven case per opaque surface. Splitting it would scatter the
+// shared template and the surrogate pair it substitutes across several
+// functions without making any of them clearer.
+#[allow(clippy::too_many_lines)]
 #[test]
 fn lone_surrogates_round_trip_in_every_opaque_surface() {
     let template = "import X from \"m<U>\"; function View() @{ const s=\"q<U>\"; const t=`t<U>`; const r=/r<U>/u; /*c<U>*/ <main title=\"a<U>\">x<U><style>.x{content:\"s<U>\"}</style></main> }";

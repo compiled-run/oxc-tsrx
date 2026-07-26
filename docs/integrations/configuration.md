@@ -12,7 +12,7 @@ starts and reused for every file in that batch. Ordinary `.js`, `.jsx`,
 and `oxfmt` still do not recognize `.tsrx`.
 
 Installed through npm? You run the `oxlint` and `oxfmt` commands from
-[`oxlint-tsrx` and `oxfmt-tsrx`](/integrations/vite-plus), and everything on
+[`oxc-tsrx`](/integrations/vite-plus), and everything on
 this page applies to them too. They can also take `lint` and `fmt` options
 from a Vite+ `vite.config.*`; that contract is the
 [Vite+ configuration boundary](/integrations/vite-plus#configuration-boundary).
@@ -100,7 +100,7 @@ The direct native command requires `--type-aware` or `--type-check` even when
 the config contains `options.typeAware` or `options.typeCheck`. Config alone
 fails actionably instead of unexpectedly starting a TypeScript-Go process.
 `--type-check` implies the type-aware lane and additionally reports TypeScript
-syntactic and semantic diagnostics. Through the npm companion, a resolved
+syntactic and semantic diagnostics. Through the npm toolchain, a resolved
 Vite+ config forwards the corresponding explicit flag automatically.
 
 <!-- annotate-config -->
@@ -147,8 +147,9 @@ compiler code, such as `typescript(TS2322)`.
 
 #### Troubleshooting tsgolint discovery
 
-Type-aware runs need exactly `oxlint-tsgolint` 0.24.0, pinned as an exact
-dependency of `oxlint-tsrx`. When `--type-aware` or `--type-check` fails to
+Type-aware runs need exactly `oxlint-tsgolint` 0.24.0, pinned through
+`oxc-tsrx`'s lint implementation dependency. When `--type-aware` or
+`--type-check` fails to
 start:
 
 - Native discovery checks the project installation and `PATH`.
@@ -163,16 +164,21 @@ start:
 
 These fail before a source parse or write; they are not silently disabled:
 
-- JavaScript plugins (`jsPlugins`). The official JS-plugin host currently
-  lives behind private OXC application code, which this project does not
-  import or copy. The source-only VS Code experiment instead routes the
-  official OXC extension through a Node-enabled Oxlint draft; it does not make
-  `jsPlugins` valid for the native CLI.
+- JavaScript plugins (`jsPlugins`) on the `.tsrx` lane. This is a scoping
+  limit, not a blanket "JS plugins never work" statement. Ordinary `.js`/`.ts`
+  files can use released Oxlint JS plugins in the normal Oxlint lane (including
+  through Vite+). What rejects `jsPlugins` is the native TSRX CLI and language
+  server, and the serialized `.tsrx` Vite+ lane that forwards config to them,
+  because that native Rust path has no Node JS-plugin host. The source-only VS
+  Code experiment routes the official OXC extension through a Node-enabled
+  Oxlint draft to run a JS rule on `.tsrx`; it does not make `jsPlugins` valid
+  for the native CLI. See
+  [Custom JavaScript plugins](/integrations/custom-js-plugins).
 - JavaScript/TypeScript config modules passed to the direct native command.
 - Alternate reporters and nested per-directory config discovery.
 
 The direct native command accepts explicit source files and JSON output; the
-npm companion adds directory/glob arguments, combined default/JSON reporting,
+npm toolchain adds directory/glob arguments, combined default/JSON reporting,
 and ordinary-file delegation. [Limitations](/reference/limitations)
 tracks every remaining boundary.
 

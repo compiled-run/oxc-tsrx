@@ -1208,6 +1208,18 @@ html.dark .hero-name {
   padding: 72px 24px;
   background: #4c1d95 url("./hero-rays.svg") center / cover no-repeat;
 }
+/* Sits on the dark band, so it cannot inherit .pg-note's body-text colour. */
+.band .demo-scenario-note {
+  max-width: 760px;
+  margin: 12px auto 0;
+  color: rgba(233, 213, 255, 0.86);
+  font-size: 12.5px;
+  line-height: 1.5;
+  text-align: center;
+}
+.band .demo-scenario-note[hidden] {
+  display: none;
+}
 .code-panel {
   max-width: 760px;
   margin: 0 auto;

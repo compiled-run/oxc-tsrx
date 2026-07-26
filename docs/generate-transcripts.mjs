@@ -6,7 +6,7 @@
 // Prereqs:
 //   cargo build --release --locked -p oxc_tsrx_cli --bins
 //   node scripts/build-parser-native.mjs (parser addon for the parsing demo)
-//   npm ci (for the npm wrappers and the pinned oxlint-tsgolint executable)
+//   pnpm install (for the npm wrappers and the pinned oxlint-tsgolint executable)
 //   jq on PATH (the JSON walkthroughs pipe through it for readable output)
 import { spawnSync } from 'node:child_process'
 import {
@@ -21,20 +21,21 @@ import {
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { resolveTsgolintExecutable } from '../scripts/tsgolint-path.mjs'
 
 const docsDir = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.join(docsDir, '..')
 const lintBin = path.join(repoRoot, 'target', 'release', 'oxc-tsrx')
-const formatBin = path.join(repoRoot, 'target', 'release', 'oxc-tsrx-fmt')
-const npmLintBin = path.join(repoRoot, 'packages', 'oxlint', 'bin', 'oxlint')
-const npmFormatBin = path.join(repoRoot, 'packages', 'oxfmt', 'bin', 'oxfmt')
-const tsgolintBin = path.join(repoRoot, 'node_modules', '.bin', 'tsgolint')
+const formatBin = path.join(repoRoot, 'target', 'release', 'oxc-tsrx')
+const npmLintBin = path.join(repoRoot, 'packages', 'toolchain', 'bin', 'oxlint')
+const npmFormatBin = path.join(repoRoot, 'packages', 'toolchain', 'bin', 'oxfmt')
+const tsgolintBin = resolveTsgolintExecutable(repoRoot)
 
 const baseEnv = {
   ...process.env,
   OXC_TSRX_LINT_BIN: lintBin,
   OXC_TSRX_FORMAT_BIN: formatBin,
-  OXLINT_TSGOLINT_PATH: tsgolintBin,
+  ...(tsgolintBin ? { OXLINT_TSGOLINT_PATH: tsgolintBin } : {}),
 }
 
 // ---------- sample project files ----------
@@ -245,7 +246,7 @@ const parseBrokenTsrx = `export function Broken() @{
 
 // Must stay identical to the js fence on docs/guide/parsing.md.
 const parseScript = `import { readFileSync } from "node:fs";
-import { parseSync } from "@oxc-tsrx/parser";
+import { parseSync } from "oxc-tsrx/parser";
 
 const source = readFileSync("src/View.tsrx", "utf8");
 const result = parseSync("src/View.tsrx", source);
@@ -270,7 +271,7 @@ console.log(source.slice(forNode.start, forNode.end).split("\\n")[0]);
 `
 
 const parseBrokenScript = `import { readFileSync } from "node:fs";
-import { parseSync } from "@oxc-tsrx/parser";
+import { parseSync } from "oxc-tsrx/parser";
 
 const source = readFileSync("src/Broken.tsrx", "utf8");
 const result = parseSync("src/Broken.tsrx", source);
@@ -284,8 +285,9 @@ for (const error of result.errors) {
 // ---------- runners ----------
 
 const runners = {
+  // One multi-call native binary: no subcommand lints, `fmt` formats.
   lint: { bin: lintBin },
-  fmt: { bin: formatBin },
+  fmt: { bin: formatBin, prefix: ['fmt'] },
   npxLint: { bin: process.execPath, prefix: [npmLintBin] },
   npxFmt: { bin: process.execPath, prefix: [npmFormatBin] },
   cat: { bin: '/bin/cat' },
@@ -335,7 +337,7 @@ function captureDemo(demo) {
       writeFileSync(absolute, contents)
     }
     // Symlinks let a demo resolve real workspace packages (for example
-    // node_modules/@oxc-tsrx/parser) without copying them into the sample.
+    // node_modules/oxc-tsrx) without copying them into the sample.
     for (const [relative, target] of Object.entries(demo.links ?? {})) {
       const absolute = path.join(workspace, relative)
       mkdirSync(path.dirname(absolute), { recursive: true })
@@ -643,7 +645,7 @@ const demos = {
 
   'parsing-quickstart': {
     caption:
-      'Real output, captured at build time. The sample project has the src/View.tsrx and parse.mjs from above, a Broken.tsrx with an unterminated closing tag, and @oxc-tsrx/parser installed.',
+      'Real output, captured at build time. The sample project has the src/View.tsrx and parse.mjs from above, a Broken.tsrx with an unterminated closing tag, and oxc-tsrx installed.',
     files: {
       'src/View.tsrx': parseViewTsrx,
       'src/Broken.tsrx': parseBrokenTsrx,
@@ -651,7 +653,7 @@ const demos = {
       'parse-broken.mjs': parseBrokenScript,
     },
     links: {
-      'node_modules/@oxc-tsrx/parser': path.join(repoRoot, 'packages', 'parser'),
+      'node_modules/oxc-tsrx': path.join(repoRoot, 'packages', 'toolchain'),
     },
     entries: [
       {

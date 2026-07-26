@@ -1,4 +1,4 @@
-import { parseSync } from "../../packages/parser/index.js";
+import { parseSync } from "../../packages/toolchain/dist/parser.js";
 
 const TSRX_ID = /\.tsrx(?:$|\?)/u;
 export const TSRX_PARSER_SERVICE = Symbol.for("@oxc-tsrx/vite/parser-service");
@@ -35,7 +35,7 @@ export function tsrxParserService(options = {}) {
   });
 
   const api = Object.freeze({
-    name: "@oxc-tsrx/parser",
+    name: "oxc-tsrx/parser",
     version: 1,
     [TSRX_PARSER_SERVICE]: true,
 

@@ -106,7 +106,7 @@ const packageResult = execFileSync(
     "--target",
     hostTarget(),
     "--lsp-bin",
-    join(root, "target/release", process.platform === "win32" ? "oxc-tsrx-lsp.exe" : "oxc-tsrx-lsp"),
+    join(root, "target/release", process.platform === "win32" ? "oxc-tsrx.exe" : "oxc-tsrx"),
     "--out-dir",
     artifacts,
   ],

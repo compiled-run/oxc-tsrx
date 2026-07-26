@@ -139,9 +139,21 @@ test("real Vite dev server recompiles a changed .tsrx module through the framewo
     configFile: false,
     logLevel: "silent",
     plugins: [tsrxReact(), tracker],
-    server: { host: "127.0.0.1", port, strictPort: true, ws: false },
+    server: {
+      host: "127.0.0.1",
+      port,
+      strictPort: true,
+      ws: false,
+      // Every `transformRequest` below otherwise leaves Vite pre-transforming
+      // that module's imports in the background, so requests are still in
+      // flight when the last assertion lands. This test drives each transform
+      // it asserts on explicitly, so the background stream adds nothing to
+      // cover and only makes teardown race the dependency optimizer.
+      preTransformRequests: false,
+    },
   });
   const watcherReady = new Promise((resolveReady) => server.watcher.once("ready", resolveReady));
+  let asserted = false;
 
   try {
     await deadline(server.listen(), 8_000, "Vite dev server listen");
@@ -181,8 +193,34 @@ test("real Vite dev server recompiles a changed .tsrx module through the framewo
     assert.ok(updated);
     assert.match(updated.code, /OXC TSRX HMR/);
     assert.doesNotMatch(updated.code, /@if|@\{/);
+    asserted = true;
   } finally {
-    await deadline(server.close(), 8_000, "Vite dev server close");
-    await rm(project, { recursive: true, force: true });
+    try {
+      // Closing on top of in-flight requests deadlocks `server.close()`:
+      // `DevEnvironment.close()` shuts the dependency optimizer down and only
+      // then drains its pending requests, and a request parked on the
+      // optimizer never settles once it is gone. On this machine the
+      // background work happened to finish inside the test body; on a CI
+      // runner it did not, and every correctness lane hung for the full close
+      // budget. Waiting for idle first removes the race rather than widening
+      // the timeout that exposed it, and keeps the reported failure accurate
+      // if anything is still outstanding.
+      await deadline(
+        Promise.all(
+          Object.values(server.environments).map((environment) =>
+            environment.waitForRequestsIdle(),
+          ),
+        ),
+        8_000,
+        "Vite background requests to settle",
+      );
+      await deadline(server.close(), 8_000, "Vite dev server close");
+    } catch (error) {
+      // A teardown failure must never overwrite the assertion that actually
+      // failed, but it still fails the test on its own.
+      if (asserted) throw error;
+    } finally {
+      await rm(project, { recursive: true, force: true });
+    }
   }
 });

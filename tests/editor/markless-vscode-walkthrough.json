@@ -1,19 +1,19 @@
 {
   "schemaVersion": 1,
-  "recordedAt": "2026-07-16T18:41:23.776Z",
-  "vscodeVersion": "1.128.0",
+  "recordedAt": "2026-07-25T19:11:16.693Z",
+  "vscodeVersion": "1.129.1",
   "markless": {
-    "head": "b7f834b878847767c14fcac9544e7a7da13a1e17",
+    "head": "a517164d2c6e7876ebb3913c6950804b6f35e36e",
     "source": "packages/vitest-browser/browser/fixtures/arm-try-events.tsrx",
     "sourceSha256": "d2c4df5fe7aa471ab4762ff0879d6af09b26545e4733d7e1ff393c25e9a0203c",
-    "beforeFingerprint": "9dea888de18b32e8cad6272076aadcd9771c219bb68e124f59f1497dc2f2cd71",
-    "afterFingerprint": "9dea888de18b32e8cad6272076aadcd9771c219bb68e124f59f1497dc2f2cd71",
+    "beforeFingerprint": "7fa3029f1821753de5ff207eb6c051d809abf69afe7257643b5ae128edc0781d",
+    "afterFingerprint": "7fa3029f1821753de5ff207eb6c051d809abf69afe7257643b5ae128edc0781d",
     "externalWrites": false
   },
   "extension": {
     "id": "thejackshelton.oxc-tsrx-vscode",
     "frameworkLanguageId": "markless-tsrx",
-    "nativeServer": "target/release/oxc-tsrx-lsp",
+    "nativeServer": "target/release/oxc-tsrx lsp",
     "bundledClient": true
   },
   "assertions": {

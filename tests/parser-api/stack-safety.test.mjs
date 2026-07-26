@@ -132,7 +132,7 @@ test("deep TSRX materializes iteratively on a bounded worker stack", async () =>
         "-e",
         childSource,
         pathToFileURL(workerPath).href,
-        new URL("../../packages/parser/index.js", import.meta.url).href,
+        new URL("../../packages/toolchain/dist/parser.js", import.meta.url).href,
         String(DEEP_JSX_DEPTH),
         String(MATERIALIZER_STACK_MIB),
       ],

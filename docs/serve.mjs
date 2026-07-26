@@ -13,6 +13,13 @@ import http from 'node:http'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import config from './site.config.mjs'
+import { resolveTsgolintExecutable } from '../scripts/tsgolint-path.mjs'
+import {
+  DEMO_TSCONFIG,
+  JSX_CONTRACT,
+  TYPE_PREFIX,
+  normalizeDiagnostics,
+} from './demo-type-lane.mjs'
 
 const docsDir = path.dirname(fileURLToPath(import.meta.url))
 const distDir = path.join(docsDir, 'dist')
@@ -31,7 +38,7 @@ const allowedOrigins = () => new Set([...allowedHosts()].map((host) => `http://$
 const lintBin =
   process.env.OXC_TSRX_LINT_BIN ?? path.join(repoRoot, 'target', 'release', 'oxc-tsrx')
 const fmtBin =
-  process.env.OXC_TSRX_FORMAT_BIN ?? path.join(repoRoot, 'target', 'release', 'oxc-tsrx-fmt')
+  process.env.OXC_TSRX_FORMAT_BIN ?? path.join(repoRoot, 'target', 'release', 'oxc-tsrx')
 const projectionBin =
   process.env.OXC_TSRX_PROJECTION_BIN ??
   path.join(docsDir, 'tools', 'projection-dump', 'target', 'release', 'projection-dump')
@@ -40,8 +47,7 @@ const wasmAvailable = () => existsSync(path.join(distDir, 'assets', 'demo-wasm',
 // Type-aware lint needs the tsgolint executable resolvable from the workspace,
 // and the linted file must live inside an inferable TypeScript program, which
 // is why demo temp files go under the repo root instead of the OS tmpdir.
-const typeAwareAvailable = () =>
-  existsSync(path.join(repoRoot, 'node_modules', '.bin', 'tsgolint'))
+const typeAwareAvailable = () => resolveTsgolintExecutable(repoRoot) !== null
 const demoTmpDir = path.join(repoRoot, '.docs-demo-tmp')
 
 const MAX_DEMO_BYTES = 64 * 1024
@@ -122,32 +128,6 @@ function parseLintRequest(body) {
 
 const SEVERITY_FLAGS = { allow: '-A', warn: '-W', deny: '-D' }
 
-const JSX_CONTRACT = `declare namespace JSX {
-  interface IntrinsicElements {
-    [name: string]: unknown;
-  }
-}
-
-declare module "react/jsx-runtime" {
-  export const Fragment: unknown;
-  export function jsx(type: unknown, properties: unknown): unknown;
-  export function jsxs(type: unknown, properties: unknown): unknown;
-}
-`
-const DEMO_TSCONFIG = `{
-  "compilerOptions": {
-    "jsx": "preserve",
-    "module": "ESNext",
-    "moduleResolution": "Bundler",
-    "noEmit": true,
-    "strict": true,
-    "target": "ESNext"
-  },
-  "include": ["demo.tsrx", "jsx.d.ts"]
-}
-`
-const TYPE_PREFIX = '/// <reference path="./jsx.d.ts" />\n'
-
 async function apiLint(body) {
   const request = parseLintRequest(body)
   const typeLane = Boolean(request.typeAware || request.typeCheck)
@@ -187,20 +167,7 @@ async function apiLint(body) {
     }
     const report = JSON.parse(stdout)
     return {
-      diagnostics: report.diagnostics
-        .map((diagnostic) => ({
-          rule: diagnostic.rule,
-          code: diagnostic.code,
-          severity: diagnostic.severity,
-          message: diagnostic.message,
-          labels: (diagnostic.labels ?? []).map((label) => ({
-            ...label,
-            span: { ...label.span, offset: label.span.offset - prefixBytes },
-          })),
-        }))
-        .filter((diagnostic) =>
-          diagnostic.labels.every((label) => label.span.offset >= 0),
-        ),
+      diagnostics: normalizeDiagnostics(report.diagnostics, prefixBytes),
       parseCount: report.oxcTsrx?.parseCount ?? null,
       suppressed: report.oxcTsrx?.diagnosticsSuppressed ?? 0,
       ruleCount: report.number_of_rules ?? null,
@@ -352,7 +319,7 @@ async function apiComplete(body) {
 
 async function apiFormat(source) {
   const startedAt = performance.now()
-  const { code, stdout, stderr } = await run(fmtBin, ['--stdin-filepath=demo.tsrx'], source)
+  const { code, stdout, stderr } = await run(fmtBin, ['fmt', '--stdin-filepath=demo.tsrx'], source)
   const elapsedMs = Math.round((performance.now() - startedAt) * 10) / 10
   if (code !== 0) return { error: (stderr.trim() || 'format failed').split('\n')[0] }
   return { formatted: stdout, elapsedMs }

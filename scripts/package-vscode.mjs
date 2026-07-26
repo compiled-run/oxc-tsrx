@@ -13,7 +13,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
-import { NATIVE_TARGETS } from "../packages/runtime/dist/targets.js";
+import { NATIVE_TARGETS } from "../packages/toolchain/dist/native-targets.js";
 import { resolveVsceInvocation } from "./vsce-invocation.mjs";
 import { verifyAndPromoteVsix } from "./vsix-archive.mjs";
 
@@ -81,7 +81,10 @@ if (!lspMetadata?.isFile()) throw new Error(`language server is missing: ${lspSo
 const lspContents = await readFile(lspSource);
 const lspSha256 = sha256(lspContents);
 const lspBytes = lspMetadata.size;
-const executable = platform.os === "win32" ? "oxc-tsrx-lsp.exe" : "oxc-tsrx-lsp";
+// The VSIX embeds the one multi-call native executable, which the extension
+// starts with the `lsp` subcommand. It replaced three separate binaries built
+// from the same crate.
+const executable = platform.os === "win32" ? "oxc-tsrx.exe" : "oxc-tsrx";
 const expectedVsix = {
   bundleSha256: sha256(sourceBundle),
   inventorySha256: sha256(sourceInventory),
@@ -99,7 +102,7 @@ const expectedVsix = {
 };
 const rustc = await run("rustc", ["-vV"]);
 if (rustHost(rustc.stdout) === platform.target) {
-  const version = await run(lspSource, ["--version"]);
+  const version = await run(lspSource, ["lsp", "--version"]);
   const expected = `oxc-tsrx-lsp ${sourceManifest.version} (OXC ${revision})\n`;
   if (version.stderr || version.stdout !== expected) {
     throw new Error(`unexpected language-server identity: ${version.stdout}${version.stderr}`);
@@ -110,7 +113,15 @@ const outDirectory = resolve(root, options["out-dir"]);
 await mkdir(outDirectory, { recursive: true });
 const stage = await mkdtemp(join(tmpdir(), "oxc-tsrx-vscode-package-"));
 try {
-  await cp(source, stage, { recursive: true });
+  // `files` already keeps `node_modules` out of the VSIX, but the staged tree
+  // must not contain it either. pnpm fills `packages/vscode/node_modules` with
+  // symlinks into the virtual store, and `cp` rewrites a relative symlink to an
+  // absolute one, so staging that directory would point the packaged extension
+  // at this machine's install and let a later write reach the pnpm store.
+  await cp(source, stage, {
+    recursive: true,
+    filter: (path) => !/[\\/]node_modules([\\/]|$)/u.test(path),
+  });
   const nativeDirectory = join(stage, "dist/native");
   await mkdir(nativeDirectory, { recursive: true });
   const lspDestination = join(nativeDirectory, executable);
@@ -165,7 +176,12 @@ try {
       version: sourceManifest.version,
       target: platform.target,
       vscodeTarget: platform.vscodeTarget,
-      vsix,
+      // POSIX separators, always. These reports are written by eight different
+      // runners and read by one Linux assembly job, and `path.basename` on
+      // POSIX does not split on a backslash, so a Windows-native path here
+      // makes the assembly job compare a whole `C:\...` string to a filename.
+      vsix: vsix.replaceAll("\\", "/"),
+      filename: basename(vsix),
       lspSha256,
       lspBytes,
       vsixVerification,

@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 
+/**
+ * Arguments that start the native language server. The linter, the formatter,
+ * and the server are one multi-call `oxc-tsrx` executable, so `lsp` selects the
+ * server. The binary also dispatches on `argv[0]`, but a harness spawns it by
+ * its real path, so the subcommand is the form that always holds.
+ */
+export const SERVER_ARGUMENTS = Object.freeze(["lsp"]);
+
 export class LspClient {
   #buffer = Buffer.alloc(0);
   #child;

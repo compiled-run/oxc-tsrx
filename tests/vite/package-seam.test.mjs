@@ -8,7 +8,7 @@ import { pathToFileURL } from "node:url";
 
 const root = resolve(import.meta.dirname, "../..");
 const lintBin = process.env.OXC_TSRX_LINT_BIN ?? join(root, "target/release/oxc-tsrx");
-const formatBin = process.env.OXC_TSRX_FORMAT_BIN ?? join(root, "target/release/oxc-tsrx-fmt");
+const formatBin = process.env.OXC_TSRX_FORMAT_BIN ?? join(root, "target/release/oxc-tsrx");
 
 function runProcess(executable, args, options = {}) {
   return new Promise((resolveRun, rejectRun) => {
@@ -89,13 +89,13 @@ function lspInitializeRoundTrip(binPath, { timeoutMs = 15_000 } = {}) {
 }
 
 test("oxlint wrapper keeps a canonical --lsp stdio session alive", async () => {
-  const response = await lspInitializeRoundTrip(join(root, "packages/oxlint/bin/oxlint"));
+  const response = await lspInitializeRoundTrip(join(root, "packages/toolchain/bin/oxlint"));
   assert.equal(response.id, 1);
   assert.ok(response.result?.capabilities, `initialize response missing capabilities: ${JSON.stringify(response)}`);
 });
 
 test("oxfmt wrapper keeps a canonical --lsp stdio session alive", async () => {
-  const response = await lspInitializeRoundTrip(join(root, "packages/oxfmt/bin/oxfmt"));
+  const response = await lspInitializeRoundTrip(join(root, "packages/toolchain/bin/oxfmt"));
   assert.equal(response.id, 1);
   assert.ok(response.result?.capabilities, `initialize response missing capabilities: ${JSON.stringify(response)}`);
 });
@@ -105,12 +105,14 @@ test("oxfmt executable forwards TSRX stdin to the native formatter", async () =>
   const args = ["--stdin-filepath=View.tsrx"];
   const environment = { ...process.env, OXC_TSRX_FORMAT_BIN: formatBin };
   const [actual, expected] = await Promise.all([
-    run(join(root, "packages/oxfmt/bin/oxfmt"), args, {
+    run(join(root, "packages/toolchain/bin/oxfmt"), args, {
       cwd: root,
       env: environment,
       input: source,
     }),
-    runProcess(formatBin, args, { cwd: root, env: environment, input: source }),
+    // The formatter is the `fmt` tool inside the one multi-call native binary,
+    // which is exactly what the wrapper is expected to select on its own.
+    runProcess(formatBin, ["fmt", ...args], { cwd: root, env: environment, input: source }),
   ]);
   assert.deepEqual(actual, expected);
   assert.notEqual(actual.stdout, "", "formatter output must not be empty");
@@ -120,8 +122,8 @@ test("drop-in package roots preserve canonical config APIs and add TSRX formatti
   process.env.OXC_TSRX_LINT_BIN = lintBin;
   process.env.OXC_TSRX_FORMAT_BIN = formatBin;
 
-  const oxlint = await import(pathToFileURL(join(root, "packages/oxlint/dist/index.js")).href);
-  const oxfmt = await import(pathToFileURL(join(root, "packages/oxfmt/dist/index.js")).href);
+  const oxlint = await import(pathToFileURL(join(root, "packages/toolchain/dist/lint.js")).href);
+  const oxfmt = await import(pathToFileURL(join(root, "packages/toolchain/dist/format.js")).href);
   const upstream = await import("oxfmt-current");
 
   const lintConfig = { rules: { "no-debugger": "error" } };
@@ -149,7 +151,7 @@ test("format package reports a missing native artifact instead of silently deleg
   const previous = process.env.OXC_TSRX_FORMAT_BIN;
   process.env.OXC_TSRX_FORMAT_BIN = join(directory, "missing-oxc-tsrx-fmt");
   try {
-    const moduleUrl = pathToFileURL(join(root, "packages/oxfmt/dist/index.js"));
+    const moduleUrl = pathToFileURL(join(root, "packages/toolchain/dist/format.js"));
     moduleUrl.searchParams.set("missing-native", String(Date.now()));
     const oxfmt = await import(moduleUrl.href);
     await assert.rejects(
@@ -163,17 +165,24 @@ test("format package reports a missing native artifact instead of silently deleg
   }
 });
 
+// Vite+ resolves the *package* `oxlint` and then derives `<pkgRoot>/bin/oxlint`
+// from its manifest, so whichever package answers to those command names has to
+// carry a resolvable root and a declared bin for each. That used to be two
+// packages, `oxlint-tsrx` and `oxfmt-tsrx`; both were folded into `oxc-tsrx`, so
+// the shape is now asserted where it actually lives.
 test("package manifests have Vite+ compatible root and bin shapes", async () => {
+  const manifest = JSON.parse(
+    await readFile(join(root, "packages/toolchain/package.json"), "utf8"),
+  );
+  assert.equal(manifest.name, "oxc-tsrx");
+  assert.equal(manifest.type, "module");
+  assert.equal(manifest.main, "./dist/index.js");
   for (const name of ["oxlint", "oxfmt"]) {
-    const packageRoot = join(root, "packages", name);
-    const manifest = JSON.parse(await readFile(join(packageRoot, "package.json"), "utf8"));
-    assert.equal(manifest.name, `${name}-tsrx`);
-    assert.equal(manifest.type, "module");
-    assert.equal(manifest.main, "./dist/index.js");
     assert.equal(manifest.bin[name], `./bin/${name}`);
-    assert.ok(manifest.exports["."]);
-    assert.ok(manifest.exports["./package.json"]);
   }
+  assert.ok(manifest.exports["."]);
+  // Vite+ reads the manifest through this subpath, so it has to stay exported.
+  assert.ok(manifest.exports["./package.json"]);
 });
 
 test("mixed package lint delegates ordinary TSX and parses each TSRX file once", async () => {
@@ -182,7 +191,7 @@ test("mixed package lint delegates ordinary TSX and parses each TSRX file once",
   const trace = join(traceDirectory, "trace.jsonl");
   try {
     const result = await run(
-      join(root, "packages/oxlint/bin/oxlint"),
+      join(root, "packages/toolchain/bin/oxlint"),
       [
         "--format=json",
         "--config",
@@ -217,9 +226,13 @@ test("mixed package lint delegates ordinary TSX and parses each TSRX file once",
       starts.some(
         (event) =>
           event.executable === process.execPath &&
-          event.args[0]
-            ?.replaceAll("\\", "/")
-            .endsWith("node_modules/oxlint-current/bin/oxlint"),
+          // npm installed the alias under its alias name; pnpm resolves the
+          // same package through its virtual store, where the directory carries
+          // the real published name. Either directory is the public
+          // manifest-declared launcher.
+          /node_modules\/(?:oxlint|oxlint-current)\/bin\/oxlint$/u.test(
+            event.args[0]?.replaceAll("\\", "/") ?? "",
+          ),
       ),
       "mixed ordinary files must use the public manifest-declared Oxlint launcher via Node",
     );

@@ -1,0 +1,105 @@
+#!/usr/bin/env node
+
+function usage() {
+  return `oxc-tsrx
+
+Usage:
+  oxc-tsrx providers [--project <directory>] [--json]
+  oxc-tsrx setup [--project <directory>] [--dry-run] [--json]
+  oxc-tsrx status [--project <directory>] [--json]
+  oxc-tsrx remove [--project <directory>] [--dry-run] [--json]
+
+providers reports the OXC language providers the project root's direct
+dependencies declare through their static oxc.provider metadata. It reads
+package manifests only: it writes nothing, mutates no node_modules directory,
+and imports, requires, or spawns no dependency. It exits non-zero when a
+provider claims a reserved extension or when two providers collide.
+
+setup, status, and remove are the temporary compatibility bridge for consumers
+whose resolver is not provider-aware yet. The bridge creates only the exact
+oxc-parser, oxlint, and oxfmt package-name facades those consumers need. It
+never edits package.json. Transitive official packages in those exact slots
+are preserved and restored; direct or unrecognized packages are never replaced.
+`;
+}
+
+function parseArguments(argv) {
+  const [command = "help", ...rest] = argv;
+  const options = { command, projectRoot: undefined, dryRun: false, json: false };
+  for (let index = 0; index < rest.length; index += 1) {
+    const argument = rest[index];
+    if (argument === "--project") {
+      options.projectRoot = rest[++index];
+      if (!options.projectRoot) throw new Error("--project requires a directory");
+    } else if (argument.startsWith("--project=")) {
+      options.projectRoot = argument.slice("--project=".length);
+    } else if (argument === "--dry-run") {
+      options.dryRun = true;
+    } else if (argument === "--json") {
+      options.json = true;
+    } else if (argument === "--help" || argument === "-h") {
+      options.command = "help";
+    } else {
+      throw new Error(`unknown option: ${argument}`);
+    }
+  }
+  return options;
+}
+
+function printResult(result, json) {
+  if (json) {
+    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    return;
+  }
+  const changes = result.changed ?? result.removed ?? [];
+  const verb = result.action === "remove" ? "removed" : result.action;
+  process.stdout.write(
+    `${verb} ${changes.length} compatibility slot(s) for oxc-tsrx ${result.providerVersion} (${result.packageManager})\n`,
+  );
+  for (const slot of result.slots) {
+    process.stdout.write(`- ${slot.name}: ${slot.state}\n`);
+  }
+}
+
+try {
+  const options = parseArguments(process.argv.slice(2));
+  if (options.command === "help") {
+    process.stdout.write(usage());
+  } else if (options.command === "providers") {
+    const { collectProviderReport, formatProviderReport } = await import(
+      "../dist/providers-report.js"
+    );
+    const report = await collectProviderReport(options);
+    process.stdout.write(
+      options.json ? `${JSON.stringify(report, null, 2)}\n` : formatProviderReport(report),
+    );
+    if (!report.ok) process.exitCode = 1;
+  } else {
+    const {
+      compatibilityStatus,
+      removeCompatibility,
+      setupCompatibility,
+    } = await import("../dist/compat.js");
+    if (options.command === "setup" || options.command === "activate") {
+      printResult(await setupCompatibility(options), options.json);
+    } else if (options.command === "status") {
+      const result = await compatibilityStatus(options);
+      if (options.json) process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+      else {
+        process.stdout.write(
+          `oxc-tsrx ${result.providerVersion} compatibility (${result.packageManager})\n`,
+        );
+        for (const slot of result.slots) {
+          process.stdout.write(`- ${slot.name}: ${slot.state}\n`);
+        }
+      }
+    } else if (options.command === "remove" || options.command === "deactivate") {
+      printResult(await removeCompatibility(options), options.json);
+    } else {
+      throw new Error(`unknown command: ${options.command}\n\n${usage()}`);
+    }
+  }
+} catch (error) {
+  console.error(`oxc-tsrx: ${error instanceof Error ? error.message : String(error)}`);
+  process.exitCode = 2;
+}

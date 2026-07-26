@@ -6,7 +6,7 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
-import { NATIVE_TARGETS, nativePackageName } from "../../packages/runtime/dist/targets.js";
+import { NATIVE_TARGETS, nativePackageName } from "../../packages/toolchain/dist/native-targets.js";
 import {
   DEFAULT_VSIX_LIMITS,
   readVsixEntries,
@@ -24,7 +24,7 @@ const reportPath = "extension/licenses/BUNDLE_DEPENDENCIES.md";
 const packagePath = "extension/package.json";
 const vsixManifestPath = "extension.vsixmanifest";
 const nativeManifestPath = "extension/dist/native/manifest.json";
-const nativeBinaryPath = "extension/dist/native/oxc-tsrx-lsp";
+const nativeBinaryPath = "extension/dist/native/oxc-tsrx";
 const target = "aarch64-apple-darwin";
 const vscodeTarget = "darwin-arm64";
 const oxcRevision = "8e0ed2ebb96137fb1611cdbd5742d5cb46037d40";
@@ -128,7 +128,7 @@ async function validFixture() {
         extensionVersion: packageManifest.version,
         target,
         vscodeTarget,
-        binary: "oxc-tsrx-lsp",
+        binary: "oxc-tsrx",
         bytes: nativeBinary.length,
         sha256: sha256(nativeBinary),
         oxcRevision,
@@ -172,7 +172,7 @@ async function validFixture() {
       version: packageManifest.version,
       target,
       vscodeTarget,
-      nativeBinary: "oxc-tsrx-lsp",
+      nativeBinary: "oxc-tsrx",
       nativeLspSha256: sha256(nativeBinary),
       nativeLspBytes: nativeBinary.length,
       oxcRevision,

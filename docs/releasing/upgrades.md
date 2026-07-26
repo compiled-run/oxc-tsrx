@@ -20,8 +20,8 @@ As of 2026-07-16, the release candidate is qualified against:
 - official Oxlint 1.74.0;
 - official Oxfmt 0.59.0;
 - `oxlint-tsgolint` 0.24.0;
-- Vite+ 0.1.24 as the minimum supported release; and
-- Vite+ 0.2.4 as the current recommended release.
+- Vite+ 0.1.24 as the tested minimum supported release; and
+- Vite+ 0.2.4 as the pinned current release (as of the date above).
 
 Vite+ 0.1.20 is retained only as an isolated non-blocking Markless compatibility
 control. It has published dependency advisories addressed in later Vite+
@@ -72,8 +72,9 @@ downstream patch queue.
 
 ## Official Oxlint, Oxfmt, and Vite+ upgrades
 
-The companions own `.tsrx` and delegate ordinary source to exact official tool
-packages. For each proposed official-tool change:
+The public toolchain's internal lint and format adapters own `.tsrx` and
+delegate ordinary source to exact official tool packages. For each proposed
+official-tool change:
 
 1. add the version as a candidate alias without removing the current lane;
 2. install it from the public registry in an empty consumer with lifecycle

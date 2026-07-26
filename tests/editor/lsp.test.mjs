@@ -2,19 +2,19 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import test from "node:test";
-import { applyTextEdits, LspClient, pathToFileUri } from "./lsp-client.mjs";
+import { applyTextEdits, LspClient, pathToFileUri, SERVER_ARGUMENTS } from "./lsp-client.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 const workspace = join(root, "tests/fixtures/editor/workspace");
 const sourcePath = join(workspace, "View.tsrx");
 const server = resolve(
-  process.env.OXC_TSRX_LSP_BIN ?? join(root, "target/release/oxc-tsrx-lsp"),
+  process.env.OXC_TSRX_LSP_BIN ?? join(root, "target/release/oxc-tsrx"),
 );
 const uri = pathToFileUri(sourcePath);
 
 test("native LSP activates TSRX formatting, live diagnostics, edits, and safe actions", async () => {
   let source = await readFile(sourcePath, "utf8");
-  const client = new LspClient(server, { cwd: workspace });
+  const client = new LspClient(server, { args: SERVER_ARGUMENTS, cwd: workspace });
   try {
     const initialized = await client.initialize(pathToFileUri(workspace));
   assert.equal(initialized.serverInfo.name, "OXC for TSRX");
@@ -154,7 +154,7 @@ test("native LSP keeps type-aware lint opt-in and authored TSRX diagnostics", as
   const typeUri = pathToFileUri(typePath);
   const rootUri = pathToFileUri(typeRoot);
   const source = await readFile(typePath, "utf8");
-  const client = new LspClient(server, { cwd: typeRoot });
+  const client = new LspClient(server, { args: SERVER_ARGUMENTS, cwd: typeRoot });
   try {
     await client.initialize(rootUri, [
       { workspaceUri: rootUri, options: { typeAware: true, typeCheck: false } },

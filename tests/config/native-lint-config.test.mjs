@@ -1,18 +1,25 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, readFile, realpath, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
-import { resolveOxlintBytePositions } from "../../packages/oxlint/dist/cli.js";
+import { resolveOxlintBytePositions } from "../../packages/toolchain/dist/lint-cli.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, "../..");
 const binary = resolve(process.env.OXLINT_BIN ?? join(root, "target/release/oxc-tsrx"));
-const stock = resolve(join(root, "node_modules/oxlint-current/bin/oxlint"));
-const companion = resolve(join(root, "packages/oxlint/bin/oxlint"));
+// pnpm installs `oxlint-current` under the package that declares it, so it is
+// resolved from this file's own package instead of from a hoisted
+// repository-root `node_modules`.
+const stock = join(
+  dirname(createRequire(import.meta.url).resolve("oxlint-current/package.json")),
+  "bin/oxlint",
+);
+const companion = resolve(join(root, "packages/toolchain/bin/oxlint"));
 
 function run(cwd, args, executable = binary, environment = process.env) {
   return new Promise((resolvePromise, reject) => {
@@ -46,9 +53,20 @@ function json(result) {
   return JSON.parse(result.stdout.slice(start));
 }
 
-function diagnostic(output, filename, rule) {
+// Stock Oxlint prints a diagnostic filename relative to its working directory
+// whenever the linted file sits under it, while the TSRX binary echoes back the
+// path it was handed. Passing `base` compares the two spellings as the same
+// file instead of as the same string. macOS hides the difference because
+// `mkdtemp` returns a symlinked `/var/folders/...` path that Oxlint cannot
+// strip its real `/private/var/folders/...` working directory from, so it falls
+// back to the absolute argument; on Linux CI `/tmp` is real and the same run
+// reports `view.tsx`.
+function diagnostic(output, filename, rule, base) {
+  const sameFile = base
+    ? (candidate) => resolve(base, candidate) === resolve(base, filename)
+    : (candidate) => candidate === filename;
   return output.diagnostics.find(
-    (item) => item.filename === filename && (item.rule === rule || item.code.includes(`(${rule})`)),
+    (item) => sameFile(item.filename) && (item.rule === rule || item.code.includes(`(${rule})`)),
   );
 }
 
@@ -196,7 +214,7 @@ test("npm wrapper matches canonical Oxlint across CR, LF, and CRLF line starts",
 });
 
 test("discovers one JSONC Oxlint config and applies rules, severities, and per-file overrides", async () => {
-  const cwd = await mkdtemp(join(tmpdir(), "oxc-tsrx-lint-config-"));
+  const cwd = await realpath(await mkdtemp(join(tmpdir(), "oxc-tsrx-lint-config-")));
   const tsrx = join(cwd, "view.tsrx");
   const tsx = join(cwd, "view.tsx");
   const config = join(cwd, ".oxlintrc.jsonc");
@@ -257,10 +275,11 @@ test("discovers one JSONC Oxlint config and applies rules, severities, and per-f
   const stockTsxResult = await run(cwd, ["--format=json", tsx], stock);
   assert.equal(stockTsxResult.code, 1, stockTsxResult.stderr || stockTsxResult.stdout);
   const stockTsx = json(stockTsxResult);
-  assert.equal(diagnostic(stockTsx, tsx, "no-debugger"), undefined);
+  assert.equal(diagnostic(stockTsx, tsx, "no-debugger", cwd), undefined);
   for (const rule of ["no-console", "eqeqeq", "no-undef", "jsx-no-undef"]) {
     const candidate = diagnostic(output, tsx, rule);
-    const control = diagnostic(stockTsx, tsx, rule);
+    const control = diagnostic(stockTsx, tsx, rule, cwd);
+    assert.ok(control, `${rule}: stock Oxlint control diagnostic`);
     assert.equal(candidate?.severity, control?.severity, rule);
     assert.equal(candidate?.labels[0]?.span.offset, control?.labels[0]?.span.offset, rule);
     assert.equal(candidate?.labels[0]?.span.length, control?.labels[0]?.span.length, rule);

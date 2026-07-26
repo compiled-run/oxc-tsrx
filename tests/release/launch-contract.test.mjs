@@ -4,13 +4,13 @@ import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
-import { NATIVE_TARGETS, nativePackageName } from "../../packages/runtime/dist/targets.js";
-import { resolveNpmInvocation } from "../../scripts/npm-invocation.mjs";
+import { NATIVE_TARGETS, nativePackageName } from "../../packages/toolchain/dist/native-targets.js";
+import { npmChildEnvironment, resolveNpmInvocation } from "../../scripts/npm-invocation.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 const repository = "https://github.com/markless-dev/oxc-tsrx";
 const homepage = "https://oxc-tsrx-docs.vercel.app/";
-const publicDirectories = ["runtime", "oxlint", "oxfmt"];
+const publicDirectories = ["toolchain"];
 
 const readJson = async (path) => JSON.parse(await readFile(path, "utf8"));
 
@@ -71,18 +71,21 @@ test("launch manifest names every byte set and keeps external actions approval-g
 
   const nativeNames = NATIVE_TARGETS.map(nativePackageName);
   assert.deepEqual(launch.npm.publishOrder.slice(0, nativeNames.length), nativeNames);
-  assert.deepEqual(launch.npm.publishOrder.slice(nativeNames.length), [
-    "@oxc-tsrx/runtime",
-    "oxlint-tsrx",
-    "oxfmt-tsrx",
-  ]);
+  // One published host package plus the eight platform packages a user never
+  // names: nine names, and no first-party wrapper between the user and the
+  // toolchain.
+  assert.deepEqual(launch.npm.publishOrder.slice(nativeNames.length), ["oxc-tsrx"]);
+  assert.equal(launch.npm.publishOrder.length, nativeNames.length + 1);
+  assert.equal(new Set(launch.npm.publishOrder).size, launch.npm.publishOrder.length);
   assert.deepEqual(
     launch.vscode.targets,
     NATIVE_TARGETS.map(({ vscodeTarget }) => vscodeTarget),
   );
+  assert.equal(launch.vscode.role, "optional-legacy-activation-client");
+  assert.equal(launch.vscode.requiredForPrimaryEditorWorkflow, false);
   assert.match(launch.social.text, /OXC for TSRX/u);
-  assert.match(launch.social.text, /oxlint-tsrx/u);
-  assert.match(launch.social.text, /oxfmt-tsrx/u);
+  assert.match(launch.social.text, /Install oxc-tsrx/u);
+  assert.doesNotMatch(launch.social.text, /Install oxlint-tsrx|Install oxfmt-tsrx/u);
   assert.match(launch.social.text, new RegExp(homepage.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.deepEqual(launch.requiredApprovals, [
     "repository-push",
@@ -114,8 +117,8 @@ test("launch manifest names every byte set and keeps external actions approval-g
   assert.match(prerequisites, /docs\/dist\/vercel\.json/u);
   assert.match(workflow, /workflow_dispatch:/u);
   assert.match(workflow, /rustup target add wasm32-wasip1-threads/u);
-  assert.match(workflow, /npm run docs:wasm/u);
-  assert.match(workflow, /OXC_TSRX_REQUIRE_WASM=1 npm run docs:build/u);
+  assert.match(workflow, /pnpm run docs:wasm/u);
+  assert.match(workflow, /OXC_TSRX_REQUIRE_WASM=1 pnpm run docs:build/u);
   assert.match(workflow, /node tests\/site\/verify-static\.mjs --require-wasm/u);
   assert.match(workflow, /actions\/upload-artifact@[0-9a-f]{40}/u);
   assert.match(workflow, /name: oxc-tsrx-docs-\$\{\{ github\.sha \}\}/u);
@@ -138,7 +141,10 @@ test("all platform-independent npm payloads pass pack dry-run", async () => {
       `./packages/${directory}`,
     ]);
     const { stdout, stderr } = await run(npmInvocation.executable, npmInvocation.args, {
-      env: { ...process.env, npm_config_cache: npmCache },
+      // npm must not inherit pnpm's `npm_config_*` settings; it warns about
+      // every one it does not recognise, and this assertion is that a clean
+      // pack prints nothing.
+      env: { ...npmChildEnvironment(), npm_config_cache: npmCache },
     });
     assert.equal(stderr, "", directory);
     const [result] = JSON.parse(stdout);
@@ -163,6 +169,13 @@ test("all platform-independent npm payloads pass pack dry-run", async () => {
       false,
       directory,
     );
+    // The host package is platform-independent. The parser addon built into the
+    // source tree for local development must never reach the payload.
+    assert.equal(
+      result.files.some(({ path }) => path.endsWith(".node")),
+      false,
+      directory,
+    );
   }
 });
 
@@ -171,8 +184,8 @@ test("every hosted VSIX validates its rebuilt bundle against the legal inventory
     readFile(join(root, ".github", "workflows", "release-candidate.yml"), "utf8"),
     readFile(join(root, "scripts", "package-vscode.mjs"), "utf8"),
   ]);
-  const build = workflow.indexOf("npm run build:editor");
-  const legalCheck = workflow.indexOf("npm run licenses:vscode:check", build);
+  const build = workflow.indexOf("pnpm run build:editor");
+  const legalCheck = workflow.indexOf("pnpm run licenses:vscode:check", build);
   const packageVsix = workflow.indexOf("node scripts/package-vscode.mjs", build);
   assert.ok(build >= 0, "release candidates must rebuild the editor bundle");
   assert.ok(legalCheck > build, "the rebuilt bundle must be checked against its legal inventory");

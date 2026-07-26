@@ -19,6 +19,7 @@ import {
 } from './benchmarks-data.mjs'
 import { getDocsHighlighter, highlightWith } from './highlight.mjs'
 import config from './site.config.mjs'
+import { heroCode, playgroundCode, typeErrorCode } from './demo-sources.mjs'
 
 const docsDir = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(docsDir, '..')
@@ -1341,26 +1342,31 @@ function renderDocPage({ page, article, headings, pageIndex, flat }) {
   })
 }
 
-// Real TSRX hero snippet, highlighted with the actual TSRX grammar. This is
-// oxc-tsrx-fmt's converged output, so the default demo state is format-clean.
-const heroCode = `export function TaskList({ tasks }: Props) @{
-  const pending = tasks.filter((task) => !task.done);
+// The demo snippets live in docs/demo-sources.mjs so the clickable examples
+// that derive variants from them cannot drift out of sync.
 
-  <section class="tasks">
-    @if (pending.length > 0) {
-      @for (const task of pending; key task.id) {
-        <TaskRow task={task} />;
-      } @empty {
-        <AllDone />;
-      }
-    } @else {
-      <SignIn />;
-    }
-    <style>
-      .tasks { display: grid; gap: 0.5rem; }
-    </style>
-  </section>;
-}`
+// Pre-generated real --type-check output for the "Type error" example. The
+// browser wasm engine cannot host tsgolint, so the published site replays this
+// committed report instead of leaving the example dead. It ships as its own
+// asset, fetched only when the example is clicked, because the home page is
+// held to a frozen transfer budget it must not spend on an unclicked example.
+const typeErrorExample = JSON.parse(
+  await readFile(path.join(docsDir, 'type-error-example.json'), 'utf8'),
+)
+// The report's byte offsets only line up with the snippet it was generated
+// from, so a snippet edit without a regenerate would underline the wrong
+// bytes. Fail the build instead of shipping that.
+if (typeErrorExample.tsrx !== typeErrorCode) {
+  throw new Error(
+    'docs/type-error-example.json is stale: the demo snippet changed. Re-run node docs/generate-type-error.mjs',
+  )
+}
+const typeErrorAsset = JSON.stringify({
+  tsrx: typeErrorExample.tsrx,
+  ruleCount: typeErrorExample.ruleCount,
+  parseCount: typeErrorExample.parseCount,
+  diagnostics: typeErrorExample.diagnostics,
+})
 
 async function renderHomePage({ description }) {
   const hero = config.hero
@@ -1401,6 +1407,7 @@ async function renderHomePage({ description }) {
         <span id="demo-meta">native lint and format run only on the local development server</span>
       </div>
     </div>
+    <p class="pg-note demo-scenario-note" id="pg-scenario-note" hidden></p>
   </section>
   <section class="home-bench" aria-label="Headline performance">
     <h2>Fast, and gated on it</h2>
@@ -1431,7 +1438,7 @@ async function renderHomePage({ description }) {
     <p class="home-upstream-link"><a href="${withBase('/architecture/upstreaming-to-oxc')}">Read the upstreaming review map →</a></p>
   </section>
   <footer class="home-footer">
-    <p class="footer-links"><a href="${config.repository}" target="_blank" rel="noreferrer">GitHub<span class="visually-hidden"> (opens in new tab)</span></a> · <a href="https://www.npmjs.com/package/oxlint-tsrx" target="_blank" rel="noreferrer">oxlint-tsrx<span class="visually-hidden"> (opens in new tab)</span></a> · <a href="https://www.npmjs.com/package/oxfmt-tsrx" target="_blank" rel="noreferrer">oxfmt-tsrx<span class="visually-hidden"> (opens in new tab)</span></a> · <a href="https://www.npmjs.com/package/@oxc-tsrx/runtime" target="_blank" rel="noreferrer">@oxc-tsrx/runtime<span class="visually-hidden"> (opens in new tab)</span></a> · <a href="https://www.npmjs.com/package/@oxc-tsrx/parser" target="_blank" rel="noreferrer">@oxc-tsrx/parser<span class="visually-hidden"> (opens in new tab)</span></a></p>
+    <p class="footer-links"><a href="${config.repository}" target="_blank" rel="noreferrer">GitHub<span class="visually-hidden"> (opens in new tab)</span></a> · <a href="https://www.npmjs.com/package/oxc-tsrx" target="_blank" rel="noreferrer">oxc-tsrx<span class="visually-hidden"> (opens in new tab)</span></a></p>
     ${footerBadge}
     <p class="footer-disclaimer">${config.footer.disclaimer}</p>
   </footer>
@@ -1445,30 +1452,6 @@ async function renderHomePage({ description }) {
     main,
   })
 }
-
-// Self-contained playground default: declares its own types and components
-// so the opt-in type-check lane starts clean instead of full of TS errors.
-const playgroundCode = `type Task = { id: string; label: string; done: boolean };
-
-function TaskRow({ task }: { task: Task }) @{
-  <li>{task.label}</li>;
-}
-
-export function TaskList({ tasks }: { tasks: Task[] }) @{
-  const pending = tasks.filter((task) => !task.done);
-
-  <section class="tasks">
-    @if (pending.length > 0) {
-      <ul>
-        @for (const task of pending; key task.id) {
-          <TaskRow task={task} />;
-        }
-      </ul>;
-    } @else {
-      <p>All done!</p>;
-    }
-  </section>;
-}`
 
 function renderPlaygroundPage() {
   const main = `
@@ -1744,6 +1727,7 @@ async function build() {
     { recursive: true },
   )
   await writeFile(path.join(outDir, 'search-index.json'), JSON.stringify(searchDocs))
+  await writeFile(path.join(outDir, 'type-error-example.json'), `${typeErrorAsset}\n`)
   await writeFile(
     path.join(outDir, 'demo-capabilities.json'),
     `${JSON.stringify({

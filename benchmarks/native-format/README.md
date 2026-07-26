@@ -3,10 +3,27 @@
 Run the release-only gate after building the formatter binary:
 
 ```sh
-cargo build --release --locked -p oxc_tsrx_cli --bins
-cargo run --release --locked -p oxc_tsrx_format_benchmark -- \
-  --assert benchmarks/native-format/budgets.json
+pnpm run build:native
+pnpm run benchmark:native-format
 ```
+
+Use `pnpm run build:native`, not bare `cargo build`. The three old release
+binaries are now one multi-call executable that selects its tool from `argv[0]`
+or from a leading subcommand, and `budgets.json` names the candidate by file
+path only, so it cannot pass a subcommand. `budgets.json` is frozen evidence:
+`tests/acceptance/performance-contract.test.mjs` pins its SHA-256 and
+`docs/acceptance/performance-report.json` embeds its exact bytes, so the
+`candidateBinary` path is made valid instead of edited. It also cannot simply
+point at `target/release/oxc-tsrx`, because with no tool in `argv[0]` and no
+subcommand that binary runs the linter, which would silently measure the wrong
+tool.
+
+`scripts/build-native.mjs` therefore rebuilds a fresh copy at
+`target/release/oxc-tsrx-fmt` after every build and checks that it reports
+`oxc-tsrx-fmt --version` before it is used. It is a copy rather than a hardlink
+because cargo replaces the binary with a new inode, so a link made once would
+serve a stale build forever. The copy is a local build convenience only: the
+published platform package still ships exactly one `bin/oxc-tsrx`.
 
 Schema 2 records raw latency/RSS arrays, hardware/toolchain/OXC identity,
 corpus hashes, sample policy, summaries, and every assertion in a timestamped

@@ -1,0 +1,333 @@
+# Publish the reviewed release candidate to npm.
+#
+# Authentication is npm Trusted Publishing over GitHub Actions OIDC. There is no
+# NPM_TOKEN anywhere in this file and none is needed: the npm CLI notices the
+# OIDC environment that `permissions: id-token: write` creates, exchanges the
+# short-lived GitHub token for a short-lived registry token, and publishes.
+#
+# Two things must be true before this workflow can authenticate, and neither one
+# is something a workflow can do for itself:
+#
+#   1. Each of the nine package names must already exist on the registry. npm
+#      configures a trusted publisher on an existing package, so the very first
+#      version of a brand new name cannot be published this way.
+#   2. Each package must have a trusted publisher pointing at THIS repository and
+#      at the file name `publish.yml` exactly.
+#
+# docs/releasing/publish-runbook.md has the exact one-time commands for both.
+#
+# Safety: this workflow only runs from a manual dispatch, it defaults to
+# `mode: dry-run`, and publishing additionally requires typing a confirmation
+# phrase that contains the version. Publishing to npm is irreversible after the
+# 72 hour unpublish window, so the default has to be the harmless one.
+name: Publish to npm
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_run_id:
+        description: "Run ID of the Build release candidate run that produced the artifacts"
+        required: true
+        type: string
+      candidate_sha:
+        description: "Commit SHA that run was built from (the artifact is named release-candidate-<sha>)"
+        required: true
+        type: string
+      version:
+        description: "Version to publish, for example 0.1.0. Must match every manifest."
+        required: true
+        type: string
+      mode:
+        description: "dry-run rehearses everything and publishes nothing. publish is irreversible."
+        required: true
+        default: dry-run
+        type: choice
+        options:
+          - dry-run
+          - publish
+      confirm:
+        description: "Required only when mode is publish. Type: PUBLISH <version>"
+        required: false
+        default: ""
+        type: string
+      dist_tag:
+        description: "Override the dist-tag. Leave empty to use npm.distTag from docs/releasing/v0.1.0-launch.json."
+        required: false
+        default: ""
+        type: string
+
+# `contents: read` is the whole write surface of this workflow apart from the
+# publish itself. `id-token: write` is what makes OIDC possible and is the one
+# permission npm trusted publishing requires. `actions: read` is needed to
+# download an artifact that belongs to a different workflow run.
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-npm
+  cancel-in-progress: false
+
+env:
+  npm_config_audit: "false"
+  npm_config_fund: "false"
+
+jobs:
+  publish:
+    name: ${{ inputs.mode }} ${{ inputs.version }}
+    # A fork cannot publish these names, and should not try.
+    if: github.repository == 'markless-dev/oxc-tsrx'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    steps:
+      # Free-text dispatch inputs are never interpolated into a shell command.
+      # They are passed through the environment so that a value containing shell
+      # syntax stays a value.
+      - name: Check the publish gate
+        shell: bash
+        env:
+          MODE: ${{ inputs.mode }}
+          CONFIRM: ${{ inputs.confirm }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          case "$VERSION" in
+            [0-9]*.[0-9]*.[0-9]*) ;;
+            *) echo "version must look like 1.2.3 or 1.2.3-rc.1, got: $VERSION" >&2; exit 1 ;;
+          esac
+          if [[ "$MODE" == "dry-run" ]]; then
+            echo "mode=dry-run: nothing will be published."
+            exit 0
+          fi
+          if [[ "$MODE" != "publish" ]]; then
+            echo "unknown mode: $MODE" >&2
+            exit 1
+          fi
+          if [[ "$CONFIRM" != "PUBLISH $VERSION" ]]; then
+            echo "mode=publish requires confirm to be exactly: PUBLISH $VERSION" >&2
+            exit 1
+          fi
+          echo "mode=publish confirmed for $VERSION. This is irreversible."
+
+      - name: Check out the exact source revision
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Install Node.js 24.15.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.15.0
+          registry-url: "https://registry.npmjs.org"
+          # A release build should resolve everything fresh.
+          package-manager-cache: false
+
+      # Node 24.15.0 bundles npm 11.12.1, which already clears the 11.5.1 floor
+      # trusted publishing needs. The pin below is deliberate anyway: it keeps
+      # the publishing npm from moving when the Node pin moves, and the assert
+      # turns a silently too-old npm into a failed job instead of an
+      # unexplained ENEEDAUTH.
+      - name: Pin an npm new enough for trusted publishing
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --version
+          npm --version
+          npm install -g npm@11.18.0
+          npm --version
+          node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+          import { execFileSync } from "node:child_process";
+          const actual = execFileSync("npm", ["--version"], { encoding: "utf8" }).trim();
+          const minimum = "11.5.1";
+          const order = (value) => value.split(".").map(Number);
+          const [aMajor, aMinor, aPatch] = order(actual);
+          const [mMajor, mMinor, mPatch] = order(minimum);
+          const ok =
+            aMajor > mMajor ||
+            (aMajor === mMajor && aMinor > mMinor) ||
+            (aMajor === mMajor && aMinor === mMinor && aPatch >= mPatch);
+          assert.ok(ok, `npm ${actual} is older than ${minimum}, which trusted publishing requires`);
+          console.log(`npm ${actual} satisfies the ${minimum} trusted-publishing floor`);
+          NODE
+
+      # The artifacts must come from a completed run of the candidate workflow on
+      # the exact commit the operator names. Anything else means the bytes about
+      # to be published were never the bytes that were reviewed.
+      - name: Prove the candidate run is the reviewed one
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ inputs.candidate_run_id }}
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          case "$RUN_ID" in
+            [0-9]*) ;;
+            *) echo "candidate_run_id must be numeric, got: $RUN_ID" >&2; exit 1 ;;
+          esac
+          gh api "repos/$REPOSITORY/actions/runs/$RUN_ID" > run.json
+          node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+          import { readFile } from "node:fs/promises";
+          const run = JSON.parse(await readFile("run.json", "utf8"));
+          assert.equal(run.path, ".github/workflows/release-candidate.yml", "wrong workflow");
+          assert.equal(run.status, "completed", "candidate run is not finished");
+          assert.equal(run.conclusion, "success", "candidate run did not succeed");
+          assert.equal(run.head_sha, process.env.CANDIDATE_SHA, "candidate SHA mismatch");
+          console.log(`candidate run ${run.id} built ${run.head_sha}`);
+          NODE
+          rm run.json
+
+      - name: Download the reviewed candidate artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-candidate-${{ inputs.candidate_sha }}
+          path: release
+          run-id: ${{ inputs.candidate_run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Re-verify the candidate checksums
+        shell: bash
+        working-directory: release
+        run: |
+          set -euo pipefail
+          sha256sum --check SHA256SUMS
+
+      # docs/releasing/v0.1.0-launch.json owns the package set and the order.
+      # This step refuses to publish anything the launch contract does not list,
+      # and refuses to publish at all if the contract has drifted from the
+      # manifests inside the tarballs.
+      - name: Resolve the publish order from the launch contract
+        id: order
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+          DIST_TAG_OVERRIDE: ${{ inputs.dist_tag }}
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+          import { execFileSync } from "node:child_process";
+          import { appendFileSync } from "node:fs";
+          import { readFile, writeFile } from "node:fs/promises";
+
+          const version = process.env.VERSION;
+          const contract = JSON.parse(
+            await readFile("docs/releasing/v0.1.0-launch.json", "utf8"),
+          );
+          const order = contract.npm.publishOrder;
+          assert.equal(order.length, 9, "the launch contract must list exactly 9 packages");
+          assert.equal(order.at(-1), "oxc-tsrx", "the public package must publish last");
+          const natives = order.slice(0, -1);
+          assert.ok(
+            natives.every((name) => name.startsWith("@oxc-tsrx/native-")),
+            "the first eight entries must be the platform packages",
+          );
+          assert.equal(new Set(order).size, order.length, "duplicate entry in publishOrder");
+
+          const distTag = process.env.DIST_TAG_OVERRIDE || contract.npm.distTag;
+          assert.ok(distTag, "no dist-tag resolved");
+
+          const tarball = (name) =>
+            name === "oxc-tsrx"
+              ? `release/oxc-tsrx-${version}.tgz`
+              : `release/oxc-tsrx-native-${name.slice("@oxc-tsrx/native-".length)}-${version}.tgz`;
+
+          const manifests = new Map();
+          for (const name of order) {
+            const path = tarball(name);
+            const manifest = JSON.parse(
+              execFileSync("tar", ["-xzOf", path, "package/package.json"], { encoding: "utf8" }),
+            );
+            assert.equal(manifest.name, name, `${path}: unexpected package name`);
+            assert.equal(manifest.version, version, `${name}: version is not ${version}`);
+            assert.equal(manifest.publishConfig?.access, "public", `${name}: not public`);
+            assert.equal(manifest.publishConfig?.provenance, true, `${name}: provenance is off`);
+            manifests.set(name, { path, manifest });
+          }
+
+          // The reason the order is not negotiable. npm resolves
+          // optionalDependencies at install time, so a consumer who installs
+          // between the public package landing and the platform packages landing
+          // gets no binary and no error.
+          const optional = manifests.get("oxc-tsrx").manifest.optionalDependencies ?? {};
+          assert.deepEqual(
+            Object.keys(optional).sort(),
+            [...natives].sort(),
+            "oxc-tsrx optionalDependencies must be exactly the eight platform packages",
+          );
+          for (const name of natives) {
+            assert.equal(optional[name], version, `${name} must be pinned to ${version}`);
+          }
+
+          await writeFile(
+            "publish-order.txt",
+            `${order.map((name) => `${name} ${manifests.get(name).path}`).join("\n")}\n`,
+          );
+          appendFileSync(process.env.GITHUB_OUTPUT, `dist_tag=${distTag}\n`);
+          console.log(`publishing ${order.length} packages to the ${distTag} tag, in order:`);
+          for (const name of order) console.log(`  ${name}  ${manifests.get(name).path}`);
+          if (distTag !== "latest") {
+            console.log(
+              `WARNING: the dist-tag is ${distTag}, so \`npm install -D oxc-tsrx\` will not ` +
+                `resolve it. Consumers must write \`oxc-tsrx@${distTag}\`.`,
+            );
+          }
+          NODE
+
+      # Always rehearsed, including in publish mode. Provenance is switched off
+      # for the rehearsal only: a dry run has nothing to attest, and asking
+      # Sigstore for a signature it will never use adds a failure mode to the
+      # step whose whole job is to be safe.
+      - name: Rehearse the publish
+        shell: bash
+        env:
+          DIST_TAG: ${{ steps.order.outputs.dist_tag }}
+          NPM_CONFIG_PROVENANCE: "false"
+        run: |
+          set -euo pipefail
+          while read -r name path; do
+            echo "::group::dry-run $name"
+            npm publish "$path" --tag "$DIST_TAG" --access public --dry-run
+            echo "::endgroup::"
+          done < publish-order.txt
+
+      # The only step that writes to the registry. It cannot run unless the
+      # operator both selected `publish` and typed the confirmation phrase, which
+      # the gate step above already checked.
+      #
+      # No NODE_AUTH_TOKEN and no NPM_TOKEN: `id-token: write` on this job is the
+      # entire credential. npm generates provenance automatically for a trusted
+      # publish from a public repository, and every manifest also carries
+      # publishConfig.provenance true.
+      - name: Publish in launch-contract order
+        if: inputs.mode == 'publish'
+        shell: bash
+        env:
+          DIST_TAG: ${{ steps.order.outputs.dist_tag }}
+        run: |
+          set -euo pipefail
+          while read -r name path; do
+            echo "::group::publish $name"
+            npm publish "$path" --tag "$DIST_TAG" --access public
+            echo "::endgroup::"
+          done < publish-order.txt
+
+      - name: Verify every package landed
+        if: inputs.mode == 'publish'
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          while read -r name path; do
+            resolved="$(npm view "$name@$VERSION" version)"
+            if [[ "$resolved" != "$VERSION" ]]; then
+              echo "$name resolved to $resolved, expected $VERSION" >&2
+              exit 1
+            fi
+            echo "$name@$resolved is on the registry"
+          done < publish-order.txt

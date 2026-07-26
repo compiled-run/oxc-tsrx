@@ -88,9 +88,10 @@ test("real native formatting preserves CSS bytes and retained evidence reports z
   const executable = join(
     root,
     "target/release",
-    process.platform === "win32" ? "oxc-tsrx-fmt.exe" : "oxc-tsrx-fmt",
+    process.platform === "win32" ? "oxc-tsrx.exe" : "oxc-tsrx",
   );
-  const formatted = await run(executable, ["--stdin-filepath=View.tsrx"], input);
+  // `fmt` selects the formatter inside the one multi-call native binary.
+  const formatted = await run(executable, ["fmt", "--stdin-filepath=View.tsrx"], input);
   assert.equal(formatted.stderr, "");
   assert.match(formatted.stdout, /<style>/u);
   assert.ok(formatted.stdout.includes(payload));

@@ -1,176 +1,90 @@
-use std::{env, path::PathBuf, process::ExitCode};
+//! One executable, three tools.
+//!
+//! `oxc-tsrx`, `oxc-tsrx-fmt`, and `oxc-tsrx-lsp` were three separate release
+//! binaries built from this crate. Each statically linked essentially the same
+//! oxc parser, linter, and formatter, so a platform package carried the same
+//! code three times. They are now one multi-call executable in the busybox
+//! style, and the per-tool logic in [`fmt`], [`lint`], and [`lsp`] is unchanged.
+//!
+//! A tool is selected two ways, and both must keep working:
+//!
+//! * **`argv[0]`.** Invoked through any path whose file stem is `oxc-tsrx-fmt`
+//!   or `oxc-tsrx-lsp` — a `node_modules/.bin` symlink, a copy under the old
+//!   name, a VSIX-embedded server — the matching tool runs and the remaining
+//!   arguments are passed through exactly as the old binary saw them.
+//! * **A leading subcommand.** `oxc-tsrx fmt ...`, `oxc-tsrx lsp ...`, and
+//!   `oxc-tsrx lint ...` select the tool explicitly. This is the form the npm
+//!   launchers use, because `argv[0]` is not dependable everywhere: Windows
+//!   `.cmd` shims and anything that resolves a symlink before exec both hand
+//!   this process its real file name.
+//!
+//! `argv[0]` wins when it names a tool, and no subcommand is stripped in that
+//! case, so `oxc-tsrx-fmt fmt` still treats `fmt` as a path exactly as before.
+//! With no tool in `argv[0]` and no leading subcommand the linter runs, which
+//! keeps `oxc-tsrx FILE...` byte-identical to the old lint-only binary.
 
-use oxc_adapter::OXC_REVISION;
-use tsrx_lint::{ConfigRuleFilter, ConfigRuleSeverity, LintSession};
+mod fmt;
+mod lint;
+mod lsp;
+
+use std::{env, path::Path, process::ExitCode};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Tool {
+    Lint,
+    Format,
+    Server,
+}
+
+impl Tool {
+    /// The tool an old binary name selects, or `None` for anything else.
+    fn from_program_name(program: &str) -> Option<Self> {
+        match program {
+            "oxc-tsrx-fmt" => Some(Self::Format),
+            "oxc-tsrx-lsp" => Some(Self::Server),
+            _ => None,
+        }
+    }
+
+    /// The tool an explicit leading subcommand selects, or `None`.
+    fn from_subcommand(argument: &str) -> Option<Self> {
+        match argument {
+            "lint" => Some(Self::Lint),
+            "fmt" => Some(Self::Format),
+            "lsp" => Some(Self::Server),
+            _ => None,
+        }
+    }
+
+    fn run(self, arguments: Vec<String>) -> ExitCode {
+        match self {
+            Self::Lint => lint::run_cli(arguments),
+            Self::Format => fmt::run_cli(arguments),
+            Self::Server => lsp::run_cli(&arguments),
+        }
+    }
+}
+
+/// The file stem of `argv[0]`, with any executable suffix removed.
+fn program_name(argv0: Option<String>) -> Option<String> {
+    let argv0 = argv0?;
+    let path = Path::new(&argv0);
+    let stem = path.file_stem().or_else(|| path.file_name())?;
+    Some(stem.to_string_lossy().into_owned())
+}
 
 fn main() -> ExitCode {
-    match run(env::args().skip(1)) {
-        Ok(code) => ExitCode::from(code),
-        Err(error) => {
-            eprintln!("oxc-tsrx: {error}");
-            ExitCode::from(2)
-        }
-    }
-}
+    let mut raw = env::args();
+    let program = program_name(raw.next());
+    let arguments = raw.collect::<Vec<_>>();
 
-fn run(arguments: impl Iterator<Item = String>) -> Result<u8, String> {
-    let arguments = arguments.collect::<Vec<_>>();
-    if arguments
-        .iter()
-        .any(|argument| matches!(argument.as_str(), "-V" | "--version"))
+    if let Some(tool) = program.as_deref().and_then(Tool::from_program_name) {
+        return tool.run(arguments);
+    }
+    if let Some((first, rest)) = arguments.split_first()
+        && let Some(tool) = Tool::from_subcommand(first)
     {
-        println!(
-            "oxc-tsrx {} (OXC {OXC_REVISION})",
-            env!("CARGO_PKG_VERSION")
-        );
-        return Ok(0);
+        return tool.run(rest.to_vec());
     }
-    let ParsedArguments {
-        filters,
-        files,
-        fix,
-        config_path,
-        config_base,
-        type_aware,
-        type_check,
-    } = parse_arguments(arguments.into_iter())?;
-
-    let cwd =
-        env::current_dir().map_err(|error| format!("unable to read current directory: {error}"))?;
-    let session = if type_aware {
-        LintSession::new_type_aware_with_config_base(
-            &cwd,
-            config_path.as_deref(),
-            config_base.as_deref(),
-            &filters,
-            fix,
-            type_check,
-        )?
-    } else {
-        LintSession::new_with_config_base(
-            &cwd,
-            config_path.as_deref(),
-            config_base.as_deref(),
-            &filters,
-            fix,
-        )?
-    };
-    let files = files
-        .into_iter()
-        .map(|path| {
-            if path.is_absolute() {
-                path
-            } else {
-                cwd.join(path)
-            }
-        })
-        .filter(|path| !session.should_ignore(path))
-        .collect::<Vec<_>>();
-    let output = session.aggregate(session.lint_files(&files)?);
-    let errors = output
-        .diagnostics
-        .iter()
-        .filter(|diagnostic| diagnostic.severity == "error")
-        .count();
-    let warnings = output
-        .diagnostics
-        .iter()
-        .filter(|diagnostic| diagnostic.severity == "warning")
-        .count();
-    println!(
-        "{}",
-        serde_json::to_string(&output).map_err(|error| format!("JSON output failed: {error}"))?
-    );
-    let warnings_fail = session.deny_warnings() && warnings > 0;
-    let max_warnings_fail = session
-        .max_warnings()
-        .is_some_and(|maximum| warnings > maximum);
-    Ok(u8::from(errors > 0 || warnings_fail || max_warnings_fail))
-}
-
-struct ParsedArguments {
-    filters: Vec<ConfigRuleFilter>,
-    files: Vec<PathBuf>,
-    fix: bool,
-    config_path: Option<PathBuf>,
-    config_base: Option<PathBuf>,
-    type_aware: bool,
-    type_check: bool,
-}
-
-fn parse_arguments(arguments: impl Iterator<Item = String>) -> Result<ParsedArguments, String> {
-    let mut arguments = arguments.peekable();
-    let mut filters = Vec::new();
-    let mut files = Vec::new();
-    let mut fix = false;
-    let mut config_path = None;
-    let mut config_base = None;
-    let mut type_aware = false;
-    let mut type_check = false;
-
-    while let Some(argument) = arguments.next() {
-        match argument.as_str() {
-            "--format=json" => {}
-            "--format" => {
-                let format = arguments.next().ok_or("--format requires a value")?;
-                if format != "json" {
-                    return Err("the current native CLI supports --format=json only".to_string());
-                }
-            }
-            "--allow" | "-A" => filters.push(ConfigRuleFilter {
-                severity: ConfigRuleSeverity::Allow,
-                name: arguments.next().ok_or("--allow requires a rule")?,
-            }),
-            "--warn" | "-W" => filters.push(ConfigRuleFilter {
-                severity: ConfigRuleSeverity::Warn,
-                name: arguments.next().ok_or("--warn requires a rule")?,
-            }),
-            "--deny" | "-D" => filters.push(ConfigRuleFilter {
-                severity: ConfigRuleSeverity::Deny,
-                name: arguments.next().ok_or("--deny requires a rule")?,
-            }),
-            "--config" | "-c" => {
-                if config_path.is_some() {
-                    return Err("--config may be specified only once".to_string());
-                }
-                config_path = Some(PathBuf::from(
-                    arguments.next().ok_or("--config requires a path")?,
-                ));
-            }
-            "--config-base" => {
-                if config_base.is_some() {
-                    return Err("--config-base may be specified only once".to_string());
-                }
-                config_base = Some(PathBuf::from(
-                    arguments.next().ok_or("--config-base requires a path")?,
-                ));
-            }
-            "--fix" => fix = true,
-            "--type-aware" => type_aware = true,
-            "--type-check" => {
-                type_aware = true;
-                type_check = true;
-            }
-            value if value.starts_with('-') => {
-                return Err(format!(
-                    "unsupported option in the current native CLI: {value}"
-                ));
-            }
-            value => files.push(PathBuf::from(value)),
-        }
-    }
-
-    if files.is_empty() {
-        return Err("at least one explicit source file is required".to_string());
-    }
-
-    Ok(ParsedArguments {
-        filters,
-        files,
-        fix,
-        config_path,
-        config_base,
-        type_aware,
-        type_check,
-    })
+    Tool::Lint.run(arguments)
 }

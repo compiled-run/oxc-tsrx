@@ -1,0 +1,136 @@
+{
+  "name": "oxc-tsrx",
+  "version": "0.1.0",
+  "description": "The complete OXC toolchain for JavaScript, TypeScript, JSX, and TSRX",
+  "keywords": [
+    "formatter",
+    "javascript",
+    "linter",
+    "oxc",
+    "oxfmt",
+    "oxlint",
+    "parser",
+    "tsx",
+    "tsrx",
+    "typescript"
+  ],
+  "homepage": "https://oxc-tsrx-docs.vercel.app/",
+  "bugs": {
+    "url": "https://github.com/markless-dev/oxc-tsrx/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/markless-dev/oxc-tsrx.git",
+    "directory": "packages/toolchain"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "oxc": {
+    "provider": {
+      "protocol": 1,
+      "id": "tsrx",
+      "languages": [
+        {
+          "id": "tsrx",
+          "extensions": [
+            ".tsrx"
+          ],
+          "capabilities": {
+            "parse": {
+              "module": "./parser"
+            },
+            "lint": {
+              "bin": "oxc-tsrx-lint"
+            },
+            "format": {
+              "bin": "oxc-tsrx-fmt"
+            },
+            "lsp": {
+              "bin": "oxc-tsrx-lsp"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "bin": {
+    "oxc-tsrx": "./bin/oxc-tsrx",
+    "oxlint": "./bin/oxlint",
+    "oxfmt": "./bin/oxfmt",
+    "oxc-tsrx-lint": "./bin/oxc-tsrx-lint",
+    "oxc-tsrx-fmt": "./bin/oxc-tsrx-fmt",
+    "oxc-tsrx-lsp": "./bin/oxc-tsrx-lsp"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./parser": {
+      "types": "./dist/parser.d.ts",
+      "import": "./dist/parser.js",
+      "default": "./dist/parser.js"
+    },
+    "./lint": {
+      "types": "./dist/lint.d.ts",
+      "import": "./dist/lint.js",
+      "default": "./dist/lint.js"
+    },
+    "./lint/plugins-dev": {
+      "types": "./dist/lint-plugins-dev.d.ts",
+      "import": "./dist/lint-plugins-dev.js",
+      "default": "./dist/lint-plugins-dev.js"
+    },
+    "./format": {
+      "types": "./dist/format.d.ts",
+      "import": "./dist/format.js",
+      "default": "./dist/format.js"
+    },
+    "./compat": {
+      "types": "./dist/compat.d.ts",
+      "import": "./dist/compat.js",
+      "default": "./dist/compat.js"
+    },
+    "./provider-resolve": {
+      "types": "./dist/provider-resolve.d.ts",
+      "import": "./dist/provider-resolve.js",
+      "default": "./dist/provider-resolve.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "LICENSE",
+    "README.md",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "sideEffects": false,
+  "dependencies": {
+    "@oxc-project/types": "0.140.0",
+    "oxfmt-current": "npm:oxfmt@0.59.0",
+    "oxlint-current": "npm:oxlint@1.74.0",
+    "oxlint-tsgolint": "0.24.0",
+    "tinyglobby": "0.2.17"
+  },
+  "optionalDependencies": {
+    "@oxc-tsrx/native-darwin-arm64": "0.1.0",
+    "@oxc-tsrx/native-darwin-x64": "0.1.0",
+    "@oxc-tsrx/native-linux-arm64-gnu": "0.1.0",
+    "@oxc-tsrx/native-linux-arm64-musl": "0.1.0",
+    "@oxc-tsrx/native-linux-x64-gnu": "0.1.0",
+    "@oxc-tsrx/native-linux-x64-musl": "0.1.0",
+    "@oxc-tsrx/native-win32-arm64-msvc": "0.1.0",
+    "@oxc-tsrx/native-win32-x64-msvc": "0.1.0"
+  },
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}

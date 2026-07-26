@@ -30,11 +30,14 @@ jobs:
       - name: Check out the exact source revision
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
+      - name: Install the pinned pnpm
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+
       - name: Install Node.js 24.15.0
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24.15.0
-          cache: npm
+          cache: pnpm
 
       - name: Install current Rust 1.97.0
         shell: bash
@@ -66,7 +69,7 @@ jobs:
           const files = [
             "crates/oxc_adapter/Cargo.toml",
             "crates/oxc_adapter/src/lib.rs",
-            "packages/runtime/dist/index.js",
+            "packages/toolchain/dist/runtime.js",
             "scripts/package-native.mjs",
             "scripts/package-vscode.mjs",
           ];
@@ -98,11 +101,11 @@ jobs:
         working-directory: ${{ env.ADVISORY_DIR }}
         shell: bash
         run: |
-          npm ci --ignore-scripts
+          pnpm install --frozen-lockfile --ignore-scripts
           cargo check --workspace --all-targets --locked
           cargo test --workspace --all-targets --locked
           cargo build --release --locked -p oxc_tsrx_cli --bins
-          npm test
+          pnpm test
           node --test tests/packaging/boundary.test.mjs
 
       - name: Summarize the advisory result
@@ -126,11 +129,14 @@ jobs:
       - name: Check out the exact source revision
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
+      - name: Install the pinned pnpm
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+
       - name: Install Node.js 24.15.0
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24.15.0
-          cache: npm
+          cache: pnpm
 
       - name: Install Rust 1.95.0
         shell: bash
@@ -141,7 +147,7 @@ jobs:
       - name: Install the locked graph and build release binaries
         shell: bash
         run: |
-          npm ci --ignore-scripts
+          pnpm install --frozen-lockfile --ignore-scripts
           cargo build --release --locked -p oxc_tsrx_cli --bins
 
       - name: Run the isolated legacy control
