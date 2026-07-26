@@ -6,6 +6,7 @@ use std::{
     io::{self, Read, Write},
     path::{Path, PathBuf},
     process::ExitCode,
+    time::Instant,
 };
 
 use rayon::prelude::*;
@@ -14,12 +15,13 @@ use tsrx_format::{FormatOutput, FormatSession};
 const HELP: &str = "\
 OXC for TSRX formatter
 
-Usage: oxc-tsrx-fmt [--write | --check] [--threads=INT] PATH...
+Usage: oxc-tsrx-fmt [--write | --check | --list-different] [--threads=INT] PATH...
        oxc-tsrx-fmt [--config=PATH] --stdin-filepath=PATH
 
 Mode options:
     --write                 Format and write explicit files (default for files)
-    --check                 Exit 1 and list files that differ; never write
+    --check                 Report every checked file, then exit 1 if any differ
+    --list-different        List only the paths that differ; never write
     --stdin-filepath=PATH   Read stdin, infer the source type, and print formatted source
     -c, --config=PATH       Use an explicit JSON/JSONC Oxfmt configuration
     --threads=INT           Worker count for explicit multi-file formatting
@@ -28,14 +30,34 @@ Mode options:
 
 The current TSRX grammar slice supports @{, if/else, for/empty, switch/case/default,
 try/pending/catch controls, dynamic JSX tags, and lowercase raw <style> elements.
-CSS payload bytes are preserved rather than CSS-formatted. Unsupported or malformed
-custom forms fail before any requested file is changed.
+CSS payload bytes are preserved rather than CSS-formatted. Every unsupported or malformed
+custom form is reported against its own file, beside the results of the files that did
+parse, and exits 2. --write stays all-or-nothing: no file is changed unless every
+requested file formatted.
 ";
+
+/// Canonical Oxfmt's own `--check` preamble, verdicts, and summary lines. They are reproduced
+/// verbatim so a `.tsrx` batch reads exactly like an ordinary one and so the drop-in `oxfmt`
+/// wrapper can merge the two halves into a single report.
+const CHECK_PREAMBLE: &str = "Checking formatting...\n\n";
+const ALL_CLEAR: &str = "All matched files use the correct format.";
+const CHECK_FAILED: &str = "Error occurred when checking code style in the above files.";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum FileMode {
     Write,
     Check,
+    ListDifferent,
+}
+
+impl FileMode {
+    const fn flag(self) -> &'static str {
+        match self {
+            Self::Write => "--write",
+            Self::Check => "--check",
+            Self::ListDifferent => "--list-different",
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -52,6 +74,47 @@ struct Args {
 struct FormattedFile {
     path: PathBuf,
     output: FormatOutput,
+    duration_ms: u128,
+}
+
+/// One batch of explicit paths: the files that formatted and the ones that did not.
+///
+/// A file that cannot be read or projected is a per-file failure rather than an abort of the
+/// whole batch. That is what canonical Oxfmt does: a source it cannot parse is reported *beside*
+/// the results of the files that parsed, never instead of them, and the run exits 2 either way.
+/// (`--write` is the one place this formatter goes further than canonical Oxfmt; see `run`.)
+///
+/// A failure therefore stays plain rendered text. Unlike the lint lane, nothing here needs to
+/// tell a user's own syntax error apart from a tool failure, because canonical Oxfmt gives both
+/// the same exit code and the same summary sentence.
+#[derive(Debug, Default)]
+struct FormatBatch {
+    formatted: Vec<FormattedFile>,
+    /// Each entry is the exact text that follows the `oxc-tsrx-fmt: ` prefix on stderr.
+    failures: Vec<String>,
+}
+
+impl FormatBatch {
+    fn considered(&self) -> usize {
+        self.formatted.len() + self.failures.len()
+    }
+
+    fn changed(&self) -> impl Iterator<Item = &FormattedFile> {
+        self.formatted.iter().filter(|file| file.output.changed)
+    }
+
+    /// `path (Nms)` per differing file, in the order the paths were given.
+    fn changed_report_lines(&self) -> Vec<String> {
+        self.changed()
+            .map(|file| format!("{} ({}ms)", file.path.display(), file.duration_ms))
+            .collect()
+    }
+
+    fn changed_paths(&self) -> Vec<String> {
+        self.changed()
+            .map(|file| file.path.display().to_string())
+            .collect()
+    }
 }
 
 #[derive(Debug)]
@@ -103,23 +166,96 @@ fn run(arguments: impl Iterator<Item = String>) -> Result<u8, String> {
         return run_stdin(&session, &path);
     }
 
-    let formatted = format_files(&session, args.files, args.threads)?;
-    match args.file_mode {
-        FileMode::Check => {
-            let mut different = false;
-            for file in &formatted {
-                if file.output.changed {
-                    println!("{}", file.path.display());
-                    different = true;
-                }
-            }
-            Ok(u8::from(different))
-        }
-        FileMode::Write => {
-            commit_all(&formatted)?;
-            Ok(0)
-        }
+    let threads = args.threads.unwrap_or_else(rayon::current_num_threads);
+    let started = Instant::now();
+    let batch = format_files(&session, args.files, args.threads)?;
+    let failed = !batch.failures.is_empty();
+    // Canonical Oxfmt writes the files that parsed even when a sibling did not. This formatter
+    // deliberately keeps the stronger all-or-nothing transaction instead, so a batch never lands
+    // half formatted; `commit_all`'s staging, backups, and restores exist for it, and
+    // `tests/native-format.test.mjs` pins it. Only the *report* changed: every file that failed
+    // is now named, where the first failure used to abort before the rest were even looked at.
+    if args.file_mode == FileMode::Write && !failed {
+        commit_all(&batch.formatted)?;
     }
+    let elapsed_ms = started.elapsed().as_millis();
+
+    let report = match args.file_mode {
+        FileMode::Check => check_report(
+            &batch.changed_report_lines(),
+            batch.considered(),
+            elapsed_ms,
+            threads,
+            failed,
+        ),
+        FileMode::ListDifferent => batch.changed_paths().join("\n"),
+        FileMode::Write if failed => String::new(),
+        FileMode::Write => format!(
+            "{}\n",
+            finished_line(elapsed_ms, batch.considered(), threads)
+        ),
+    };
+    io::stdout()
+        .write_all(report.as_bytes())
+        .and_then(|()| io::stdout().flush())
+        .map_err(|error| format!("unable to write stdout: {error}"))?;
+
+    if failed {
+        // A failing `--check` truncates stdout without a trailing newline, so the diagnostic
+        // block opens with the blank line that terminates it. Canonical Oxfmt's block opens the
+        // same way, which is why its two streams read as one report in a terminal.
+        eprintln!();
+        for failure in &batch.failures {
+            eprintln!("oxc-tsrx-fmt: {failure}");
+        }
+        eprintln!("{CHECK_FAILED}");
+        return Ok(2);
+    }
+    Ok(match args.file_mode {
+        FileMode::Write => 0,
+        FileMode::Check | FileMode::ListDifferent => u8::from(batch.changed().next().is_some()),
+    })
+}
+
+fn issues_verdict(count: usize) -> String {
+    format!("Format issues found in above {count} files. Run without `--check` to fix.")
+}
+
+fn finished_line(elapsed_ms: u128, considered: usize, threads: usize) -> String {
+    format!("Finished in {elapsed_ms}ms on {considered} files using {threads} threads.")
+}
+
+/// Render canonical Oxfmt's `--check` report.
+///
+/// The verdict and the `Finished in ...` count are one statement about one batch, so a run that
+/// could not read every file stops after the file list rather than claiming an all-clear above a
+/// failure or publishing a count that silently excludes it. That truncation is canonical Oxfmt's
+/// own behaviour, verified against the pinned stock binary.
+fn check_report(
+    changed: &[String],
+    considered: usize,
+    elapsed_ms: u128,
+    threads: usize,
+    failed: bool,
+) -> String {
+    let mut report = String::from(CHECK_PREAMBLE);
+    report.push_str(&changed.join("\n"));
+    if failed {
+        return report;
+    }
+    if !changed.is_empty() {
+        report.push_str("\n\n");
+    }
+    let verdict = if changed.is_empty() {
+        ALL_CLEAR.to_string()
+    } else {
+        issues_verdict(changed.len())
+    };
+    report.push_str(&verdict);
+    report.push('\n');
+    report.push_str(&finished_line(elapsed_ms, considered, threads));
+    report.push('\n');
+    report
 }
 
 #[allow(clippy::too_many_lines)]
@@ -135,7 +271,8 @@ fn parse_args(arguments: impl Iterator<Item = String>) -> Result<Args, String> {
     while let Some(argument) = arguments.next() {
         match argument.as_str() {
             "--write" => set_mode(&mut file_mode, FileMode::Write)?,
-            "--check" | "--list-different" => set_mode(&mut file_mode, FileMode::Check)?,
+            "--check" => set_mode(&mut file_mode, FileMode::Check)?,
+            "--list-different" => set_mode(&mut file_mode, FileMode::ListDifferent)?,
             "--stdin-filepath" => {
                 let value = arguments.next().ok_or("--stdin-filepath requires a path")?;
                 set_once_path(&mut stdin_filepath, value, "--stdin-filepath")?;
@@ -206,8 +343,16 @@ fn parse_args(arguments: impl Iterator<Item = String>) -> Result<Args, String> {
 }
 
 fn set_mode(mode: &mut Option<FileMode>, value: FileMode) -> Result<(), String> {
-    if mode.is_some_and(|current| current != value) {
-        return Err("--write and --check are mutually exclusive".to_string());
+    if let Some(current) = *mode
+        && current != value
+    {
+        // Canonical Oxfmt rejects any two of `--write`, `--check`, and `--list-different`
+        // together, naming both flags.
+        return Err(format!(
+            "{} cannot be used at the same time as {}",
+            value.flag(),
+            current.flag()
+        ));
     }
     *mode = Some(value);
     Ok(())
@@ -262,24 +407,33 @@ fn format_files(
     session: &FormatSession,
     mut paths: Vec<PathBuf>,
     threads: Option<usize>,
-) -> Result<Vec<FormattedFile>, String> {
+) -> Result<FormatBatch, String> {
     paths.retain(|path| !session.should_ignore(path));
     validate_unique_paths(&paths)?;
     let operation = || {
         paths
             .into_par_iter()
             .map(|path| {
+                let started = Instant::now();
                 let source = fs::read_to_string(&path)
                     .map_err(|error| format!("unable to read {}: {error}", path.display()))?;
                 let output = session
                     .format_text(&path, &source)
                     .map_err(|error| format!("{}: {error}", path.display()))?;
-                Ok(FormattedFile { path, output })
+                Ok(FormattedFile {
+                    path,
+                    output,
+                    duration_ms: started.elapsed().as_millis(),
+                })
             })
-            .collect::<Result<Vec<_>, String>>()
+            // A per-path `Result` collected into a `Vec` rather than into a `Result<Vec<_>>`:
+            // the short-circuiting collect discarded every other file's work as soon as one
+            // path failed. `into_par_iter` preserves argument order, so a failed path still
+            // sits between the files it was named between.
+            .collect::<Vec<Result<FormattedFile, String>>>()
     };
 
-    if let Some(threads) = threads {
+    let results = if let Some(threads) = threads {
         rayon::ThreadPoolBuilder::new()
             .num_threads(threads)
             .build()
@@ -287,7 +441,16 @@ fn format_files(
             .install(operation)
     } else {
         operation()
+    };
+
+    let mut batch = FormatBatch::default();
+    for result in results {
+        match result {
+            Ok(file) => batch.formatted.push(file),
+            Err(failure) => batch.failures.push(failure),
+        }
     }
+    Ok(batch)
 }
 
 /// Stages every changed output next to its source, then swaps all originals through backups.
@@ -417,5 +580,115 @@ fn cleanup_staged(items: &[StagedFile]) {
         if item.backup.exists() && !item.path.exists() {
             let _ = fs::rename(&item.backup, &item.path);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{env, fs, path::PathBuf, sync::atomic::AtomicU32, sync::atomic::Ordering};
+
+    use tsrx_format::FormatSession;
+
+    use super::{FileMode, check_report, format_files, set_mode};
+
+    static COUNTER: AtomicU32 = AtomicU32::new(0);
+
+    fn scratch_directory(label: &str) -> PathBuf {
+        let unique = COUNTER.fetch_add(1, Ordering::Relaxed);
+        let directory = env::temp_dir().join(format!(
+            "oxc-tsrx-fmt-{label}-{}-{unique}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&directory).expect("scratch directory");
+        directory
+    }
+
+    #[test]
+    fn a_clean_check_reports_the_all_clear_and_the_full_count() {
+        assert_eq!(
+            check_report(&[], 3, 12, 4, false),
+            "Checking formatting...\n\nAll matched files use the correct format.\n\
+             Finished in 12ms on 3 files using 4 threads.\n"
+        );
+    }
+
+    #[test]
+    fn a_differing_check_reports_every_path_and_counts_every_file() {
+        let changed = ["a.tsrx (0ms)".to_string(), "b.tsrx (1ms)".to_string()];
+        assert_eq!(
+            check_report(&changed, 3, 12, 4, false),
+            "Checking formatting...\n\na.tsrx (0ms)\nb.tsrx (1ms)\n\n\
+             Format issues found in above 2 files. Run without `--check` to fix.\n\
+             Finished in 12ms on 3 files using 4 threads.\n"
+        );
+    }
+
+    #[test]
+    fn a_failed_check_never_prints_an_all_clear_or_a_count_above_the_failure() {
+        // The verdict and the count are one statement about one batch. A run that could not
+        // read every file stops after the file list instead of contradicting itself.
+        let report = check_report(&["a.tsrx (0ms)".to_string()], 2, 12, 4, true);
+        assert_eq!(report, "Checking formatting...\n\na.tsrx (0ms)");
+        assert!(!report.contains("All matched files"));
+        assert!(!report.contains("Finished in"));
+        assert_eq!(
+            check_report(&[], 1, 12, 4, true),
+            "Checking formatting...\n\n"
+        );
+    }
+
+    #[test]
+    fn one_unparseable_file_keeps_every_other_result_in_the_batch() {
+        let directory = scratch_directory("batch");
+        let clean = directory.join("Clean.tsrx");
+        let dirty = directory.join("Dirty.tsrx");
+        let broken = directory.join("Broken.tsrx");
+        fs::write(&clean, "export function Clean() @{\n  <p>a</p>;\n}\n").expect("clean");
+        fs::write(
+            &dirty,
+            "export function Dirty( ) @{\n     let x   = 1;\n}\n",
+        )
+        .expect("dirty");
+        fs::write(&broken, "export function Broken() @{\n  <main>\n}\n").expect("broken");
+
+        let session = FormatSession::new_with_config_base(&directory, None, None).expect("session");
+        let batch = format_files(
+            &session,
+            vec![clean.clone(), broken.clone(), dirty.clone()],
+            Some(1),
+        )
+        .expect("batch");
+
+        assert_eq!(batch.failures.len(), 1, "{:?}", batch.failures);
+        assert!(
+            batch.failures[0].starts_with(&format!("{}: ", broken.display())),
+            "{}",
+            batch.failures[0]
+        );
+        assert_eq!(batch.considered(), 3);
+        // Argument order survives, so the failed path still sits between its neighbours.
+        assert_eq!(
+            batch
+                .formatted
+                .iter()
+                .map(|file| file.path.clone())
+                .collect::<Vec<_>>(),
+            vec![clean.clone(), dirty.clone()]
+        );
+        assert_eq!(batch.changed_paths(), vec![dirty.display().to_string()]);
+
+        fs::remove_dir_all(&directory).expect("cleanup");
+    }
+
+    #[test]
+    fn two_file_modes_are_rejected_by_name() {
+        let mut mode = None;
+        set_mode(&mut mode, FileMode::Check).expect("first mode");
+        assert_eq!(
+            set_mode(&mut mode, FileMode::ListDifferent),
+            Err("--list-different cannot be used at the same time as --check".to_string())
+        );
+        // Repeating the same flag stays accepted, as it was before the modes were split.
+        assert_eq!(set_mode(&mut mode, FileMode::Check), Ok(()));
     }
 }

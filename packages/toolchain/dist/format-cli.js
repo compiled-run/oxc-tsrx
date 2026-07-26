@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { isAbsolute, relative } from "node:path";
 import {
   argumentValue,
   canonicalToolEnvironment,
@@ -52,6 +53,183 @@ function nativeArguments(args, files, resolvedConfig) {
     output.push("--config", resolvedConfig.path, "--config-base", resolvedConfig.base);
   }
   return [...output, ...files];
+}
+
+// Discovery hands back absolute paths, and the native formatter echoes back the
+// path it was given. Handing it the same relative spelling canonical Oxfmt was
+// given keeps one merged report from mixing the two spellings, in its file list
+// and in its diagnostics alike. The child runs in this same directory, so the
+// two spellings name the same file.
+function withCwdRelativePaths(files, cwd) {
+  return files.map((file) => {
+    if (!isAbsolute(file)) return file;
+    const relativePath = relative(cwd, file);
+    if (relativePath === "" || relativePath.startsWith("..") || isAbsolute(relativePath)) {
+      return file;
+    }
+    return relativePath;
+  });
+}
+
+// --- Merging the two halves into one report ------------------------------
+//
+// Canonical Oxfmt has no machine-readable output, so a mixed run is rebuilt
+// from the two rendered halves rather than concatenated. Concatenating printed
+// one half's "All matched files use the correct format." directly above the
+// other half's failing paths, and a file count that excluded every `.tsrx`
+// file in the run.
+//
+// The shape both halves emit, verified against the pinned stock binary:
+//
+//   <preamble>\n\n<path> (Nms)\n...\n\n<verdict>\n<summary with a file count>\n
+//
+// and, when some file could not be read, truncated right after the path list,
+// so no verdict and no count is ever printed above a failure.
+//
+// Nothing below hardcodes canonical wording. The preamble, the verdict, and
+// the summary are taken from whichever half produced them and only their
+// counts are rewritten, so the merged report keeps tracking upstream if its
+// sentences move.
+
+function fileMode(args) {
+  let mode = "write";
+  let positionalOnly = false;
+  for (let index = 0; index < args.length; index += 1) {
+    const argument = args[index];
+    if (positionalOnly) continue;
+    if (argument === "--") {
+      positionalOnly = true;
+      continue;
+    }
+    if (!argument.startsWith("-") || argument === "-") continue;
+    const { name, value: inlineValue } = parseOxfmtOption(argument);
+    if (VALUE_OPTIONS.has(name)) {
+      if (inlineValue === null) index += 1;
+      continue;
+    }
+    if (name === "--check") mode = "check";
+    else if (name === "--list-different") mode = "list-different";
+    else if (name === "--write") mode = "write";
+  }
+  return mode;
+}
+
+function reportedFileCount(line) {
+  const match = /\bon (\d+) files\b/u.exec(line ?? "");
+  return match ? Number(match[1]) : null;
+}
+
+function withReportedFileCount(line, count) {
+  return line.replace(/\bon \d+ files\b/u, `on ${count} files`);
+}
+
+function withVerdictCount(verdict, count) {
+  return verdict.replace(/\b\d+ files\b/u, `${count} files`);
+}
+
+function parseCheckReport(stdout) {
+  const separator = stdout.indexOf("\n\n");
+  if (separator <= 0 || stdout.slice(0, separator).includes("\n")) return null;
+  const preamble = stdout.slice(0, separator + 2);
+  const body = stdout.slice(separator + 2);
+  if (!body.endsWith("\n")) {
+    // Truncated by a failure: the paths that differ, and nothing that would
+    // claim anything about the batch as a whole.
+    return {
+      preamble,
+      files: body === "" ? [] : body.split("\n"),
+      verdict: null,
+      summary: null,
+      count: null,
+    };
+  }
+  const lines = body.slice(0, -1).split("\n");
+  const summary = lines.pop() ?? null;
+  const verdict = lines.pop() ?? null;
+  if (lines.at(-1) === "") lines.pop();
+  return { preamble, files: lines, verdict, summary, count: reportedFileCount(summary) };
+}
+
+function parseWriteReport(stdout) {
+  if (!stdout.endsWith("\n")) return null;
+  const line = stdout.slice(0, -1);
+  const count = reportedFileCount(line);
+  if (line.includes("\n") || count === null) return null;
+  return { line, count };
+}
+
+function mergeCheckStdout(upstream, native, failed) {
+  const reports = [parseCheckReport(upstream.stdout), parseCheckReport(native.stdout)].filter(
+    Boolean,
+  );
+  if (reports.length === 0) return upstream.stdout + native.stdout;
+  const preamble = reports[0].preamble;
+  const files = reports.flatMap((report) => report.files);
+  if (failed) return preamble + files.join("\n");
+
+  const verdict =
+    files.length > 0
+      ? reports.find((report) => report.files.length > 0)?.verdict
+      : reports.find((report) => report.files.length === 0)?.verdict;
+  const summary = reports.find((report) => report.summary !== null)?.summary;
+  if (!verdict || !summary) return upstream.stdout + native.stdout;
+  const count = reports.reduce((total, report) => total + (report.count ?? 0), 0);
+  return `${preamble}${files.join("\n")}${files.length > 0 ? "\n\n" : ""}${withVerdictCount(
+    verdict,
+    files.length,
+  )}\n${withReportedFileCount(summary, count)}\n`;
+}
+
+function mergeWriteStdout(upstream, native, failed) {
+  const reports = [upstream.stdout, native.stdout].map(parseWriteReport).filter(Boolean);
+  if (reports.length === 0) return upstream.stdout + native.stdout;
+  // Canonical Oxfmt prints no summary at all once a file in the batch failed.
+  if (failed) return "";
+  const count = reports.reduce((total, report) => total + report.count, 0);
+  return `${withReportedFileCount(reports[0].line, count)}\n`;
+}
+
+function mergeListDifferentStdout(upstream, native) {
+  // Canonical Oxfmt joins these paths with newlines and prints no trailing one.
+  return [upstream.stdout, native.stdout].filter((part) => part.length > 0).join("\n");
+}
+
+export function mergeFormatStdout(mode, upstream, native) {
+  // Exit 2 is what both halves use for a file they could not read or parse.
+  const failed = upstream.status >= 2 || native.status >= 2;
+  if (mode === "list-different") return mergeListDifferentStdout(upstream, native);
+  if (mode === "check") return mergeCheckStdout(upstream, native, failed);
+  return mergeWriteStdout(upstream, native, failed);
+}
+
+function lastNonEmptyLine(text) {
+  const lines = text.split("\n").filter((line) => line !== "");
+  return lines.at(-1) ?? "";
+}
+
+function withoutLine(text, line) {
+  const marker = `${line}\n`;
+  const index = text.lastIndexOf(marker);
+  return index === -1 ? text : text.slice(0, index) + text.slice(index + marker.length);
+}
+
+export function mergeFormatStderr(upstream, native, stdout) {
+  let leading = upstream.stderr;
+  const summary = lastNonEmptyLine(native.stderr);
+  // Each half closes its diagnostics with the same sentence about its own
+  // files. One report states it once, under both halves' diagnostics.
+  if (summary !== "" && lastNonEmptyLine(leading) === summary) {
+    leading = withoutLine(leading, summary);
+  }
+  const merged = leading + native.stderr;
+  // A report truncated by a failure ends without a newline, and the diagnostic
+  // block that follows it supplies one. Canonical Oxfmt's block already opens
+  // with that blank line; canonical Oxfmt's config notice, which only the
+  // ordinary half prints, does not.
+  if (merged === "" || merged.startsWith("\n") || stdout === "" || stdout.endsWith("\n")) {
+    return merged;
+  }
+  return `\n${merged}`;
 }
 
 async function delegate(args, cwd, input) {
@@ -131,7 +309,8 @@ export async function runCli(args, options = {}) {
     const upstreamArgs = useMaterializedUpstreamConfig
       ? replaceConfigArgument(stripped.args, viteConfig.path)
       : stripped.args;
-    const nativeArgs = files.length > 0 ? nativeArguments(args, files, viteConfig) : null;
+    const nativeArgs =
+      files.length > 0 ? nativeArguments(args, withCwdRelativePaths(files, cwd), viteConfig) : null;
     // Resolve and validate every artifact before either tool can mutate a mixed batch.
     // In particular, a missing platform package must not let canonical Oxfmt
     // rewrite ordinary files before the TSRX lane fails.
@@ -147,8 +326,9 @@ export async function runCli(args, options = {}) {
         ? runCaptured(nativeCommand.executable, nativeCommand.args, { cwd })
         : Promise.resolve({ status: 0, stdout: "", stderr: "", signal: null }),
     ]);
-    process.stdout.write(upstreamResult.stdout + nativeResult.stdout);
-    process.stderr.write(upstreamResult.stderr + nativeResult.stderr);
+    const stdout = mergeFormatStdout(fileMode(args), upstreamResult, nativeResult);
+    process.stdout.write(stdout);
+    process.stderr.write(mergeFormatStderr(upstreamResult, nativeResult, stdout));
     return Math.max(upstreamResult.status, nativeResult.status);
   } finally {
     await viteConfig?.cleanup();

@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, readFile, realpath, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
@@ -42,6 +42,258 @@ function run(executable, cwd, args, input = null) {
 function runFormat(cwd, args, input = null) {
   return run(binary, cwd, ["fmt", ...args], input);
 }
+
+// The published drop-in `oxfmt` command, which runs canonical Oxfmt and the
+// native TSRX formatter and has to merge their two reports into one.
+const companion = resolve(join(root, "packages/toolchain/bin/oxfmt"));
+
+function runCompanion(cwd, args) {
+  return new Promise((resolvePromise, reject) => {
+    const child = spawn(process.execPath, [companion, ...args], {
+      cwd,
+      env: { ...process.env, OXC_TSRX_FORMAT_BIN: binary },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => (stdout += chunk));
+    child.stderr.on("data", (chunk) => (stderr += chunk));
+    child.once("error", reject);
+    child.once("close", (code, signal) => resolvePromise({ code, signal, stdout, stderr }));
+  });
+}
+
+// --- Comparing a TSRX report against a live stock Oxfmt control -----------
+//
+// Nothing below hardcodes a canonical sentence. Every fixture is written twice,
+// once as `.tsrx` and once as an ordinary `.ts` file of the same base name and
+// the same cleanliness, so the two reports are the same report about the same
+// batch and can be compared field by field. Durations, thread counts, and the
+// extension are the only things normalised away.
+
+function normalizeSummary(line) {
+  return line
+    .replace(/\bin [0-9.]+\s*(?:ms|s|m)\b/u, "in <duration>")
+    .replace(/\busing \d+ threads\b/u, "using <threads> threads");
+}
+
+function normalizeReportPath(line) {
+  return basename(line.replace(/ \(\d+ms\)$/u, "")).replace(/\.(?:tsrx|ts)$/u, "");
+}
+
+/// Split an Oxfmt report into its parts. A report truncated by a failing file
+/// carries the paths that differ and nothing else: no verdict, no file count.
+function parseReport(stdout) {
+  const separator = stdout.indexOf("\n\n");
+  if (separator <= 0 || stdout.slice(0, separator).includes("\n")) return null;
+  const preamble = stdout.slice(0, separator);
+  const body = stdout.slice(separator + 2);
+  let files;
+  let verdict = null;
+  let summary = null;
+  if (body.endsWith("\n")) {
+    const lines = body.slice(0, -1).split("\n");
+    summary = normalizeSummary(lines.pop());
+    verdict = lines.pop();
+    if (lines.at(-1) === "") lines.pop();
+    files = lines;
+  } else {
+    files = body === "" ? [] : body.split("\n");
+  }
+  return { preamble, verdict, summary, files: files.map(normalizeReportPath).sort() };
+}
+
+function lastLine(text) {
+  const lines = text.split("\n").filter((line) => line.trim() !== "");
+  return lines.at(-1) ?? "";
+}
+
+const FIXTURES = {
+  clean: { ts: "export const value = 1;\n", tsrx: "export function Clean() @{\n  <p>a</p>;\n}\n" },
+  dirty: {
+    ts: "export   const  other=2\n",
+    tsrx: "export function Dirty( ) @{\n     let x   = 1;\n  <p>b</p>;\n}\n",
+  },
+  broken: {
+    ts: "const unclosed = ((\n",
+    tsrx: "export function Broken() @{\n  let x = 1;\n  <main>\n    <h1>hi</h1>\n}\n",
+  },
+};
+
+/// Write `names` into a fresh directory, choosing the `.tsrx` spelling for the
+/// names listed in `tsrx` and the ordinary `.ts` spelling for the rest.
+async function fixtureDirectory(label, names, tsrx = []) {
+  const cwd = await realpath(await mkdtemp(join(tmpdir(), `oxc-tsrx-format-${label}-`)));
+  await mkdir(join(cwd, "src"));
+  const paths = {};
+  for (const [name, kind] of Object.entries(names)) {
+    const extension = tsrx.includes(name) ? "tsrx" : "ts";
+    paths[name] = join(cwd, "src", `${name}.${extension}`);
+    await writeFile(paths[name], FIXTURES[kind][extension]);
+  }
+  return { cwd, paths };
+}
+
+test("one unparseable .tsrx leaves the rest of the batch reported, as canonical Oxfmt does", async () => {
+  const control = await fixtureDirectory("batch-control", {
+    a: "clean",
+    b: "dirty",
+    c: "broken",
+  });
+  const candidate = await fixtureDirectory(
+    "batch-candidate",
+    { a: "clean", b: "dirty", c: "broken" },
+    ["a", "b", "c"],
+  );
+  const order = (paths) => [paths.a, paths.b, paths.c];
+
+  const [stockResult, nativeResult] = await Promise.all([
+    run(stock, control.cwd, ["--check", ...order(control.paths)]),
+    runFormat(candidate.cwd, ["--check", ...order(candidate.paths)]),
+  ]);
+
+  // Canonical Oxfmt reports the file it could not parse next to the results of
+  // the files it could, and exits 2. Before this fix the whole TSRX batch was
+  // discarded on the first failure, so `b` never appeared at all.
+  assert.equal(stockResult.code, 2, stockResult.stderr || stockResult.stdout);
+  assert.equal(nativeResult.code, stockResult.code, nativeResult.stderr || nativeResult.stdout);
+
+  const expected = parseReport(stockResult.stdout);
+  const actual = parseReport(nativeResult.stdout);
+  assert.ok(expected, JSON.stringify(stockResult.stdout));
+  assert.deepEqual(actual, expected);
+  assert.deepEqual(actual.files, ["b"]);
+  // A report truncated by a failure states nothing about the batch as a whole.
+  assert.equal(actual.verdict, null);
+  assert.equal(actual.summary, null);
+
+  // The summary sentence is taken from the live control rather than pinned.
+  assert.equal(lastLine(nativeResult.stderr), lastLine(stockResult.stderr));
+  // A truncated report ends without a newline, so canonical Oxfmt's diagnostic
+  // block opens with the blank line that terminates it. Otherwise the first
+  // diagnostic runs on from the last path in the report.
+  assert.equal(stockResult.stderr.startsWith("\n"), true);
+  assert.equal(nativeResult.stderr.startsWith("\n"), true);
+  // The failure names its own file, and it is the file that could not be parsed.
+  assert.match(nativeResult.stderr, /c\.tsrx/u);
+  assert.equal(nativeResult.stderr.includes("b.tsrx"), false);
+});
+
+test("--write reports every file it could not parse and keeps its all-or-nothing transaction", async () => {
+  const names = { b: "dirty", c: "broken", d: "broken" };
+  const control = await fixtureDirectory("write-control", names);
+  const candidate = await fixtureDirectory("write-candidate", names, ["b", "c", "d"]);
+  const before = await readFile(candidate.paths.b, "utf8");
+  const order = (paths) => [paths.b, paths.c, paths.d];
+
+  const [stockResult, nativeResult] = await Promise.all([
+    run(stock, control.cwd, ["--write", ...order(control.paths)]),
+    runFormat(candidate.cwd, ["--write", ...order(candidate.paths)]),
+  ]);
+
+  // Canonical Oxfmt prints no summary at all once a file in the batch failed.
+  assert.equal(stockResult.code, 2, stockResult.stderr || stockResult.stdout);
+  assert.equal(nativeResult.code, stockResult.code, nativeResult.stderr || nativeResult.stdout);
+  assert.equal(stockResult.stdout, "");
+  assert.equal(nativeResult.stdout, "");
+  assert.equal(lastLine(nativeResult.stderr), lastLine(stockResult.stderr));
+
+  // Both unparseable files are named. The batch used to abort on the first one,
+  // so `d` was never even looked at.
+  assert.match(nativeResult.stderr, /c\.tsrx/u);
+  assert.match(nativeResult.stderr, /d\.tsrx/u);
+
+  // The one deliberate divergence from canonical Oxfmt, which writes the files
+  // that parsed: this formatter keeps `--write` all-or-nothing so a batch never
+  // lands half formatted. `tests/native-format.test.mjs` pins the same rule.
+  assert.equal(await readFile(candidate.paths.b, "utf8"), before);
+  assert.notEqual(await readFile(control.paths.b, "utf8"), FIXTURES.dirty.ts);
+});
+
+test("the merged oxfmt report counts every file and never claims an all-clear above a failure", async () => {
+  const names = { a: "clean", b: "dirty", c: "clean", d: "dirty" };
+  const control = await fixtureDirectory("merge-control", names);
+  const candidate = await fixtureDirectory("merge-candidate", names, ["c", "d"]);
+
+  const [stockResult, mergedResult] = await Promise.all([
+    run(stock, control.cwd, ["--check", "src"]),
+    runCompanion(candidate.cwd, ["--check", "src"]),
+  ]);
+  assert.equal(stockResult.code, 1, stockResult.stderr || stockResult.stdout);
+  assert.equal(mergedResult.code, stockResult.code, mergedResult.stderr || mergedResult.stdout);
+
+  // One report about four files, two of which differ, whichever tool handled
+  // them. The count used to exclude the whole `.tsrx` half.
+  const expected = parseReport(stockResult.stdout);
+  assert.ok(expected, JSON.stringify(stockResult.stdout));
+  assert.deepEqual(parseReport(mergedResult.stdout), expected);
+  assert.deepEqual(expected.files, ["b", "d"]);
+  assert.match(expected.summary, /\bon 4 files\b/u);
+
+  // Now break one file in each half, so both tools have something to report.
+  await writeFile(join(control.cwd, "src/e.ts"), FIXTURES.broken.ts);
+  await writeFile(join(candidate.cwd, "src/e.tsrx"), FIXTURES.broken.tsrx);
+  await writeFile(join(control.cwd, "src/f.ts"), FIXTURES.broken.ts);
+  await writeFile(join(candidate.cwd, "src/f.ts"), FIXTURES.broken.ts);
+  const [stockFailure, mergedFailure] = await Promise.all([
+    run(stock, control.cwd, ["--check", "src"]),
+    runCompanion(candidate.cwd, ["--check", "src"]),
+  ]);
+  assert.equal(stockFailure.code, 2, stockFailure.stderr || stockFailure.stdout);
+  assert.equal(mergedFailure.code, stockFailure.code, mergedFailure.stderr || mergedFailure.stdout);
+
+  const failed = parseReport(mergedFailure.stdout);
+  assert.deepEqual(failed, parseReport(stockFailure.stdout));
+  assert.deepEqual(failed.files, ["b", "d"]);
+  assert.equal(failed.verdict, null);
+  assert.equal(failed.summary, null);
+  // The all-clear sentence comes from the live control's clean run, not a literal.
+  const clearControl = await run(stock, control.cwd, ["--check", control.paths.a]);
+  assert.equal(clearControl.code, 0, clearControl.stderr || clearControl.stdout);
+  const allClear = parseReport(clearControl.stdout).verdict;
+  assert.ok(allClear);
+  assert.equal(mergedFailure.stdout.includes(allClear), false);
+
+  // Both halves failed here, and each closes with the same sentence about its
+  // own files. One report states it once, and names both broken files.
+  const closing = lastLine(stockFailure.stderr);
+  assert.equal(lastLine(mergedFailure.stderr), closing);
+  assert.equal(mergedFailure.stderr.split(closing).length - 1, 1, mergedFailure.stderr);
+  assert.match(mergedFailure.stderr, /e\.tsrx/u);
+  assert.match(mergedFailure.stderr, /f\.ts\b/u);
+  // Both halves spell the same directory the same way.
+  assert.equal(mergedFailure.stderr.includes(candidate.cwd), false, mergedFailure.stderr);
+});
+
+test("a .tsrx-only oxfmt run prints the same summary an ordinary run prints", async () => {
+  const names = { a: "clean", b: "dirty" };
+  const control = await fixtureDirectory("solo-control", names);
+  const candidate = await fixtureDirectory("solo-candidate", names, ["a", "b"]);
+
+  for (const name of ["a", "b"]) {
+    const [expected, actual] = await Promise.all([
+      run(stock, control.cwd, ["--check", control.paths[name]]),
+      runCompanion(candidate.cwd, ["--check", candidate.paths[name]]),
+    ]);
+    assert.equal(actual.code, expected.code, actual.stderr || actual.stdout);
+    const report = parseReport(expected.stdout);
+    assert.ok(report, JSON.stringify(expected.stdout));
+    // Before this fix a `.tsrx`-only check printed nothing at all: a user could
+    // not tell "checked and clean" from "skipped the file".
+    assert.deepEqual(parseReport(actual.stdout), report);
+    assert.match(report.summary, /\bon 1 files\b/u);
+  }
+
+  const [expectedWrite, actualWrite] = await Promise.all([
+    run(stock, control.cwd, ["--write", control.paths.b]),
+    runCompanion(candidate.cwd, ["--write", candidate.paths.b]),
+  ]);
+  assert.equal(actualWrite.code, expectedWrite.code, actualWrite.stderr || actualWrite.stdout);
+  assert.equal(normalizeSummary(actualWrite.stdout), normalizeSummary(expectedWrite.stdout));
+  assert.match(actualWrite.stdout, /\bon 1 files\b/u);
+});
 
 test("discovers JSONC Oxfmt options for TSRX and preserves ordinary TSX parity", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "oxc-tsrx-format-config-"));
