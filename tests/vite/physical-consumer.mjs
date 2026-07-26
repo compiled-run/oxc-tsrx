@@ -122,17 +122,28 @@ export async function installPhysicalToolPackages(modules, vitePlusPackage) {
       await linkPackage(modules, dependency, await resolvePackageRoot(packageRequire, dependency));
     }
   }
+  // The native bindings are optional dependencies of Oxlint and Oxfmt, so they
+  // are resolved from those packages rather than from this file. pnpm keeps a
+  // package's optional dependencies beside it in the virtual store instead of
+  // hoisting them to the repository root, and only the owning package can see
+  // them.
   await Promise.all([
     linkPackage(modules, "tinyglobby", await resolvePackageRoot(require, "tinyglobby")),
     linkPackage(
       modules,
       `@oxlint/binding-${suffix}`,
-      await resolvePackageRoot(require, `@oxlint/binding-${suffix}`),
+      await resolvePackageRoot(
+        createRequire(join(canonicalLint, "package.json")),
+        `@oxlint/binding-${suffix}`,
+      ),
     ),
     linkPackage(
       modules,
       `@oxfmt/binding-${suffix}`,
-      await resolvePackageRoot(require, `@oxfmt/binding-${suffix}`),
+      await resolvePackageRoot(
+        createRequire(join(canonicalFormat, "package.json")),
+        `@oxfmt/binding-${suffix}`,
+      ),
     ),
     linkPackage(modules, "oxlint-tsgolint", await resolvePackageRoot(require, "oxlint-tsgolint")),
   ]);

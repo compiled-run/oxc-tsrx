@@ -235,7 +235,7 @@ for (const [path, expected] of outputs) {
   if (check) {
     const actual = await readFile(absolute, "utf8").catch(() => null);
     if (actual !== expected) {
-      throw new Error(`${path} is stale; run npm run licenses:rust:generate`);
+      throw new Error(`${path} is stale; run pnpm run licenses:rust:generate`);
     }
   } else {
     await writeFile(absolute, expected);

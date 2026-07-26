@@ -23,6 +23,14 @@ import { resolvePackageBinary } from "../../packages/toolchain/dist/runtime.js";
 
 const root = resolve(import.meta.dirname, "../..");
 
+// The stock comparison binaries are the ones `packages/toolchain/bin/*` would
+// delegate to, so they are resolved from that package's own manifest. pnpm
+// installs them under `packages/toolchain/node_modules`, not at the repository
+// root, and only the declaring package is entitled to see them.
+const toolchainManifestUrl = pathToFileURL(join(root, "packages/toolchain/package.json")).href;
+const stockOxlint = resolvePackageBinary("oxlint-current", "oxlint", toolchainManifestUrl);
+const stockOxfmt = resolvePackageBinary("oxfmt-current", "oxfmt", toolchainManifestUrl);
+
 function run(executable, args, options = {}) {
   return new Promise((resolveRun, rejectRun) => {
     const child = spawn(process.execPath, [executable, ...args], {
@@ -44,10 +52,17 @@ function run(executable, args, options = {}) {
   });
 }
 
+// Both routes are compared byte for byte, so every measured duration has to be
+// normalised or the assertion becomes a race. `--format=json` reports
+// `start_time`; the human-readable format reports `Finished in <n>ms`. Only the
+// duration varies: the candidate and the stock binary run on the same machine,
+// so file, rule, and thread counts already match.
 function withoutRuntimeTiming(result) {
   return {
     ...result,
-    stdout: result.stdout.replace(/"start_time":\s*[0-9.]+/u, '"start_time": <runtime>'),
+    stdout: result.stdout
+      .replace(/"start_time":\s*[0-9.]+/u, '"start_time": <runtime>')
+      .replace(/Finished in [0-9.]+(?:ms|s|m)\b/u, "Finished in <runtime>"),
   };
 }
 
@@ -82,7 +97,7 @@ test("explicit ordinary files take the zero-wrapper canonical Oxlint route", asy
   const trace = join(directory, "trace.jsonl");
   const config = join(directory, "oxlint.config.mjs");
   const candidate = join(root, "packages/toolchain/bin/oxlint");
-  const stock = join(root, "node_modules/oxlint-current/bin/oxlint");
+  const stock = stockOxlint;
   const environment = {
     ...process.env,
     CI: "1",
@@ -305,7 +320,7 @@ test("ordinary Oxfmt stdin and explicit files take the zero-wrapper canonical ro
   const source = join(directory, "ordinary.tsx");
   const trace = join(directory, "trace.jsonl");
   const candidate = join(root, "packages/toolchain/bin/oxfmt");
-  const stock = join(root, "node_modules/oxfmt-current/bin/oxfmt");
+  const stock = stockOxfmt;
   const environment = {
     ...process.env,
     CI: "1",

@@ -99,6 +99,27 @@ function nodeDirectories(nodeExecutable) {
 }
 
 /**
+ * An environment for an npm child process that carries none of the calling
+ * package manager's own configuration.
+ *
+ * A script started by `pnpm run` inherits pnpm's settings as `npm_config_*`
+ * variables, and `npm_execpath` points at pnpm rather than npm. npm 11 prints a
+ * warning to stderr for every setting it does not recognise, which is noise a
+ * real consumer never sees and which turns "npm printed nothing" assertions
+ * into failures. Callers add back the variables they actually mean, such as
+ * `npm_config_cache`.
+ */
+export function npmChildEnvironment(env = process.env) {
+  const clean = {};
+  for (const [key, value] of Object.entries(env)) {
+    const lower = key.toLowerCase();
+    if (lower.startsWith("npm_config_") || lower === "npm_execpath") continue;
+    clean[key] = value;
+  }
+  return clean;
+}
+
+/**
  * Resolve npm from its public package manifest and run its declared JavaScript CLI with Node.
  * Platform shell shims (`npm.cmd`, `npm`, and friends) are never parsed or executed.
  */

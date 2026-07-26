@@ -48,6 +48,8 @@ function cleanEnvironment(root) {
     NO_COLOR: '1',
     MARKLESS_ROOT: marklessRoot,
     npm_config_cache: path.join(root, '.npm-cache'),
+    // The clean room must not inherit the developer's pnpm store decisions.
+    npm_config_store_dir: path.join(root, '.pnpm-store'),
   }
   for (const key of Object.keys(environment)) {
     if (
@@ -275,21 +277,21 @@ try {
   }
 
   const environment = cleanEnvironment(cleanRoot)
-  const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm'
-  const packageManager = await run(npm, ['--version'], {
+  const pnpm = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm'
+  const packageManager = await run(pnpm, ['--version'], {
     cwd: cleanRoot,
     env: environment,
-    label: 'npm version',
+    label: 'pnpm version',
   })
   const rust = await run('rustc', ['--version'], {
     cwd: cleanRoot,
     env: environment,
     label: 'Rust version',
   })
-  await run(npm, ['ci', '--ignore-scripts', '--no-audit', '--no-fund'], {
+  await run(pnpm, ['install', '--frozen-lockfile', '--ignore-scripts'], {
     cwd: cleanRoot,
     env: environment,
-    label: 'fresh locked npm install',
+    label: 'fresh locked pnpm install',
   })
   await run('cargo', ['fmt', '--all', '--', '--check'], {
     cwd: cleanRoot,
@@ -311,12 +313,12 @@ try {
     ['build', '--release', '--locked', '-p', 'oxc_tsrx_cli', '--bins'],
     { cwd: cleanRoot, env: environment, label: 'fresh release native binaries' },
   )
-  await run(npm, ['run', 'build:editor'], {
+  await run(pnpm, ['run', 'build:editor'], {
     cwd: cleanRoot,
     env: environment,
     label: 'fresh editor bundle',
   })
-  await run(npm, ['run', 'licenses:check'], {
+  await run(pnpm, ['run', 'licenses:check'], {
     cwd: cleanRoot,
     env: environment,
     label: 'locked legal inventories',
@@ -324,22 +326,22 @@ try {
 
   matrix.authoredSpanAndFix = await diagnosticAndFixProof(cleanRoot, environment)
 
-  await run(npm, ['test'], {
+  await run(pnpm, ['test'], {
     cwd: cleanRoot,
     env: environment,
     label: 'product/config/Vite/editor matrix',
   })
-  await run(npm, ['run', 'test:packaging:unit'], {
+  await run(pnpm, ['run', 'test:packaging:unit'], {
     cwd: cleanRoot,
     env: environment,
     label: 'package/non-fork/legal artifact matrix',
   })
-  await run(npm, ['run', 'test:packaging:clean'], {
+  await run(pnpm, ['run', 'test:packaging:clean'], {
     cwd: cleanRoot,
     env: environment,
     label: 'untouched-tarball empty-consumer workflow',
   })
-  await run(npm, ['run', 'test:packaging:matrix'], {
+  await run(pnpm, ['run', 'test:packaging:matrix'], {
     cwd: cleanRoot,
     env: { ...environment, OXC_TSRX_RETAIN_MATRIX_REPORT: '1' },
     label: 'minimum/current Vite+ installed-package matrix',
@@ -356,7 +358,7 @@ try {
       label: 'read-only 179-file Markless format/reparse/convergence corpus',
     },
   )
-  await run(npm, ['run', 'test:packaging:vscode'], {
+  await run(pnpm, ['run', 'test:packaging:vscode'], {
     cwd: cleanRoot,
     env: environment,
     label: 'installed VSIX Markless format-on-save/diagnostics/action walkthrough',
@@ -383,7 +385,7 @@ try {
     oxcRevision: /OXC_REVISION:\s*&str\s*=\s*"([0-9a-f]{40})"/u.exec(
       await readFile(path.join(cleanRoot, 'crates', 'oxc_adapter', 'src', 'lib.rs'), 'utf8'),
     )?.[1],
-    npm: packageManager.stdout.trim(),
+    pnpm: packageManager.stdout.trim(),
     rustc: rust.stdout.trim(),
   }
   matrix.claims = {

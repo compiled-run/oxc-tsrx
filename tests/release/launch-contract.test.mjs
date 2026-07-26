@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
 import { NATIVE_TARGETS, nativePackageName } from "../../packages/toolchain/dist/native-targets.js";
-import { resolveNpmInvocation } from "../../scripts/npm-invocation.mjs";
+import { npmChildEnvironment, resolveNpmInvocation } from "../../scripts/npm-invocation.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 const repository = "https://github.com/markless-dev/oxc-tsrx";
@@ -117,8 +117,8 @@ test("launch manifest names every byte set and keeps external actions approval-g
   assert.match(prerequisites, /docs\/dist\/vercel\.json/u);
   assert.match(workflow, /workflow_dispatch:/u);
   assert.match(workflow, /rustup target add wasm32-wasip1-threads/u);
-  assert.match(workflow, /npm run docs:wasm/u);
-  assert.match(workflow, /OXC_TSRX_REQUIRE_WASM=1 npm run docs:build/u);
+  assert.match(workflow, /pnpm run docs:wasm/u);
+  assert.match(workflow, /OXC_TSRX_REQUIRE_WASM=1 pnpm run docs:build/u);
   assert.match(workflow, /node tests\/site\/verify-static\.mjs --require-wasm/u);
   assert.match(workflow, /actions\/upload-artifact@[0-9a-f]{40}/u);
   assert.match(workflow, /name: oxc-tsrx-docs-\$\{\{ github\.sha \}\}/u);
@@ -141,7 +141,10 @@ test("all platform-independent npm payloads pass pack dry-run", async () => {
       `./packages/${directory}`,
     ]);
     const { stdout, stderr } = await run(npmInvocation.executable, npmInvocation.args, {
-      env: { ...process.env, npm_config_cache: npmCache },
+      // npm must not inherit pnpm's `npm_config_*` settings; it warns about
+      // every one it does not recognise, and this assertion is that a clean
+      // pack prints nothing.
+      env: { ...npmChildEnvironment(), npm_config_cache: npmCache },
     });
     assert.equal(stderr, "", directory);
     const [result] = JSON.parse(stdout);
@@ -181,8 +184,8 @@ test("every hosted VSIX validates its rebuilt bundle against the legal inventory
     readFile(join(root, ".github", "workflows", "release-candidate.yml"), "utf8"),
     readFile(join(root, "scripts", "package-vscode.mjs"), "utf8"),
   ]);
-  const build = workflow.indexOf("npm run build:editor");
-  const legalCheck = workflow.indexOf("npm run licenses:vscode:check", build);
+  const build = workflow.indexOf("pnpm run build:editor");
+  const legalCheck = workflow.indexOf("pnpm run licenses:vscode:check", build);
   const packageVsix = workflow.indexOf("node scripts/package-vscode.mjs", build);
   assert.ok(build >= 0, "release candidates must rebuild the editor bundle");
   assert.ok(legalCheck > build, "the rebuilt bundle must be checked against its legal inventory");

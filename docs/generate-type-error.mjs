@@ -11,7 +11,7 @@
 //
 // Prereqs:
 //   cargo build --release --locked -p oxc_tsrx_cli --bins
-//   npm install   (provides node_modules/.bin/tsgolint)
+//   pnpm install   (provides node_modules/@oxlint-tsgolint/<platform>/tsgolint)
 // Run: node docs/generate-type-error.mjs
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs'
@@ -25,17 +25,18 @@ import {
   TYPE_PREFIX_BYTES,
   normalizeDiagnostics,
 } from './demo-type-lane.mjs'
+import { resolveTsgolintExecutable } from '../scripts/tsgolint-path.mjs'
 
 const docsDir = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.join(docsDir, '..')
 const lintBin = process.env.OXC_TSRX_LINT_BIN ?? path.join(repoRoot, 'target', 'release', 'oxc-tsrx')
-const tsgolintBin = path.join(repoRoot, 'node_modules', '.bin', 'tsgolint')
+const tsgolintBin = resolveTsgolintExecutable(repoRoot)
 
 if (!existsSync(lintBin)) {
   throw new Error(`oxc-tsrx is not built at ${lintBin}: cargo build --release -p oxc_tsrx_cli --bins`)
 }
-if (!existsSync(tsgolintBin)) {
-  throw new Error(`tsgolint is not resolvable at ${tsgolintBin}: run npm install`)
+if (!tsgolintBin) {
+  throw new Error('tsgolint is not resolvable under node_modules/@oxlint-tsgolint: run pnpm install')
 }
 
 // The type lane infers a TypeScript program from the file's directory, so the

@@ -1,11 +1,29 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { cp, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, resolve, sep } from "node:path";
+import { pathToFileURL } from "node:url";
 import test from "node:test";
 
 const root = resolve(import.meta.dirname, "../..");
+
+/**
+ * The installed directory of one package, found by resolving a subpath the
+ * package really exports and walking back to its root. pnpm gives every
+ * workspace package its own `node_modules`, so `vscode-languageclient` is
+ * visible to `packages/vscode` and to nothing else, and there is no hoisted
+ * repository-root copy to point at. `vscode-languageclient` does not export
+ * `./package.json`, which is why the probe is a subpath rather than a manifest.
+ */
+function installedPackage(name, { probe = name, from = import.meta.url } = {}) {
+  const entry = createRequire(from).resolve(probe);
+  const marker = `${sep}${name.split("/").join(sep)}${sep}`;
+  const index = entry.lastIndexOf(marker);
+  assert.notEqual(index, -1, `${probe} did not resolve inside a ${name} directory`);
+  return entry.slice(0, index + marker.length - 1);
+}
 
 async function linkPackage(fixtureRoot, packageName, source) {
   const destination = join(fixtureRoot, "node_modules", ...packageName.split("/"));
@@ -46,21 +64,32 @@ async function createFixture({ linkProvider = true } = {}) {
   // the same way they do in the repository build.
   const fixtureRoot = await realpath(await mkdtemp(join(tmpdir(), "oxc-tsrx-vscode-build-")));
   await mkdir(join(fixtureRoot, "packages"), { recursive: true });
+  // The copied sources must arrive without their installed `node_modules`.
+  // pnpm links each workspace package's dependencies into that directory, so
+  // copying it would smuggle a working `oxc-tsrx` link into the fixture that
+  // is supposed to have none, and would carry symlinks pointing at a virtual
+  // store the fixture does not have.
+  const withoutInstalledModules = (source) => !/[\\/]node_modules([\\/]|$)/u.test(source);
   await Promise.all([
     cp(join(root, "packages/vscode"), join(fixtureRoot, "packages/vscode"), {
       recursive: true,
+      filter: withoutInstalledModules,
     }),
     cp(join(root, "packages/toolchain"), join(fixtureRoot, "packages/toolchain"), {
       recursive: true,
+      filter: withoutInstalledModules,
     }),
   ]);
   await Promise.all([
-    linkPackage(fixtureRoot, "rolldown", join(root, "node_modules/rolldown")),
-    linkPackage(fixtureRoot, "tinyglobby", join(root, "node_modules/tinyglobby")),
+    linkPackage(fixtureRoot, "rolldown", installedPackage("rolldown")),
+    linkPackage(fixtureRoot, "tinyglobby", installedPackage("tinyglobby")),
     linkPackage(
       fixtureRoot,
       "vscode-languageclient",
-      join(root, "node_modules/vscode-languageclient"),
+      installedPackage("vscode-languageclient", {
+        probe: "vscode-languageclient/node",
+        from: pathToFileURL(join(root, "packages/vscode/package.json")).href,
+      }),
     ),
     // The fixture must resolve the provider resolver exactly the way the repo
     // does, from a package inside the fixture, or the build it verifies is not
@@ -130,8 +159,8 @@ test("the committed editor bundle carries the provider resolver it discovers wit
 
 // The shape assertions above are satisfied by a bundle built from *any* version
 // of the resolver, so on their own they let a VSIX ship a resolver that no
-// longer matches its source. `npm run build:editor:check` catches that, but it
-// is not part of `npm run test:packaging`, so nothing in the packaging suite
+// longer matches its source. `pnpm run build:editor:check` catches that, but it
+// is not part of `pnpm run test:packaging`, so nothing in the packaging suite
 // noticed. This test makes it fail here too.
 test("the committed editor bundle inlines the current resolver, byte for byte", async (context) => {
   const fixtureRoot = await createFixture();
@@ -148,7 +177,7 @@ test("the committed editor bundle inlines the current resolver, byte for byte", 
   assert.equal(
     committed,
     fresh,
-    `packages/vscode/dist/extension.bundle.cjs no longer matches ${RESOLVER_SOURCE}; run npm run build:editor`,
+    `packages/vscode/dist/extension.bundle.cjs no longer matches ${RESOLVER_SOURCE}; run pnpm run build:editor`,
   );
 
   // Contrast case, so the equality above cannot pass vacuously. Edit the

@@ -12,7 +12,7 @@ if (unsupported.length > 0) {
 }
 
 // Rolldown's retained module-region paths are relative to process.cwd(). Keep
-// them stable whether this script is invoked directly or through npm workspaces;
+// them stable whether this script is invoked directly or through a pnpm filter;
 // the generated third-party license inventory keys those regions to the lockfile.
 process.chdir(resolve(root, "../.."));
 
@@ -41,7 +41,7 @@ if (check) {
     ]);
     if (!actual || !expected.equals(actual)) {
       throw new Error(
-        "packages/vscode/dist/extension.bundle.cjs is stale; run npm run build:editor",
+        "packages/vscode/dist/extension.bundle.cjs is stale; run pnpm run build:editor",
       );
     }
     process.stdout.write("verified fresh VS Code extension bundle\n");

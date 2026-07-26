@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
+import { createRequire } from 'node:module';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
@@ -11,7 +12,13 @@ const root = resolve(here, '..');
 // One multi-call native binary carries the linter, the formatter, and the
 // language server. `fmt` selects the formatter.
 const binary = process.env.OXFMT_BIN ?? join(root, 'target/release/oxc-tsrx');
-const stockBinary = join(root, 'node_modules/oxfmt-current/bin/oxfmt');
+// `oxfmt-current` is declared by tests/package.json, so it is resolved from
+// this file rather than from a hoisted repository-root `node_modules`. pnpm
+// installs it under tests/node_modules and nowhere else.
+const stockBinary = join(
+  dirname(createRequire(import.meta.url).resolve('oxfmt-current/package.json')),
+  'bin/oxfmt',
+);
 const fixtures = join(root, 'tests/fixtures/format');
 
 function run(executable, args, input = null) {

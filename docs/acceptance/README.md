@@ -12,7 +12,8 @@ MARKLESS_ROOT=/Users/jacksm5pro/dev/open-source/markless \
 
 The runner copies the current source into a disposable directory while
 excluding `node_modules`, `target`, and generated site output. It verifies the
-copy hash, runs a fresh lifecycle-script-free `npm ci`, builds and tests Rust
+copy hash, runs a fresh lifecycle-script-free `pnpm install --frozen-lockfile`,
+builds and tests Rust
 from fresh target directories, produces release binaries, installs untouched
 npm tarballs in empty consumers, exercises Vite/Vite+, and installs a real
 target VSIX into an isolated VS Code profile. Markless's committed corpus and a

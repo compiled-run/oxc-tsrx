@@ -225,7 +225,15 @@ test("an isolated consumer resolves every public export and bin from the package
 
   try {
     await mkdir(join(consumer, "node_modules"), { recursive: true });
-    await cp(packageRoot, installed, { recursive: true });
+    // The installed copy must arrive without `packages/toolchain/node_modules`.
+    // This lane stubs the two pinned third-party packages itself a few lines
+    // below, and `cp` turns pnpm's relative store symlinks into absolute ones,
+    // so copying that directory would make those stub writes land in the real
+    // pnpm store instead of in this fixture.
+    await cp(packageRoot, installed, {
+      recursive: true,
+      filter: (path) => !/[\\/]node_modules([\\/]|$)/u.test(path),
+    });
     // `files` excludes the parser addon built into the source tree for local
     // development, so an installed copy must not carry it either.
     for (const artifact of ["parser.node", "parser.node.json"]) {

@@ -196,17 +196,17 @@ installed-VSIX gate, and the benchmark.
 
 There is no separate language-server executable to build. `crates/oxc_tsrx_cli`
 produces one binary, `oxc-tsrx`, and the `lsp` subcommand serves an editor.
-`npm run build:native` runs that cargo build and then writes the `oxc-tsrx-fmt`
+`pnpm run build:native` runs that cargo build and then writes the `oxc-tsrx-fmt`
 alias that the format benchmark resolves by file name.
 
 ```sh
-npm run build:native
-npm run test:editor
-npm run test:editor:official-toolchain
-npm run build:editor
-npm run test:editor:vscode
-npm run test:packaging:vscode
-npm run benchmark:editor
+pnpm run build:native
+pnpm run test:editor
+pnpm run test:editor:official-toolchain
+pnpm run build:editor
+pnpm run test:editor:vscode
+pnpm run test:packaging:vscode
+pnpm run benchmark:editor
 ```
 
 Retained evidence lives in `tests/editor/markless-vscode-walkthrough.json`

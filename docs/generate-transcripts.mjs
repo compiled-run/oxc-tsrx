@@ -6,7 +6,7 @@
 // Prereqs:
 //   cargo build --release --locked -p oxc_tsrx_cli --bins
 //   node scripts/build-parser-native.mjs (parser addon for the parsing demo)
-//   npm ci (for the npm wrappers and the pinned oxlint-tsgolint executable)
+//   pnpm install (for the npm wrappers and the pinned oxlint-tsgolint executable)
 //   jq on PATH (the JSON walkthroughs pipe through it for readable output)
 import { spawnSync } from 'node:child_process'
 import {
@@ -21,6 +21,7 @@ import {
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { resolveTsgolintExecutable } from '../scripts/tsgolint-path.mjs'
 
 const docsDir = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.join(docsDir, '..')
@@ -28,13 +29,13 @@ const lintBin = path.join(repoRoot, 'target', 'release', 'oxc-tsrx')
 const formatBin = path.join(repoRoot, 'target', 'release', 'oxc-tsrx')
 const npmLintBin = path.join(repoRoot, 'packages', 'toolchain', 'bin', 'oxlint')
 const npmFormatBin = path.join(repoRoot, 'packages', 'toolchain', 'bin', 'oxfmt')
-const tsgolintBin = path.join(repoRoot, 'node_modules', '.bin', 'tsgolint')
+const tsgolintBin = resolveTsgolintExecutable(repoRoot)
 
 const baseEnv = {
   ...process.env,
   OXC_TSRX_LINT_BIN: lintBin,
   OXC_TSRX_FORMAT_BIN: formatBin,
-  OXLINT_TSGOLINT_PATH: tsgolintBin,
+  ...(tsgolintBin ? { OXLINT_TSGOLINT_PATH: tsgolintBin } : {}),
 }
 
 // ---------- sample project files ----------

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, readFile, realpath, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,7 +12,13 @@ import { resolveOxlintBytePositions } from "../../packages/toolchain/dist/lint-c
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, "../..");
 const binary = resolve(process.env.OXLINT_BIN ?? join(root, "target/release/oxc-tsrx"));
-const stock = resolve(join(root, "node_modules/oxlint-current/bin/oxlint"));
+// pnpm installs `oxlint-current` under the package that declares it, so it is
+// resolved from this file's own package instead of from a hoisted
+// repository-root `node_modules`.
+const stock = join(
+  dirname(createRequire(import.meta.url).resolve("oxlint-current/package.json")),
+  "bin/oxlint",
+);
 const companion = resolve(join(root, "packages/toolchain/bin/oxlint"));
 
 function run(cwd, args, executable = binary, environment = process.env) {

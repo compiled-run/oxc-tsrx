@@ -1,0 +1,59 @@
+# pnpm ignores the `workspaces` field in package.json, so the workspace globs
+# live here. They are the same two globs npm used, and the now-inert field was
+# removed from package.json rather than left to rot: nothing in this repository
+# read it, and pnpm warns about it on every command.
+packages:
+  - packages/*
+  - tests
+
+# npm workspaces always symlink a local package over a registry one. pnpm 10
+# flipped that default to false, which would make `oxc-tsrx: 0.1.0` in
+# packages/vscode and packages/tsrx-core-compat resolve from the registry
+# instead of from packages/toolchain. Keeping it true preserves npm's behaviour
+# without putting `workspace:` specifiers in manifests that `npm pack` and
+# `npm publish` still read verbatim.
+linkWorkspacePackages: true
+
+# `packages/toolchain` declares the eight platform-native packages as optional
+# dependencies, and none of them exists on the registry: this repository builds
+# them and the release workflow publishes them. npm recorded each one in
+# package-lock.json as an unresolved `{"optional": true}` placeholder, which is
+# why `npm ci` tolerated them. pnpm has no such placeholder, so a lockfile that
+# omits them is permanently "out of date" with the manifest and
+# `--frozen-lockfile` fails. Ignoring them here says the same thing npm's
+# placeholder said, and it says it in a root development file rather than in the
+# published manifest, which keeps `packages/toolchain/package.json` exactly as a
+# consumer receives it.
+ignoredOptionalDependencies:
+  - '@oxc-tsrx/native-*'
+
+# The one hoist this repository needs, and only this one.
+#
+# `find_tsgolint_executable` in crates/oxc_adapter/src/toolchain.rs discovers the
+# type-aware linter by walking up from the file being linted and looking for
+# `node_modules/@oxlint-tsgolint/<platform>/tsgolint`. That is a directory
+# convention, not a module resolution, so pnpm's isolated layout hides it: the
+# platform binary is an optional dependency of `oxlint-tsgolint`, so it only
+# exists inside the virtual store. The `.bin/tsgolint` fallback is found instead,
+# and it is a pnpm command shim rather than a symlink into the package, so
+# `verify_tsgolint_version` cannot read the version from an ancestor manifest and
+# refuses to run.
+#
+# Hoisting exactly the platform binaries restores the directory the adapter looks
+# for at the workspace root, without hoisting anything else. This is not
+# `node-linker=hoisted` and no other package's resolution changes. The walk stops
+# at the first `node_modules` it meets, so tests/package.json additionally
+# declares the same six platform packages as optional dependencies: the fixtures
+# under tests/ would otherwise find `tests/node_modules/.bin/tsgolint` first.
+publicHoistPattern:
+  - '@oxlint-tsgolint/*'
+
+# CI has always installed with `--ignore-scripts`, so nothing here has ever
+# depended on these two postinstalls. `@vscode/vsce-sign` downloads a signing
+# binary used only by `vsce publish`, and `keytar` builds a native credential
+# store used only for `vsce login`. VSIX files are packaged by
+# scripts/package-vscode.mjs and nothing is signed or published from a developer
+# machine. Listing them keeps installs quiet and makes the decision reviewable.
+ignoredBuiltDependencies:
+  - '@vscode/vsce-sign'
+  - keytar

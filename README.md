@@ -152,7 +152,7 @@ Vite+ path, and it is the only place an install alone is not enough.
 
 ## Current proof
 
-Run `npm run build:native` before the lanes that need a release binary. It runs
+Run `pnpm run build:native` before the lanes that need a release binary. It runs
 the same `cargo build --release --locked -p oxc_tsrx_cli --bins` and then writes
 `target/release/oxc-tsrx-fmt` as a verified copy of it. The crate builds one
 executable named `oxc-tsrx`, which picks its tool from `argv[0]` or a leading
@@ -163,17 +163,17 @@ the formatter. A bare `cargo build` does not create it.
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo test --workspace --all-targets --locked
-npm run build:native
-npm test
-npm run build:editor
-npm run test:editor
-npm run test:editor:official-toolchain
-npm run test:editor:vscode
-npm run test:packaging:unit
-npm run test:packaging:clean
-npm run test:packaging:matrix
-npm run test:packaging:vscode
-npm run licenses:check
+pnpm run build:native
+pnpm test
+pnpm run build:editor
+pnpm run test:editor
+pnpm run test:editor:official-toolchain
+pnpm run test:editor:vscode
+pnpm run test:packaging:unit
+pnpm run test:packaging:clean
+pnpm run test:packaging:matrix
+pnpm run test:packaging:vscode
+pnpm run licenses:check
 
 MARKLESS_ROOT=/Users/jacksm5pro/dev/open-source/markless \
   OXFMT_BIN=target/release/oxc-tsrx-fmt \
@@ -432,7 +432,7 @@ mode stages every successful output before replacing any original.
   `benchmarks/{vite,editor}`: frozen native and ecosystem-boundary budgets and
   reports;
 - `docs/`: markdown documentation and the vanilla-JS static docs site
-  (`npm run docs:build`, `docs:serve`, `docs:verify`).
+  (`pnpm run docs:build`, `docs:serve`, `docs:verify`).
 
 Rejected JavaScript/Prettier and Zig/Yuku prototypes are absent from the
 product tree; no Zig or JavaScript language core is built or shipped.

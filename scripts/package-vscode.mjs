@@ -113,7 +113,15 @@ const outDirectory = resolve(root, options["out-dir"]);
 await mkdir(outDirectory, { recursive: true });
 const stage = await mkdtemp(join(tmpdir(), "oxc-tsrx-vscode-package-"));
 try {
-  await cp(source, stage, { recursive: true });
+  // `files` already keeps `node_modules` out of the VSIX, but the staged tree
+  // must not contain it either. pnpm fills `packages/vscode/node_modules` with
+  // symlinks into the virtual store, and `cp` rewrites a relative symlink to an
+  // absolute one, so staging that directory would point the packaged extension
+  // at this machine's install and let a later write reach the pnpm store.
+  await cp(source, stage, {
+    recursive: true,
+    filter: (path) => !/[\\/]node_modules([\\/]|$)/u.test(path),
+  });
   const nativeDirectory = join(stage, "dist/native");
   await mkdir(nativeDirectory, { recursive: true });
   const lspDestination = join(nativeDirectory, executable);

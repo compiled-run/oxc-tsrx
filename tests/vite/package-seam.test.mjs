@@ -219,9 +219,13 @@ test("mixed package lint delegates ordinary TSX and parses each TSRX file once",
       starts.some(
         (event) =>
           event.executable === process.execPath &&
-          event.args[0]
-            ?.replaceAll("\\", "/")
-            .endsWith("node_modules/oxlint-current/bin/oxlint"),
+          // npm installed the alias under its alias name; pnpm resolves the
+          // same package through its virtual store, where the directory carries
+          // the real published name. Either directory is the public
+          // manifest-declared launcher.
+          /node_modules\/(?:oxlint|oxlint-current)\/bin\/oxlint$/u.test(
+            event.args[0]?.replaceAll("\\", "/") ?? "",
+          ),
       ),
       "mixed ordinary files must use the public manifest-declared Oxlint launcher via Node",
     );

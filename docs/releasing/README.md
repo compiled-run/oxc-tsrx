@@ -45,15 +45,15 @@ revision.
 Run the source gates from a fresh checkout with no native-binary override:
 
 ```bash
-npm ci --ignore-scripts
-npm run licenses:check
+pnpm install --frozen-lockfile --ignore-scripts
+pnpm run licenses:check
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo test --workspace --all-targets --locked
 cargo build --release --locked -p oxc_tsrx_cli --bins
-npm test
-npm run test:editor:official-toolchain
-npm run test:packaging:unit
+pnpm test
+pnpm run test:editor:official-toolchain
+pnpm run test:packaging:unit
 node --test tests/packaging/clean-install.test.mjs
 node --test tests/packaging/vite-plus-matrix.test.mjs
 ```

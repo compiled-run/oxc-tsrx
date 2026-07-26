@@ -3,11 +3,11 @@
 Run the release-only gate after building the formatter binary:
 
 ```sh
-npm run build:native
-npm run benchmark:native-format
+pnpm run build:native
+pnpm run benchmark:native-format
 ```
 
-Use `npm run build:native`, not bare `cargo build`. The three old release
+Use `pnpm run build:native`, not bare `cargo build`. The three old release
 binaries are now one multi-call executable that selects its tool from `argv[0]`
 or from a leading subcommand, and `budgets.json` names the candidate by file
 path only, so it cannot pass a subcommand. `budgets.json` is frozen evidence:

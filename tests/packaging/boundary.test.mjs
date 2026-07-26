@@ -765,8 +765,8 @@ test("the maintainer guide defines a source-backed upstream transplant contract"
     /no (?:new )?(?:source )?cop(?:y|ies),\s+parses,\s+allocations, or dynamic dispatch/i,
   );
   assert.match(guide, /cargo test --locked -p tsrx_syntax --all-targets/);
-  assert.match(guide, /npm run benchmark:native-lint/);
-  assert.match(guide, /npm run benchmark:native-format/);
+  assert.match(guide, /pnpm run benchmark:native-lint/);
+  assert.match(guide, /pnpm run benchmark:native-format/);
   assert.match(guide, /avoid editing generated directories directly/i);
   assert.match(guide, /`just allocs`/);
   assert.match(guide, /`just ready`/);

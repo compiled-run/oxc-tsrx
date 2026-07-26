@@ -4,7 +4,7 @@ Run the release-only comparison after building the native lint binary:
 
 ```sh
 cargo build --release --locked -p oxc_tsrx_cli --bin oxc-tsrx
-npm run benchmark:comparative
+pnpm run benchmark:comparative
 ```
 
 The cross-tool lanes give ESLint plus typescript-eslint, official Oxlint, and

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, readFile, realpath, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,7 +12,13 @@ const root = resolve(here, "../..");
 // One multi-call native binary carries the linter, the formatter, and the
 // language server; `fmt` selects the formatter.
 const binary = resolve(process.env.OXFMT_BIN ?? join(root, "target/release/oxc-tsrx"));
-const stock = resolve(join(root, "node_modules/oxfmt-current/bin/oxfmt"));
+// pnpm installs `oxfmt-current` under the package that declares it, so it is
+// resolved from this file's own package instead of from a hoisted
+// repository-root `node_modules`.
+const stock = join(
+  dirname(createRequire(import.meta.url).resolve("oxfmt-current/package.json")),
+  "bin/oxfmt",
+);
 
 function run(executable, cwd, args, input = null) {
   return new Promise((resolvePromise, reject) => {

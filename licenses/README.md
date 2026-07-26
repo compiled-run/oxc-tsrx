@@ -13,5 +13,5 @@ the project `LICENSE` and `THIRD_PARTY_NOTICES.md`.
   dual/multi-license expression (including Apache-2.0 for `self_cell`, not
   GPL-2.0-only). A new expression stops the deterministic compliance gate.
 
-Regenerate the locked Rust reports with `npm run licenses:rust:generate` and
-verify them without mutation with `npm run licenses:rust:check`.
+Regenerate the locked Rust reports with `pnpm run licenses:rust:generate` and
+verify them without mutation with `pnpm run licenses:rust:check`.

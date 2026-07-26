@@ -13,6 +13,7 @@ import http from 'node:http'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import config from './site.config.mjs'
+import { resolveTsgolintExecutable } from '../scripts/tsgolint-path.mjs'
 import {
   DEMO_TSCONFIG,
   JSX_CONTRACT,
@@ -46,8 +47,7 @@ const wasmAvailable = () => existsSync(path.join(distDir, 'assets', 'demo-wasm',
 // Type-aware lint needs the tsgolint executable resolvable from the workspace,
 // and the linted file must live inside an inferable TypeScript program, which
 // is why demo temp files go under the repo root instead of the OS tmpdir.
-const typeAwareAvailable = () =>
-  existsSync(path.join(repoRoot, 'node_modules', '.bin', 'tsgolint'))
+const typeAwareAvailable = () => resolveTsgolintExecutable(repoRoot) !== null
 const demoTmpDir = path.join(repoRoot, '.docs-demo-tmp')
 
 const MAX_DEMO_BYTES = 64 * 1024

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { copyFile, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
+import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
@@ -9,7 +10,13 @@ import test from 'node:test';
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '..');
 const binary = process.env.OXLINT_BIN ?? join(root, 'target/release/oxc-tsrx');
-const stockBinary = join(root, 'node_modules/oxlint-current/bin/oxlint');
+// `oxlint-current` is declared by tests/package.json, so it is resolved from
+// this file rather than from a hoisted repository-root `node_modules`. pnpm
+// installs it under tests/node_modules and nowhere else.
+const stockBinary = join(
+  dirname(createRequire(import.meta.url).resolve('oxlint-current/package.json')),
+  'bin/oxlint',
+);
 const tsrxFixture = join(root, 'tests/fixtures/lint/native-lint.tsrx');
 const tsxFixture = join(root, 'tests/fixtures/lint/ordinary.tsx');
 

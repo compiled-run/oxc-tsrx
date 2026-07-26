@@ -14,11 +14,21 @@ import { execFileSync, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { cpus, release as osRelease } from 'node:os'
+import { createRequire } from 'node:module'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.join(here, '..', '..')
+// pnpm installs each workspace package's dependencies under that package, so
+// the lanes are resolved from the manifest that declares them instead of from a
+// hoisted repository-root `node_modules`.
+const fromTests = createRequire(pathToFileURL(path.join(repoRoot, 'tests', 'package.json')).href)
+const fromToolchain = createRequire(
+  pathToFileURL(path.join(repoRoot, 'packages', 'toolchain', 'package.json')).href,
+)
+const packageDirectory = (require_, name) =>
+  path.dirname(require_.resolve(`${name}/package.json`))
 const budgetsPath = path.join(here, 'budgets.json')
 const budgets = JSON.parse(readFileSync(budgetsPath, 'utf8'))
 const FILES = budgets.files
@@ -304,14 +314,14 @@ export default [{
 `
   writeFileSync(path.join(tsxDir, 'eslint.config.mjs'), eslintConfig)
 
-  const eslintBin = path.join(repoRoot, 'node_modules', '.bin', 'eslint')
-  const oxlintBin = path.join(repoRoot, 'node_modules', 'oxlint-current', 'bin', 'oxlint')
+  const eslintBin = path.join(packageDirectory(fromTests, 'eslint'), 'bin', 'eslint.js')
+  const oxlintBin = path.join(packageDirectory(fromToolchain, 'oxlint-current'), 'bin', 'oxlint')
   const nativeLintBin = path.join(repoRoot, 'target', 'release', 'oxc-tsrx')
   // The product lane crosses the same boundary users do: the oxc-tsrx npm
   // launcher, pinned to the release binary under test. The all-TSX route
   // imports oxlint-current's declared CLI directly; only the mixed route also
   // launches the native TSRX binary.
-  const oxcTsrxBin = path.join(repoRoot, 'node_modules', 'oxc-tsrx', 'bin', 'oxlint')
+  const oxcTsrxBin = path.join(repoRoot, 'packages', 'toolchain', 'bin', 'oxlint')
   const oxcTsrxEnv = { OXC_TSRX_LINT_BIN: nativeLintBin }
   const validation = validateLanes({
     eslintBin,
@@ -435,7 +445,7 @@ export default [{
     versions: {
       eslint: version(eslintBin),
       typescriptEslint: JSON.parse(
-        readFileSync(path.join(repoRoot, 'node_modules', 'typescript-eslint', 'package.json'), 'utf8'),
+        readFileSync(path.join(packageDirectory(fromTests, 'typescript-eslint'), 'package.json'), 'utf8'),
       ).version,
       oxlint: version(oxlintBin),
       oxcTsrx: version(nativeLintBin, '--version'),

@@ -450,21 +450,21 @@ cargo test --locked -p tsrx_syntax --test architecture
 cargo test --locked -p tsrx_syntax --all-targets
 cargo test --locked --workspace --all-targets
 cargo clippy --locked --workspace --all-targets -- -D warnings
-npm test
-npm run test:packaging:unit
-npm run benchmark:native-lint
-npm run benchmark:native-format
-npm run benchmark:type-aware
-npm run benchmark:editor
+pnpm test
+pnpm run test:packaging:unit
+pnpm run benchmark:native-lint
+pnpm run benchmark:native-format
+pnpm run benchmark:type-aware
+pnpm run benchmark:editor
 node benchmarks/vite/run.mjs
-npm run benchmark:comparative
+pnpm run benchmark:comparative
 ```
 
 The optional product-corpus oracle requires a compatible external Markless
 checkout and treats it as read-only:
 
 ```sh
-MARKLESS_ROOT=/path/to/markless npm run test:markless-control
+MARKLESS_ROOT=/path/to/markless pnpm run test:markless-control
 ```
 
 The architecture contract checks the exact private module tree, public root

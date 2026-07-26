@@ -81,11 +81,14 @@ jobs:
       - name: Check out the exact source revision
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
+      - name: Install the pinned pnpm
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+
       - name: Install Node.js 24.15.0
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24.15.0
-          cache: npm
+          cache: pnpm
 
       - name: Prove the runner matches the package ABI
         shell: bash
@@ -112,13 +115,13 @@ jobs:
           rustc -Vv
 
       - name: Install the locked JavaScript graph without lifecycle scripts
-        run: npm ci --ignore-scripts
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Build the editor bundle and native executables
         shell: bash
         run: |
-          npm run build:editor
-          npm run licenses:vscode:check
+          pnpm run build:editor
+          pnpm run licenses:vscode:check
           cargo build --release --locked --target "$TARGET" -p oxc_tsrx_cli --bins
 
       - name: Smoke the companion CLIs on this host
@@ -198,11 +201,14 @@ jobs:
       - name: Check out the exact source revision
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
+      - name: Install the pinned pnpm
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+
       - name: Install Node.js 24.15.0
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24.15.0
-          cache: npm
+          cache: pnpm
 
       - name: Install Rust 1.97.0 for SBOM tooling
         shell: bash
@@ -211,7 +217,7 @@ jobs:
           rustup default 1.97.0
 
       - name: Install locked JavaScript dependencies
-        run: npm ci --ignore-scripts
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Download all target artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -320,7 +326,7 @@ jobs:
       - name: Stage legal texts and locked dependency inventory
         shell: bash
         run: |
-          npm run licenses:check
+          pnpm run licenses:check
           mkdir -p release/legal
           cp LICENSE THIRD_PARTY_NOTICES.md release/legal/
           cp -R licenses release/legal/licenses

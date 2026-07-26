@@ -84,9 +84,9 @@ cargo run --release --locked -p oxc_tsrx_benchmark -- \
 cargo run --release --locked -p oxc_tsrx_format_benchmark -- \
   --assert benchmarks/native-format/budgets.json
 node benchmarks/vite/run.mjs
-npm run benchmark:type-aware
-npm run benchmark:editor
-npm run benchmark:comparative
+pnpm run benchmark:type-aware
+pnpm run benchmark:editor
+pnpm run benchmark:comparative
 ```
 
 <!-- benchmarks:auto -->

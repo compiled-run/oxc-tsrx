@@ -13,11 +13,16 @@ import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { installPhysicalToolPackages } from "../vite/physical-consumer.mjs";
+import { resolveTsgolintExecutable } from "../../scripts/tsgolint-path.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, "../..");
 const binary = resolve(process.env.OXLINT_BIN ?? join(root, "target/release/oxc-tsrx"));
-const tsgolint = join(root, "node_modules/.bin/tsgolint");
+// `node_modules/.bin/tsgolint` is a pnpm command shim, and the adapter verifies
+// the tsgolint version by reading the manifest above the executable, which a
+// shim has no path to. The platform package is the real binary.
+const tsgolint = resolveTsgolintExecutable(root);
+if (!tsgolint) throw new Error("tsgolint is not installed for this host: run pnpm install");
 const singleRoot = join(root, "tests/fixtures/type-aware/single");
 const singleSource = join(singleRoot, "View.tsrx");
 const projectRoot = join(root, "tests/fixtures/type-aware/project");
@@ -265,6 +270,13 @@ test("the oxc-tsrx lint bridge enables type awareness from resolved Vite+ config
   const source = join(cwd, "View.tsrx");
   const modules = join(cwd, "node_modules");
   await mkdir(modules, { recursive: true });
+  // installPhysicalToolPackages records `oxc-tsrx` in the consumer's manifest,
+  // so the consumer needs one. Every other caller copies a fixture that already
+  // has it; this one builds its project by hand.
+  await writeFile(
+    join(cwd, "package.json"),
+    `${JSON.stringify({ name: "oxc-tsrx-type-aware-consumer", private: true, type: "module" }, null, 2)}\n`,
+  );
   await installPhysicalToolPackages(modules, "vite-plus-current");
   await copyFile(singleSource, source);
   await copyFile(join(singleRoot, "tsconfig.json"), join(cwd, "tsconfig.json"));
