@@ -14,7 +14,7 @@
 // time, so publishing the parent first opens a window where an install
 // succeeds, silently installs no binary, and fails at first use.
 
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -36,6 +36,20 @@ function run(executable, args, options = {}) {
         else resolveRun({ stdout, stderr });
       },
     );
+  });
+}
+
+// Publishing needs the real terminal. With 2FA enabled npm answers EOTP and
+// prints a browser URL to authenticate against, and it can only do that if it
+// owns stdio. Capturing the output instead turns the prompt into a failure.
+function runInteractive(executable, args) {
+  return new Promise((resolveRun, rejectRun) => {
+    const child = spawn(executable, args, { cwd: root, env: process.env, stdio: "inherit" });
+    child.on("error", rejectRun);
+    child.on("close", (status) => {
+      if (status === 0) resolveRun();
+      else rejectRun(new Error(`${executable} exited with ${status}`));
+    });
   });
 }
 
@@ -159,12 +173,12 @@ try {
     // A laptop cannot produce provenance; CI does that once trusted publishing
     // is configured. Without this the publish fails outright.
     args.push("--no-provenance");
+    console.log(`\n>>> ${name}`);
     try {
-      await run("npm", args);
+      await runInteractive("npm", args);
       console.log(`  published  ${name}`);
     } catch (error) {
-      console.error(`  FAILED     ${name}`);
-      console.error(String(error.message).split("\n").slice(0, 6).join("\n"));
+      console.error(`  FAILED     ${name}: ${error.message}`);
       if (!options.dryRun) {
         console.error(
           "\nStopping. Packages already published stay published; re-run to continue,\n" +
