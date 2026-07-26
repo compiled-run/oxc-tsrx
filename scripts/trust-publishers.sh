@@ -29,6 +29,21 @@ if ! npm whoami >/dev/null 2>&1; then
   exit 1
 fi
 
+# `npm trust` exists before 11.15.0 but sends a payload the registry rejects
+# with a bare 400 ("value must be an array"), once per package and with no
+# indication that the CLI is the problem. Fail up front instead.
+NPM_VERSION=$(npm --version)
+if ! node -e '
+  const [have, want] = [process.argv[1], "11.15.0"].map((v) => v.split(".").map(Number));
+  const ok = have[0] > want[0]
+    || (have[0] === want[0] && (have[1] > want[1] || (have[1] === want[1] && have[2] >= want[2])));
+  process.exit(ok ? 0 : 1);
+' "$NPM_VERSION"; then
+  echo "npm $NPM_VERSION is too old for 'npm trust' (needs >= 11.15.0)." >&2
+  echo "Run: npm install -g npm@latest" >&2
+  exit 1
+fi
+
 ok=0
 skipped=0
 failed=0
