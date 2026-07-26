@@ -69,6 +69,7 @@ for name in $NAMES; do
   if npm trust github "$name" \
     --repo "$REPO" \
     --file "$WORKFLOW" \
+    --allow-publish \
     --yes
   then
     echo "  trusted   $name"
