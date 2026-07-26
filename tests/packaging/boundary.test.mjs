@@ -42,6 +42,26 @@ const expectedAdapterDependencies = [
   "oxc_syntax",
 ];
 
+/**
+ * A temporary fixture directory named the way the filesystem itself names it.
+ *
+ * On Windows CI `os.tmpdir()` reports the 8.3 short form of the user's profile
+ * (`C:\Users\RUNNER~1\AppData\Local\Temp`), and the two realpath implementations
+ * in Node disagree about it. `fs.realpathSync`, which the invocation resolvers
+ * use, walks the path in JavaScript and keeps whatever spelling it was handed,
+ * so it returns the short form. `fs.promises.realpath` is the libuv call, which
+ * asks Windows for the final name and returns `C:\Users\runneradmin\...`. Both
+ * name the same file, but comparing them as strings fails.
+ *
+ * Anchoring every fixture on its real path resolves the alias once, at the only
+ * point where it is introduced, so the assertions below stay exact equality on
+ * paths rather than being loosened into path matching. On POSIX this is the
+ * `/var` -> `/private/var` resolution these tests already depended on.
+ */
+async function temporaryDirectory(prefix) {
+  return realpath(await mkdtemp(join(tmpdir(), prefix)));
+}
+
 async function writeNpmFixture(
   packageRoot,
   { declared = "./cli/from-public-manifest.mjs", contents = "#!/usr/bin/env node\n" } = {},
@@ -337,7 +357,7 @@ test("the workspace has no Cargo patch, vendor tree, checkout, or copied OXC cra
 });
 
 test("VSCE runs its manifest-declared JavaScript entry through Node on Windows", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "oxc-tsrx-vsce-invocation-"));
+  const directory = await temporaryDirectory("oxc-tsrx-vsce-invocation-");
   const packageRoot = join(directory, "node_modules/@vscode/vsce");
   const consumer = join(directory, "package-vscode.mjs");
   const declaredEntry = join(packageRoot, "commands/vsce.js");
@@ -391,7 +411,7 @@ test("repository VSCE invocation resolves the installed public package manifest"
 });
 
 test("npm rejects every exact dotfile basename before shebang inspection", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "oxc-tsrx-npm-rejected-dotfiles-"));
+  const directory = await temporaryDirectory("oxc-tsrx-npm-rejected-dotfiles-");
   const nodeDirectory = join(directory, "node");
   const nodeExecutable = join(nodeDirectory, "node.exe");
   const packageRoot = join(nodeDirectory, "node_modules/npm");
@@ -430,7 +450,7 @@ test("npm rejects every exact dotfile basename before shebang inspection", async
 });
 
 test("npm categorically rejects manifest-declared shell and native launchers", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "oxc-tsrx-npm-rejected-launchers-"));
+  const directory = await temporaryDirectory("oxc-tsrx-npm-rejected-launchers-");
   const nodeDirectory = join(directory, "node");
   const nodeExecutable = join(nodeDirectory, "node.exe");
   const packageRoot = join(nodeDirectory, "node_modules/npm");
@@ -459,7 +479,7 @@ test("npm categorically rejects manifest-declared shell and native launchers", a
 });
 
 test("npm accepts JavaScript entries and only extensionless entries with a Node shebang", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "oxc-tsrx-npm-javascript-entries-"));
+  const directory = await temporaryDirectory("oxc-tsrx-npm-javascript-entries-");
   const nodeDirectory = join(directory, "node");
   const nodeExecutable = join(nodeDirectory, "node.exe");
   const packageRoot = join(nodeDirectory, "node_modules/npm");
@@ -510,7 +530,7 @@ test("npm accepts JavaScript entries and only extensionless entries with a Node 
 });
 
 test("npm rejects a manifest-declared entry whose symlink escapes the package root", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "oxc-tsrx-npm-symlink-escape-"));
+  const directory = await temporaryDirectory("oxc-tsrx-npm-symlink-escape-");
   const nodeDirectory = join(directory, "node");
   const nodeExecutable = join(nodeDirectory, "node.exe");
   const packageRoot = join(nodeDirectory, "node_modules/npm");
@@ -549,7 +569,7 @@ test("npm rejects a manifest-declared entry whose symlink escapes the package ro
 });
 
 test("npm uses its manifest-declared JavaScript entry in a simulated Windows Node layout", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "oxc-tsrx-npm-windows-invocation-"));
+  const directory = await temporaryDirectory("oxc-tsrx-npm-windows-invocation-");
   const nodeDirectory = join(directory, "node");
   const nodeExecutable = join(nodeDirectory, "node.exe");
   const packageRoot = join(nodeDirectory, "node_modules/npm");
@@ -574,7 +594,7 @@ test("npm uses its manifest-declared JavaScript entry in a simulated Windows Nod
 });
 
 test("npm discovery supports the ordinary Unix Node distribution layout", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "oxc-tsrx-npm-unix-invocation-"));
+  const directory = await temporaryDirectory("oxc-tsrx-npm-unix-invocation-");
   const installation = join(directory, "installation");
   const nodeExecutable = join(installation, "bin/node");
   const packageRoot = join(installation, "lib/node_modules/npm");
@@ -596,7 +616,7 @@ test("npm discovery supports the ordinary Unix Node distribution layout", async 
 });
 
 test("npm_execpath is accepted only when it is the npm manifest's declared entry", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "oxc-tsrx-npm-execpath-invocation-"));
+  const directory = await temporaryDirectory("oxc-tsrx-npm-execpath-invocation-");
   const nodeExecutable = join(directory, "detached/node");
   const packageRoot = join(directory, "share/node_modules/npm");
 
@@ -634,7 +654,7 @@ test(
   "npm discovery follows a PATH launcher symlink back to the declared entry",
   { skip: process.platform === "win32" ? "file symlinks need elevated Windows privileges" : false },
   async () => {
-    const directory = await mkdtemp(join(tmpdir(), "oxc-tsrx-npm-path-invocation-"));
+    const directory = await temporaryDirectory("oxc-tsrx-npm-path-invocation-");
     const nodeExecutable = join(directory, "detached/node");
     const packageRoot = join(directory, "share/node_modules/npm");
     const pathDirectory = join(directory, "path-bin");

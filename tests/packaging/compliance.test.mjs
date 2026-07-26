@@ -6,11 +6,11 @@ import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
+import { resolveNpmInvocation } from "../../scripts/npm-invocation.mjs";
 
 const require = createRequire(import.meta.url);
 const yauzl = require("yauzl");
 const root = resolve(import.meta.dirname, "../..");
-const npm = process.platform === "win32" ? "npm.cmd" : "npm";
 const revision = "8e0ed2ebb96137fb1611cdbd5742d5cb46037d40";
 const legalFiles = [
   "README.md",
@@ -192,7 +192,19 @@ test("native npm artifact ships the exact legal tree and independent-project not
     ).stdout,
   );
   const consumer = await mkdtemp(join(tmpdir(), "oxc-tsrx-compliance-consumer-"));
-  await run(npm, ["install", "--ignore-scripts", "--no-audit", "--no-fund", packaged.tarball], {
+  // npm is reached the way the product reaches it: its manifest-declared
+  // JavaScript entry, run by Node. Spelling it `npm.cmd` on Windows is not just
+  // the shim this repository's boundary forbids, it cannot run at all, because
+  // Node refuses to spawn a `.cmd` file without `shell: true` and fails the
+  // whole test with `spawn EINVAL`.
+  const npmInvocation = resolveNpmInvocation([
+    "install",
+    "--ignore-scripts",
+    "--no-audit",
+    "--no-fund",
+    packaged.tarball,
+  ]);
+  await run(npmInvocation.executable, npmInvocation.args, {
     cwd: consumer,
     env: { ...process.env, npm_config_cache: join(consumer, ".npm-cache") },
   });

@@ -15,7 +15,6 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
-import { createRequire } from "node:module";
 import { NATIVE_TARGETS, nativePackageName } from "../packages/toolchain/dist/native-targets.js";
 import { resolveNpmInvocation } from "./npm-invocation.mjs";
 
@@ -33,7 +32,6 @@ const tools = [
   { name: "oxc-tsrx-fmt", subcommand: ["fmt"] },
   { name: "oxc-tsrx-lsp", subcommand: ["lsp"] },
 ];
-const require = createRequire(import.meta.url);
 
 function parseArguments(argv) {
   const options = {};
@@ -362,13 +360,26 @@ try {
       transportAbi: 1,
     };
     if (host === platform.target) {
-      const binding = require(destination);
-      const keys = Object.keys(binding).sort();
+      // Load the addon in a child process, never in this one. Windows keeps a
+      // native module mapped for the lifetime of the process that required it,
+      // so requiring it here made the staging cleanup below fail with EPERM and
+      // Windows parser-addon packaging could never succeed. A child also means a
+      // broken addon cannot take the packager down with it.
+      const probe = [
+        "const binding = require(process.argv[1]);",
+        "process.stdout.write(JSON.stringify({",
+        "  keys: Object.keys(binding).sort(),",
+        "  nodeApi: binding.nodeApi(),",
+        "}));",
+      ].join("\n");
+      const { stdout } = await run(process.execPath, ["-e", probe, destination]);
+      const binding = JSON.parse(stdout);
+      const keys = binding.keys;
       if (JSON.stringify(keys) !== JSON.stringify(["nodeApi", "parse", "parseSync"])) {
         throw new Error(`unexpected parser.node exports: ${keys.join(",")}`);
       }
-      if (binding.nodeApi() !== addonRecord.nodeApi) {
-        throw new Error(`unexpected parser.node Node-API identity: ${binding.nodeApi()}`);
+      if (binding.nodeApi !== addonRecord.nodeApi) {
+        throw new Error(`unexpected parser.node Node-API identity: ${binding.nodeApi}`);
       }
     }
   }
