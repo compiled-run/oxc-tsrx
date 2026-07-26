@@ -487,6 +487,12 @@ export function createOxlintLspMultiplexer({
     },
     dispose() {
       for (const dispose of disposeReaders.splice(0)) dispose();
+      // Reading the client stream resumed it, and dropping the listener does
+      // not release the handle. Without this the process stays alive after the
+      // servers are gone, so `oxlint --lsp` never exits and an editor leaks one
+      // multiplexer per session.
+      clientInput.pause?.();
+      clientInput.unref?.();
     },
   };
 }
@@ -610,7 +616,26 @@ export async function runOxlintLspMultiplexer(args, options = {}) {
     providers,
   });
 
-  const forwardSignal = (signal) => multiplexer.kill(signal);
+  // Installing a handler for these replaces Node's default, which is to
+  // terminate. So once we forward the signal we own the exit: if a child
+  // ignores it, or is wedged, nothing else will ever stop this process and the
+  // editor is left with an orphan language server per session. Escalate on a
+  // timer instead of waiting forever.
+  const shutdownGraceMs = Number(process.env.OXC_TSRX_LSP_SHUTDOWN_GRACE_MS ?? 2000);
+  let escalation;
+  const forwardSignal = (signal) => {
+    multiplexer.kill(signal);
+    if (escalation) return;
+    escalation = setTimeout(() => {
+      multiplexer.kill("SIGKILL");
+      // A child that survives SIGKILL is not something this process can wait
+      // out, and staying alive would be worse than reporting the signal.
+      escalation = setTimeout(() => process.exit(signal === "SIGINT" ? 130 : 143), shutdownGraceMs);
+      escalation.unref?.();
+    }, shutdownGraceMs);
+    // Do not hold the event loop open purely to run the escalation.
+    escalation.unref?.();
+  };
   const signals = ["SIGINT", "SIGTERM"];
   for (const signal of signals) process.once(signal, forwardSignal);
   try {
@@ -625,6 +650,7 @@ export async function runOxlintLspMultiplexer(args, options = {}) {
     }
     return Math.max(exits.canonical.status, ...exits.providers.map((exit) => exit.status), 0);
   } finally {
+    if (escalation) clearTimeout(escalation);
     multiplexer.dispose();
     for (const signal of signals) process.off(signal, forwardSignal);
   }

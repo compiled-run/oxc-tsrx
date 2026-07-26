@@ -165,17 +165,24 @@ test("format package reports a missing native artifact instead of silently deleg
   }
 });
 
+// Vite+ resolves the *package* `oxlint` and then derives `<pkgRoot>/bin/oxlint`
+// from its manifest, so whichever package answers to those command names has to
+// carry a resolvable root and a declared bin for each. That used to be two
+// packages, `oxlint-tsrx` and `oxfmt-tsrx`; both were folded into `oxc-tsrx`, so
+// the shape is now asserted where it actually lives.
 test("package manifests have Vite+ compatible root and bin shapes", async () => {
+  const manifest = JSON.parse(
+    await readFile(join(root, "packages/toolchain/package.json"), "utf8"),
+  );
+  assert.equal(manifest.name, "oxc-tsrx");
+  assert.equal(manifest.type, "module");
+  assert.equal(manifest.main, "./dist/index.js");
   for (const name of ["oxlint", "oxfmt"]) {
-    const packageRoot = join(root, "packages", name);
-    const manifest = JSON.parse(await readFile(join(packageRoot, "package.json"), "utf8"));
-    assert.equal(manifest.name, `${name}-tsrx`);
-    assert.equal(manifest.type, "module");
-    assert.equal(manifest.main, "./dist/index.js");
     assert.equal(manifest.bin[name], `./bin/${name}`);
-    assert.ok(manifest.exports["."]);
-    assert.ok(manifest.exports["./package.json"]);
   }
+  assert.ok(manifest.exports["."]);
+  // Vite+ reads the manifest through this subpath, so it has to stay exported.
+  assert.ok(manifest.exports["./package.json"]);
 });
 
 test("mixed package lint delegates ordinary TSX and parses each TSRX file once", async () => {
