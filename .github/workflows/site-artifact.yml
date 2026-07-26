@@ -1,6 +1,8 @@
 name: Build website artifact
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -9,6 +11,13 @@ permissions:
 concurrency:
   group: site-artifact-${{ github.ref }}
   cancel-in-progress: false
+
+env:
+  # The static docs project. Vercel's Git integration is deliberately not
+  # connected: the site cannot be built on Vercel's image, so the artifact this
+  # workflow proves is the only thing that ever reaches production.
+  VERCEL_ORG_ID: team_4TrBQsvIkFM0lYTqh08Fqxgd
+  VERCEL_PROJECT_ID: prj_ErfsoKm2LTTCtEYIdlv7jw8cik1G
 
 jobs:
   build:
@@ -48,3 +57,53 @@ jobs:
           path: docs/dist
           if-no-files-found: error
           retention-days: 14
+
+      - name: Ship the proven artifact to Vercel
+        if: github.repository == 'markless-dev/oxc-tsrx'
+        id: deploy
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${VERCEL_TOKEN}" ]; then
+            echo "::error::VERCEL_TOKEN is not set, so the built site cannot be shipped."
+            exit 1
+          fi
+          # main ships to production; a manual run on any other branch gets a
+          # throwaway preview URL instead.
+          target=()
+          if [ "${{ github.ref_name }}" = "main" ]; then
+            target=(--prod)
+          fi
+          url="$(npx --yes vercel@57.0.0 deploy \
+            --cwd docs/dist \
+            --yes \
+            --token "${VERCEL_TOKEN}" \
+            "${target[@]}")"
+          echo "Deployed ${url}"
+          echo "url=${url}" >> "${GITHUB_OUTPUT}"
+
+      - name: Prove production is serving this build
+        if: github.repository == 'markless-dev/oxc-tsrx' && github.ref_name == 'main'
+        run: |
+          set -euo pipefail
+          origin="https://oxc-tsrx-docs.vercel.app"
+          for attempt in 1 2 3 4 5; do
+            if curl -fsS "${origin}/demo-capabilities.json" -o capabilities.json; then
+              break
+            fi
+            echo "attempt ${attempt} could not read the live capabilities, retrying"
+            sleep 5
+          done
+          node -e '
+            const live = require("./capabilities.json")
+            const built = require("./docs/dist/demo-capabilities.json")
+            if (!live.ok || !live.wasm || live.mode !== "wasm") {
+              throw new Error(`production is not serving the WebAssembly engine: ${JSON.stringify(live)}`)
+            }
+            if (JSON.stringify(live) !== JSON.stringify(built)) {
+              throw new Error("production is serving a different build than this run produced")
+            }
+            console.log("production is serving this run's WebAssembly build")
+          '
+          rm -f capabilities.json
