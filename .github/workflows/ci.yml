@@ -48,6 +48,18 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: npm
 
+      # npm 10 and npm 11 disagree about optional peer dependencies, so they
+      # want different lockfiles: emnapi declares `node-addon-api >= 6.1.0` as
+      # an optional peer, npm 10 materialises it and npm 11 does not. Node
+      # 20.19.0 ships npm 10 and would reject a lockfile npm 11 wrote. Pin the
+      # npm version so every lane resolves the committed lockfile identically.
+      # This still tests the Node floor, which is what these lanes are for.
+      - name: Pin npm so every Node lane resolves the lockfile identically
+        shell: bash
+        run: |
+          npm install -g npm@11.12.1
+          npm --version
+
       - name: Install the pinned Rust lane
         shell: bash
         run: |
