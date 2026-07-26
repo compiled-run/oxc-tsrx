@@ -47,18 +47,19 @@ for name in $NAMES; do
     continue
   fi
 
+  # npm requires 2FA here and prints a browser URL to authenticate against, so
+  # it needs the real terminal. Swallowing its output turns the prompt into a
+  # silent failure.
+  echo ">>> $name"
   if npm trust github "$name" \
     --repo "$REPO" \
     --file "$WORKFLOW" \
-    --allow-publish \
-    --yes >/dev/null 2>&1
+    --yes
   then
     echo "  trusted   $name"
     ok=$((ok + 1))
   else
     echo "  FAILED    $name"
-    npm trust github "$name" --repo "$REPO" --file "$WORKFLOW" --allow-publish --yes 2>&1 \
-      | grep -i "error" | head -2 | sed 's/^/    /'
     failed=$((failed + 1))
   fi
   # npm rate limits bursts of writes.
