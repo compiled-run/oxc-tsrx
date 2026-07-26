@@ -12,13 +12,6 @@ concurrency:
   group: site-artifact-${{ github.ref }}
   cancel-in-progress: false
 
-env:
-  # The static docs project. Vercel's Git integration is deliberately not
-  # connected: the site cannot be built on Vercel's image, so the artifact this
-  # workflow proves is the only thing that ever reaches production.
-  VERCEL_ORG_ID: team_4TrBQsvIkFM0lYTqh08Fqxgd
-  VERCEL_PROJECT_ID: prj_ErfsoKm2LTTCtEYIdlv7jw8cik1G
-
 jobs:
   build:
     runs-on: ubuntu-24.04
@@ -58,33 +51,50 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Ship the proven artifact to Vercel
-        if: github.repository == 'markless-dev/oxc-tsrx'
-        id: deploy
+  # Deliberately a separate job. The build above runs the whole dependency
+  # graph -- pnpm postinstalls, 205 crates of cargo, every docs script -- and
+  # none of that is ever in the same runner as the deploy credential. This job
+  # does not check the repository out at all: it only unpacks the artifact the
+  # build already proved and hands it to Vercel.
+  deploy:
+    needs: build
+    if: github.repository == 'markless-dev/oxc-tsrx' && github.ref_name == 'main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions: {}
+    environment:
+      name: production
+      url: https://oxc-tsrx-docs.vercel.app
+    env:
+      # The static docs project. Vercel's Git integration is deliberately not
+      # connected: the site cannot be built on Vercel's image, so the artifact
+      # the build job proved is the only thing that ever reaches production.
+      VERCEL_ORG_ID: team_4TrBQsvIkFM0lYTqh08Fqxgd
+      VERCEL_PROJECT_ID: prj_ErfsoKm2LTTCtEYIdlv7jw8cik1G
+    steps:
+      - name: Download the artifact the build job proved
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: oxc-tsrx-docs-${{ github.sha }}
+          path: dist
+
+      - name: Ship that artifact to production
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
           set -euo pipefail
           if [ -z "${VERCEL_TOKEN}" ]; then
-            echo "::error::VERCEL_TOKEN is not set, so the built site cannot be shipped."
+            echo "::error::VERCEL_TOKEN is not set on the production environment."
             exit 1
           fi
-          # main ships to production; a manual run on any other branch gets a
-          # throwaway preview URL instead.
-          target=()
-          if [ "${{ github.ref_name }}" = "main" ]; then
-            target=(--prod)
-          fi
           url="$(npx --yes vercel@57.0.0 deploy \
-            --cwd docs/dist \
+            --cwd dist \
+            --prod \
             --yes \
-            --token "${VERCEL_TOKEN}" \
-            "${target[@]}")"
+            --token "${VERCEL_TOKEN}")"
           echo "Deployed ${url}"
-          echo "url=${url}" >> "${GITHUB_OUTPUT}"
 
       - name: Prove production is serving this build
-        if: github.repository == 'markless-dev/oxc-tsrx' && github.ref_name == 'main'
         run: |
           set -euo pipefail
           origin="https://oxc-tsrx-docs.vercel.app"
@@ -97,13 +107,12 @@ jobs:
           done
           node -e '
             const live = require("./capabilities.json")
-            const built = require("./docs/dist/demo-capabilities.json")
+            const built = require("./dist/demo-capabilities.json")
             if (!live.ok || !live.wasm || live.mode !== "wasm") {
               throw new Error(`production is not serving the WebAssembly engine: ${JSON.stringify(live)}`)
             }
             if (JSON.stringify(live) !== JSON.stringify(built)) {
               throw new Error("production is serving a different build than this run produced")
             }
-            console.log("production is serving this run's WebAssembly build")
+            console.log("production is serving this run'"'"'s WebAssembly build")
           '
-          rm -f capabilities.json
