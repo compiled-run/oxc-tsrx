@@ -174,7 +174,9 @@ test("npm wrapper matches canonical Oxlint line and UTF-8 byte columns after Uni
       assert.match(
         human.stdout,
         new RegExp(
-          `^${fixture.name}\\.tsrx:${controlSpan.line}:${controlSpan.column}: error eslint\\(${rule}\\) `,
+          // Canonical Oxlint separates the code from the message with `: `, so
+          // the merged report must too. See the fidelity test below.
+          `^${fixture.name}\\.tsrx:${controlSpan.line}:${controlSpan.column}: error eslint\\(${rule}\\): `,
           "mu",
         ),
         `${fixture.name}: ${rule}`,
@@ -463,4 +465,120 @@ test("unsupported JS plugins, type-aware mode, and JS config modules fail before
     assert.equal(result.stdout, "", fixture.name);
     assert.match(result.stderr, fixture.pattern, fixture.name);
   }
+});
+
+// The three tests below pin one property: composing a `.tsrx` file into a batch
+// must leave the report a report. Each of them reproduces a specific way the
+// merged output stopped being one.
+
+/** A project with one ordinary file, one TSRX file, and one unparseable TSRX file. */
+async function mixedProject(name) {
+  const cwd = await realpath(await mkdtemp(join(tmpdir(), `oxc-tsrx-lint-${name}-`)));
+  await mkdir(join(cwd, "src"), { recursive: true });
+  await writeFile(
+    join(cwd, "src/util.ts"),
+    "export function total() {\n  let unusedTotal = 0;\n  debugger;\n}\n",
+  );
+  await writeFile(
+    join(cwd, "src/Counter.tsrx"),
+    "export function Counter() @{\n  var legacy = 1;\n  <div>hi</div>\n}\n",
+  );
+  await writeFile(
+    join(cwd, "src/Broken.tsrx"),
+    "export function Broken() @{\n  let x = 1;\n  <main>\n    <h1>hi</h1>\n}\n",
+  );
+  return cwd;
+}
+
+test("a .tsrx file in the batch leaves ordinary diagnostics byte-identical to canonical Oxlint", async () => {
+  const cwd = await mixedProject("report-fidelity");
+
+  // The control is what the user saw before they adopted TSRX: canonical Oxlint
+  // on the ordinary file alone.
+  const control = await run(cwd, ["src/util.ts"], stock);
+  assert.equal(control.code, 0, control.stderr || control.stdout);
+  const controlLines = control.stdout.split("\n").filter((line) => line.length > 0);
+  assert.ok(controlLines.length >= 2, control.stdout);
+  assert.ok(
+    controlLines.every((line) => /: warning eslint\([a-z-]+\): .* help: /u.test(line)),
+    `the control lost its own code separator or help text:\n${control.stdout}`,
+  );
+
+  const merged = await runCompanion(cwd, ["src/util.ts", "src/Counter.tsrx"]);
+  assert.equal(merged.code, 0, merged.stderr || merged.stdout);
+  const mergedLines = merged.stdout.split("\n");
+  for (const line of controlLines) {
+    assert.ok(
+      mergedLines.includes(line),
+      `adding a .tsrx file changed an ordinary file's diagnostic.\nexpected line: ${line}\ngot:\n${merged.stdout}`,
+    );
+  }
+  // The TSRX half has no help text of its own to print yet, but it must still
+  // separate its code from its message the way every other line does.
+  assert.match(
+    merged.stdout,
+    /^src\/Counter\.tsrx:2:7: warning eslint\(no-unused-vars\): Variable 'legacy'/mu,
+    merged.stdout,
+  );
+});
+
+test("a .tsrx syntax error still reports the rest of the batch as text, not internal JSON", async () => {
+  const cwd = await mixedProject("report-syntax-error");
+
+  const control = await run(cwd, ["src/util.ts"], stock);
+  assert.equal(control.code, 0, control.stderr || control.stdout);
+  const controlLines = control.stdout.split("\n").filter((line) => line.length > 0);
+
+  const result = await runCompanion(cwd, ["src/util.ts", "src/Broken.tsrx"]);
+  assert.equal(result.code, 2, result.stderr || result.stdout);
+  assert.match(result.stderr, /unterminated/u, result.stderr);
+  assert.doesNotMatch(
+    result.stdout,
+    /"diagnostics"|"number_of_files"|"start_time"/u,
+    `the failing batch dumped the internally forced --format=json output:\n${result.stdout}`,
+  );
+  const lines = result.stdout.split("\n");
+  for (const line of controlLines) {
+    assert.ok(
+      lines.includes(line),
+      `the failing batch dropped an ordinary file's diagnostic.\nexpected line: ${line}\ngot:\n${result.stdout}`,
+    );
+  }
+});
+
+test("a nonexistent .tsrx positional reports canonical Oxlint's unmatched-pattern error", async () => {
+  const cwd = await mixedProject("report-unmatched");
+
+  // Canonical Oxlint on a nonexistent ordinary file is the precedent: one line
+  // on stdout and exit 1.
+  const control = await run(cwd, ["src/Missing.ts"], stock);
+  assert.equal(control.code, 1, control.stderr || control.stdout);
+  assert.match(control.stdout, /No files found to lint/u, control.stdout);
+
+  const missing = await runCompanion(cwd, ["src/Missing.tsrx"]);
+  assert.equal(
+    missing.code,
+    control.code,
+    `a mistyped .tsrx filename exited ${missing.code} with stdout:\n${missing.stdout}`,
+  );
+  assert.equal(missing.stdout, control.stdout);
+
+  // The opt-out canonical Oxlint already publishes keeps working.
+  const controlAllowed = await run(
+    cwd,
+    ["--no-error-on-unmatched-pattern", "src/Missing.ts"],
+    stock,
+  );
+  assert.equal(controlAllowed.code, 0, controlAllowed.stderr || controlAllowed.stdout);
+  const allowed = await runCompanion(cwd, ["--no-error-on-unmatched-pattern", "src/Missing.tsrx"]);
+  assert.equal(allowed.code, controlAllowed.code, allowed.stderr || allowed.stdout);
+  assert.equal(allowed.stdout, controlAllowed.stdout);
+
+  // Canonical Oxlint only errors when the whole invocation matched nothing, so a
+  // batch that still has work to do must keep exiting on that work alone.
+  const controlMixed = await run(cwd, ["src/Missing.ts", "src/util.ts"], stock);
+  const mixed = await runCompanion(cwd, ["src/Missing.tsrx", "src/util.ts"]);
+  assert.equal(controlMixed.code, 0, controlMixed.stderr || controlMixed.stdout);
+  assert.equal(mixed.code, controlMixed.code, mixed.stderr || mixed.stdout);
+  assert.match(mixed.stdout, /src\/util\.ts:2:7: warning eslint\(no-unused-vars\): /u, mixed.stdout);
 });

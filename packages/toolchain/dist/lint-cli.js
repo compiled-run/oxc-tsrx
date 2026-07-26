@@ -42,6 +42,12 @@ const NATIVE_VALUE_OPTIONS = new Map([
   ["-D", "--deny"],
   ["--deny", "--deny"],
 ]);
+// Canonical Oxlint's own wording for "every path you named matched nothing",
+// reproduced verbatim so a `.tsrx` positional reports it the same way a `.ts`
+// positional already does.
+const UNMATCHED_PATTERN_MESSAGE =
+  "No files found to lint. Please check your paths and ignore patterns.";
+
 const WRAPPER_OPTIONS = new Set([
   "--quiet",
   "--silent",
@@ -189,6 +195,25 @@ function parseJson(result, label) {
   }
 }
 
+// A half that exits above 1 still hands back whatever it had composed when it
+// failed, and this command forces `--format=json` on both halves internally
+// (`withOxlintOutputFormat(..., "json")` and `nativeArguments`). Writing that
+// stdout through untouched is what turns one `.tsrx` syntax error into a raw
+// internal JSON dump in answer to a plain `oxlint src`. Split each half into the
+// report it did produce and any output that is not a report, so the failure path
+// can render through the same formatter the success path uses and only genuinely
+// unstructured output is passed through.
+function splitCapturedReport(result) {
+  if (result.stdout.trim() === "") return { report: null, passthrough: "" };
+  try {
+    const parsed = JSON.parse(result.stdout);
+    if (parsed !== null && typeof parsed === "object") return { report: parsed, passthrough: "" };
+  } catch {
+    // Not a report. Fall through and pass it on verbatim.
+  }
+  return { report: null, passthrough: result.stdout };
+}
+
 function combine(upstream, native) {
   return {
     ...upstream,
@@ -205,7 +230,7 @@ function primaryLocation(diagnostic) {
 }
 
 function renderDefault(result, cwd) {
-  const diagnostics = [...result.diagnostics].sort((left, right) => {
+  const diagnostics = [...(result.diagnostics ?? [])].sort((left, right) => {
     const filename = left.filename.localeCompare(right.filename);
     if (filename !== 0) return filename;
     return (left.labels?.[0]?.span?.offset ?? 0) - (right.labels?.[0]?.span?.offset ?? 0);
@@ -214,7 +239,18 @@ function renderDefault(result, cwd) {
   const lines = diagnostics.map((diagnostic) => {
     const location = primaryLocation(diagnostic);
     const filename = relative(cwd, diagnostic.filename) || diagnostic.filename;
-    return `${filename}:${location.line}:${location.column}: ${diagnostic.severity} ${diagnostic.code ?? diagnostic.rule ?? ""} ${diagnostic.message}`.trimEnd();
+    // Canonical Oxlint's own default renderer, reproduced field for field:
+    // `file:line:col: severity code: message help: help`, with the code omitted
+    // (and its space with it) for a diagnostic that carries none, such as a
+    // parse error. Composing a mixed batch must not cost the ordinary half the
+    // `:` separator or the `help:` suggestion it prints without a .tsrx file in
+    // the run; both are already in the JSON this function receives. TSRX
+    // diagnostics carry `rule` and no `help`, so they render the same shape
+    // minus the suggestion the native leaf does not emit yet.
+    const code = diagnostic.code ?? diagnostic.rule ?? "";
+    const help = diagnostic.help ? ` help: ${diagnostic.help}` : "";
+    const prefix = `${filename}:${location.line}:${location.column}: ${diagnostic.severity}`;
+    return `${prefix}${code ? ` ${code}` : ""}: ${diagnostic.message}${help}`.trimEnd();
   });
   const errors = diagnostics.filter((diagnostic) => diagnostic.severity === "error").length;
   const warnings = diagnostics.filter((diagnostic) => diagnostic.severity === "warning").length;
@@ -261,6 +297,20 @@ export async function runCli(args, options = {}) {
   try {
     const stripped = removeExplicitTsrx(args, VALUE_OPTIONS);
     const shouldRunUpstream = !stripped.hadPositionals || stripped.remainingPositionals > 0;
+    // Every positional was a `.tsrx` path and discovery matched none of them, so
+    // neither half has anything to lint and neither would print. Canonical
+    // Oxlint answers the same invocation over `.ts` with this line on stdout and
+    // exit 1, and stays silent with exit 0 under
+    // `--no-error-on-unmatched-pattern`; a mistyped `.tsrx` filename must not be
+    // the one path that reports a green CI run for work nobody did.
+    if (!shouldRunUpstream && files.length === 0) {
+      if (args.includes("--no-error-on-unmatched-pattern")) return 0;
+      process.stdout.write(`${UNMATCHED_PATTERN_MESSAGE}\n`);
+      if (format === "json") {
+        process.stdout.write(`${JSON.stringify({ diagnostics: [], number_of_files: 0 })}\n`);
+      }
+      return 1;
+    }
     const upstreamBinary = resolvePackageBinary("oxlint-current", "oxlint", import.meta.url);
     const useMaterializedUpstreamConfig = Boolean(viteConfig && !viteConfig.requiresAuthoredBase);
     let upstreamArgs = withOxlintOutputFormat(stripped.args, "json");
@@ -297,7 +347,31 @@ export async function runCli(args, options = {}) {
     ]);
 
     if (upstreamResult.status > 1 || nativeResult.status > 1) {
-      process.stdout.write(upstreamResult.stdout + nativeResult.stdout);
+      // One half failing hard abandons the merge, but the report the other half
+      // produced is still a report and the user still asked for their chosen
+      // format. Render it instead of dumping the internal JSON.
+      const upstreamHalf = splitCapturedReport(upstreamResult);
+      const nativeHalf = splitCapturedReport(nativeResult);
+      if (nativeHalf.report) {
+        try {
+          await addLineColumns(nativeHalf.report.diagnostics ?? []);
+        } catch {
+          // Byte offsets only become line/column by reading the source, which
+          // the same failure may have made unreadable. The diagnostics that did
+          // arrive are still worth printing without exact positions.
+        }
+      }
+      const report =
+        upstreamHalf.report && nativeHalf.report
+          ? combine(upstreamHalf.report, nativeHalf.report)
+          : (upstreamHalf.report ?? nativeHalf.report);
+      const rendered =
+        report === null
+          ? ""
+          : format === "json"
+            ? `${JSON.stringify(report)}\n`
+            : renderDefault(report, cwd);
+      process.stdout.write(upstreamHalf.passthrough + nativeHalf.passthrough + rendered);
       process.stderr.write(upstreamResult.stderr + nativeResult.stderr);
       return Math.max(upstreamResult.status, nativeResult.status);
     }
