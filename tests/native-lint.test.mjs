@@ -134,6 +134,57 @@ test('applies only an identity-mapped no-var fix and reparses TSRX', async () =>
   assert.equal(output.oxcTsrx.reparseCount, 1);
 });
 
+test('an unprojectable .tsrx becomes its own diagnostic and the rest of the batch still reports', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'oxc-tsrx-batch-continues-'));
+  const goodSource = 'export function Good() @{\n  var legacy = 1;\n  <div>hi</div>\n}\n';
+  const brokenSource = 'export function Broken() @{\n  let x = 1;\n  <main>\n    <h1>hi</h1>\n}\n';
+  const good = join(directory, 'Good.tsrx');
+  const broken = join(directory, 'Broken.tsrx');
+  await writeFile(good, goodSource);
+  await writeFile(broken, brokenSource);
+
+  // The control: the good file on its own. Only warnings, so it exits 0.
+  const alone = await run(['--format=json', good]);
+  assert.equal(alone.code, 0, alone.stderr || alone.stdout);
+  const aloneDiagnostics = parseJsonOutput(alone).diagnostics;
+  assert.ok(aloneDiagnostics.length > 0, alone.stdout);
+
+  const batch = await run(['--format=json', good, broken]);
+  // Before this, `lint_files` collected into a Result and short-circuited: one
+  // unparseable file exited 2 with empty stdout and discarded every other file's
+  // diagnostics. A syntax error is a diagnostic, so exit 1 now falls out of the
+  // error count with no special case, and stderr stays clean.
+  assert.equal(batch.code, 1, batch.stderr || batch.stdout);
+  assert.equal(batch.stderr, '', batch.stderr);
+  const output = parseJsonOutput(batch);
+  assert.equal(output.number_of_files, 2);
+
+  const survived = output.diagnostics.filter((diagnostic) => diagnostic.filename === good);
+  assert.deepEqual(
+    survived,
+    aloneDiagnostics,
+    `a broken sibling changed the good file's report:\n${batch.stdout}`,
+  );
+
+  const failures = output.diagnostics.filter((diagnostic) => diagnostic.filename === broken);
+  assert.equal(failures.length, 1, batch.stdout);
+  assert.equal(failures[0].severity, 'error');
+  assert.match(failures[0].message, /unterminated/u);
+  // No rule and no code: there is no rule to disable, and the wrapper's default
+  // renderer omits the code slot for a diagnostic that carries none, which is
+  // how canonical Oxlint prints a `.ts` parse error.
+  assert.equal(failures[0].rule, '');
+  assert.equal(failures[0].code, '');
+  // The label is the authored byte offset of the token that was never closed,
+  // which is the only thing a caller needs to turn it into line:col.
+  assert.equal(failures[0].labels[0].span.offset, byteOffset(brokenSource, '<main>'));
+  assert.equal(
+    output.diagnostics.filter((diagnostic) => diagnostic.severity === 'error').length,
+    1,
+    batch.stdout,
+  );
+});
+
 test('ordinary TSX bypasses the TSRX scan and projection allocation', async () => {
   const result = await run(['--format=json', '--deny', 'no-debugger', tsxFixture]);
   assert.equal(result.code, 1, result.stderr || result.stdout);

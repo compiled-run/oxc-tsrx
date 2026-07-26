@@ -4,7 +4,7 @@ use std::{
     cmp::Reverse,
     collections::{HashMap, HashSet},
     ffi::OsString,
-    fs,
+    fmt, fs,
     path::{Path, PathBuf},
     time::Instant,
 };
@@ -14,7 +14,9 @@ use oxc_adapter::{
     OXC_REVISION, RuleFilter, RuleSeverity, SourceKind, TypeBatchFile,
 };
 use serde::Serialize;
-use tsrx_syntax::{MappedProjection, TypeProjection, project_for_lint, project_for_types, scan};
+use tsrx_syntax::{
+    MappedProjection, ProjectionError, TypeProjection, project_for_lint, project_for_types, scan,
+};
 
 #[derive(Debug, Clone)]
 pub struct Options {
@@ -141,38 +143,56 @@ impl LintSession {
 
     /// Lint one filesystem source with this compiled configuration.
     ///
+    /// A TSRX file that cannot be scanned or projected is reported as that file's own error
+    /// diagnostic rather than as a command failure, so a syntax error reads like every other
+    /// diagnostic and never discards the rest of a batch. Read, parser, semantic, and lint
+    /// failures remain errors.
+    ///
     /// # Errors
     ///
-    /// Returns an error without writing for read, projection, parser, semantic, or lint failures.
+    /// Returns an error without writing for read, parser, semantic, or lint failures.
     pub fn lint_file(&self, path: &Path) -> Result<Output, String> {
         let source = fs::read_to_string(path)
             .map_err(|error| format!("Unable to read {}: {error}", path.display()))?;
-        lint_loaded_source(self, path, &source, true)
+        lint_loaded_file(self, path, &source, true)
     }
 
     /// Lint a filesystem batch with one shared TypeScript-Go project process when opted in.
     ///
+    /// One unprojectable TSRX file contributes its own error diagnostic and the batch continues,
+    /// so a single typo cannot blank every other file's report.
+    ///
     /// # Errors
     ///
-    /// Returns before writing if any source, projection, OXC pass, or type-aware batch fails.
+    /// Returns before writing if any source, OXC pass, or type-aware batch fails.
     pub fn lint_files(&self, paths: &[PathBuf]) -> Result<Vec<Output>, String> {
         if !self.engine.type_aware_enabled() {
             return paths.iter().map(|path| self.lint_file(path)).collect();
         }
+        // Each path keeps its slot so a file that fails projection stays in argument order
+        // alongside the files that reached the shared type-aware batch.
+        let mut ordered = Vec::with_capacity(paths.len());
+        ordered.resize_with(paths.len(), || None);
         let mut pending = Vec::with_capacity(paths.len());
-        for path in paths {
+        for (slot, path) in paths.iter().enumerate() {
             let source = fs::read_to_string(path)
                 .map_err(|error| format!("Unable to read {}: {error}", path.display()))?;
-            let (prepared, syntax) = run_syntax_lint(self, path, &source)?;
-            pending.push(PendingBatchFile {
-                path: path.clone(),
-                source,
-                prepared,
-                syntax,
-            });
+            match run_syntax_lint(self, path, &source) {
+                Ok((prepared, syntax)) => pending.push(PendingBatchFile {
+                    slot,
+                    path: path.clone(),
+                    source,
+                    prepared,
+                    syntax,
+                }),
+                Err(PrepareError::Projection(error)) => {
+                    ordered[slot] = Some(projection_failure_output(self, path, &error));
+                }
+                Err(PrepareError::Other(message)) => return Err(message),
+            }
         }
         if pending.is_empty() {
-            return Ok(Vec::new());
+            return Ok(ordered.into_iter().flatten().collect());
         }
         let virtual_paths = pending
             .iter()
@@ -208,13 +228,13 @@ impl LintSession {
                 global.push(result.diagnostic);
             }
         }
-        let mut outputs = Vec::with_capacity(pending.len());
         for (index, (file, virtual_path)) in pending.into_iter().zip(virtual_paths).enumerate() {
             let mut diagnostics = by_path.remove(&virtual_path).unwrap_or_default();
             if index == 0 {
                 diagnostics.append(&mut global);
             }
-            outputs.push(finish_lint(
+            let slot = file.slot;
+            ordered[slot] = Some(finish_lint(
                 self,
                 &file.path,
                 &file.source,
@@ -234,10 +254,14 @@ impl LintSession {
                 },
             )?);
         }
-        Ok(outputs)
+        Ok(ordered.into_iter().flatten().collect())
     }
 
     /// Lint caller-owned source with this compiled configuration and no filesystem writes.
+    ///
+    /// Unlike [`LintSession::lint_file`], a projection failure stays an error here. The editor
+    /// boundary in `oxc_tsrx_cli::lsp` renders it as its own LSP diagnostic and must keep
+    /// receiving it as an error.
     ///
     /// # Errors
     ///
@@ -246,7 +270,7 @@ impl LintSession {
         if self.fix {
             return Err("LintSession::lint_text cannot apply filesystem fixes".to_string());
         }
-        lint_loaded_source(self, path, source, false)
+        lint_loaded_source(self, path, source, false).map_err(|error| error.to_string())
     }
 
     /// Collect safe, mapped, validation-passed edits for an in-memory editor document.
@@ -263,7 +287,8 @@ impl LintSession {
         if !self.fix {
             return Err("LintSession::code_actions requires a fix-enabled session".to_string());
         }
-        let (prepared, syntax) = run_syntax_lint(self, path, source)?;
+        let (prepared, syntax) =
+            run_syntax_lint(self, path, source).map_err(|error| error.to_string())?;
         let (type_diagnostics, _, _) = run_type_lint(self, path, source, &prepared, &syntax)?;
         let mut translated =
             translate_diagnostics(syntax.diagnostics, prepared.projection.as_ref());
@@ -388,10 +413,44 @@ struct PreparedSource {
 }
 
 struct PendingBatchFile {
+    slot: usize,
     path: PathBuf,
     source: String,
     prepared: PreparedSource,
     syntax: LintResult,
+}
+
+/// A per-file failure that has not yet been decided to be a diagnostic or a command failure.
+///
+/// `Projection` is the one kind the CLI lint lane turns into a diagnostic: it is a syntax error in
+/// the user's own TSRX file, positioned by [`ProjectionError::byte_offset`]. Everything else is a
+/// genuine tool failure. `Display` reproduces each message unchanged, so a caller that maps this
+/// straight back to a `String` keeps the exact text it had before.
+#[derive(Debug)]
+enum PrepareError {
+    Projection(ProjectionError),
+    Other(String),
+}
+
+impl fmt::Display for PrepareError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Projection(error) => error.fmt(formatter),
+            Self::Other(message) => formatter.write_str(message),
+        }
+    }
+}
+
+impl From<ProjectionError> for PrepareError {
+    fn from(error: ProjectionError) -> Self {
+        Self::Projection(error)
+    }
+}
+
+impl From<String> for PrepareError {
+    fn from(message: String) -> Self {
+        Self::Other(message)
+    }
 }
 
 impl PreparedSource {
@@ -449,7 +508,7 @@ pub fn lint_text(path: &Path, source: &str, options: &Options) -> Result<Output,
         return Err("lint_text does not write or apply fixes; use lint_file".to_string());
     }
     let session = legacy_session(path, options)?;
-    lint_loaded_source(&session, path, source, false)
+    lint_loaded_source(&session, path, source, false).map_err(|error| error.to_string())
 }
 
 fn legacy_session(path: &Path, options: &Options) -> Result<LintSession, String> {
@@ -561,16 +620,91 @@ fn aggregate_outputs(session: &LintSession, outputs: Vec<Output>) -> Output {
     }
 }
 
-fn lint_loaded_source(
+/// Lint one loaded file, reporting an unprojectable TSRX source as that file's own diagnostic.
+///
+/// This is the filesystem CLI boundary. A syntax error in the user's source is their defect, not
+/// the linter's, so it is answered with a positioned error diagnostic and the caller's exit code
+/// falls out of the usual error count.
+fn lint_loaded_file(
     session: &LintSession,
     path: &Path,
     source: &str,
     allow_writes: bool,
 ) -> Result<Output, String> {
+    match lint_loaded_source(session, path, source, allow_writes) {
+        Ok(output) => Ok(output),
+        Err(PrepareError::Projection(error)) => {
+            Ok(projection_failure_output(session, path, &error))
+        }
+        Err(PrepareError::Other(message)) => Err(message),
+    }
+}
+
+/// Build the one-diagnostic report that stands in for a TSRX file the scanner could not project.
+///
+/// The diagnostic carries the filename and, for the four offset-bearing failures, the authored
+/// byte offset in `labels[0].span.offset`, which is the same shape every other diagnostic uses.
+/// It carries no rule and no code because there is no rule to disable; the failure is the source
+/// itself. The nine positionless failures get no label rather than a fabricated offset 0.
+fn projection_failure_output(
+    session: &LintSession,
+    path: &Path,
+    error: &ProjectionError,
+) -> Output {
+    let labels = error
+        .byte_offset()
+        .map(|offset| LabelOutput {
+            span: SpanOutput { offset, length: 0 },
+            message: None,
+        })
+        .into_iter()
+        .collect();
+    Output {
+        diagnostics: vec![DiagnosticOutput {
+            filename: path.to_string_lossy().into_owned(),
+            rule: String::new(),
+            code: String::new(),
+            severity: "error".to_string(),
+            message: error.to_string(),
+            labels,
+        }],
+        number_of_files: 1,
+        number_of_rules: session.engine.number_of_rules(),
+        metadata: Metadata {
+            native: true,
+            engine: "oxc_linter",
+            oxc_revision: OXC_REVISION,
+            mode: "mapped_projection",
+            config_loads: 0,
+            config_path: None,
+            parse_count: 0,
+            reparse_count: 0,
+            files: FileCounts {
+                tsrx: 1,
+                standard: 0,
+            },
+            timings: TimingOutput::default(),
+            projection_bytes: 0,
+            diagnostics_suppressed: 0,
+            fixes: FixOutput::default(),
+            type_aware: session.engine.type_aware_enabled(),
+            type_check: session.engine.type_check_enabled(),
+            type_aware_files: 0,
+            type_aware_processes: 0,
+        },
+    }
+}
+
+fn lint_loaded_source(
+    session: &LintSession,
+    path: &Path,
+    source: &str,
+    allow_writes: bool,
+) -> Result<Output, PrepareError> {
     let (prepared, syntax) = run_syntax_lint(session, path, source)?;
     let (diagnostics, type_aware_ns, type_aware_processes) =
         run_type_lint(session, path, source, &prepared, &syntax)?;
-    finish_lint(
+    Ok(finish_lint(
         session,
         path,
         source,
@@ -580,7 +714,7 @@ fn lint_loaded_source(
         allow_writes,
         type_aware_ns,
         type_aware_processes,
-    )
+    )?)
 }
 
 fn run_type_lint(
@@ -629,7 +763,7 @@ fn run_syntax_lint(
     session: &LintSession,
     path: &Path,
     source: &str,
-) -> Result<(PreparedSource, LintResult), String> {
+) -> Result<(PreparedSource, LintResult), PrepareError> {
     let prepared = prepare_source(path, source, session.engine.type_aware_enabled())?;
     let parse_source = prepared.parse_source(source);
     let syntax = session.engine.lint(&LintRequest {
@@ -734,7 +868,11 @@ fn finish_lint(
     })
 }
 
-fn prepare_source(path: &Path, source: &str, type_aware: bool) -> Result<PreparedSource, String> {
+fn prepare_source(
+    path: &Path,
+    source: &str,
+    type_aware: bool,
+) -> Result<PreparedSource, PrepareError> {
     let is_tsrx = path
         .extension()
         .is_some_and(|extension| extension == "tsrx");
@@ -749,12 +887,12 @@ fn prepare_source(path: &Path, source: &str, type_aware: bool) -> Result<Prepare
         });
     }
     let started = Instant::now();
-    let overlay = scan(source).map_err(|error| error.to_string())?;
+    let overlay = scan(source)?;
     timings.scan_ns = elapsed_ns(started);
     let started = Instant::now();
-    let projection = project_for_lint(source, &overlay).map_err(|error| error.to_string())?;
+    let projection = project_for_lint(source, &overlay)?;
     let type_projection = type_aware
-        .then(|| project_for_types(source, &overlay).map_err(|error| error.to_string()))
+        .then(|| project_for_types(source, &overlay))
         .transpose()?;
     timings.projection_ns = elapsed_ns(started);
     Ok(PreparedSource {
@@ -1162,6 +1300,84 @@ mod tests {
                 .any(|diagnostic| diagnostic.rule == "no-console")
         );
         assert!(!path.exists());
+    }
+
+    #[test]
+    fn one_unprojectable_file_keeps_the_rest_of_the_batch_reporting() {
+        let directory = std::env::temp_dir().join("oxc-tsrx-lint-batch-continues");
+        std::fs::create_dir_all(&directory).expect("temp directory");
+        let good_source = "export function Good() @{\n  var legacy = 1;\n  <div>hi</div>\n}\n";
+        let broken_source =
+            "export function Broken() @{\n  let x = 1;\n  <main>\n    <h1>hi</h1>\n}\n";
+        let good = directory.join("Good.tsrx");
+        let broken = directory.join("Broken.tsrx");
+        std::fs::write(&good, good_source).expect("write");
+        std::fs::write(&broken, broken_source).expect("write");
+
+        let session = LintSession::new(
+            &directory,
+            None,
+            // A warning, so the one error in the aggregate below can only be the syntax error.
+            &[RuleFilter {
+                severity: RuleSeverity::Warn,
+                name: "no-var".to_string(),
+            }],
+            false,
+        )
+        .unwrap();
+        let outputs = session
+            .lint_files(&[good.clone(), broken.clone()])
+            .expect("an unprojectable file must not fail the batch");
+
+        assert_eq!(outputs.len(), 2);
+        // The good file still reports, which is the whole point: before this, the first failing
+        // file short-circuited the collect and discarded every other file's diagnostics.
+        assert!(
+            outputs[0]
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.rule == "no-var" && diagnostic.severity == "warning"),
+            "{:?}",
+            outputs[0].diagnostics
+        );
+
+        let failure = &outputs[1].diagnostics;
+        assert_eq!(failure.len(), 1);
+        assert_eq!(failure[0].filename, broken.to_string_lossy());
+        assert_eq!(failure[0].severity, "error");
+        assert!(failure[0].message.contains("unterminated"), "{failure:?}");
+        // No rule and no code: there is nothing to disable, and the default renderer omits the
+        // code slot for a diagnostic that carries none, matching canonical Oxlint's parse errors.
+        assert_eq!(failure[0].rule, "");
+        assert_eq!(failure[0].code, "");
+        assert_eq!(
+            failure[0].labels[0].span.offset as usize,
+            broken_source.find("<main>").expect("fixture")
+        );
+
+        // The aggregate the CLI exits on now counts the syntax error as one error.
+        let aggregated = session.aggregate(outputs);
+        assert_eq!(
+            aggregated
+                .diagnostics
+                .iter()
+                .filter(|diagnostic| diagnostic.severity == "error")
+                .count(),
+            1
+        );
+        std::fs::remove_dir_all(&directory).ok();
+    }
+
+    #[test]
+    fn lint_text_still_fails_a_projection_error_for_the_editor() {
+        let session = LintSession::new(Path::new("."), None, &[], false).unwrap();
+        let error = session
+            .lint_text(
+                Path::new("Broken.tsrx"),
+                "export function Broken() @{\n  <main>\n}\n",
+            )
+            .expect_err("the LSP boundary must keep receiving projection failures as errors");
+        assert!(error.contains("unterminated"), "{error}");
     }
 
     #[test]

@@ -522,28 +522,71 @@ test("a .tsrx file in the batch leaves ordinary diagnostics byte-identical to ca
   );
 });
 
-test("a .tsrx syntax error still reports the rest of the batch as text, not internal JSON", async () => {
+test("a .tsrx syntax error is a positioned diagnostic that leaves the rest of the batch reporting", async () => {
   const cwd = await mixedProject("report-syntax-error");
 
   const control = await run(cwd, ["src/util.ts"], stock);
   assert.equal(control.code, 0, control.stderr || control.stdout);
   const controlLines = control.stdout.split("\n").filter((line) => line.length > 0);
 
-  const result = await runCompanion(cwd, ["src/util.ts", "src/Broken.tsrx"]);
-  assert.equal(result.code, 2, result.stderr || result.stdout);
-  assert.match(result.stderr, /unterminated/u, result.stderr);
+  // The invocation that used to be the worst case: a good ordinary file, a good
+  // `.tsrx` file, and one `.tsrx` file that cannot be projected. It exited 2 with
+  // empty stdout and a bare stderr line naming no file, so one typo discarded
+  // every other file's diagnostics.
+  const result = await runCompanion(cwd, ["src/util.ts", "src/Counter.tsrx", "src/Broken.tsrx"]);
+  // Exit 1 is canonical Oxlint's "diagnostics were found", the code a `.ts`
+  // parse error already produced. Exit 2 stays reserved for the tool failing.
+  assert.equal(result.code, 1, result.stderr || result.stdout);
+  assert.equal(result.stderr, "", result.stderr);
   assert.doesNotMatch(
     result.stdout,
     /"diagnostics"|"number_of_files"|"start_time"/u,
-    `the failing batch dumped the internally forced --format=json output:\n${result.stdout}`,
+    `the batch dumped the internally forced --format=json output:\n${result.stdout}`,
   );
+
   const lines = result.stdout.split("\n");
   for (const line of controlLines) {
     assert.ok(
       lines.includes(line),
-      `the failing batch dropped an ordinary file's diagnostic.\nexpected line: ${line}\ngot:\n${result.stdout}`,
+      `the batch dropped an ordinary file's diagnostic.\nexpected line: ${line}\ngot:\n${result.stdout}`,
     );
   }
+  // The good `.tsrx` file's own diagnostics survive its broken sibling too. This
+  // is the half no wrapper change could ever have reached.
+  assert.match(
+    result.stdout,
+    /^src\/Counter\.tsrx:2:7: warning eslint\(no-unused-vars\): Variable 'legacy'/mu,
+    result.stdout,
+  );
+
+  // The syntax error names its own file and carries a real line:col. Derive the
+  // expected position from the byte offset the native leaf emitted rather than
+  // hardcoding it, so this fails if the offset ever stops being an authored
+  // UTF-8 index.
+  const brokenPath = join(cwd, "src/Broken.tsrx");
+  const native = await run(cwd, ["--format=json", brokenPath]);
+  assert.equal(native.code, 1, native.stderr || native.stdout);
+  const failures = json(native).diagnostics;
+  assert.equal(failures.length, 1, native.stdout);
+  assert.equal(failures[0].filename, brokenPath);
+  assert.equal(failures[0].severity, "error");
+  const offset = failures[0].labels[0].span.offset;
+  const bytes = await readFile(brokenPath);
+  const position = resolveOxlintBytePositions(bytes, [offset], brokenPath).get(offset);
+  // Independent of the resolver: that line and column really do land on the
+  // element that was never closed.
+  const sourceLines = bytes.toString("utf8").split("\n");
+  assert.equal(
+    sourceLines[position.line - 1].slice(position.column - 1, position.column + 5),
+    "<main>",
+  );
+  assert.match(
+    result.stdout,
+    new RegExp(`^src/Broken\\.tsrx:${position.line}:${position.column}: error: .*unterminated`, "mu"),
+    `the syntax error did not render as file:line:col:\n${result.stdout}`,
+  );
+
+  assert.match(result.stdout, /^Found 1 error\(s\) and 3 warning\(s\)\.$/mu, result.stdout);
 });
 
 test("a nonexistent .tsrx positional reports canonical Oxlint's unmatched-pattern error", async () => {
