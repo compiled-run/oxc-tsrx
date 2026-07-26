@@ -370,16 +370,19 @@ jobs:
             )}\n`,
           );
           NODE
+          # A real install into the throwaway prefix, not --package-lock-only.
+          # `npm sbom` reports ESBOMPROBLEMS "missing: oxc-tsrx@file:..." when the
+          # tree is only locked and never materialised, so the lock-only pair
+          # produced an empty SBOM and a failed step. This prefix holds nothing
+          # but the nine release tarballs, so installing it costs about a second.
           npm install \
             --prefix "$npm_sbom_root" \
-            --package-lock-only \
             --ignore-scripts \
             --force \
             --no-audit \
             --no-fund
           npm sbom \
             --prefix "$npm_sbom_root" \
-            --package-lock-only \
             --force \
             --sbom-format=cyclonedx \
             --sbom-type=application \
