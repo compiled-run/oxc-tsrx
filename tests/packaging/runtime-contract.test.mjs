@@ -139,7 +139,11 @@ test("explicit ordinary files take the zero-wrapper canonical Oxlint route", asy
       run(candidate, ["--fix", "--deny", "no-var", candidateFix], { env: environment }),
       run(stock, ["--fix", "--deny", "no-var", stockFix], { env: environment }),
     ]);
-    assert.deepEqual(actualFix, expectedFix, "--fix process result");
+    assert.deepEqual(
+      withoutRuntimeTiming(actualFix),
+      withoutRuntimeTiming(expectedFix),
+      "--fix process result",
+    );
     assert.equal(await readFile(candidateFix, "utf8"), await readFile(stockFix, "utf8"));
 
     await assert.rejects(
@@ -342,14 +346,22 @@ test("ordinary Oxfmt stdin and explicit files take the zero-wrapper canonical ro
         input: unformatted,
       }),
     ]);
-    assert.deepEqual(actualStdin, expectedStdin, "ordinary stdin");
+    assert.deepEqual(
+      withoutRuntimeTiming(actualStdin),
+      withoutRuntimeTiming(expectedStdin),
+      "ordinary stdin",
+    );
 
     await writeFile(source, unformatted);
     const [actualFile, expectedFile] = await Promise.all([
       run(candidate, ["--list-different", source], { env: environment }),
       run(stock, ["--list-different", source], { env: environment }),
     ]);
-    assert.deepEqual(actualFile, expectedFile, "explicit ordinary file");
+    assert.deepEqual(
+      withoutRuntimeTiming(actualFile),
+      withoutRuntimeTiming(expectedFile),
+      "explicit ordinary file",
+    );
 
     await assert.rejects(
       readFile(trace, "utf8"),
