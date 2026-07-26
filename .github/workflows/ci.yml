@@ -168,7 +168,9 @@ jobs:
           cache-all-crates: true
 
       - name: Install the locked JavaScript graph without lifecycle scripts
-        run: pnpm install --frozen-lockfile --ignore-scripts
+        # Verbose because a linking failure here exits 1 without naming the file
+        # it was writing, which is exactly the shape a MAX_PATH overrun takes.
+        run: pnpm install --frozen-lockfile --ignore-scripts --loglevel=debug
 
       - name: Build the distributable native executables and parser addon
         shell: bash

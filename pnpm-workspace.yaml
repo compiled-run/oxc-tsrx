@@ -57,3 +57,12 @@ publicHoistPattern:
 ignoredBuiltDependencies:
   - '@vscode/vsce-sign'
   - keytar
+
+# Windows only, harmless elsewhere. pnpm's virtual store nests a directory per
+# package as `node_modules/.pnpm/<name>@<version>_<peer hashes>/node_modules/...`,
+# and that name is allowed to grow to 120 characters by default. On a Windows
+# runner the repository already sits at `D:\a\oxc-tsrx\oxc-tsrx`, so long
+# scoped names with peer suffixes push the full path past the 260 character
+# MAX_PATH limit and linking dies without printing which file it was writing.
+# Shortening the directory name keeps every path well inside the limit.
+virtualStoreDirMaxLength: 60
