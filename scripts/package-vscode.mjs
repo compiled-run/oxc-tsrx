@@ -176,7 +176,12 @@ try {
       version: sourceManifest.version,
       target: platform.target,
       vscodeTarget: platform.vscodeTarget,
-      vsix,
+      // POSIX separators, always. These reports are written by eight different
+      // runners and read by one Linux assembly job, and `path.basename` on
+      // POSIX does not split on a backslash, so a Windows-native path here
+      // makes the assembly job compare a whole `C:\...` string to a filename.
+      vsix: vsix.replaceAll("\\", "/"),
+      filename: basename(vsix),
       lspSha256,
       lspBytes,
       vsixVerification,

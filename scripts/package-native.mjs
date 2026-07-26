@@ -470,7 +470,9 @@ try {
       vscodeTarget: platform.vscodeTarget,
       lspSha256: lsp.sha256,
       lspBytes: lsp.bytes,
-      tarball,
+      // POSIX separators, always: see the same note in package-vscode.mjs. The
+      // filename is derived here, on the host that owns the native path.
+      tarball: tarball.replaceAll("\\", "/"),
       filename: basename(tarball),
       integrity: packed[0].integrity,
       shasum: packed[0].shasum,
