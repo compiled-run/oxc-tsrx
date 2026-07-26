@@ -413,7 +413,23 @@ jobs:
             --spec-version 1.5
           find crates/oxc_tsrx_cli -maxdepth 1 -name '*.cdx.json' \
             -exec cp {} release/sbom/ \;
-          test "$(find release/sbom -name '*.cdx.json' | wc -l | tr -d ' ')" -ge 4
+          # `--describe binaries` writes one document per [[bin]] target, plus
+          # npm.cdx.json from the JavaScript half. The crate declared three
+          # binaries until they were merged into one multi-call executable, so
+          # this count was 4 and is now 2. Derived rather than hard-coded, so
+          # merging or adding a binary cannot silently pass an empty SBOM.
+          # Count only oxc_tsrx_cli's binaries. `cargo metadata --no-deps`
+          # returns every workspace member, and the two benchmark crates each
+          # declare a binary that cargo-cyclonedx is not asked to describe here.
+          bins=$(cargo metadata --no-deps --format-version 1 \
+            --manifest-path crates/oxc_tsrx_cli/Cargo.toml \
+            | node -e 'const m=JSON.parse(require("fs").readFileSync(0,"utf8"));const p=m.packages.find((x)=>x.name==="oxc_tsrx_cli");if(!p)throw new Error("oxc_tsrx_cli not found in cargo metadata");process.stdout.write(String(p.targets.filter((t)=>t.kind.includes("bin")).length))')
+          expected=$((bins + 1))
+          actual=$(find release/sbom -name '*.cdx.json' | wc -l | tr -d ' ')
+          if [ "$actual" -lt "$expected" ]; then
+            echo "expected at least $expected SBOM documents ($bins binaries plus npm), found $actual" >&2
+            exit 1
+          fi
 
       - name: Write the unsigned provenance staging statement
         shell: bash
