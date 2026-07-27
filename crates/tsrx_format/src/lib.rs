@@ -21,8 +21,6 @@ use tsrx_syntax::{lift_formatted, project_for_format, scan};
 pub use error::{ConfigScope, FormatError, GlobField};
 pub use oxc_adapter::OXC_REVISION;
 
-use crate::error::{ConfigScope as Scope, GlobField as Field};
-
 /// Deliberate embedded-CSS boundary for this release.
 ///
 /// `<style>` payloads never leave the current process and stay byte-exact until canonical OXC
@@ -177,7 +175,7 @@ impl FormatSession {
         let config_path = resolve_oxfmt_config(&cwd, explicit_config)?;
         let (base, overrides, ignore_patterns, config_root) = if let Some(path) = &config_path {
             let raw = read_oxfmt_config(path)?;
-            let base = raw.options.resolve(Scope::Root)?;
+            let base = raw.options.resolve(ConfigScope::Root)?;
             let overrides = raw
                 .overrides
                 .into_iter()
@@ -311,10 +309,10 @@ impl FormatOverride {
         if raw.files.is_empty() {
             return Err(FormatError::OverrideWithoutFiles { index });
         }
-        let scope = Scope::Override { index };
+        let scope = ConfigScope::Override { index };
         Ok(Self {
-            files: build_globs(&raw.files, scope, Field::Files)?,
-            exclude_files: build_globs(&raw.exclude_files, scope, Field::ExcludeFiles)?,
+            files: build_globs(&raw.files, scope, GlobField::Files)?,
+            exclude_files: build_globs(&raw.exclude_files, scope, GlobField::ExcludeFiles)?,
             options: raw.options.resolve(scope)?,
         })
     }
