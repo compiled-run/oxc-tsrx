@@ -397,7 +397,15 @@ impl EditorTool for TsrxEditorTool {
         // adds one visible diagnostic of its own; none of them can take a Rust rule away.
         if let Some(lane) = self.js_plugins.as_ref() {
             match lane.diagnostics(document.uri, &path, source) {
-                Ok(plugin) => diagnostics.extend(plugin),
+                Ok(plugin) => {
+                    // A rule whose report had no authored position was dropped. Publishing
+                    // the count is what keeps a dropped rule from looking like a rule that
+                    // found nothing, which is a clean panel hiding a real result.
+                    if plugin.unmapped > 0 {
+                        diagnostics.push(js_plugin_unmapped_diagnostic(source, plugin.unmapped));
+                    }
+                    diagnostics.extend(plugin.diagnostics);
+                }
                 Err(reason) => diagnostics.push(js_plugin_lane_diagnostic(source, &reason)),
             }
         } else if let Some(reason) = self.js_plugins_unavailable.as_deref() {
@@ -541,6 +549,17 @@ enum LaneProcess {
     Failed(String),
 }
 
+/// One file's plugin answer: what reached the editor, and what could not.
+#[derive(Clone)]
+struct LaneAnswer {
+    diagnostics: Vec<EditorDiagnostic>,
+    /// Diagnostics whose labels landed on text the projection inserted, so they had no
+    /// position in the file the developer wrote. They are dropped, and this is how many,
+    /// because a rule that fires on `.tsx` and disappears on `.tsrx` with an empty
+    /// Problems panel is the exact failure this lane exists to remove.
+    unmapped: usize,
+}
+
 /// The project's JavaScript plugin host for one editor workspace.
 struct JsPluginLane {
     root: PathBuf,
@@ -550,7 +569,7 @@ struct JsPluginLane {
     /// The last answer for each open document, keyed by the projection it was computed
     /// from. An editor republishes far more often than it really changes a file, and a
     /// projection that has not moved cannot have new plugin diagnostics.
-    cache: RwLock<HashMap<String, (String, Vec<EditorDiagnostic>)>>,
+    cache: RwLock<HashMap<String, (String, LaneAnswer)>>,
 }
 
 impl JsPluginLane {
@@ -581,39 +600,42 @@ impl JsPluginLane {
     }
 
     /// This project's plugin diagnostics for one in-memory buffer, in authored bytes.
-    fn diagnostics(
-        &self,
-        uri: &str,
-        path: &Path,
-        source: &str,
-    ) -> Result<Vec<EditorDiagnostic>, String> {
+    fn diagnostics(&self, uri: &str, path: &Path, source: &str) -> Result<LaneAnswer, String> {
         // A source this process cannot project is a syntax error the native lane already
         // reports against the authored file, and a plugin has nothing to say about it.
         let Ok(projection) = PluginProjection::new(source) else {
-            return Ok(Vec::new());
+            return Ok(LaneAnswer {
+                diagnostics: Vec::new(),
+                unmapped: 0,
+            });
         };
         if let Ok(cache) = self.cache.read()
-            && let Some((cached, diagnostics)) = cache.get(uri)
+            && let Some((cached, answer)) = cache.get(uri)
             && cached == projection.source()
         {
-            return Ok(diagnostics.clone());
+            return Ok(answer.clone());
         }
 
         let reported = match self.request(path, projection.source()) {
             Ok(reported) => reported,
             Err(failure) => return Err(failure.message().to_string()),
         };
+        let requested = reported.len();
         let diagnostics = reported
             .into_iter()
             .filter_map(|diagnostic| authored_plugin_diagnostic(&projection, source, diagnostic))
             .collect::<Vec<_>>();
+        let answer = LaneAnswer {
+            unmapped: requested.saturating_sub(diagnostics.len()),
+            diagnostics,
+        };
         if let Ok(mut cache) = self.cache.write() {
             cache.insert(
                 uri.to_string(),
-                (projection.source().to_string(), diagnostics.clone()),
+                (projection.source().to_string(), answer.clone()),
             );
         }
-        Ok(diagnostics)
+        Ok(answer)
     }
 
     /// Drop one closed document's cached answer.
@@ -949,6 +971,28 @@ fn js_plugin_lane_diagnostic(source: &str, reason: &str) -> EditorDiagnostic {
         ),
         related: Vec::new(),
         data: Some(json!({ "rule": "js-plugins-unavailable" })),
+    }
+}
+
+/// What this file's plugin lane found and could not place, as a diagnostic.
+///
+/// The command line writes the same count to stderr and puts it in
+/// `oxcTsrx.jsPluginProjection.unmapped`. An editor has neither, so it gets this instead:
+/// one warning beside the rules that did report, in the same place and the same style as
+/// `js-plugins-unavailable`. Without it a rule dropped for having no authored position is
+/// indistinguishable from a rule that ran and found nothing.
+fn js_plugin_unmapped_diagnostic(source: &str, count: usize) -> EditorDiagnostic {
+    let end = source.chars().next().map_or(0, char::len_utf8);
+    EditorDiagnostic {
+        range: EditorRange::new(0, u32::try_from(end).unwrap_or(0)),
+        severity: EditorSeverity::Warning,
+        code: Some("js-plugins-unmapped".to_string()),
+        source: Some("oxc-tsrx".to_string()),
+        message: format!(
+            "OXC for TSRX dropped {count} of this project's Oxlint JS plugin diagnostic(s) on this file: they landed on text the TSX projection inserted, so they have no position in the source you wrote. The rules that did report are unaffected."
+        ),
+        related: Vec::new(),
+        data: Some(json!({ "rule": "js-plugins-unmapped" })),
     }
 }
 

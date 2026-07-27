@@ -21,7 +21,7 @@ import {
   parseOxlintOption,
   withOxlintOutputFormat,
 } from "./lint-invocation.js";
-import { preparePluginLane } from "./lint-js-plugins.js";
+import { jsPluginUnmappedNote, preparePluginLane } from "./lint-js-plugins.js";
 
 // Mixed invocations need captured JSON so the canonical and TSRX diagnostics
 // can be combined. Run the public, manifest-declared JavaScript launcher via
@@ -640,11 +640,20 @@ export async function runCli(args, options = {}) {
           process.stderr.write(`oxlint (oxc-tsrx): ${failure}\n`);
         }
       }
+      // A plugin diagnostic that landed on text the projection inserted has no
+      // authored position and was dropped. Saying so is the difference between a
+      // rule the developer can investigate and a rule that looks like it found
+      // nothing, which is the silence this lane exists to remove.
+      const unmapped = laneOutcome.value.unmapped ?? 0;
+      if (unmapped > 0 && !args.includes("--silent")) {
+        process.stderr.write(`${jsPluginUnmappedNote(unmapped)}\n`);
+      }
       native.diagnostics = [...(native.diagnostics ?? []), ...laneOutcome.value.diagnostics];
       if (native.oxcTsrx) {
         native.oxcTsrx.jsPluginProjection = {
           files: laneOutcome.value.files,
           extraParses: laneOutcome.value.extraParses,
+          unmapped,
         };
       }
     }

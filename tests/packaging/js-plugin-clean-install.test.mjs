@@ -29,8 +29,17 @@ import { startLocalRegistry } from "./local-registry.mjs";
 const root = resolve(import.meta.dirname, "../..");
 const npm = process.platform === "win32" ? "npm.cmd" : "npm";
 
-/** The authored `.tsrx` file. Every asserted position below is a position in this string. */
-const WIDGET_TSRX = `export function Widget() @{
+/**
+ * The authored `.tsrx` file. Every asserted position below is a position in this
+ * string.
+ *
+ * It opens with a comment on purpose. A rule that reports on the whole `Program`
+ * gets a span that starts at the first token, so leading trivia is what once made
+ * that whole class of report vanish on `.tsrx` while firing on an identical
+ * `.tsx`. A fixture with nothing above its first token cannot catch that.
+ */
+const WIDGET_TSRX = `// The first line is a comment, so nothing here starts at byte zero.
+export function Widget() @{
   const banned = 1;
   debugger;
 
@@ -39,7 +48,8 @@ const WIDGET_TSRX = `export function Widget() @{
 `;
 
 /** The ordinary file, so the same rule is proved on both halves of a mixed batch. */
-const ORDINARY_TSX = `export function ordinary() {
+const ORDINARY_TSX = `// The first line is a comment, so nothing here starts at byte zero.
+export function ordinary() {
   const banned = 2;
   return banned;
 }
@@ -66,9 +76,24 @@ const PLUGIN = `const noBannedIdentifier = {
   },
 };
 
+const wholeFile = {
+  meta: {
+    type: "problem",
+    docs: { description: "Report once on the whole file" },
+    schema: [],
+  },
+  create(context) {
+    return {
+      Program(node) {
+        context.report({ node, message: "this file was reported as a whole" });
+      },
+    };
+  },
+};
+
 export default {
   meta: { name: "house-rules", version: "1.0.0" },
-  rules: { "no-banned-identifier": noBannedIdentifier },
+  rules: { "no-banned-identifier": noBannedIdentifier, "whole-file": wholeFile },
 };
 `;
 
@@ -249,7 +274,11 @@ test(
       `${JSON.stringify(
         {
           jsPlugins: ["./house-rules.mjs"],
-          rules: { "house-rules/no-banned-identifier": "error", "no-debugger": "warn" },
+          rules: {
+            "house-rules/no-banned-identifier": "error",
+            "house-rules/whole-file": "warn",
+            "no-debugger": "warn",
+          },
         },
         null,
         2,
@@ -285,9 +314,15 @@ test(
       assert.equal(lint.status, 1, lint.stderr || lint.stdout);
       const report = JSON.parse(lint.stdout);
 
-      // The extra parse is disclosed, both on stderr and as data.
+      // The extra parse is disclosed, both on stderr and as data, and `unmapped`
+      // reports how many of this project's plugin diagnostics had no position in
+      // the authored source and were dropped. None here.
       assert.match(lint.stderr, /running JS plugins on 1 \.tsrx file/u);
-      assert.deepEqual(report.oxcTsrx.jsPluginProjection, { files: 1, extraParses: 1 });
+      assert.deepEqual(report.oxcTsrx.jsPluginProjection, {
+        files: 1,
+        extraParses: 1,
+        unmapped: 0,
+      });
 
       const widget = forFile(report.diagnostics, "src/Widget.tsrx");
       const rule = widget.filter((diagnostic) => diagnostic.code === "house-rules(no-banned-identifier)");
@@ -335,6 +370,25 @@ test(
       const ordinaryLabel = labelOf(ordinary[0]);
       assert.equal(ordinaryLabel.line, expectedTsxRule.line);
       assert.equal(ordinaryLabel.column, expectedTsxRule.column);
+
+      // A rule that reports on the whole file, on both halves. Its span starts at
+      // the first token rather than at byte zero, which is what used to make it
+      // vanish on `.tsrx` while firing on the `.tsx` beside it.
+      const wholeOnTsrx = widget.filter(
+        (diagnostic) => diagnostic.code === "house-rules(whole-file)",
+      );
+      const wholeOnTsx = forFile(report.diagnostics, "src/Ordinary.tsx").filter(
+        (diagnostic) => diagnostic.code === "house-rules(whole-file)",
+      );
+      assert.equal(wholeOnTsx.length, 1, JSON.stringify(report.diagnostics, null, 2));
+      assert.equal(wholeOnTsrx.length, 1, JSON.stringify(widget, null, 2));
+      const wholeLabel = labelOf(wholeOnTsrx[0]);
+      const expectedWhole = authoredPosition(WIDGET_TSRX, "export");
+      assert.equal(wholeLabel.offset, expectedWhole.offset);
+      assert.equal(wholeLabel.line, expectedWhole.line);
+      assert.equal(wholeLabel.column, expectedWhole.column);
+      // It covers the rest of the authored file, and nothing beyond it.
+      assert.equal(wholeLabel.offset + wholeLabel.length, Buffer.byteLength(WIDGET_TSRX));
     });
 
     await context.test("the language server publishes both on the same .tsrx file", async () => {
@@ -381,6 +435,17 @@ test(
               character: authoredPosition(WIDGET_TSRX, "banned", 2).column - 1,
             },
           ],
+          shown,
+        );
+
+        // The whole-file rule reaches the editor as well, at the position the
+        // CLI reported it at: the first token, below this file's leading comment.
+        const whole = withCode("house-rules(whole-file)");
+        const expectedWhole = authoredPosition(WIDGET_TSRX, "export");
+        assert.equal(whole.length, 1, shown);
+        assert.deepEqual(
+          whole[0].range.start,
+          { line: expectedWhole.line - 1, character: expectedWhole.column - 1 },
           shown,
         );
 

@@ -507,7 +507,7 @@ test(
         ...NATIVE_TARGETS.map((platform) => [
           `native-${platform.packageSuffix}`,
           nativePackageName(platform),
-          "0.1.2",
+          "0.1.3",
         ]),
       ].map(([directory, name, version]) =>
         writePackage(
@@ -540,7 +540,7 @@ test(
       const directory = join(temporary, name);
       await writePackage(
         directory,
-        { name, private: true, type: "module", ...manifest, dependencies: { "oxc-tsrx": "0.1.2" } },
+        { name, private: true, type: "module", ...manifest, dependencies: { "oxc-tsrx": "0.1.3" } },
         files,
       );
       consumers.add(directory);
@@ -908,7 +908,7 @@ test(
         ...NATIVE_TARGETS.map((platform) => [
           `native-${platform.packageSuffix}`,
           nativePackageName(platform),
-          "0.1.2",
+          "0.1.3",
         ]),
       ].map(([directory, name, version]) =>
         writePackage(
@@ -947,7 +947,7 @@ test(
     const app = join(temporary, "mixed-consumer");
     await writePackage(
       app,
-      { name: "mixed-consumer", private: true, type: "module", dependencies: { "oxc-tsrx": "0.1.2" } },
+      { name: "mixed-consumer", private: true, type: "module", dependencies: { "oxc-tsrx": "0.1.3" } },
       files,
     );
 

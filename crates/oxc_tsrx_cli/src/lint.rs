@@ -36,13 +36,15 @@ JavaScript plugin lane (driven by the `oxlint` command, not by hand):
     --map-plugin-diagnostics    Read {files:[{path,diagnostics}]} on stdin and
                                 print it back with every label span moved from
                                 projection bytes to authored bytes. A label
-                                covering the whole projection is a whole-file
-                                report and maps to the whole authored file. Any
-                                other diagnostic whose labels do not all map is
-                                dropped, because a position the user did not
-                                write is worse than no diagnostic, and each file
-                                carries an `unmapped` count of how many were
-                                dropped so the loss is never silent
+                                running to the end of the projected source is a
+                                whole-file report and maps to the authored file
+                                from the first authored byte it covers, however
+                                much trivia precedes it. Any other diagnostic
+                                whose labels do not all map is dropped, because a
+                                position the user did not write is worse than no
+                                diagnostic, and each file carries an `unmapped`
+                                count of how many were dropped so the loss is
+                                never silent
 
 This is the internal capability target the oxc.provider metadata names for
 linting .tsrx files. It takes explicit file paths only, never a directory or a
@@ -310,36 +312,29 @@ fn map_one_diagnostic(
 
 /// Move one label from projection bytes to authored bytes.
 ///
-/// Every label goes through [`PluginProjection::map_labels`] one at a time, which is the same
-/// all-or-nothing rejection the native lane applies, except for one shape that rejection gets
-/// wrong. A rule that reports on the whole `Program` gets a span covering everything Oxlint
-/// linted, and what Oxlint linted for a `.tsrx` file is the projection, markers and synthetic
-/// wrappers included. That range can never lie entirely inside authored text, so such a rule used
-/// to fire at `1:1` on an ordinary `.tsx` and vanish without a trace on a `.tsrx`. A whole-file
-/// report has an obvious authored position: the whole authored file. It is mapped there instead of
-/// being dropped.
+/// Every label goes through [`PluginProjection::map_labels`] first, which is the same
+/// all-or-nothing rejection the native lane applies: a label that lies inside one stretch of
+/// copied text keeps its exact authored position.
+///
+/// That rejection gets one shape wrong. A rule that reports on the whole `Program` gets a span
+/// covering everything Oxlint linted, and what Oxlint linted for a `.tsrx` file is the projection,
+/// markers and synthetic wrappers included. That range can never lie inside one authored segment,
+/// so such a rule used to fire on an ordinary `.tsx` and vanish without a trace on the
+/// byte-identical `.tsrx`. The earlier attempt at this recognised the shape by
+/// `label.offset == 0`, which a `Program` only satisfies in a file with no leading trivia: one
+/// blank line, comment, or `// @ts-nocheck` above the first token put the whole report back in the
+/// bin. [`PluginProjection::map_whole_file_label`] uses the projection's own copied-byte bounds
+/// instead, so leading trivia cannot hide the shape, and a report that covers no authored bytes at
+/// all is still dropped.
 pub(crate) fn map_label(
     projection: &PluginProjection,
     authored_length: u32,
     label: PluginLabel,
 ) -> Option<PluginLabel> {
-    if spans_whole_projection(projection, label) {
-        return Some(PluginLabel {
-            offset: 0,
-            length: authored_length,
-        });
-    }
     projection
         .map_labels(&[label])
         .and_then(|mut mapped| mapped.pop())
-}
-
-/// Whether a label covers the entire projected source.
-fn spans_whole_projection(projection: &PluginProjection, label: PluginLabel) -> bool {
-    let Ok(projected_length) = u32::try_from(projection.source().len()) else {
-        return false;
-    };
-    label.offset == 0 && label.offset.saturating_add(label.length) >= projected_length
+        .or_else(|| projection.map_whole_file_label(label, authored_length))
 }
 
 fn label_span(label: &Value) -> Option<PluginLabel> {

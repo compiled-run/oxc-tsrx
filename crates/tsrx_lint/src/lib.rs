@@ -362,6 +362,51 @@ impl PluginProjection {
     pub fn map_labels(&self, labels: &[PluginLabel]) -> Option<Vec<PluginLabel>> {
         map_projection_labels(&self.projection, labels)
     }
+
+    /// Map one label that runs to the end of everything this projection copied.
+    ///
+    /// A rule that reports on the whole `Program` gets the span OXC gave that node in the
+    /// projection: it starts at the first token, after any leading trivia, and runs to the end of
+    /// the source Oxlint linted. That range crosses every marker and synthetic wrapper the
+    /// projection inserted, so [`Self::map_labels`] can never place it inside one authored segment
+    /// and drops it. Such a report used to fire at the top of an ordinary `.tsx` and vanish
+    /// without a trace on the byte-identical `.tsrx`.
+    ///
+    /// The answer is `first authored byte the label covers .. authored_length`: the report really
+    /// does cover the authored source from there to the end of the file, so nothing is invented.
+    /// `None` when the label does not reach the end of the authored region, or when it starts
+    /// after the last byte this projection copied. Both of those are genuinely projection-only
+    /// reports, and they stay dropped.
+    #[must_use]
+    pub fn map_whole_file_label(
+        &self,
+        label: PluginLabel,
+        authored_length: u32,
+    ) -> Option<PluginLabel> {
+        let segments = self.projection.view().segments;
+        let authored_end = segments.iter().map(|segment| segment.projected.end).max()?;
+        if label.offset.saturating_add(label.length) < authored_end {
+            return None;
+        }
+        // The authored byte the label starts covering: the affine image of its own start when
+        // that start is inside copied text, and otherwise the first copied byte after it.
+        let start = segments
+            .iter()
+            .filter_map(|segment| {
+                if label.offset < segment.projected.start {
+                    Some(segment.original_start)
+                } else if label.offset < segment.projected.end {
+                    Some(segment.original_start + (label.offset - segment.projected.start))
+                } else {
+                    None
+                }
+            })
+            .min()?;
+        (start <= authored_length).then_some(PluginLabel {
+            offset: start,
+            length: authored_length - start,
+        })
+    }
 }
 
 /// The single rejection rule for projection-to-authored label mapping.
@@ -1354,6 +1399,62 @@ mod tests {
                     length: 1
                 },
             ]),
+            None
+        );
+    }
+
+    /// A whole-file report survives leading trivia, which is what a `Program` node always has to
+    /// step over. The offsets here are the ones OXC gives that node: it starts at the first token,
+    /// not at byte zero, so a check written as `offset == 0` silently dropped every one of these.
+    #[test]
+    fn plugin_projection_maps_a_whole_file_label_through_leading_trivia() {
+        for prefix in [
+            "",
+            "\n",
+            "// leading comment\n",
+            "/* leading block */\n",
+            "// @ts-nocheck\n",
+        ] {
+            let source =
+                format!("{prefix}function View() @{{ var banned = 1; <p>{{banned}}</p>; }}\n");
+            let projection = PluginProjection::new(&source).unwrap();
+            let authored_length = u32::try_from(source.len()).unwrap();
+            let projected_length = u32::try_from(projection.source().len()).unwrap();
+            // Exactly the span a rule reporting on `Program` carries: first token to end of file.
+            let program_start =
+                u32::try_from(projection.source().find("function").unwrap()).unwrap();
+            let label = PluginLabel {
+                offset: program_start,
+                length: projected_length - program_start,
+            };
+            // The all-or-nothing mapping cannot place it: it crosses the inserted markers.
+            assert_eq!(projection.map_labels(&[label]), None, "{prefix:?}");
+
+            let mapped = projection
+                .map_whole_file_label(label, authored_length)
+                .unwrap_or_else(|| panic!("a whole-file report was dropped after {prefix:?}"));
+            let authored_start = u32::try_from(source.find("function").unwrap()).unwrap();
+            assert_eq!(mapped.offset, authored_start, "{prefix:?}");
+            assert_eq!(mapped.offset + mapped.length, authored_length, "{prefix:?}");
+        }
+    }
+
+    /// The widening must not turn a report on inserted text into a report on the user's code.
+    #[test]
+    fn plugin_projection_still_drops_a_projection_only_label() {
+        let source = "function View() @{ var banned = 1; <p>{banned}</p>; }";
+        let projection = PluginProjection::new(source).unwrap();
+        let authored_length = u32::try_from(source.len()).unwrap();
+        let marker = u32::try_from(projection.source().find("/*").unwrap()).unwrap();
+        let label = PluginLabel {
+            offset: marker,
+            length: 4,
+        };
+        assert_eq!(projection.map_labels(&[label]), None);
+        // It covers no authored byte and does not reach the end of the copied region, so it has no
+        // authored position and stays dropped rather than being reported at an invented one.
+        assert_eq!(
+            projection.map_whole_file_label(label, authored_length),
             None
         );
     }

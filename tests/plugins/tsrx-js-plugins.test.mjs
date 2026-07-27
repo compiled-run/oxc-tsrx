@@ -21,6 +21,7 @@ import {
   installedOxlintVersion,
   jsPluginDisclosure,
   jsPluginEditorDisclosure,
+  jsPluginUnmappedNote,
   laneSupportsOxlintVersion,
   mirrorRelativePath,
   nativeLaneConfig,
@@ -165,8 +166,14 @@ test("a user plugin reports on .tsrx at the authored source's own positions", as
     assert.equal(span.column, location.column);
   }
 
-  // The lane is disclosed in the machine-readable report too, not only on stderr.
-  assert.deepEqual(parsed.oxcTsrx.jsPluginProjection, { files: 1, extraParses: 1 });
+  // The lane is disclosed in the machine-readable report too, not only on stderr,
+  // and `unmapped` says how many of this project's plugin diagnostics had no
+  // authored position and were dropped. Zero here: both reports landed.
+  assert.deepEqual(parsed.oxcTsrx.jsPluginProjection, {
+    files: 1,
+    extraParses: 1,
+    unmapped: 0,
+  });
   // An error-severity plugin rule must not report a green run.
   assert.equal(result.code, 1, result.stderr);
 });
@@ -215,6 +222,277 @@ test("a mixed .tsrx and .tsx batch runs the same rule on both halves", async () 
       (diagnostic) => diagnostic.filename.endsWith("demo.tsrx") && diagnostic.rule === "no-debugger",
     ),
     "the native .tsrx rules stopped reporting in a mixed batch",
+  );
+});
+
+// A rule that reports on the whole `Program` is the shape this lane got wrong for
+// longest. Its span is everything Oxlint linted, which on this route is the
+// projection with every marker and synthetic wrapper in it, so the all-or-nothing
+// mapping cannot place it. The first fix recognised it as `offset == 0`, and a
+// `Program` only starts at byte zero when nothing precedes the first token: one
+// blank line, comment, or `// @ts-nocheck` above it and the report vanished again,
+// on a `.tsrx` that was byte-identical to a `.tsx` where the same rule fired.
+// Nothing caught that, because nothing tested leading trivia. This does.
+const WHOLE_FILE_PLUGIN = `const wholeFile = {
+  meta: {
+    type: "problem",
+    docs: { description: "Report once on the whole file" },
+    schema: [],
+  },
+  create(context) {
+    return {
+      Program(node) {
+        context.report({ node, message: "this file was reported as a whole" });
+      },
+    };
+  },
+};
+
+export default {
+  meta: { name: "tsrx-js-whole", version: "0.1.0" },
+  rules: { "whole-file": wholeFile },
+};
+`;
+
+const WHOLE_FILE_CONFIG = {
+  jsPlugins: ["./whole-file.mjs"],
+  rules: { "tsrx-js-whole/whole-file": "error" },
+};
+
+/** The same component, once in TSRX and once in ordinary TSX. */
+const WHOLE_FILE_TSRX = `export function Widget() @{
+  const label = "hi";
+
+  <p>{label}</p>;
+}
+`;
+const WHOLE_FILE_TSX = `export function Widget() {
+  const label = "hi";
+
+  return <p>{label}</p>;
+}
+`;
+
+/** Everything that can sit above the first token of a file. */
+const LEADING_TRIVIA = {
+  nothing: "",
+  "a blank line": "\n",
+  "a line comment": "// a comment above everything\n",
+  "a block comment": "/* a block comment above everything */\n",
+  "a ts-nocheck": "// @ts-nocheck\n",
+};
+
+function trivialSlug(name) {
+  return name.replace(/[^a-z]+/giu, "-");
+}
+
+function wholeFileFixtures() {
+  const files = { "whole-file.mjs": WHOLE_FILE_PLUGIN };
+  for (const [name, prefix] of Object.entries(LEADING_TRIVIA)) {
+    const slug = trivialSlug(name);
+    files[`src/${slug}.tsrx`] = prefix + WHOLE_FILE_TSRX;
+    files[`src/${slug}.tsx`] = prefix + WHOLE_FILE_TSX;
+  }
+  return files;
+}
+
+test("a rule reporting on the whole Program fires on .tsrx whatever precedes the first token", async () => {
+  await withProject(
+    WHOLE_FILE_CONFIG,
+    async (project) => {
+      for (const [name, prefix] of Object.entries(LEADING_TRIVIA)) {
+        const slug = trivialSlug(name);
+        const result = await oxlint(project, [
+          "--format=json",
+          `src/${slug}.tsrx`,
+          `src/${slug}.tsx`,
+        ]);
+        const parsed = report(result);
+        const reported = (extension) =>
+          (parsed.diagnostics ?? []).filter(
+            (diagnostic) =>
+              diagnostic.filename.endsWith(`${slug}.${extension}`) &&
+              String(diagnostic.code ?? "").startsWith("tsrx-js-whole("),
+          );
+        const shown = JSON.stringify(parsed.diagnostics, null, 2);
+        const onTsrx = reported("tsrx");
+        const onTsx = reported("tsx");
+        // The ordinary file is the control: whatever the rule does there, the
+        // `.tsrx` file with the same trivia above it has to do as well.
+        assert.equal(onTsx.length, 1, `${name}: the .tsx control lost the rule\n${shown}`);
+        assert.equal(onTsrx.length, 1, `${name}: the rule vanished on .tsrx\n${shown}`);
+
+        // The position is checked against the authored bytes rather than against
+        // the other report, so both landing in the same wrong place would fail.
+        const source = prefix + WHOLE_FILE_TSRX;
+        const expected = locationOf(source, source.indexOf("export"));
+        const span = onTsrx[0].labels[0].span;
+        assert.equal(span.offset, source.indexOf("export"), name);
+        assert.equal(span.offset + span.length, Buffer.byteLength(source), name);
+        assert.deepEqual({ line: span.line, column: span.column }, expected, name);
+        // And it is where the identical `.tsx` puts it.
+        const control = onTsx[0].labels[0].span;
+        assert.deepEqual(
+          { line: span.line, column: span.column },
+          { line: control.line, column: control.column },
+          `${name}: the .tsrx report moved away from the .tsx one`,
+        );
+
+        // Nothing was lost on the way, and the report says so.
+        assert.equal(parsed.oxcTsrx.jsPluginProjection.unmapped, 0, name);
+        assert.ok(
+          !result.stderr.includes("had no position in the source you wrote"),
+          `${name}: a dropped diagnostic was reported where none was dropped`,
+        );
+      }
+    },
+    wholeFileFixtures(),
+  );
+});
+
+test("the editor publishes a whole-file rule where the CLI reports it", async () => {
+  await withProject(
+    WHOLE_FILE_CONFIG,
+    async (project) => {
+      // The variant that used to disappear: a comment above the first token.
+      const name = "a line comment";
+      const slug = trivialSlug(name);
+      const relative = `src/${slug}.tsrx`;
+      const parsed = report(await oxlint(project, ["--format=json", relative]));
+      const fromCli = (parsed.diagnostics ?? []).filter((diagnostic) =>
+        String(diagnostic.code ?? "").startsWith("tsrx-js-whole("),
+      );
+      assert.equal(fromCli.length, 1, JSON.stringify(parsed.diagnostics, null, 2));
+      const span = fromCli[0].labels[0].span;
+      const source = await readFile(join(project, relative), "utf8");
+      const start = locationOf(source, span.offset);
+      const end = locationOf(source, span.offset + span.length);
+
+      const uri = pathToFileUri(join(project, relative));
+      const client = new LspClient(binary, { args: SERVER_ARGUMENTS, cwd: project });
+      try {
+        await client.initialize(pathToFileUri(project));
+        client.notify("textDocument/didOpen", {
+          textDocument: { uri, languageId: "markless-tsrx", version: 1, text: source },
+        });
+        const published = await client.waitFor(
+          (message) =>
+            message.method === "textDocument/publishDiagnostics" &&
+            message.params.uri === uri &&
+            message.params.diagnostics.some((diagnostic) =>
+              String(diagnostic.code ?? "").startsWith("tsrx-js-whole("),
+            ),
+          20000,
+          "the editor's whole-file plugin diagnostic",
+        );
+        const fromEditor = published.params.diagnostics.filter((diagnostic) =>
+          String(diagnostic.code ?? "").startsWith("tsrx-js-whole("),
+        );
+        assert.equal(fromEditor.length, 1, JSON.stringify(published.params.diagnostics, null, 2));
+        assert.deepEqual(fromEditor[0].range, {
+          start: { line: start.line - 1, character: start.column - 1 },
+          end: { line: end.line - 1, character: end.column - 1 },
+        });
+        await client.close();
+      } finally {
+        client.terminate();
+      }
+    },
+    wholeFileFixtures(),
+  );
+});
+
+// The other half of the same rule: a report that really does belong to text the
+// projection invented still has nowhere to go, and is still dropped. What changed
+// is that the drop is now counted and said out loud instead of leaving a rule that
+// looks like it found nothing.
+const MARKER_PLUGIN = `export default {
+  meta: { name: "tsrx-js-marker", version: "0.1.0" },
+  rules: {
+    "marker": {
+      meta: { type: "problem", schema: [] },
+      create(context) {
+        return {
+          Identifier(node) {
+            if (!/^_t\\d+_/u.test(node.name)) return;
+            context.report({ node, message: "this identifier exists only in the projection" });
+          },
+        };
+      },
+    },
+  },
+};
+`;
+
+test("a report that exists only in the projection is dropped, counted, and disclosed", async () => {
+  await withProject(
+    { jsPlugins: ["./marker.mjs"], rules: { "tsrx-js-marker/marker": "error" } },
+    async (project) => {
+      const result = await oxlint(project, ["--format=json", "src/demo.tsrx"]);
+      const parsed = report(result);
+      // Nothing is reported at a position the developer never wrote.
+      assert.equal(
+        (parsed.diagnostics ?? []).filter((diagnostic) =>
+          String(diagnostic.code ?? "").startsWith("tsrx-js-marker("),
+        ).length,
+        0,
+        JSON.stringify(parsed.diagnostics, null, 2),
+      );
+      // But the loss is a number in the report and a line on stderr, not silence.
+      const unmapped = parsed.oxcTsrx.jsPluginProjection.unmapped;
+      assert.ok(unmapped > 0, JSON.stringify(parsed.oxcTsrx, null, 2));
+      assert.ok(
+        result.stderr.includes(jsPluginUnmappedNote(unmapped)),
+        `expected the dropped-diagnostic note, got:\n${result.stderr}`,
+      );
+
+      const silent = await oxlint(project, ["--silent", "--format=json", "src/demo.tsrx"]);
+      assert.ok(
+        !silent.stderr.includes("had no position in the source you wrote"),
+        `--silent must suppress the note, got:\n${silent.stderr}`,
+      );
+    },
+    { "marker.mjs": MARKER_PLUGIN },
+  );
+});
+
+test("the editor says so too when a plugin diagnostic could not be placed", async () => {
+  await withProject(
+    { jsPlugins: ["./marker.mjs"], rules: { "tsrx-js-marker/marker": "error" } },
+    async (project) => {
+      const source = await readFile(join(project, "src/demo.tsrx"), "utf8");
+      const uri = pathToFileUri(join(project, "src/demo.tsrx"));
+      const client = new LspClient(binary, { args: SERVER_ARGUMENTS, cwd: project });
+      try {
+        await client.initialize(pathToFileUri(project));
+        client.notify("textDocument/didOpen", {
+          textDocument: { uri, languageId: "markless-tsrx", version: 1, text: source },
+        });
+        const published = await client.waitFor(
+          (message) =>
+            message.method === "textDocument/publishDiagnostics" &&
+            message.params.uri === uri &&
+            message.params.diagnostics.some(
+              (diagnostic) => diagnostic.code === "js-plugins-unmapped",
+            ),
+          20000,
+          "the editor's dropped-diagnostic warning",
+        );
+        const note = published.params.diagnostics.find(
+          (diagnostic) => diagnostic.code === "js-plugins-unmapped",
+        );
+        assert.match(note.message, /no position in the source you wrote/u);
+        // The native Rust rules are still in the same publish.
+        assert.ok(
+          published.params.diagnostics.some((diagnostic) => diagnostic.code === "no-debugger"),
+          JSON.stringify(published.params.diagnostics, null, 2),
+        );
+        await client.close();
+      } finally {
+        client.terminate();
+      }
+    },
+    { "marker.mjs": MARKER_PLUGIN },
   );
 });
 
@@ -685,11 +963,15 @@ test("the native binary's two plugin modes answer on their own", async () => {
     child.stdin.end(request);
   });
   assert.equal(result.code, 0, result.stderr);
-  const answered = JSON.parse(result.stdout).files[0].diagnostics;
+  const answeredFile = JSON.parse(result.stdout).files[0];
+  const answered = answeredFile.diagnostics;
   assert.deepEqual(
     answered.map((diagnostic) => diagnostic.code),
     ["demo(keeps)"],
   );
+  // The two that had no authored position are counted rather than left for the
+  // caller to notice by comparing list lengths.
+  assert.equal(answeredFile.unmapped, 2);
   const span = answered[0].labels[0].span;
   assert.equal(span.offset, source.indexOf("banned"));
   assert.equal(span.length, 6);

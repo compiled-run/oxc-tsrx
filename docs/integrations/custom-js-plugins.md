@@ -267,7 +267,10 @@ Three practical consequences:
   UI.
 - **A broken plugin does not take your other diagnostics with it.** If the lane
   cannot start or one of your rules throws, the built-in rules still publish and
-  a `js-plugins-unavailable` warning carries the reason.
+  a `js-plugins-unavailable` warning carries the reason. If one of your reports
+  had no position in the source you wrote, it is dropped and a
+  `js-plugins-unmapped` warning says how many, so an empty Problems panel is
+  never how you find out.
 
 [Editor integration](/integrations/editor#your-own-javascript-rules-in-the-editor)
 has the rest, including the one activation step the official extension needs.
@@ -290,8 +293,10 @@ The cost is one extra parse per `.tsrx` file, and it is never silent. Every run
 that does it writes one line to stderr, ahead of the report, which is the
 `oxlint (oxc-tsrx):` line in both runs above. `--silent` suppresses it along
 with everything else. A `--format=json` report carries the same fact as data,
-under
-`oxcTsrx.jsPluginProjection`, as `{ "files": N, "extraParses": N }`.
+under `oxcTsrx.jsPluginProjection`, as
+`{ "files": N, "extraParses": N, "unmapped": N }`. `unmapped` is how many of
+your plugin diagnostics could not be placed in the source you wrote; the next
+section explains when that happens.
 
 If the installed Oxlint is outside the range this route was built against
 (`>=1.74.0 <2.0.0`), the command refuses and exits 1 rather than running with
@@ -318,24 +323,31 @@ the extension to be `.tsrx`, does not. The diagnostic itself is still reported
 against `src/View.tsrx`, which is what you and your editor see. This holds in
 the editor as well, with a different throwaway directory per session.
 
-**A diagnostic that lands on projected-only text is dropped.** The projection
-inserts markers and wrappers that correspond to nothing you typed. If a rule
-reports on one of those, there is no authored position to point at, so the
-diagnostic is discarded rather than reported at an invented location.
+**A diagnostic that lands on projected-only text is dropped, and counted.** The
+projection inserts markers and wrappers that correspond to nothing you typed. If
+a rule reports on one of those, there is no authored position to point at, so
+the diagnostic is discarded rather than reported at an invented location.
 
-There is one shape you would not guess is projected-only: a report on the whole
-`Program`. Its span covers the entire file Oxlint linted, which on this route is
-the projection, markers and all. Whole-file reports are not dropped; they are
-mapped to your whole authored file, so they arrive at line 1, column 1 of your
-`.tsrx`, the same place they land on an ordinary `.tsx`.
+That drop is never silent. A run that discards any of your diagnostics writes a
+second `oxlint (oxc-tsrx):` line to stderr saying how many, and the same number
+is in `oxcTsrx.jsPluginProjection.unmapped` in a `--format=json` report. In the
+editor it arrives as one `js-plugins-unmapped` warning on the file. So a rule
+that fires on `.tsx` and reports nothing on `.tsrx` is something you are told
+about rather than something you have to suspect.
+
+A report on the whole `Program` is not one of these, even though its span
+covers the projection, markers and all. It is mapped to your authored file from
+its first token to the end, which is the same place the same rule lands on an
+ordinary `.tsx` file. Whatever sits above that first token — a comment, a blank
+line, `// @ts-nocheck` — makes no difference. The same holds for any report that
+runs to the end of the file across text the projection rewrote.
 
 What is still dropped is a report whose span sits partly on a marker and partly
-on code you wrote, which happens when a rule reports on a node the projection
-rewrote rather than on one of your own tokens. The run does not tell you when
-that happens. If a rule fires on a `.tsx` file and stays quiet on a `.tsrx` one,
-this is the first thing to suspect, and
+on code you wrote and stops short of the end of the file, which happens when a
+rule reports on a node the projection rewrote rather than on one of your own
+tokens. If that is the rule you need,
 [the ESLint route](#when-your-rule-must-see-authored-tsrx-nodes-eslint) parses
-your file directly if you need that rule to run.
+your file directly.
 
 **An `overrides` glob written for `.tsrx` is matched for you, in your own config
 only.** The projection is named `View.tsrx.tsx`, which `**/*.tsrx` does not

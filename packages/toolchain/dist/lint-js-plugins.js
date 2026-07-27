@@ -116,6 +116,24 @@ export function jsPluginDisclosure(fileCount) {
 }
 
 /**
+ * The line that reports plugin diagnostics this lane could not place.
+ *
+ * A diagnostic whose labels land on text the projection inserted has no
+ * position in the file the developer wrote, so it is dropped rather than
+ * reported somewhere they can see no such code. Dropping it quietly is the same
+ * silence this lane exists to remove, one level down: the rule looks like it
+ * simply found nothing. So the count reaches stderr, and
+ * `oxcTsrx.jsPluginProjection.unmapped` carries it in `--format=json` too.
+ */
+export function jsPluginUnmappedNote(count) {
+  return (
+    `oxlint (oxc-tsrx): ${count} JS plugin diagnostic(s) on .tsrx had no position in the ` +
+    `source you wrote (they landed on text the TSX projection inserted) and were dropped. ` +
+    `See oxcTsrx.jsPluginProjection.unmapped in --format=json.`
+  );
+}
+
+/**
  * Read a `.oxlintrc.json` or `.oxlintrc.jsonc`.
  *
  * Comments and trailing commas are stripped rather than parsed, because this
@@ -642,7 +660,9 @@ export function pluginHostFailures(report, paths = new Map()) {
 async function runPluginLane({ cwd, configs, nativeConfig, explicit, temporary }) {
   const laneFiles = configs.flatMap((entry) => entry.files);
   const projections = await emitProjections(cwd, laneFiles, nativeConfig);
-  if (projections.length === 0) return { diagnostics: [], files: 0, extraParses: 0, failures: [] };
+  if (projections.length === 0) {
+    return { diagnostics: [], files: 0, extraParses: 0, unmapped: 0, failures: [] };
+  }
 
   const mirror = await mkdtemp(join(tmpdir(), "oxc-tsrx-js-plugins-"));
   temporary.push(mirror);
@@ -656,7 +676,9 @@ async function runPluginLane({ cwd, configs, nativeConfig, explicit, temporary }
     authoredByMirrorPath.set(relativePath, projection.path);
     mirrored.push(relativePath);
   }
-  if (mirrored.length === 0) return { diagnostics: [], files: 0, extraParses: 0, failures: [] };
+  if (mirrored.length === 0) {
+    return { diagnostics: [], files: 0, extraParses: 0, unmapped: 0, failures: [] };
+  }
 
   // Oxlint resolves the configuration itself, from copies sitting where it
   // expects to find them: an explicit `-c` becomes one config at the mirror
@@ -723,8 +745,13 @@ async function runPluginLane({ cwd, configs, nativeConfig, explicit, temporary }
 
   const nonEmpty = new Map([...byFile].filter(([, diagnostics]) => diagnostics.length > 0));
   const diagnostics = [];
+  // What the native mapping mode could not place. It answers with this count per
+  // file precisely so the loss does not have to be inferred from a shorter list,
+  // and the caller turns it into a stderr line and a field in the JSON report.
+  let unmapped = 0;
   if (nonEmpty.size > 0) {
     for (const file of await mapDiagnostics(cwd, nonEmpty)) {
+      if (Number.isSafeInteger(file.unmapped) && file.unmapped > 0) unmapped += file.unmapped;
       for (const diagnostic of file.diagnostics ?? []) {
         diagnostics.push({ ...diagnostic, filename: file.path });
       }
@@ -734,6 +761,7 @@ async function runPluginLane({ cwd, configs, nativeConfig, explicit, temporary }
     diagnostics,
     files: mirrored.length,
     extraParses: mirrored.length,
+    unmapped,
     failures: pluginHostFailures(
       report,
       authoredPathMap(
