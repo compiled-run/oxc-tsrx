@@ -10,7 +10,7 @@ use oxc_adapter::editor::{
 };
 use serde_json::{Value, json};
 use tsrx_format::FormatSession;
-use tsrx_lint::{ConfigRuleFilter, LintSession};
+use tsrx_lint::{ConfigRuleFilter, LintError, LintSession};
 
 #[expect(
     clippy::print_stdout,
@@ -128,7 +128,7 @@ fn build_lint_session(
     fix: bool,
     type_aware: bool,
     type_check: bool,
-) -> Result<LintSession, String> {
+) -> Result<LintSession, LintError> {
     if type_aware {
         LintSession::new_type_aware_with_config_base(root, config, None, filters, fix, type_check)
     } else {
@@ -164,7 +164,7 @@ impl EditorTool for TsrxEditorTool {
         }
         let output = match self.lint.lint_text(&path, source) {
             Ok(output) => output,
-            Err(error) => return Ok(vec![parse_error_diagnostic(source, error)]),
+            Err(error) => return Ok(vec![parse_error_diagnostic(source, &error.to_string())]),
         };
         Ok(output
             .diagnostics
@@ -248,8 +248,8 @@ impl EditorTool for TsrxEditorTool {
     }
 }
 
-fn parse_error_diagnostic(source: &str, message: String) -> EditorDiagnostic {
-    let offset = error_byte_offset(&message)
+fn parse_error_diagnostic(source: &str, message: &str) -> EditorDiagnostic {
+    let offset = error_byte_offset(message)
         .filter(|offset| *offset <= source.len() && source.is_char_boundary(*offset))
         .unwrap_or(0);
     let end =
@@ -262,7 +262,7 @@ fn parse_error_diagnostic(source: &str, message: String) -> EditorDiagnostic {
         severity: EditorSeverity::Error,
         code: Some("parse-error".to_string()),
         source: Some("oxc-tsrx".to_string()),
-        message,
+        message: message.to_string(),
         related: Vec::new(),
         data: None,
     }

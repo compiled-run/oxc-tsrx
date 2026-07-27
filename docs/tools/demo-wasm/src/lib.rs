@@ -59,11 +59,11 @@ pub fn lint(source: String, options_json: String) -> String {
         false,
     ) {
         Ok(session) => session,
-        Err(error) => return error_json(&error),
+        Err(error) => return error_json(&error.to_string()),
     };
     let output = match session.lint_text(Path::new(DEMO_FILE), &source) {
         Ok(output) => output,
-        Err(error) => return error_json(&error),
+        Err(error) => return error_json(&error.to_string()),
     };
     let report = session.aggregate(vec![output]);
     serde_json::to_string(&report).unwrap_or_else(|error| error_json(&error.to_string()))
@@ -75,7 +75,7 @@ pub fn lint(source: String, options_json: String) -> String {
 pub fn format(source: String) -> String {
     match tsrx_format::format_text(Path::new(DEMO_FILE), &source) {
         Ok(output) => serde_json::json!({ "formatted": output.code }).to_string(),
-        Err(error) => error_json(&error),
+        Err(error) => error_json(&error.to_string()),
     }
 }
 
