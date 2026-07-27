@@ -20,6 +20,7 @@ import {
   OXLINT_JS_PLUGIN_LANE_MINIMUM,
   installedOxlintVersion,
   jsPluginDisclosure,
+  jsPluginEditorDisclosure,
   laneSupportsOxlintVersion,
   mirrorRelativePath,
   nativeLaneConfig,
@@ -411,6 +412,190 @@ test("the editor reports the same native .tsrx diagnostics as the CLI with jsPlu
       client.terminate();
     }
   });
+});
+
+// The board's own oracle, checked end to end in one test: the same file, the same
+// project, the same `.oxlintrc.json`, linted once by the command line and once by
+// the language server, and the developer's own rule has to land on identical
+// positions in both. A near-miss here is the failure mode this goal exists to
+// prevent, so the comparison is between the two reports rather than against a
+// number written down in the test.
+test("the editor reports the developer's plugin rule at the CLI's own positions", async () => {
+  await withProject(BASE_CONFIG, async (project) => {
+    const parsed = report(await oxlint(project, ["--format=json", "src/demo.tsrx"]));
+    const fromCli = pluginDiagnostics(parsed, "src/demo.tsrx")
+      .map((diagnostic) => ({
+        code: diagnostic.code,
+        offset: diagnostic.labels[0].span.offset,
+        length: diagnostic.labels[0].span.length,
+      }))
+      .sort((left, right) => left.offset - right.offset);
+    assert.equal(fromCli.length, 2, JSON.stringify(parsed.diagnostics, null, 2));
+
+    const source = await readFile(join(project, "src/demo.tsrx"), "utf8");
+    const uri = pathToFileUri(join(project, "src/demo.tsrx"));
+    const client = new LspClient(binary, { args: SERVER_ARGUMENTS, cwd: project });
+    try {
+      await client.initialize(pathToFileUri(project));
+      client.notify("textDocument/didOpen", {
+        textDocument: { uri, languageId: "markless-tsrx", version: 1, text: source },
+      });
+      const published = await client.waitFor(
+        (message) =>
+          message.method === "textDocument/publishDiagnostics" && message.params.uri === uri,
+        20000,
+        "editor plugin diagnostics",
+      );
+      const fromEditor = published.params.diagnostics
+        .filter((diagnostic) => String(diagnostic.code ?? "").startsWith("tsrx-js-demo("))
+        .sort(
+          (left, right) =>
+            left.range.start.line - right.range.start.line ||
+            left.range.start.character - right.range.start.character,
+        );
+      assert.equal(
+        fromEditor.length,
+        fromCli.length,
+        JSON.stringify(published.params.diagnostics, null, 2),
+      );
+      for (const [index, expected] of fromCli.entries()) {
+        const start = locationOf(source, expected.offset);
+        const end = locationOf(source, expected.offset + expected.length);
+        assert.equal(fromEditor[index].code, expected.code);
+        assert.deepEqual(fromEditor[index].range, {
+          start: { line: start.line - 1, character: start.column - 1 },
+          end: { line: end.line - 1, character: end.column - 1 },
+        });
+      }
+
+      // The native Rust rules are in the same publish. Custom rules arriving at the
+      // cost of the built-in ones would be a trade nobody asked for.
+      assert.ok(
+        published.params.diagnostics.some((diagnostic) => diagnostic.code === "no-debugger"),
+        JSON.stringify(published.params.diagnostics, null, 2),
+      );
+      // The extra parse is disclosed in the editor too, once, with its opt-out.
+      const notice = jsPluginEditorDisclosure();
+      assert.ok(client.stderr.includes(notice), `expected the disclosure, got:\n${client.stderr}`);
+      assert.equal(client.stderr.split(notice).length - 1, 1, client.stderr);
+      await client.close();
+    } finally {
+      client.terminate();
+    }
+  });
+});
+
+// Oxlint reports a rule that threw with an empty `filename`, no `code`, and no
+// labels, which is the exact shape every file-matching filter in the lane drops.
+// Left alone, a broken plugin is indistinguishable from a plugin that found
+// nothing — the same silence this board exists to remove, one level down.
+const THROWING_PLUGIN = `export default {
+  meta: { name: "tsrx-js-boom", version: "0.0.1" },
+  rules: {
+    explode: {
+      meta: { type: "problem", schema: [] },
+      create() {
+        return { Identifier() { throw new Error("this rule is broken on purpose"); } };
+      },
+    },
+  },
+};
+`;
+const THROWING_CONFIG = {
+  jsPlugins: ["./boom.mjs"],
+  rules: { "tsrx-js-boom/explode": "error" },
+};
+
+test("a plugin that throws is reported rather than silently dropped", async () => {
+  await withProject(
+    THROWING_CONFIG,
+    async (project) => {
+      const result = await oxlint(project, ["src/demo.tsrx"]);
+      assert.match(result.stderr, /this rule is broken on purpose/u);
+      // The authored file, not the throwaway mirror the developer never opened.
+      assert.match(result.stderr, /File path: .*src[/\\]demo\.tsrx$/mu);
+      assert.doesNotMatch(result.stderr, /demo\.tsrx\.tsx/u);
+      // The native Rust rules still reported, and a broken rule is not a green run.
+      assert.match(result.stdout, /no-debugger/u);
+      assert.equal(result.code, 1, `${result.stdout}\n${result.stderr}`);
+    },
+    { "boom.mjs": THROWING_PLUGIN },
+  );
+});
+
+test("a plugin that throws reaches the editor as a diagnostic of its own", async () => {
+  await withProject(
+    THROWING_CONFIG,
+    async (project) => {
+      const source = await readFile(join(project, "src/demo.tsrx"), "utf8");
+      const uri = pathToFileUri(join(project, "src/demo.tsrx"));
+      const client = new LspClient(binary, { args: SERVER_ARGUMENTS, cwd: project });
+      try {
+        await client.initialize(pathToFileUri(project));
+        client.notify("textDocument/didOpen", {
+          textDocument: { uri, languageId: "markless-tsrx", version: 1, text: source },
+        });
+        const published = await client.waitFor(
+          (message) =>
+            message.method === "textDocument/publishDiagnostics" && message.params.uri === uri,
+          20000,
+          "broken-plugin editor diagnostics",
+        );
+        const reported = published.params.diagnostics.find(
+          (diagnostic) => diagnostic.code === "js-plugins-unavailable",
+        );
+        assert.ok(reported, JSON.stringify(published.params.diagnostics, null, 2));
+        assert.match(reported.message, /this rule is broken on purpose/u);
+        // Losing a native rule because a plugin threw would be the T005 regression
+        // all over again.
+        assert.ok(
+          published.params.diagnostics.some((diagnostic) => diagnostic.code === "no-debugger"),
+          JSON.stringify(published.params.diagnostics, null, 2),
+        );
+        await client.close();
+      } finally {
+        client.terminate();
+      }
+    },
+    { "boom.mjs": THROWING_PLUGIN },
+  );
+});
+
+// The opt-out has to reach the editor's lane as well as the command line's, or a
+// project that switched the extra parse off would still be paying for it.
+test("the editor lane stays off when the project opted out", async () => {
+  await withProject(
+    { ...BASE_CONFIG, settings: { oxcTsrx: { jsPluginsOnTsrx: false } } },
+    async (project) => {
+      const source = await readFile(join(project, "src/demo.tsrx"), "utf8");
+      const uri = pathToFileUri(join(project, "src/demo.tsrx"));
+      const client = new LspClient(binary, { args: SERVER_ARGUMENTS, cwd: project });
+      try {
+        await client.initialize(pathToFileUri(project));
+        client.notify("textDocument/didOpen", {
+          textDocument: { uri, languageId: "markless-tsrx", version: 1, text: source },
+        });
+        const published = await client.waitFor(
+          (message) =>
+            message.method === "textDocument/publishDiagnostics" && message.params.uri === uri,
+          20000,
+          "opted-out editor diagnostics",
+        );
+        assert.deepEqual(
+          published.params.diagnostics.map((diagnostic) => diagnostic.code),
+          ["lint-unavailable"],
+          JSON.stringify(published.params.diagnostics, null, 2),
+        );
+        assert.ok(
+          !client.stderr.includes("running this project's Oxlint JS plugins"),
+          `the opt-out must not start the lane, got:\n${client.stderr}`,
+        );
+        await client.close();
+      } finally {
+        client.terminate();
+      }
+    },
+  );
 });
 
 test("the refusal no longer claims the public package has no plugin host", async () => {

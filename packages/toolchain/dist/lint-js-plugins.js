@@ -24,7 +24,7 @@
 // Nothing here imports an Oxlint module: the binary is the one its package
 // manifest declares, and the version is read from its public `package.json`
 // export. The projection's span map never leaves Rust.
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
@@ -591,10 +591,58 @@ function diagnosticNamespace(diagnostic) {
   return open === -1 ? code : code.slice(0, open);
 }
 
+/**
+ * The failures Oxlint's plugin host itself reported, in the user's own terms.
+ *
+ * A rule that throws does not come back as a diagnostic on a file: Oxlint reports
+ * it with an empty `filename`, no `code`, and no labels, which is exactly the
+ * shape every other filter in this file drops. Dropping it too would mean a
+ * broken rule looks like a rule that found nothing, which is the failure this
+ * whole lane exists to remove. `paths` rewrites the mirror path Oxlint saw back
+ * to the file the developer opened.
+ */
+/**
+ * Mirror paths to the authored paths they stand for, each mirror path recorded
+ * under both the name it was written with and the one a `realpath` resolves it
+ * to. Oxlint reports the resolved name, and on macOS a temporary directory is
+ * always a symlink away from it.
+ */
+function authoredPathMap(pairs) {
+  const map = new Map();
+  for (const [mirrorPath, authored] of pairs) {
+    map.set(mirrorPath, authored);
+    try {
+      map.set(realpathSync(mirrorPath), authored);
+    } catch {
+      // The mirror file is already gone; the unresolved name is still worth having.
+    }
+  }
+  return map;
+}
+
+export function pluginHostFailures(report, paths = new Map()) {
+  const failures = [];
+  for (const diagnostic of report?.diagnostics ?? []) {
+    if (typeof diagnostic?.message !== "string" || diagnostic.message === "") continue;
+    if (diagnostic.filename !== undefined && diagnostic.filename !== "") continue;
+    if ((diagnostic.labels ?? []).length > 0) continue;
+    if (typeof diagnostic.code === "string" && diagnostic.code !== "") continue;
+    // Everything up to the first stack frame: the plugin's own error, without a
+    // wall of Oxlint internals in front of it.
+    let message = diagnostic.message.split(/\n\s+at /u, 1)[0].trim();
+    // Longest first: a mirror path and its resolved twin share a suffix, so
+    // replacing the shorter one first would leave the resolver's prefix behind.
+    const rewrites = [...paths].sort(([left], [right]) => right.length - left.length);
+    for (const [from, to] of rewrites) message = message.split(from).join(to);
+    failures.push(message);
+  }
+  return failures;
+}
+
 async function runPluginLane({ cwd, configs, nativeConfig, explicit, temporary }) {
   const laneFiles = configs.flatMap((entry) => entry.files);
   const projections = await emitProjections(cwd, laneFiles, nativeConfig);
-  if (projections.length === 0) return { diagnostics: [], files: 0, extraParses: 0 };
+  if (projections.length === 0) return { diagnostics: [], files: 0, extraParses: 0, failures: [] };
 
   const mirror = await mkdtemp(join(tmpdir(), "oxc-tsrx-js-plugins-"));
   temporary.push(mirror);
@@ -608,7 +656,7 @@ async function runPluginLane({ cwd, configs, nativeConfig, explicit, temporary }
     authoredByMirrorPath.set(relativePath, projection.path);
     mirrored.push(relativePath);
   }
-  if (mirrored.length === 0) return { diagnostics: [], files: 0, extraParses: 0 };
+  if (mirrored.length === 0) return { diagnostics: [], files: 0, extraParses: 0, failures: [] };
 
   // Oxlint resolves the configuration itself, from copies sitting where it
   // expects to find them: an explicit `-c` becomes one config at the mirror
@@ -682,5 +730,312 @@ async function runPluginLane({ cwd, configs, nativeConfig, explicit, temporary }
       }
     }
   }
-  return { diagnostics, files: mirrored.length, extraParses: mirrored.length };
+  return {
+    diagnostics,
+    files: mirrored.length,
+    extraParses: mirrored.length,
+    failures: pluginHostFailures(
+      report,
+      authoredPathMap(
+        [...authoredByMirrorPath].map(([relativePath, authored]) => [
+          join(mirror, relativePath),
+          authored,
+        ]),
+      ),
+    ),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// The editor half of the same lane.
+//
+// `oxc-tsrx-lsp` is the Rust process the editor talks to. It can project a
+// `.tsrx` buffer and it can move a projection byte range back to an authored one
+// — both in-process, through exactly the API the two native command modes above
+// use — but it cannot host a JavaScript rule, because it has no Node runtime.
+//
+// So the editor session starts one of these hosts per workspace, lazily, the
+// first time a `.tsrx` file is linted in a project that declares `jsPlugins`.
+// The Rust side sends `{id, path, projection}` lines on stdin; this host writes
+// the projection into a mirror it keeps for the whole session, runs the
+// published Oxlint binary over that one file, and answers with the diagnostics
+// the project's own plugins produced, still in projection bytes. The Rust side
+// maps them, so the editor and the command line share one span mapping and one
+// plugin host and cannot drift apart.
+//
+// The mirror, the resolved configuration, and the plugin namespaces are built
+// once and reused for every keystroke; only the projection file is rewritten.
+// ---------------------------------------------------------------------------
+
+/** The flag that turns this module into the editor's lane host. */
+export const LANE_HOST_FLAG = "--oxc-tsrx-js-plugin-lane-host";
+
+/**
+ * The one line the editor session prints when the lane starts.
+ *
+ * An editor has no report to put a notice in front of, so this goes to the
+ * server's stderr, which every LSP client surfaces as its output log. It names
+ * the extra parse and the exact key that turns it off, the same way the command
+ * line's own notice does.
+ */
+export function jsPluginEditorDisclosure() {
+  return (
+    `oxc-tsrx-lsp: running this project's Oxlint JS plugins on .tsrx by linting each ` +
+    `file's TSX projection; this parses every linted .tsrx file once more. Disable with ` +
+    `"settings": { "oxcTsrx": { "jsPluginsOnTsrx": false } }.`
+  );
+}
+
+/** One long-lived mirror, config set, and Oxlint invocation for an editor session. */
+class EditorPluginLane {
+  constructor(cwd) {
+    this.cwd = resolve(cwd);
+    this.mirror = null;
+    this.configs = new Map();
+  }
+
+  async mirrorRoot() {
+    if (this.mirror === null) {
+      this.mirror = await mkdtemp(join(tmpdir(), "oxc-tsrx-js-plugins-lsp-"));
+    }
+    return this.mirror;
+  }
+
+  /**
+   * The configuration governing one directory, resolved and mirrored once.
+   *
+   * A configuration file that changes during the session is not re-read here:
+   * the language server watches `.oxlintrc.json`, rebuilds its workspace tool on
+   * a change, and that drops this whole process along with the stale cache.
+   */
+  async entryFor(directory) {
+    const path = findOxlintConfig(directory);
+    if (path === null) return { active: false };
+    const cached = this.configs.get(path);
+    if (cached !== undefined) return cached;
+
+    const facts = await collectLaneFacts(path);
+    let entry = { active: false };
+    if (facts.config !== null && facts.jsPlugins.length > 0 && facts.optedOut !== true) {
+      const mirror = await this.mirrorRoot();
+      const candidate = relative(this.cwd, path);
+      // The mirror keeps each config where the file it governs can still find it
+      // by walking up, so Oxlint resolves nesting itself. A config above the
+      // workspace root has no such position, so it becomes the mirror's root one.
+      const mirrorConfig =
+        candidate !== "" && !candidate.startsWith("..") && !isAbsolute(candidate)
+          ? candidate
+          : ".oxlintrc.json";
+      await writeMirrorFile(
+        mirror,
+        mirrorConfig,
+        `${JSON.stringify(projectionConfig(facts.config, dirname(path)), null, 2)}\n`,
+      );
+      entry = { active: true, namespaces: await pluginNamespaces(facts.jsPlugins) };
+    }
+    this.configs.set(path, entry);
+    return entry;
+  }
+
+  /**
+   * Run this project's JavaScript plugins over one projection.
+   *
+   * Returns Oxlint's own diagnostics with their label spans still measured in
+   * projection bytes. Mapping them to authored bytes is the caller's job,
+   * because the caller is the process that owns the span map.
+   */
+  async lint(path, projection) {
+    const entry = await this.entryFor(dirname(path));
+    if (!entry.active) return [];
+    const mirror = await this.mirrorRoot();
+    const relativePath = mirrorRelativePath(this.cwd, path);
+    await writeMirrorFile(mirror, relativePath, projection);
+
+    const oxlintBinary = resolvePackageBinary("oxlint-current", "oxlint", import.meta.url);
+    const result = await runCaptured(
+      process.execPath,
+      [oxlintBinary, "--format=json", relativePath],
+      { cwd: mirror, env: process.env },
+    );
+    if (result.status > 1) {
+      throw new Error(
+        `running your JS plugins over the .tsrx projection failed:\n${result.stderr || result.stdout}`,
+      );
+    }
+    let report;
+    try {
+      report = JSON.parse(result.stdout);
+    } catch {
+      throw new Error(
+        `running your JS plugins over the .tsrx projection returned non-JSON output:\n${result.stdout}${result.stderr}`,
+      );
+    }
+
+    // A rule that threw is not a diagnostic on this file, so it would otherwise be
+    // dropped by the filters below and the developer would see a rule that simply
+    // found nothing. Fail the request instead; the caller publishes the reason and
+    // the native Rust rules are already on their way regardless.
+    const failures = pluginHostFailures(
+      report,
+      authoredPathMap([[join(mirror, relativePath), path]]),
+    );
+    if (failures.length > 0) throw new Error(failures.join("\n"));
+
+    const diagnostics = [];
+    for (const diagnostic of report.diagnostics ?? []) {
+      if (diagnostic.filename !== relativePath) continue;
+      // Same two filters the command line applies: a diagnostic with no rule
+      // code is the projection's own parse complaint, which the native lane
+      // already reports against the authored source, and anything outside this
+      // project's own plugin namespaces is a built-in rule it also reports.
+      const namespace = diagnosticNamespace(diagnostic);
+      if (namespace === "") continue;
+      if (entry.namespaces !== null && !entry.namespaces.has(namespace)) continue;
+      const labels = [];
+      for (const label of diagnostic.labels ?? []) {
+        const offset = label?.span?.offset;
+        if (!Number.isSafeInteger(offset) || offset < 0) continue;
+        const length = label.span.length;
+        labels.push({ offset, length: Number.isSafeInteger(length) && length > 0 ? length : 0 });
+      }
+      if (labels.length === 0) continue;
+      diagnostics.push({
+        code: typeof diagnostic.code === "string" ? diagnostic.code : null,
+        message: typeof diagnostic.message === "string" ? diagnostic.message : "",
+        severity: diagnostic.severity === "error" ? "error" : "warning",
+        help: typeof diagnostic.help === "string" ? diagnostic.help : null,
+        labels,
+      });
+    }
+    return diagnostics;
+  }
+
+  async cleanup() {
+    if (this.mirror !== null) await rm(this.mirror, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Serve the editor's plugin lane over newline-delimited JSON on stdio.
+ *
+ * The first line out is the handshake: `{"ready":true,...}`, or
+ * `{"ready":false,"error":...}` when the installed Oxlint is outside the range
+ * this lane was established against. Refusing out loud is the point — an editor
+ * that quietly stopped running a developer's rule is the failure this whole lane
+ * exists to remove, and a squiggle that silently disappears is worse than one
+ * that never appeared.
+ *
+ * Every request is `{id, path, projection}` and every answer is either
+ * `{id, diagnostics}` or `{id, error}`. Requests are served one at a time and in
+ * order, so a burst of keystrokes cannot interleave two Oxlint runs over the
+ * same mirror file.
+ */
+export async function runJsPluginLaneHost({
+  cwd = process.cwd(),
+  input = process.stdin,
+  output = process.stdout,
+  errorOutput = process.stderr,
+} = {}) {
+  const version = installedOxlintVersion();
+  if (!laneSupportsOxlintVersion(version)) {
+    output.write(`${JSON.stringify({ ready: false, error: oxlintVersionRefusal(version) })}\n`);
+    return 0;
+  }
+
+  const lane = new EditorPluginLane(cwd);
+  errorOutput.write(`${jsPluginEditorDisclosure()}\n`);
+  output.write(`${JSON.stringify({ ready: true, oxlint: version })}\n`);
+
+  let pending = Promise.resolve();
+  let buffer = "";
+  await new Promise((finished) => {
+    const drain = () => {
+      pending.then(
+        () => finished(),
+        () => finished(),
+      );
+    };
+    input.setEncoding("utf8");
+    input.on("data", (chunk) => {
+      buffer += chunk;
+      for (;;) {
+        const newline = buffer.indexOf("\n");
+        if (newline === -1) break;
+        const line = buffer.slice(0, newline).trim();
+        buffer = buffer.slice(newline + 1);
+        if (line === "") continue;
+        let request;
+        try {
+          request = JSON.parse(line);
+        } catch {
+          continue;
+        }
+        pending = pending.then(async () => {
+          let answer;
+          try {
+            answer = {
+              id: request.id,
+              diagnostics: await lane.lint(String(request.path), String(request.projection)),
+            };
+          } catch (error) {
+            answer = {
+              id: request.id,
+              error: error instanceof Error ? error.message : String(error),
+            };
+          }
+          output.write(`${JSON.stringify(answer)}\n`);
+        });
+      }
+    });
+    input.once("end", drain);
+    input.once("close", drain);
+    input.once("error", drain);
+  });
+  await lane.cleanup();
+  return 0;
+}
+
+/**
+ * Whether this module is the process entry point.
+ *
+ * `process.argv[1]` keeps the path the caller named while `import.meta.url`
+ * reports the real one, and the editor reaches this file through a package
+ * symlink often enough that comparing them raw would silently never match.
+ */
+function invokedAsLaneHost() {
+  if (!process.argv.includes(LANE_HOST_FLAG)) return false;
+  const entry = process.argv[1];
+  if (typeof entry !== "string" || entry === "") return false;
+  for (const candidate of [entry, (() => {
+    try {
+      return realpathSync(entry);
+    } catch {
+      return entry;
+    }
+  })()]) {
+    try {
+      if (pathToFileURL(candidate).href === import.meta.url) return true;
+    } catch {
+      // Not a path this platform can turn into a URL; try the next candidate.
+    }
+  }
+  return false;
+}
+
+if (invokedAsLaneHost()) {
+  const index = process.argv.indexOf("--cwd");
+  const cwd = index === -1 ? process.cwd() : (process.argv[index + 1] ?? process.cwd());
+  runJsPluginLaneHost({ cwd }).then(
+    (status) => {
+      process.exitCode = status;
+    },
+    (error) => {
+      process.stderr.write(
+        `oxc-tsrx-lsp: the JS plugin lane host stopped: ${
+          error instanceof Error ? error.message : String(error)
+        }\n`,
+      );
+      process.exitCode = 1;
+    },
+  );
 }

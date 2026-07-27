@@ -157,7 +157,8 @@ test("native LSP activates TSRX formatting, live diagnostics, edits, and safe ac
 // developer who added one custom rule lost `no-debugger` with no way to find out
 // why.
 //
-// These two tests pin both halves of the fix: the native rules survive the config,
+// These tests pin all three halves of the fix: the native rules survive the
+// config, the developer's own rule reaches the editor as a squiggle of its own,
 // and a refusal the strip cannot avoid is published rather than swallowed.
 const pluginFixtures = join(root, "tests/fixtures/lint/js-plugins");
 
@@ -185,10 +186,19 @@ async function openTsrx(workspace) {
   const published = await client.waitFor(
     (message) =>
       message.method === "textDocument/publishDiagnostics" && message.params.uri === uri,
-    5000,
+    // The plugin lane starts a Node host and runs the published Oxlint binary over
+    // the projection, so the first publish is slower than a native-only one.
+    20000,
     "jsPlugins diagnostics",
   );
-  return { client, source, diagnostics: published.params.diagnostics };
+  return { client, uri, source, diagnostics: published.params.diagnostics };
+}
+
+/** The zero-based line and UTF-16 column of one authored byte offset. */
+function editorPositionOf(source, offset) {
+  const before = source.slice(0, offset);
+  const line = before.split("\n").length - 1;
+  return { line, character: before.slice(before.lastIndexOf("\n") + 1).length };
 }
 
 const JS_PLUGIN_CONFIG = {
@@ -220,11 +230,97 @@ test("native LSP still reports Rust rules on .tsrx while jsPlugins is configured
       assert.equal(reported.range.start.line, line);
       assert.equal(reported.range.start.character, source.split("\n")[line].indexOf("debugger"));
 
-      // The user's own plugin rules are not the native engine's to report, and
-      // stripping `jsPlugins` must not have turned one into a native diagnostic.
+      await client.close();
+    } finally {
+      client.terminate();
+    }
+  });
+});
+
+// The whole point of the board: a rule the developer wrote, registered in their
+// own `.oxlintrc.json`, has to arrive in the editor as a squiggle on the `.tsrx`
+// file, at the bytes they actually wrote. Before this, the editor path never
+// reached the plugin lane at all and a custom rule was invisible there.
+test("native LSP publishes the developer's own plugin rule as a .tsrx squiggle", async () => {
+  await withPluginWorkspace(JS_PLUGIN_CONFIG, async (workspace) => {
+    const { client, source, diagnostics } = await openTsrx(workspace);
+    try {
+      const reported = diagnostics.filter(
+        (diagnostic) => diagnostic.code === "tsrx-js-demo(no-banned-identifier)",
+      );
+      // The fixture plugin reports every identifier literally named `banned`, so
+      // the expected spans are readable straight out of the authored source and a
+      // diagnostic sitting on projection offsets could not pass.
+      const expected = [...source.matchAll(/banned/gu)].map((match) => match.index);
+      assert.equal(expected.length, 2, "the fixture stopped containing two `banned` identifiers");
+      assert.equal(reported.length, expected.length, JSON.stringify(diagnostics, null, 2));
+      for (const [index, diagnostic] of reported.entries()) {
+        assert.deepEqual(diagnostic.range, {
+          start: editorPositionOf(source, expected[index]),
+          end: editorPositionOf(source, expected[index] + "banned".length),
+        });
+        assert.equal(diagnostic.severity, 1, "the config sets this rule to error on .tsrx");
+        assert.equal(diagnostic.data.jsPlugin, true);
+        assert.equal(diagnostic.data.rule, "no-banned-identifier");
+      }
+
+      // And the native Rust rules are still in the same publish, which is what
+      // makes this a merge rather than a replacement.
+      assert.ok(
+        diagnostics.some((diagnostic) => diagnostic.code === "no-debugger"),
+        JSON.stringify(diagnostics, null, 2),
+      );
+      // Nothing failed quietly on the way.
       assert.deepEqual(
-        diagnostics.filter((diagnostic) => String(diagnostic.code).startsWith("tsrx-js-demo")),
+        diagnostics.filter((diagnostic) =>
+          ["js-plugins-unavailable", "lint-unavailable"].includes(String(diagnostic.code)),
+        ),
         [],
+      );
+      // The extra parse is disclosed once, in the server log, with its opt-out.
+      assert.match(client.stderr, /running this project's Oxlint JS plugins on \.tsrx/u);
+      assert.match(client.stderr, /jsPluginsOnTsrx/u);
+      await client.close();
+    } finally {
+      client.terminate();
+    }
+  });
+});
+
+// An editor re-lints on every keystroke, so the lane has to keep answering with
+// positions measured in the buffer it was handed rather than in whatever is on
+// disk. This edits the file in memory only and checks the rule follows.
+test("native LSP re-runs the plugin lane on an unsaved edit", async () => {
+  await withPluginWorkspace(JS_PLUGIN_CONFIG, async (workspace) => {
+    const { client, uri, source } = await openTsrx(workspace);
+    try {
+      const edited = `// a line nobody saved\n${source}`;
+      client.notify("textDocument/didChange", {
+        textDocument: { uri, version: 2 },
+        contentChanges: [{ text: edited }],
+      });
+      const changed = await client.waitFor(
+        (message) =>
+          message.method === "textDocument/publishDiagnostics" && message.params.version === 2,
+        20000,
+        "plugin diagnostics after an unsaved edit",
+      );
+      const reported = changed.params.diagnostics.filter(
+        (diagnostic) => diagnostic.code === "tsrx-js-demo(no-banned-identifier)",
+      );
+      const expected = [...edited.matchAll(/banned/gu)].map((match) => match.index);
+      assert.equal(reported.length, expected.length, JSON.stringify(changed.params.diagnostics));
+      for (const [index, diagnostic] of reported.entries()) {
+        assert.deepEqual(diagnostic.range.start, editorPositionOf(edited, expected[index]));
+      }
+      // The native half moved with it too.
+      const nativeDiagnostic = changed.params.diagnostics.find(
+        (diagnostic) => diagnostic.code === "no-debugger",
+      );
+      assert.ok(nativeDiagnostic, JSON.stringify(changed.params.diagnostics));
+      assert.deepEqual(
+        nativeDiagnostic.range.start,
+        editorPositionOf(edited, edited.indexOf("debugger")),
       );
       await client.close();
     } finally {

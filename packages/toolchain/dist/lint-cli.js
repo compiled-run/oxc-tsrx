@@ -632,6 +632,14 @@ export async function runCli(args, options = {}) {
     // its line and column are counted in the authored `.tsrx` file rather than
     // in the projection Oxlint actually read.
     if (laneOutcome.value !== null) {
+      // A rule that threw comes back from Oxlint with no filename, no code, and no
+      // labels, so every filter that matches diagnostics to files drops it. Left
+      // there, a broken plugin looks exactly like a plugin that found nothing.
+      for (const failure of laneOutcome.value.failures ?? []) {
+        if (!args.includes("--silent")) {
+          process.stderr.write(`oxlint (oxc-tsrx): ${failure}\n`);
+        }
+      }
       native.diagnostics = [...(native.diagnostics ?? []), ...laneOutcome.value.diagnostics];
       if (native.oxcTsrx) {
         native.oxcTsrx.jsPluginProjection = {
@@ -664,9 +672,10 @@ export async function runCli(args, options = {}) {
     // exit code from here. A rule the project set to `error` firing on a `.tsrx`
     // file and still reporting a green run would be the same silent failure this
     // lane exists to remove, one step further down.
-    const pluginErrors = (laneOutcome.value?.diagnostics ?? []).some(
-      (diagnostic) => diagnostic.severity === "error",
-    );
+    const pluginErrors =
+      (laneOutcome.value?.diagnostics ?? []).some(
+        (diagnostic) => diagnostic.severity === "error",
+      ) || (laneOutcome.value?.failures ?? []).length > 0;
     return Math.max(
       upstreamResult.status,
       nativeResult.status,

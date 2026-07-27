@@ -2,14 +2,18 @@
 //! subcommand.
 
 use std::{
+    collections::HashMap,
     env, fs,
+    io::{BufRead, BufReader, Write},
     path::{Path, PathBuf},
-    process::ExitCode,
+    process::{Child, ChildStdin, Command, ExitCode, Stdio},
     sync::{
-        Arc,
+        Arc, Mutex, RwLock,
         atomic::{AtomicU64, Ordering},
+        mpsc::{self, Receiver, RecvTimeoutError},
     },
-    time::{SystemTime, UNIX_EPOCH},
+    thread,
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use oxc_adapter::{
@@ -23,7 +27,7 @@ use oxc_adapter::{
 };
 use serde_json::{Value, json};
 use tsrx_format::FormatSession;
-use tsrx_lint::{ConfigRuleFilter, LintSession};
+use tsrx_lint::{ConfigRuleFilter, LintSession, PluginLabel, PluginProjection};
 
 pub fn run_cli(arguments: &[String]) -> ExitCode {
     if arguments
@@ -90,13 +94,33 @@ impl EditorToolFactory for TsrxEditorFactory {
         // diagnostics, no message, and nothing in the log. Keep the tool, remember why
         // linting is unavailable, and report it on every `.tsrx` file that is opened.
         match build_lint_sessions(&root, lint_config.as_deref(), type_aware, type_check) {
-            Ok(sessions) => Ok(Box::new(TsrxEditorTool {
-                lint: Some(sessions.lint),
-                actions: Some(sessions.actions),
-                format,
-                unavailable: None,
-                _staged_config: sessions.staged_config,
-            })),
+            Ok(sessions) => {
+                // `build_lint_sessions` stripped a `jsPlugins` declaration exactly when this
+                // project has one and has not opted out, which is the same condition that
+                // decides whether a user's own rules should be running on `.tsrx` here.
+                let (js_plugins, js_plugins_unavailable) = if sessions.declares_js_plugins {
+                    match JsPluginLane::locate(&root) {
+                        Ok(lane) => (Some(lane), None),
+                        Err(reason) => {
+                            eprintln!(
+                                "oxc-tsrx-lsp: this project's Oxlint JS plugins cannot run on .tsrx: {reason}"
+                            );
+                            (None, Some(reason))
+                        }
+                    }
+                } else {
+                    (None, None)
+                };
+                Ok(Box::new(TsrxEditorTool {
+                    lint: Some(sessions.lint),
+                    actions: Some(sessions.actions),
+                    format,
+                    unavailable: None,
+                    js_plugins,
+                    js_plugins_unavailable,
+                    _staged_config: sessions.staged_config,
+                }))
+            }
             Err(error) => {
                 // Also on stderr, which clients surface as the server's output log.
                 eprintln!("oxc-tsrx-lsp: TSRX linting is unavailable: {error}");
@@ -105,6 +129,8 @@ impl EditorToolFactory for TsrxEditorFactory {
                     actions: None,
                     format,
                     unavailable: Some(error),
+                    js_plugins: None,
+                    js_plugins_unavailable: None,
                     _staged_config: None,
                 }))
             }
@@ -213,6 +239,9 @@ struct LintSessions {
     lint: LintSession,
     actions: LintSession,
     staged_config: Option<StagedConfig>,
+    /// Whether the configuration this workspace loaded declares JavaScript plugins that
+    /// were stripped before the native engine, and therefore still have to be run.
+    declares_js_plugins: bool,
 }
 
 /// Build the diagnostics and quick-fix sessions this workspace lints with.
@@ -238,11 +267,13 @@ fn build_lint_sessions(
         Some(stripped) => Some(StagedConfig::write(&stripped)?),
         None => None,
     };
+    let declares_js_plugins = staged_config.is_some();
     let (config_path, config_base) = match &staged_config {
         Some(staged) => (Some(staged.path.as_path()), Some(staged.base.as_path())),
         None => (config, None),
     };
     Ok(LintSessions {
+        declares_js_plugins,
         lint: build_lint_session(
             root,
             config_path,
@@ -294,6 +325,10 @@ struct TsrxEditorTool {
     format: FormatSession,
     /// Why linting is unavailable in this workspace, when it is.
     unavailable: Option<String>,
+    /// The project's own Oxlint JavaScript plugins, hosted for this session.
+    js_plugins: Option<JsPluginLane>,
+    /// Why this project's JavaScript plugins cannot run here, when they cannot.
+    js_plugins_unavailable: Option<String>,
     /// Held so the staged configuration outlives the sessions compiled from it and is
     /// removed with them.
     _staged_config: Option<StagedConfig>,
@@ -335,7 +370,7 @@ impl EditorTool for TsrxEditorTool {
             Ok(output) => output,
             Err(error) => return Ok(vec![parse_error_diagnostic(source, error)]),
         };
-        Ok(output
+        let mut diagnostics = output
             .diagnostics
             .into_iter()
             .filter_map(|diagnostic| {
@@ -356,7 +391,19 @@ impl EditorTool for TsrxEditorTool {
                     data: Some(json!({ "rule": diagnostic.rule, "code": diagnostic.code })),
                 })
             })
-            .collect())
+            .collect::<Vec<_>>();
+        // The native rules above are already published whatever happens next. A plugin
+        // that throws, a lane that cannot start, or an Oxlint outside the supported range
+        // adds one visible diagnostic of its own; none of them can take a Rust rule away.
+        if let Some(lane) = self.js_plugins.as_ref() {
+            match lane.diagnostics(document.uri, &path, source) {
+                Ok(plugin) => diagnostics.extend(plugin),
+                Err(reason) => diagnostics.push(js_plugin_lane_diagnostic(source, &reason)),
+            }
+        } else if let Some(reason) = self.js_plugins_unavailable.as_deref() {
+            diagnostics.push(js_plugin_lane_diagnostic(source, reason));
+        }
+        Ok(diagnostics)
     }
 
     fn format(&self, document: &EditorDocument<'_>) -> Result<Vec<EditorTextEdit>, String> {
@@ -421,6 +468,478 @@ impl EditorTool for TsrxEditorTool {
                 data: Some(json!({ "rule": fix.rule })),
             })
             .collect())
+    }
+
+    fn remove_document(&self, uri: &str) {
+        if let Some(lane) = self.js_plugins.as_ref() {
+            lane.forget(uri);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// The project's own Oxlint JavaScript plugins, in the editor.
+//
+// This process can project a `.tsrx` buffer to legal TSX and can move a
+// projection byte range back to the range the user wrote, both in-process and
+// through exactly the API `oxc-tsrx lint --emit-plugin-projection` and
+// `--map-plugin-diagnostics` use for the command line. What it cannot do is
+// execute a JavaScript rule: it is a Rust process with no Node runtime.
+//
+// So the missing half is borrowed rather than rebuilt. One Node host per
+// workspace — `packages/toolchain/dist/lint-js-plugins.js`, the same file the
+// `oxlint` command's lane lives in — is started lazily the first time a `.tsrx`
+// file is linted in a project that declares `jsPlugins`. It receives a
+// projection, runs the published Oxlint binary over it with the project's own
+// configuration, and answers with the diagnostics the project's plugins
+// produced, still in projection bytes. This side maps them.
+//
+// One process per workspace, not per file, and it only exists in a workspace
+// that asked for plugins.
+// ---------------------------------------------------------------------------
+
+/// How long to wait for the lane host to announce itself.
+const LANE_START_TIMEOUT: Duration = Duration::from_secs(30);
+/// How long to wait for one projection to come back linted.
+const LANE_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+/// The flag that turns the lane module into the editor's host, mirrored from its
+/// exported `LANE_HOST_FLAG`.
+const LANE_HOST_FLAG: &str = "--oxc-tsrx-js-plugin-lane-host";
+/// Where the lane host lives, relative to a directory that may contain it.
+const LANE_HOST_PATHS: [&str; 2] = [
+    "node_modules/oxc-tsrx/dist/lint-js-plugins.js",
+    "packages/toolchain/dist/lint-js-plugins.js",
+];
+
+/// One diagnostic the project's plugins produced, still measured in projection bytes.
+struct LanePluginDiagnostic {
+    code: Option<String>,
+    message: String,
+    severity: EditorSeverity,
+    labels: Vec<PluginLabel>,
+}
+
+/// A lane failure that is worth reporting, and whether the host survived it.
+enum LaneFailure {
+    /// The host is gone or unusable. Every later request fails the same way.
+    Fatal(String),
+    /// This one request failed. The host is still there.
+    Reported(String),
+}
+
+impl LaneFailure {
+    fn message(&self) -> &str {
+        match self {
+            Self::Fatal(message) | Self::Reported(message) => message,
+        }
+    }
+}
+
+enum LaneProcess {
+    NotStarted,
+    Running(Box<LaneChild>),
+    Failed(String),
+}
+
+/// The project's JavaScript plugin host for one editor workspace.
+struct JsPluginLane {
+    root: PathBuf,
+    node: PathBuf,
+    script: PathBuf,
+    process: Mutex<LaneProcess>,
+    /// The last answer for each open document, keyed by the projection it was computed
+    /// from. An editor republishes far more often than it really changes a file, and a
+    /// projection that has not moved cannot have new plugin diagnostics.
+    cache: RwLock<HashMap<String, (String, Vec<EditorDiagnostic>)>>,
+}
+
+impl JsPluginLane {
+    /// Find the Node runtime and the lane host this workspace should use.
+    ///
+    /// # Errors
+    ///
+    /// Returns the reason the lane cannot run, which the caller publishes on every
+    /// `.tsrx` file rather than swallowing: a plugin that is configured and silently not
+    /// running is the exact failure this lane exists to remove.
+    fn locate(root: &Path) -> Result<Self, String> {
+        let script = locate_lane_host_script(root).ok_or_else(|| {
+            format!(
+                "unable to find {}. Install `oxc-tsrx` in this project, or set OXC_TSRX_JS_PLUGIN_LANE to the file",
+                LANE_HOST_PATHS[0]
+            )
+        })?;
+        let node = locate_node().ok_or(
+            "unable to find a `node` executable on PATH. A JavaScript plugin needs a Node runtime; set OXC_TSRX_NODE to one",
+        )?;
+        Ok(Self {
+            root: root.to_path_buf(),
+            node,
+            script,
+            process: Mutex::new(LaneProcess::NotStarted),
+            cache: RwLock::new(HashMap::new()),
+        })
+    }
+
+    /// This project's plugin diagnostics for one in-memory buffer, in authored bytes.
+    fn diagnostics(
+        &self,
+        uri: &str,
+        path: &Path,
+        source: &str,
+    ) -> Result<Vec<EditorDiagnostic>, String> {
+        // A source this process cannot project is a syntax error the native lane already
+        // reports against the authored file, and a plugin has nothing to say about it.
+        let Ok(projection) = PluginProjection::new(source) else {
+            return Ok(Vec::new());
+        };
+        if let Ok(cache) = self.cache.read()
+            && let Some((cached, diagnostics)) = cache.get(uri)
+            && cached == projection.source()
+        {
+            return Ok(diagnostics.clone());
+        }
+
+        let reported = match self.request(path, projection.source()) {
+            Ok(reported) => reported,
+            Err(failure) => return Err(failure.message().to_string()),
+        };
+        let diagnostics = reported
+            .into_iter()
+            .filter_map(|diagnostic| authored_plugin_diagnostic(&projection, source, diagnostic))
+            .collect::<Vec<_>>();
+        if let Ok(mut cache) = self.cache.write() {
+            cache.insert(
+                uri.to_string(),
+                (projection.source().to_string(), diagnostics.clone()),
+            );
+        }
+        Ok(diagnostics)
+    }
+
+    /// Drop one closed document's cached answer.
+    fn forget(&self, uri: &str) {
+        if let Ok(mut cache) = self.cache.write() {
+            cache.remove(uri);
+        }
+    }
+
+    fn request(
+        &self,
+        path: &Path,
+        projection: &str,
+    ) -> Result<Vec<LanePluginDiagnostic>, LaneFailure> {
+        let mut process = self
+            .process
+            .lock()
+            .map_err(|_| LaneFailure::Fatal("the JS plugin lane host is poisoned".to_string()))?;
+        if let LaneProcess::Failed(reason) = &*process {
+            return Err(LaneFailure::Fatal(reason.clone()));
+        }
+        if matches!(*process, LaneProcess::NotStarted) {
+            match LaneChild::start(&self.node, &self.script, &self.root) {
+                Ok(child) => *process = LaneProcess::Running(Box::new(child)),
+                Err(reason) => {
+                    *process = LaneProcess::Failed(reason.clone());
+                    return Err(LaneFailure::Fatal(reason));
+                }
+            }
+        }
+        let LaneProcess::Running(child) = &mut *process else {
+            return Err(LaneFailure::Fatal(
+                "the JS plugin lane host is not running".to_string(),
+            ));
+        };
+        match child.lint(path, projection) {
+            Ok(diagnostics) => Ok(diagnostics),
+            Err(LaneFailure::Reported(message)) => Err(LaneFailure::Reported(message)),
+            Err(LaneFailure::Fatal(message)) => {
+                // The host is gone. Remember why, so the next keystroke reports the same
+                // reason instead of spawning a fresh process that will fail the same way.
+                *process = LaneProcess::Failed(message.clone());
+                Err(LaneFailure::Fatal(message))
+            }
+        }
+    }
+}
+
+/// One running lane host, its request writer, and its answer reader.
+struct LaneChild {
+    child: Child,
+    stdin: ChildStdin,
+    answers: Receiver<Option<String>>,
+    next_id: u64,
+}
+
+impl LaneChild {
+    fn start(node: &Path, script: &Path, root: &Path) -> Result<Self, String> {
+        let mut child = Command::new(node)
+            .arg(script)
+            .arg(LANE_HOST_FLAG)
+            .arg("--cwd")
+            .arg(root)
+            .current_dir(root)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            // Inherited, so the host's disclosure line and any plugin's own output reach
+            // the client's server log rather than disappearing.
+            .stderr(Stdio::inherit())
+            .spawn()
+            .map_err(|error| {
+                format!(
+                    "unable to start the JS plugin lane host with {}: {error}",
+                    node.display()
+                )
+            })?;
+        let stdin = child
+            .stdin
+            .take()
+            .ok_or("the JS plugin lane host has no stdin")?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or("the JS plugin lane host has no stdout")?;
+        let (sender, answers) = mpsc::channel();
+        // Blocking reads live on their own thread so a wedged host times out here instead
+        // of hanging the editor's diagnostics forever.
+        thread::spawn(move || {
+            for line in BufReader::new(stdout).lines() {
+                let Ok(line) = line else { break };
+                if sender.send(Some(line)).is_err() {
+                    return;
+                }
+            }
+            let _ = sender.send(None);
+        });
+
+        let mut host = Self {
+            child,
+            stdin,
+            answers,
+            next_id: 1,
+        };
+        let ready = host
+            .read_answer(LANE_START_TIMEOUT)
+            .map_err(|failure| failure.message().to_string())?;
+        if ready.get("ready").and_then(Value::as_bool) == Some(true) {
+            return Ok(host);
+        }
+        Err(ready
+            .get("error")
+            .and_then(Value::as_str)
+            .unwrap_or("the JS plugin lane host refused to start")
+            .to_string())
+    }
+
+    fn lint(
+        &mut self,
+        path: &Path,
+        projection: &str,
+    ) -> Result<Vec<LanePluginDiagnostic>, LaneFailure> {
+        let id = self.next_id;
+        self.next_id += 1;
+        let request = json!({
+            "id": id,
+            "path": path.to_string_lossy(),
+            "projection": projection,
+        });
+        writeln!(self.stdin, "{request}")
+            .and_then(|()| self.stdin.flush())
+            .map_err(|error| {
+                LaneFailure::Fatal(format!("the JS plugin lane host stopped reading: {error}"))
+            })?;
+
+        loop {
+            let answer = self.read_answer(LANE_REQUEST_TIMEOUT)?;
+            // A late answer to a request that already timed out is discarded rather than
+            // attributed to this file.
+            if answer.get("id").and_then(Value::as_u64) != Some(id) {
+                continue;
+            }
+            if let Some(error) = answer.get("error").and_then(Value::as_str) {
+                return Err(LaneFailure::Reported(error.to_string()));
+            }
+            return Ok(answer
+                .get("diagnostics")
+                .and_then(Value::as_array)
+                .map_or_else(Vec::new, |diagnostics| {
+                    diagnostics.iter().filter_map(lane_diagnostic).collect()
+                }));
+        }
+    }
+
+    fn read_answer(&mut self, timeout: Duration) -> Result<Value, LaneFailure> {
+        let line = match self.answers.recv_timeout(timeout) {
+            Ok(Some(line)) => line,
+            Ok(None) | Err(RecvTimeoutError::Disconnected) => {
+                return Err(LaneFailure::Fatal(
+                    "the JS plugin lane host exited; your plugins are not running on .tsrx"
+                        .to_string(),
+                ));
+            }
+            Err(RecvTimeoutError::Timeout) => {
+                return Err(LaneFailure::Fatal(format!(
+                    "the JS plugin lane host did not answer within {} seconds",
+                    timeout.as_secs()
+                )));
+            }
+        };
+        serde_json::from_str(&line).map_err(|error| {
+            LaneFailure::Fatal(format!(
+                "the JS plugin lane host wrote something that is not a JSON answer: {error}"
+            ))
+        })
+    }
+}
+
+impl Drop for LaneChild {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
+fn lane_diagnostic(value: &Value) -> Option<LanePluginDiagnostic> {
+    let labels = value
+        .get("labels")?
+        .as_array()?
+        .iter()
+        .map(|label| {
+            Some(PluginLabel {
+                offset: u32::try_from(label.get("offset")?.as_u64()?).ok()?,
+                length: u32::try_from(label.get("length")?.as_u64().unwrap_or(0)).ok()?,
+            })
+        })
+        .collect::<Option<Vec<_>>>()?;
+    if labels.is_empty() {
+        return None;
+    }
+    Some(LanePluginDiagnostic {
+        code: value
+            .get("code")
+            .and_then(Value::as_str)
+            .map(ToString::to_string),
+        message: value
+            .get("message")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string(),
+        severity: if value.get("severity").and_then(Value::as_str) == Some("error") {
+            EditorSeverity::Error
+        } else {
+            EditorSeverity::Warning
+        },
+        labels,
+    })
+}
+
+/// One plugin diagnostic moved from projection bytes to the bytes the user wrote.
+///
+/// `None` drops it, under the same rule the native lane applies to OXC's own diagnostics:
+/// a label that landed on projection-only text has no authored position, and a squiggle
+/// on code the developer did not write is worse than no squiggle at all.
+fn authored_plugin_diagnostic(
+    projection: &PluginProjection,
+    source: &str,
+    diagnostic: LanePluginDiagnostic,
+) -> Option<EditorDiagnostic> {
+    let authored = projection.map_labels(&diagnostic.labels)?;
+    let primary = authored.first()?;
+    let start = usize::try_from(primary.offset).ok()?;
+    let end = start.checked_add(usize::try_from(primary.length).ok()?)?;
+    // The transport rejects a whole publish over one invalid range, which would cost this
+    // file its native Rust diagnostics too. Check here instead of trusting the mapping.
+    if end > source.len() || !source.is_char_boundary(start) || !source.is_char_boundary(end) {
+        return None;
+    }
+    let rule = diagnostic.code.as_deref().map(|code| {
+        code.split_once('(')
+            .map_or(code, |(_, rest)| rest.trim_end_matches(')'))
+            .to_string()
+    });
+    Some(EditorDiagnostic {
+        range: EditorRange::new(
+            primary.offset,
+            primary.offset.saturating_add(primary.length),
+        ),
+        severity: diagnostic.severity,
+        // Oxlint's own `plugin(rule)` code, verbatim, so the Problems panel names the
+        // plugin the developer wrote as well as the rule inside it.
+        code: diagnostic.code.clone(),
+        source: Some("oxlint-tsrx".to_string()),
+        message: diagnostic.message,
+        related: Vec::new(),
+        data: Some(json!({ "rule": rule, "code": diagnostic.code, "jsPlugin": true })),
+    })
+}
+
+/// Where the editor's plugin lane host lives, or `None` when it cannot be found.
+fn locate_lane_host_script(root: &Path) -> Option<PathBuf> {
+    if let Some(explicit) = env::var_os("OXC_TSRX_JS_PLUGIN_LANE") {
+        let path = PathBuf::from(explicit);
+        if path.is_file() {
+            return Some(path);
+        }
+    }
+    // The workspace first, because that is where the project's own install is, then this
+    // executable, which covers a native package installed beside the toolchain one and a
+    // binary run straight out of this repository's `target/`.
+    let mut starting_points = vec![root.to_path_buf()];
+    if let Ok(executable) = env::current_exe() {
+        starting_points.push(executable);
+    }
+    for start in starting_points {
+        for ancestor in start.ancestors() {
+            for relative in LANE_HOST_PATHS {
+                let candidate = ancestor.join(relative);
+                if candidate.is_file() {
+                    return Some(candidate);
+                }
+            }
+        }
+    }
+    None
+}
+
+/// The Node runtime a JavaScript rule needs, or `None` when there is none to be had.
+fn locate_node() -> Option<PathBuf> {
+    if let Some(explicit) = env::var_os("OXC_TSRX_NODE") {
+        let path = PathBuf::from(explicit);
+        if path.is_file() {
+            return Some(path);
+        }
+    }
+    let names: &[&str] = if cfg!(windows) {
+        &["node.exe", "node.cmd"]
+    } else {
+        &["node"]
+    };
+    for directory in env::split_paths(&env::var_os("PATH")?) {
+        for name in names {
+            let candidate = directory.join(name);
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+    None
+}
+
+/// Why this project's JavaScript plugins are not reporting, as a diagnostic.
+///
+/// Anchored at the first character, next to whatever the native rules found, because the
+/// alternative is a file that looks like the developer's rule simply found nothing.
+fn js_plugin_lane_diagnostic(source: &str, reason: &str) -> EditorDiagnostic {
+    let end = source.chars().next().map_or(0, char::len_utf8);
+    EditorDiagnostic {
+        range: EditorRange::new(0, u32::try_from(end).unwrap_or(0)),
+        severity: EditorSeverity::Warning,
+        code: Some("js-plugins-unavailable".to_string()),
+        source: Some("oxc-tsrx".to_string()),
+        message: format!(
+            "OXC for TSRX could not run this project's Oxlint JS plugins on this file: {reason}. The native Rust rules above are unaffected."
+        ),
+        related: Vec::new(),
+        data: Some(json!({ "rule": "js-plugins-unavailable" })),
     }
 }
 
