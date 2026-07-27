@@ -13,7 +13,7 @@
     "deployWorkflow": null
   },
   "npm": {
-    "distTag": "next",
+    "distTag": "latest",
     "publishOrder": [
       "@oxc-tsrx/native-darwin-arm64",
       "@oxc-tsrx/native-darwin-x64",

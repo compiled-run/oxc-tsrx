@@ -291,7 +291,11 @@ jobs:
           set -euo pipefail
           while read -r name path; do
             echo "::group::dry-run $name"
-            npm publish "$path" --tag "$DIST_TAG" --access public --dry-run
+            # `./` is load-bearing. npm reads a bare `release/x.tgz` as the
+            # GitHub shorthand `user/repo` and tries to clone it, which fails as
+            # `git ls-remote ssh://git@github.com/release/x.tgz.git` rather than
+            # as anything naming a tarball.
+            npm publish "./$path" --tag "$DIST_TAG" --access public --dry-run
             echo "::endgroup::"
           done < publish-order.txt
 
@@ -312,7 +316,8 @@ jobs:
           set -euo pipefail
           while read -r name path; do
             echo "::group::publish $name"
-            npm publish "$path" --tag "$DIST_TAG" --access public
+            # See the dry-run step: a bare relative path is a GitHub shorthand.
+            npm publish "./$path" --tag "$DIST_TAG" --access public
             echo "::endgroup::"
           done < publish-order.txt
 
