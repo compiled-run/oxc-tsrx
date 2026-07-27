@@ -15,7 +15,7 @@ test fails.
 | `src/TaskRow.tsx` | An ordinary React component. Its `.map()` call has the same missing-key problem. |
 | `explore-tsrx-ast.mjs` | Prints the node type of every TSRX control block in `src/TaskList.tsrx`. |
 
-## Oxlint: a JavaScript plugin on ordinary files, today
+## Oxlint: one JavaScript plugin, both file types
 
 `oxlint-demo-plugin.mjs` is an Oxlint JavaScript plugin, and `.oxlintrc.json`
 enables it. The `oxlint` binary that `oxc-tsrx` installs runs it on
@@ -25,14 +25,24 @@ enables it. The `oxlint` binary that `oxc-tsrx` installs runs it on
 npx oxlint src/TaskRow.tsx
 ```
 
-Pointed at `src/TaskList.tsrx`, the same config exits 2 with
-"JavaScript plugins are not supported by the native TSRX path yet". That is not
-a bug: `.tsrx` is linted by a separate native Rust process with no Node.js
-plugin host, and OXC for TSRX refuses rather than silently parsing the file a
-second time. Without a `jsPlugins` entry, that same command lints `.tsrx` fine
-with OXC's built-in Rust rules.
+Pointed at `src/TaskList.tsrx`, the same config runs the same plugin. `.tsrx`
+files are linted by a native Rust process with no Node.js runtime, so `oxlint`
+hands each file's legal-TSX projection to the published Oxlint binary, runs your
+plugin over that, and maps every diagnostic back to the bytes you wrote. It
+costs one extra parse per `.tsrx` file and says so on stderr each time.
+`require-keyed-map` looks for a `.map()` call, and `src/TaskList.tsrx` has an
+`@for` block, so the rule runs there and finds nothing; the docs page adds a
+`src/TaskFeed.tsrx` that does have one.
 
-## ESLint: the escape hatch for a JavaScript rule on `.tsrx`
+Set `settings.oxcTsrx.jsPluginsOnTsrx` to `false` and the `.tsrx` half refuses
+out loud with exit 2 instead, rather than dropping your rule quietly.
+
+## ESLint: for a rule that must visit authored TSRX nodes
+
+Your rule sees the projection above, in which `@if` and `@for` have already
+become ordinary `if` and `for`. A rule keyed on `JSXIfExpression` or
+`JSXForExpression` therefore cannot fire on that route. That is what the rest of
+this directory is for.
 
 `tsrx-eslint-parser.mjs` adapts the parser to the public `parseForESLint`
 contract. It supplies authored ranges and locations, comments, parser services,
@@ -115,5 +125,7 @@ is the production-grade destination for cached parsing, typed visitor schemas,
 faithful virtual TS, source mappings, and type-aware rules.
 
 The native `oxc-tsrx-lsp` remains an in-process Rust host and does not execute
-JavaScript. Shipping the Oxlint lane for `.tsrx` waits for upstream
-custom-parser support to be released.
+JavaScript. Running your Oxlint plugin on `.tsrx` from the command line ships
+today, through the projection route above; what still waits on released upstream
+custom-parser support is a rule that visits authored TSRX node types inside
+Oxlint itself.

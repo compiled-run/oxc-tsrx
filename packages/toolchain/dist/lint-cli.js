@@ -21,6 +21,7 @@ import {
   parseOxlintOption,
   withOxlintOutputFormat,
 } from "./lint-invocation.js";
+import { preparePluginLane } from "./lint-js-plugins.js";
 
 // Mixed invocations need captured JSON so the canonical and TSRX diagnostics
 // can be combined. Run the public, manifest-declared JavaScript launcher via
@@ -506,6 +507,33 @@ export async function runCli(args, options = {}) {
         )
       : null;
 
+  // A project's own Oxlint JavaScript plugins run on `.tsrx` by linting each
+  // file's TSX projection with the published Oxlint binary. The lane is on by
+  // default: a rule the user wrote and enabled has to run, and an opt-in flag
+  // would just be a quieter way of not running it.
+  let pluginLane = null;
+  try {
+    pluginLane =
+      files.length > 0
+        ? await preparePluginLane({ cwd, files, viteConfig, explicitConfig })
+        : null;
+  } catch (error) {
+    await viteConfig?.cleanup();
+    throw error;
+  }
+  if (pluginLane?.status === "version-refused") {
+    await viteConfig?.cleanup();
+    // Not running a rule the project asked for is the failure this lane exists
+    // to remove, so an unsupported Oxlint stops the command instead of quietly
+    // reducing it to the native rules.
+    process.stderr.write(`${pluginLane.message}\n`);
+    return 1;
+  }
+  const pluginLaneActive = pluginLane?.status === "active";
+  if (pluginLaneActive && !args.includes("--silent")) {
+    process.stderr.write(`${pluginLane.notice}\n`);
+  }
+
   try {
     const stripped = removeExplicitTsrx(args, VALUE_OPTIONS);
     const shouldRunUpstream = !stripped.hadPositionals || stripped.remainingPositionals > 0;
@@ -529,7 +557,12 @@ export async function runCli(args, options = {}) {
     if (useMaterializedUpstreamConfig) {
       upstreamArgs = replaceConfigArgument(upstreamArgs, viteConfig.path);
     }
-    const nativeArgs = files.length > 0 ? nativeArguments(args, files, viteConfig) : null;
+    // With the lane running, the native leaf is handed the same configuration
+    // minus `jsPlugins`, so `reject_unavailable_lint_capabilities` is never
+    // reached and the plugins are hosted exactly once, by Oxlint.
+    const nativeResolvedConfig = pluginLane?.nativeConfig ?? viteConfig;
+    const nativeArgs =
+      files.length > 0 ? nativeArguments(args, files, nativeResolvedConfig) : null;
     // Mutating invocations never prestart. Preflight their native lane before
     // canonical Oxlint can apply fixes to the ordinary half of a mixed batch.
     // Missing or mismatched artifacts therefore fail atomically instead of
@@ -551,11 +584,19 @@ export async function runCli(args, options = {}) {
       });
     }
 
-    const [upstreamResult, nativeResult] = await Promise.all([
+    const lanePromise = pluginLaneActive
+      ? pluginLane.run().then(
+          (value) => ({ ok: true, value }),
+          (error) => ({ ok: false, error }),
+        )
+      : Promise.resolve({ ok: true, value: null });
+
+    const [upstreamResult, nativeResult, laneOutcome] = await Promise.all([
       upstreamPromise,
       nativeCommand
         ? runCaptured(nativeCommand.executable, nativeCommand.args, { cwd })
         : Promise.resolve({ status: 0, stdout: "", stderr: "", signal: null }),
+      lanePromise,
     ]);
 
     if (upstreamResult.status > 1 || nativeResult.status > 1) {
@@ -583,8 +624,22 @@ export async function runCli(args, options = {}) {
       return Math.max(upstreamResult.status, nativeResult.status);
     }
 
+    if (!laneOutcome.ok) throw laneOutcome.error;
+
     const upstream = parseJson(upstreamResult, "canonical Oxlint");
     const native = parseJson(nativeResult, "OXC for TSRX");
+    // The plugin half joins the native half before positions are resolved, so
+    // its line and column are counted in the authored `.tsrx` file rather than
+    // in the projection Oxlint actually read.
+    if (laneOutcome.value !== null) {
+      native.diagnostics = [...(native.diagnostics ?? []), ...laneOutcome.value.diagnostics];
+      if (native.oxcTsrx) {
+        native.oxcTsrx.jsPluginProjection = {
+          files: laneOutcome.value.files,
+          extraParses: laneOutcome.value.extraParses,
+        };
+      }
+    }
     await addLineColumns(native.diagnostics ?? []);
     let result = combine(upstream, native);
     if (args.includes("--quiet")) {
@@ -605,13 +660,22 @@ export async function runCli(args, options = {}) {
     const denyWarnings = args.includes("--deny-warnings");
     const maximum = argumentValue(args, new Set(["--max-warnings"]));
     const exceedsMaximum = maximum !== null && warnings > Number.parseInt(maximum, 10);
+    // Neither child process saw the plugin half, so its errors have to reach the
+    // exit code from here. A rule the project set to `error` firing on a `.tsrx`
+    // file and still reporting a green run would be the same silent failure this
+    // lane exists to remove, one step further down.
+    const pluginErrors = (laneOutcome.value?.diagnostics ?? []).some(
+      (diagnostic) => diagnostic.severity === "error",
+    );
     return Math.max(
       upstreamResult.status,
       nativeResult.status,
       denyWarnings && warnings > 0 ? 1 : 0,
       exceedsMaximum ? 1 : 0,
+      pluginErrors ? 1 : 0,
     );
   } finally {
+    await pluginLane?.cleanup?.();
     await viteConfig?.cleanup();
   }
 }

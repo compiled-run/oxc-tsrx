@@ -1,12 +1,25 @@
 //! The `oxc-tsrx-lsp` language server. Selected by `argv[0]` or the `lsp`
 //! subcommand.
 
-use std::{env, path::PathBuf, process::ExitCode, sync::Arc};
+use std::{
+    env, fs,
+    path::{Path, PathBuf},
+    process::ExitCode,
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
+    time::{SystemTime, UNIX_EPOCH},
+};
 
-use oxc_adapter::editor::{
-    EditorActionKind, EditorCodeAction, EditorCodeActionRequest, EditorDiagnostic, EditorDocument,
-    EditorDocumentEdit, EditorRange, EditorSeverity, EditorTextEdit, EditorTool, EditorToolFactory,
-    EditorWorkspace, run_editor_server,
+use oxc_adapter::{
+    JsPluginFreeLintConfig,
+    editor::{
+        EditorActionKind, EditorCodeAction, EditorCodeActionRequest, EditorDiagnostic,
+        EditorDocument, EditorDocumentEdit, EditorRange, EditorSeverity, EditorTextEdit,
+        EditorTool, EditorToolFactory, EditorWorkspace, run_editor_server,
+    },
+    lint_config_without_js_plugins,
 };
 use serde_json::{Value, json};
 use tsrx_format::FormatSession;
@@ -70,29 +83,32 @@ impl EditorToolFactory for TsrxEditorFactory {
         let format_config = option_path(&root, options, "formatConfigPath");
         let type_check = option_bool(options, "typeCheck");
         let type_aware = option_bool(options, "typeAware") || type_check;
-        let filters = Vec::<ConfigRuleFilter>::new();
-        let lint = build_lint_session(
-            &root,
-            lint_config.as_deref(),
-            &filters,
-            false,
-            type_aware,
-            type_check,
-        )?;
-        let actions = build_lint_session(
-            &root,
-            lint_config.as_deref(),
-            &filters,
-            true,
-            type_aware,
-            type_check,
-        )?;
         let format = FormatSession::new(&root, format_config.as_deref())?;
-        Ok(Box::new(TsrxEditorTool {
-            lint,
-            actions,
-            format,
-        }))
+        // A lint session that cannot be built is a state the user has to be able to see.
+        // Returning it as an error here loses it: the transport has nowhere to put a
+        // workspace-construction failure, so the editor shows an empty file with no
+        // diagnostics, no message, and nothing in the log. Keep the tool, remember why
+        // linting is unavailable, and report it on every `.tsrx` file that is opened.
+        match build_lint_sessions(&root, lint_config.as_deref(), type_aware, type_check) {
+            Ok(sessions) => Ok(Box::new(TsrxEditorTool {
+                lint: Some(sessions.lint),
+                actions: Some(sessions.actions),
+                format,
+                unavailable: None,
+                _staged_config: sessions.staged_config,
+            })),
+            Err(error) => {
+                // Also on stderr, which clients surface as the server's output log.
+                eprintln!("oxc-tsrx-lsp: TSRX linting is unavailable: {error}");
+                Ok(Box::new(TsrxEditorTool {
+                    lint: None,
+                    actions: None,
+                    format,
+                    unavailable: Some(error),
+                    _staged_config: None,
+                }))
+            }
+        }
     }
 
     fn watcher_patterns(&self, _workspace: &EditorWorkspace, options: &Value) -> Vec<String> {
@@ -147,25 +163,140 @@ fn option_string<'a>(
     })
 }
 
+/// A stripped Oxlint configuration written to a throwaway directory, removed with the
+/// workspace tool that owns it.
+struct StagedConfig {
+    directory: PathBuf,
+    path: PathBuf,
+    base: PathBuf,
+}
+
+impl StagedConfig {
+    fn write(stripped: &JsPluginFreeLintConfig) -> Result<Self, String> {
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_or(0, |elapsed| elapsed.as_nanos());
+        let directory = env::temp_dir().join(format!(
+            "oxc-tsrx-lsp-config-{}-{nanos}-{}",
+            std::process::id(),
+            COUNTER.fetch_add(1, Ordering::Relaxed),
+        ));
+        fs::create_dir_all(&directory).map_err(|error| {
+            format!(
+                "unable to stage a JS-plugin-free Oxlint config in {}: {error}",
+                directory.display()
+            )
+        })?;
+        let path = directory.join(".oxlintrc.json");
+        fs::write(&path, &stripped.json).map_err(|error| {
+            format!(
+                "unable to stage a JS-plugin-free Oxlint config at {}: {error}",
+                path.display()
+            )
+        })?;
+        Ok(Self {
+            directory,
+            path,
+            base: stripped.base.clone(),
+        })
+    }
+}
+
+impl Drop for StagedConfig {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.directory);
+    }
+}
+
+struct LintSessions {
+    lint: LintSession,
+    actions: LintSession,
+    staged_config: Option<StagedConfig>,
+}
+
+/// Build the diagnostics and quick-fix sessions this workspace lints with.
+///
+/// A project's `jsPlugins` are hosted by the `oxlint` command OXC for TSRX installs,
+/// over each `.tsrx` file's TSX projection. The native engine refuses a configuration
+/// that still declares them, so the command line strips them before handing the config
+/// down. This is the same strip on the editor path: without it, adding one JavaScript
+/// plugin to `.oxlintrc.json` takes away every diagnostic on every `.tsrx` file,
+/// including the native Rust ones that have nothing to do with plugins.
+///
+/// The stripped copy is written to a temporary directory and handed over with the
+/// directory the original was authored in as its config base, so relative `extends`,
+/// `overrides` globs and `ignorePatterns` still resolve exactly where they did.
+fn build_lint_sessions(
+    root: &Path,
+    config: Option<&Path>,
+    type_aware: bool,
+    type_check: bool,
+) -> Result<LintSessions, String> {
+    let filters = Vec::<ConfigRuleFilter>::new();
+    let staged_config = match lint_config_without_js_plugins(root, config)? {
+        Some(stripped) => Some(StagedConfig::write(&stripped)?),
+        None => None,
+    };
+    let (config_path, config_base) = match &staged_config {
+        Some(staged) => (Some(staged.path.as_path()), Some(staged.base.as_path())),
+        None => (config, None),
+    };
+    Ok(LintSessions {
+        lint: build_lint_session(
+            root,
+            config_path,
+            config_base,
+            &filters,
+            false,
+            type_aware,
+            type_check,
+        )?,
+        actions: build_lint_session(
+            root,
+            config_path,
+            config_base,
+            &filters,
+            true,
+            type_aware,
+            type_check,
+        )?,
+        staged_config,
+    })
+}
+
 fn build_lint_session(
-    root: &std::path::Path,
-    config: Option<&std::path::Path>,
+    root: &Path,
+    config: Option<&Path>,
+    config_base: Option<&Path>,
     filters: &[ConfigRuleFilter],
     fix: bool,
     type_aware: bool,
     type_check: bool,
 ) -> Result<LintSession, String> {
     if type_aware {
-        LintSession::new_type_aware_with_config_base(root, config, None, filters, fix, type_check)
+        LintSession::new_type_aware_with_config_base(
+            root,
+            config,
+            config_base,
+            filters,
+            fix,
+            type_check,
+        )
     } else {
-        LintSession::new(root, config, filters, fix)
+        LintSession::new_with_config_base(root, config, config_base, filters, fix)
     }
 }
 
 struct TsrxEditorTool {
-    lint: LintSession,
-    actions: LintSession,
+    lint: Option<LintSession>,
+    actions: Option<LintSession>,
     format: FormatSession,
+    /// Why linting is unavailable in this workspace, when it is.
+    unavailable: Option<String>,
+    /// Held so the staged configuration outlives the sessions compiled from it and is
+    /// removed with them.
+    _staged_config: Option<StagedConfig>,
 }
 
 impl TsrxEditorTool {
@@ -186,10 +317,21 @@ impl TsrxEditorTool {
 impl EditorTool for TsrxEditorTool {
     fn diagnostics(&self, document: &EditorDocument<'_>) -> Result<Vec<EditorDiagnostic>, String> {
         let (path, source) = Self::source(document)?;
-        if self.lint.should_ignore(&path) {
+        let Some(lint) = self.lint.as_ref() else {
+            // Silence here is the worst answer available: the file looks clean, the
+            // native rules that were working a moment ago are gone, and nothing says
+            // why. Publish the reason as this file's own diagnostic instead.
+            return Ok(vec![unavailable_diagnostic(
+                source,
+                self.unavailable.as_deref().unwrap_or(
+                    "TSRX linting is unavailable for this workspace and no reason was recorded",
+                ),
+            )]);
+        };
+        if lint.should_ignore(&path) {
             return Ok(Vec::new());
         }
-        let output = match self.lint.lint_text(&path, source) {
+        let output = match lint.lint_text(&path, source) {
             Ok(output) => output,
             Err(error) => return Ok(vec![parse_error_diagnostic(source, error)]),
         };
@@ -248,11 +390,15 @@ impl EditorTool for TsrxEditorTool {
             return Ok(Vec::new());
         }
         let (path, source) = Self::source(&request.document)?;
-        if self.actions.should_ignore(&path) {
+        // The refusal is already published as a diagnostic; a quick fix cannot repair a
+        // configuration, so this stays quiet rather than reporting it a second time.
+        let Some(actions) = self.actions.as_ref() else {
+            return Ok(Vec::new());
+        };
+        if actions.should_ignore(&path) {
             return Ok(Vec::new());
         }
-        Ok(self
-            .actions
+        Ok(actions
             .code_actions(&path, source)?
             .into_iter()
             .filter(|fix| {
@@ -275,6 +421,23 @@ impl EditorTool for TsrxEditorTool {
                 data: Some(json!({ "rule": fix.rule })),
             })
             .collect())
+    }
+}
+
+/// The reason TSRX linting is unavailable, as this file's own diagnostic.
+///
+/// It is anchored at the first character so an editor has something to underline and
+/// the message reaches the Problems panel, the hover, and the client's own log.
+fn unavailable_diagnostic(source: &str, reason: &str) -> EditorDiagnostic {
+    let end = source.chars().next().map_or(0, char::len_utf8);
+    EditorDiagnostic {
+        range: EditorRange::new(0, u32::try_from(end).unwrap_or(0)),
+        severity: EditorSeverity::Error,
+        code: Some("lint-unavailable".to_string()),
+        source: Some("oxc-tsrx".to_string()),
+        message: format!("OXC for TSRX cannot lint this file: {reason}"),
+        related: Vec::new(),
+        data: Some(json!({ "rule": "lint-unavailable" })),
     }
 }
 

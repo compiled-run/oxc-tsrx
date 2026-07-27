@@ -1,9 +1,15 @@
 //! The `oxc-tsrx` linter. Selected by default, or by the `lint` subcommand.
 
-use std::{env, path::PathBuf, process::ExitCode};
+use std::{
+    env,
+    io::{Read, Write},
+    path::{Path, PathBuf},
+    process::ExitCode,
+};
 
 use oxc_adapter::OXC_REVISION;
-use tsrx_lint::{ConfigRuleFilter, ConfigRuleSeverity, LintSession};
+use serde_json::{Map, Value, json};
+use tsrx_lint::{ConfigRuleFilter, ConfigRuleSeverity, LintSession, PluginLabel, PluginProjection};
 
 const HELP: &str = "\
 OXC for TSRX linter
@@ -22,6 +28,18 @@ Options:
     -h, --help              Show this help
     -V, --version           Show the package and canonical OXC revision
 
+JavaScript plugin lane (driven by the `oxlint` command, not by hand):
+    --emit-plugin-projection    Print {projections:[{path,projected}]}: the legal
+                                TSX projection of each named .tsrx file, which is
+                                what the published Oxlint binary hosts JS plugins
+                                over. Honours the same ignore rules as a lint run
+    --map-plugin-diagnostics    Read {files:[{path,diagnostics}]} on stdin and
+                                print it back with every label span moved from
+                                projection bytes to authored bytes. A diagnostic
+                                whose labels do not all map is dropped, because a
+                                position the user did not write is worse than no
+                                diagnostic
+
 This is the internal capability target the oxc.provider metadata names for
 linting .tsrx files. It takes explicit file paths only, never a directory or a
 glob, and always prints one JSON report to stdout. Run `oxlint` instead for the
@@ -29,6 +47,11 @@ drop-in command a project installs: it discovers files, honours ignore files,
 prints human-readable diagnostics, and covers .tsrx and ordinary files in one
 run.
 ";
+
+/// Print the legal-TSX projection of each authored `.tsrx` path.
+const EMIT_PLUGIN_PROJECTION: &str = "--emit-plugin-projection";
+/// Move Oxlint's plugin diagnostics from projection bytes back to authored bytes.
+const MAP_PLUGIN_DIAGNOSTICS: &str = "--map-plugin-diagnostics";
 
 pub fn run_cli(arguments: Vec<String>) -> ExitCode {
     match run(arguments.into_iter()) {
@@ -59,6 +82,21 @@ fn run(arguments: impl Iterator<Item = String>) -> Result<u8, String> {
         );
         return Ok(0);
     }
+    // The mapping mode needs no configuration and no positional file: every path it touches
+    // arrives in the stdin request, so it is answered before argument parsing.
+    if arguments
+        .iter()
+        .any(|argument| argument == MAP_PLUGIN_DIAGNOSTICS)
+    {
+        return map_plugin_diagnostics();
+    }
+    let emit_projection = arguments
+        .iter()
+        .any(|argument| argument == EMIT_PLUGIN_PROJECTION);
+    let arguments = arguments
+        .into_iter()
+        .filter(|argument| argument != EMIT_PLUGIN_PROJECTION)
+        .collect::<Vec<_>>();
     let ParsedArguments {
         filters,
         files,
@@ -100,6 +138,11 @@ fn run(arguments: impl Iterator<Item = String>) -> Result<u8, String> {
         })
         .filter(|path| !session.should_ignore(path))
         .collect::<Vec<_>>();
+    // The projection mode reuses everything above it so the plugin lane sees exactly the files a
+    // lint run would have reported on: the same config, the same ignore rules, the same order.
+    if emit_projection {
+        return emit_plugin_projection(&files);
+    }
     let output = session.aggregate(session.lint_files(&files)?);
     let errors = output
         .diagnostics
@@ -120,6 +163,139 @@ fn run(arguments: impl Iterator<Item = String>) -> Result<u8, String> {
         .max_warnings()
         .is_some_and(|maximum| warnings > maximum);
     Ok(u8::from(errors > 0 || warnings_fail || max_warnings_fail))
+}
+
+/// Print the legal-TSX projection of every named `.tsrx` file.
+///
+/// This is the only way the projection text leaves the native process. The published Oxlint binary
+/// lints these strings so a user's JavaScript rules see a source OXC can parse, and the offsets
+/// they report come back through [`map_plugin_diagnostics`].
+///
+/// A file that cannot be scanned or projected is omitted rather than failing the command: the
+/// ordinary lint lane already reports that syntax error as the file's own diagnostic, and a plugin
+/// has nothing to say about a source that does not parse.
+fn emit_plugin_projection(files: &[PathBuf]) -> Result<u8, String> {
+    let mut projections = Vec::new();
+    for path in files {
+        if path.extension().is_none_or(|extension| extension != "tsrx") {
+            continue;
+        }
+        let Ok(source) = std::fs::read_to_string(path) else {
+            continue;
+        };
+        let Ok(projection) = PluginProjection::new(&source) else {
+            continue;
+        };
+        projections.push(json!({
+            "path": path.to_string_lossy(),
+            "projected": projection.source(),
+        }));
+    }
+    print_json(&json!({ "projections": projections }))
+}
+
+/// Move Oxlint's plugin diagnostics from projection bytes back to the bytes the user wrote.
+///
+/// The request is `{files:[{path, diagnostics:[...]}]}`, where each diagnostic is Oxlint's own JSON
+/// passed through untouched apart from its label spans. Every field this process does not
+/// understand survives, so the rule's message, code, severity, and help stay exactly as Oxlint
+/// wrote them.
+fn map_plugin_diagnostics() -> Result<u8, String> {
+    let mut request = String::new();
+    std::io::stdin()
+        .read_to_string(&mut request)
+        .map_err(|error| format!("unable to read the plugin diagnostic request: {error}"))?;
+    let request: Value = serde_json::from_str(&request)
+        .map_err(|error| format!("invalid plugin diagnostic request: {error}"))?;
+    let files = request
+        .get("files")
+        .and_then(Value::as_array)
+        .ok_or("plugin diagnostic request needs a files array")?;
+
+    let mut mapped_files = Vec::with_capacity(files.len());
+    for file in files {
+        let path = file
+            .get("path")
+            .and_then(Value::as_str)
+            .ok_or("every plugin diagnostic file needs a path")?;
+        let diagnostics = file
+            .get("diagnostics")
+            .and_then(Value::as_array)
+            .map_or_else(Vec::new, Clone::clone);
+        mapped_files.push(json!({
+            "path": path,
+            "diagnostics": map_file_diagnostics(Path::new(path), diagnostics),
+        }));
+    }
+    print_json(&json!({ "files": mapped_files }))
+}
+
+/// Map one file's diagnostics, dropping the file's whole contribution when it cannot be projected.
+fn map_file_diagnostics(path: &Path, diagnostics: Vec<Value>) -> Vec<Value> {
+    let Ok(source) = std::fs::read_to_string(path) else {
+        return Vec::new();
+    };
+    let Ok(projection) = PluginProjection::new(&source) else {
+        return Vec::new();
+    };
+    diagnostics
+        .into_iter()
+        .filter_map(|diagnostic| map_one_diagnostic(&projection, diagnostic))
+        .collect()
+}
+
+fn map_one_diagnostic(projection: &PluginProjection, mut diagnostic: Value) -> Option<Value> {
+    let object = diagnostic.as_object_mut()?;
+    let labels = object.get("labels")?.as_array()?.clone();
+    let spans = labels.iter().map(label_span).collect::<Option<Vec<_>>>()?;
+    let authored = projection.map_labels(&spans)?;
+
+    let mut mapped_labels = Vec::with_capacity(labels.len());
+    for (label, span) in labels.into_iter().zip(&authored) {
+        let mut label = label;
+        let entry = label.as_object_mut()?;
+        let mut mapped_span = Map::new();
+        mapped_span.insert("offset".to_string(), json!(span.offset));
+        mapped_span.insert("length".to_string(), json!(span.length));
+        // Oxlint resolved `line` and `column` against the projection. Dropping them is what makes
+        // the wrapper recompute both from the authored `.tsrx` file itself.
+        if let Some(Value::Object(original)) = entry.get("span") {
+            for (key, value) in original {
+                if !matches!(key.as_str(), "offset" | "length" | "line" | "column") {
+                    mapped_span.insert(key.clone(), value.clone());
+                }
+            }
+        }
+        entry.insert("span".to_string(), Value::Object(mapped_span));
+        mapped_labels.push(label);
+    }
+    object.insert("labels".to_string(), Value::Array(mapped_labels));
+    // Related spans carry projection offsets this mode does not map. Shipping them unmapped would
+    // point a user at a position in a file they never wrote, so they are dropped instead.
+    if object
+        .get("related")
+        .and_then(Value::as_array)
+        .is_some_and(|related| !related.is_empty())
+    {
+        object.remove("related");
+    }
+    Some(diagnostic)
+}
+
+fn label_span(label: &Value) -> Option<PluginLabel> {
+    let span = label.get("span")?;
+    Some(PluginLabel {
+        offset: u32::try_from(span.get("offset")?.as_u64()?).ok()?,
+        length: u32::try_from(span.get("length")?.as_u64().unwrap_or(0)).ok()?,
+    })
+}
+
+fn print_json(value: &Value) -> Result<u8, String> {
+    let rendered =
+        serde_json::to_string(value).map_err(|error| format!("JSON output failed: {error}"))?;
+    let mut stdout = std::io::stdout().lock();
+    writeln!(stdout, "{rendered}").map_err(|error| format!("JSON output failed: {error}"))?;
+    Ok(0)
 }
 
 struct ParsedArguments {

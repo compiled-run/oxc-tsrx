@@ -313,6 +313,85 @@ impl LintSession {
     }
 }
 
+/// One diagnostic label range, in bytes.
+///
+/// The JavaScript plugin lane hands Oxlint's own label spans across this type so the projection
+/// itself is never serialized out of this crate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PluginLabel {
+    pub offset: u32,
+    pub length: u32,
+}
+
+/// One authored TSRX source's legal-TSX projection, exposed for the JavaScript plugin lane.
+///
+/// The published Oxlint binary hosts a user's JavaScript rules over [`PluginProjection::source`],
+/// then its diagnostics come back through [`PluginProjection::map_labels`]. Only byte ranges cross
+/// the process boundary: [`MappedProjection`] carries segments, dynamic offsets, and synthetic
+/// spans whose rejection rules live here and stay here.
+#[derive(Debug)]
+pub struct PluginProjection {
+    projection: MappedProjection,
+}
+
+impl PluginProjection {
+    /// Scan and project one authored TSRX source.
+    ///
+    /// # Errors
+    ///
+    /// Returns the scanner's or projector's own message for a TSRX source that cannot be
+    /// projected. The native lane reports that failure as the file's own diagnostic already, so
+    /// the plugin lane simply contributes nothing for such a file.
+    pub fn new(source: &str) -> Result<Self, String> {
+        let overlay = scan(source).map_err(|error| error.to_string())?;
+        let projection = project_for_lint(source, &overlay).map_err(|error| error.to_string())?;
+        Ok(Self { projection })
+    }
+
+    /// The legal TSX the published Oxlint binary lints.
+    #[must_use]
+    pub fn source(&self) -> &str {
+        self.projection.source()
+    }
+
+    /// Map one diagnostic's label spans from projection bytes to authored bytes.
+    ///
+    /// `None` means the diagnostic must be dropped, under exactly the rule the native lane already
+    /// applies to canonical OXC's own diagnostics.
+    #[must_use]
+    pub fn map_labels(&self, labels: &[PluginLabel]) -> Option<Vec<PluginLabel>> {
+        map_projection_labels(&self.projection, labels)
+    }
+}
+
+/// The single rejection rule for projection-to-authored label mapping.
+///
+/// A diagnostic survives only when it carries at least one label and every one of those labels
+/// lies inside an authored range. A label that landed on projection-only text (an inserted marker,
+/// a synthetic wrapper) has no authored position to report, and a diagnostic reported at a
+/// position the user did not write is worse than no diagnostic at all.
+///
+/// [`translate_diagnostics`] and [`PluginProjection::map_labels`] both go through this function so
+/// the native rules and the JavaScript plugin lane can never drift apart on it.
+fn map_projection_labels(
+    projection: &MappedProjection,
+    labels: &[PluginLabel],
+) -> Option<Vec<PluginLabel>> {
+    if labels.is_empty() {
+        return None;
+    }
+    let mut mapped = Vec::with_capacity(labels.len());
+    for label in labels {
+        let range = label.offset..label.offset.saturating_add(label.length);
+        let authored = projection.map_range(range)?;
+        mapped.push(PluginLabel {
+            offset: authored.start,
+            length: authored.end - authored.start,
+        });
+    }
+    Some(mapped)
+}
+
 #[derive(Debug, Serialize)]
 pub struct SpanOutput {
     pub offset: u32,
@@ -1021,29 +1100,23 @@ fn translate_diagnostics(
     };
     let mut translated = TranslatedDiagnostics::default();
     for mut diagnostic in diagnostics {
-        if diagnostic.labels.is_empty() {
+        let ranges = diagnostic
+            .labels
+            .iter()
+            .map(|label| PluginLabel {
+                offset: label.offset,
+                length: label.length,
+            })
+            .collect::<Vec<_>>();
+        let Some(mapped) = map_projection_labels(projection, &ranges) else {
             translated.suppressed += 1;
             translated.rejected_fixes += u32::try_from(diagnostic.fixes.len()).unwrap_or(u32::MAX);
             continue;
+        };
+        for (label, authored) in diagnostic.labels.iter_mut().zip(&mapped) {
+            label.offset = authored.offset;
+            label.length = authored.length;
         }
-        let mut labels = Vec::with_capacity(diagnostic.labels.len());
-        let mut labels_are_authored = true;
-        for mut label in diagnostic.labels {
-            let range = label.offset..label.offset.saturating_add(label.length);
-            let Some(mapped) = projection.map_range(range) else {
-                labels_are_authored = false;
-                break;
-            };
-            label.offset = mapped.start;
-            label.length = mapped.end - mapped.start;
-            labels.push(label);
-        }
-        if !labels_are_authored {
-            translated.suppressed += 1;
-            translated.rejected_fixes += u32::try_from(diagnostic.fixes.len()).unwrap_or(u32::MAX);
-            continue;
-        }
-        diagnostic.labels = labels;
         if diagnostic.rule.as_deref() == Some("require-yield")
             && diagnostic.labels.iter().any(|label| {
                 projection.is_synthetic_generator_range(
@@ -1236,7 +1309,61 @@ mod tests {
     use oxc_adapter::{RuleFilter, RuleSeverity};
     use tsrx_syntax::{project_for_lint, scan};
 
-    use super::LintSession;
+    use super::{LintSession, PluginLabel, PluginProjection};
+
+    #[test]
+    fn plugin_projection_maps_labels_and_rejects_projection_only_text() {
+        let source = "function View() @{ var banned = 1; <p>{banned}</p>; }";
+        let projection = PluginProjection::new(source).unwrap();
+        // The published Oxlint binary lints this text, so a plugin's byte offsets are offsets into
+        // it rather than into what the user wrote.
+        let projected = u32::try_from(projection.source().find("banned").unwrap()).unwrap();
+        let authored = u32::try_from(source.find("banned").unwrap()).unwrap();
+        assert_eq!(
+            projection.map_labels(&[PluginLabel {
+                offset: projected,
+                length: 6
+            }]),
+            Some(vec![PluginLabel {
+                offset: authored,
+                length: 6
+            }])
+        );
+
+        // A diagnostic with no label has no authored position at all.
+        assert_eq!(projection.map_labels(&[]), None);
+
+        // A label on text the projection inserted is dropped whole, and one unmappable label
+        // rejects the entire diagnostic rather than reporting a subset at the wrong place.
+        let marker = u32::try_from(projection.source().find("/*").unwrap()).unwrap();
+        assert_eq!(
+            projection.map_labels(&[PluginLabel {
+                offset: marker,
+                length: 1
+            }]),
+            None
+        );
+        assert_eq!(
+            projection.map_labels(&[
+                PluginLabel {
+                    offset: projected,
+                    length: 6
+                },
+                PluginLabel {
+                    offset: marker,
+                    length: 1
+                },
+            ]),
+            None
+        );
+    }
+
+    #[test]
+    fn plugin_projection_rejects_an_unprojectable_source() {
+        let error = PluginProjection::new("export function Broken() @{\n  <main>\n}\n")
+            .expect_err("an unprojectable TSRX source has no legal TSX to lint");
+        assert!(error.contains("unterminated"), "{error}");
+    }
 
     #[test]
     fn fix_mapping_is_identity_only() {

@@ -20,6 +20,9 @@ importers:
       '@napi-rs/wasm-runtime':
         specifier: ^1.1.6
         version: 1.1.6(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)
+      '@oxc-tsrx/native-darwin-arm64':
+        specifier: 0.1.1
+        version: 0.1.1
       '@terrastruct/d2':
         specifier: ^0.1.33
         version: 0.1.33
@@ -990,6 +993,12 @@ packages:
 
   '@oxc-project/types@0.140.0':
     resolution: {integrity: sha512-h5LUOzGArYemnW1NMz/DuuQhBi96J6JL2Bk8zE4kvqxB5Sg3jxmCiH4uyOWHDkiKSt5vWlG4FIwCR/DbstcNRQ==}
+
+  '@oxc-tsrx/native-darwin-arm64@0.1.1':
+    resolution: {integrity: sha512-TGIyUZ8kvW+/8pdb2Jao7FjCUnoHDm85QdOBTe4Mdi5GdJQvhqUTfveq95xraOaOzaoIVKYJ4j2m8qwnDw+7fA==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [arm64]
+    os: [darwin]
 
   '@oxfmt/binding-android-arm-eabi@0.57.0':
     resolution: {integrity: sha512-qVBsEO+KugOsCmUHcO8iqNnqc65p7PCKpCs8M66mPZ+Ri+CWbcpoQOEJBg2OTu03+0qu++NK1jj6IzvQVs0Sig==}
@@ -4518,6 +4527,8 @@ snapshots:
   '@oxc-project/types@0.139.0': {}
 
   '@oxc-project/types@0.140.0': {}
+
+  '@oxc-tsrx/native-darwin-arm64@0.1.1': {}
 
   '@oxfmt/binding-android-arm-eabi@0.57.0':
     optional: true

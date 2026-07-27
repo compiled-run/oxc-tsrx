@@ -1,6 +1,6 @@
 ---
 title: Custom JavaScript plugins
-description: Write a custom lint rule with the oxlint that oxc-tsrx installs, and see exactly where a JavaScript rule can and cannot run against .tsrx today.
+description: Write a custom lint rule with the oxlint that oxc-tsrx installs and run it on .tsrx files, with positions in your authored source.
 ---
 
 # Custom JavaScript plugins
@@ -9,12 +9,18 @@ description: Write a custom lint rule with the oxlint that oxc-tsrx installs, an
 already lints `.tsrx`. So this page starts with the linter you have, not with a
 second one you would have to install.
 
-Keep one split in your head, the same split a Vite user already thinks in: file
-types. On ordinary `.js`, `.ts`, `.jsx`, and `.tsx` files, this `oxlint` runs
-your own JavaScript plugins today. On `.tsrx` files it runs OXC's built-in Rust
-rules only, and it refuses a JavaScript plugin with an explicit error rather
-than skipping it quietly. If you need a JavaScript rule on `.tsrx` today, jump
-to [the ESLint route](#if-you-need-a-javascript-rule-on-tsrx-today-eslint).
+You write one ordinary Oxlint JavaScript plugin, list it in `.oxlintrc.json`,
+and it runs on both halves of your project: on `.js`, `.ts`, `.jsx`, and `.tsx`
+directly, and on `.tsrx` through the TSX projection, with every diagnostic
+reported at the line and column of the file you wrote. There is no second
+linter and no separate plugin format.
+
+The `.tsrx` half costs one extra parse per file, and `oxlint` says so on stderr
+every time it does it. [Turning the extra parse
+off](#turning-the-extra-parse-off) covers when you might want that. If your rule
+needs to see TSRX control syntax as its own node types rather than as the
+JavaScript it compiles to, read [what your rule sees on
+`.tsrx`](#what-your-rule-sees-on-tsrx) before you write it.
 
 ## Set up the project
 
@@ -201,37 +207,141 @@ this as `.oxlintrc.json`:
 That is your own JavaScript, running inside the `oxlint` that `oxc-tsrx`
 installed, with no other linter involved.
 
-## The wall: a JavaScript plugin does not run on `.tsrx` yet
+## The same plugin on `.tsrx`
 
 Leave everything exactly as it is and point the same command at the `.tsrx`
 file instead:
 
-<!-- terminal-demo:custom-plugins-tsrx-wall -->
+<!-- terminal-demo:custom-plugins-tsrx-plugin -->
 
-That is exit code 2, and it is deliberate rather than a bug. `.tsrx` files are
-linted by a separate native Rust process, and that process has no Node.js
-plugin host to run your module in. OXC for TSRX will not silently parse your
-file a second time in Node just to run a plugin, so it refuses out loud instead
-of dropping your rule and reporting success.
+Two things happened there. The `oxlint (oxc-tsrx):` line is the disclosure:
+linting `.tsrx` with a JavaScript plugin costs one more parse of that file, and
+the command tells you so every time, naming the setting that turns it off. It
+goes to stderr, so in a terminal it arrives before the report; the transcript
+above prints stdout first and stderr after it, which is why it reads last there.
+
+The other thing is that your rule ran and found nothing, because
+`require-keyed-map` looks for a `.map()` call and `TaskList.tsrx` has an `@for`
+block instead. The built-in `no-debugger` rule still reported, from the native
+Rust lane, exactly as it did before you added a plugin.
+
+Give the rule something to find. Add this as `src/TaskFeed.tsrx`:
+
+```tsrx
+type Task = { id: string; label: string; done: boolean };
+
+export function TaskFeed({ tasks }: { tasks: Task[] }) @{
+  const rows = tasks.map((task) => <li>{task.label}</li>);
+
+  <ul class="feed">{rows}</ul>;
+}
+```
+
+<!-- terminal-demo:custom-plugins-tsrx-map -->
+
+That is your own JavaScript rule, reporting a problem in a `.tsrx` file, at the
+column of the `<li>` you wrote. Line 4, column 36 is where that `<li>` really
+is in the file above.
+
+One command over a directory holding both file types does both halves at once:
+
+<!-- terminal-demo:custom-plugins-mixed-directory -->
+
+## How it runs, and what it costs
+
+`.tsrx` files are linted by a native Rust process, and that process has no
+Node.js runtime to run your module in. What it does have is a *projection*: one
+legal TSX rendering of your `.tsrx` source, which it already builds to run OXC's
+built-in rules, plus a byte-for-byte map from positions in that projection back
+to positions in what you wrote.
+
+So `oxlint` writes each projection into a throwaway directory, runs the
+published Oxlint binary over it with your `.oxlintrc.json`, and sends the
+diagnostics back through that map. Your severities, rule options, `extends`,
+and `overrides` are resolved by Oxlint itself, from your own config, so a rule
+behaves the same on `.tsrx` as it does anywhere else.
+
+The cost is one extra parse per `.tsrx` file, and it is never silent. Every run
+that does it writes one line to stderr, ahead of the report, which is the
+`oxlint (oxc-tsrx):` line in both runs above. `--silent` suppresses it along
+with everything else. A `--format=json` report carries the same fact as data,
+under
+`oxcTsrx.jsPluginProjection`, as `{ "files": N, "extraParses": N }`.
+
+If the installed Oxlint is outside the range this route was built against
+(`>=1.74.0 <2.0.0`), the command refuses and exits 1 rather than running with
+your rules quietly switched off.
+
+## What your rule sees on `.tsrx`
+
+Your rule is handed the projection, not your authored TSRX tree. Four
+consequences, in the order they tend to bite:
+
+**TSRX control syntax is already compiled away.** `@if`, `@for`, `@switch`, and
+`@try` do not reach your rule as `JSXIfExpression` and friends; they arrive as
+the ordinary `if`, `for`, and `switch` statements they project to. A rule keyed
+on `JSXForExpression` will never fire on this route. If that is the rule you
+need, use [the ESLint route](#when-your-rule-must-see-authored-tsrx-nodes-eslint),
+which parses your file directly.
+
+**`context.filename` is the projection's path, not yours.** It points inside the
+throwaway directory and ends in `.tsrx.tsx`: a `src/View.tsrx` in your project
+is `<temporary directory>/src/View.tsrx.tsx` to your rule. The path relative to
+your working directory is preserved, so a rule that tests for `src/` still
+works, but one that compares against an absolute project path, or that expects
+the extension to be `.tsrx`, does not. The diagnostic itself is still reported
+against `src/View.tsrx`, which is what you and your editor see.
+
+**A diagnostic that lands on projected-only text is dropped.** The projection
+inserts markers and wrappers that correspond to nothing you typed. If a rule
+reports on one of those, there is no authored position to point at, so the
+diagnostic is discarded rather than reported at an invented location. Reports on
+code you wrote are unaffected.
+
+**An `overrides` glob written for `.tsrx` is matched for you, in your own config
+only.** The projection is named `View.tsrx.tsx`, which `**/*.tsrx` does not
+match, so `oxlint` also emits each of your `overrides[].files` and
+`excludeFiles` globs with `.tsx` appended. A config reached through `extends`
+does not get that rewrite yet, so a `.tsrx`-targeted override in a shared config
+will not apply on this route. Put those overrides in the config that names
+`jsPlugins`.
+
+## Turning the extra parse off
+
+If you would rather not pay the second parse, say so in `settings`:
+
+```json
+{
+  "jsPlugins": ["./oxlint-demo-plugin.mjs"],
+  "rules": {
+    "tsrx-demo/require-keyed-map": "error"
+  },
+  "settings": {
+    "oxcTsrx": {
+      "jsPluginsOnTsrx": false
+    }
+  }
+}
+```
+
+Your plugins keep running on ordinary files. On `.tsrx` the command now refuses
+out loud rather than dropping your rule and reporting success:
+
+<!-- terminal-demo:custom-plugins-tsrx-opt-out -->
 
 The [configuration guide](/integrations/configuration) has the full support
 matrix for what the native `.tsrx` lane accepts.
 
-You get the same refusal when you point one command at a directory holding both
-file types:
+## When your rule must see authored TSRX nodes: ESLint
 
-<!-- terminal-demo:custom-plugins-mixed-directory -->
-
-The ordinary half is still linted and still reported in the normal format, the
-`.tsrx` half refuses out loud, and the command exits 2. Nothing is silently
-dropped in either direction.
-
-## If you need a JavaScript rule on `.tsrx` today: ESLint
+Everything above hands your rule the projection, where `@if` and `@for` have
+already become `if` and `for`. If your rule is *about* that syntax, you need the
+authored tree, and for that there is still one route: ESLint's public parser
+slot.
 
 This is an escape hatch, not the recommended default. ESLint is a second linter
 to install and configure, it is not part of `oxc-tsrx`, and it does not reuse
-any of the native `.tsrx` work above. What it does have is a public parser slot,
-so you can hand it the authored TSRX tree yourself.
+any of the native `.tsrx` work above.
 
 <!-- pm-install -->
 ```sh
@@ -386,13 +496,14 @@ block the key it was missing:
 
 <!-- terminal-demo:custom-plugins-eslint-fixed -->
 
-The error is gone and the warning you asked for stays. That is a complete
-custom rule for `.tsrx`, running in a standard tool.
+The error is gone and the warning you asked for stays. Both rules read node
+types that only exist in the authored tree, which is the one thing this route
+still buys you over running the same rule inside `oxlint`.
 
-## What works, and what does not yet
+## What the ESLint route does not do
 
-The ESLint route is **AST-only**. Rules that read the tree work. Two things do
-not, and it is better to hit them here than halfway through writing a rule.
+It is **AST-only**. Rules that read the tree work. Two things do not, and it is
+better to hit them here than halfway through writing a rule.
 
 **There are no tokens.** The v1 parser API does not expose OXC's token stream,
 so the adapter sets `program.tokens = []` rather than faking it.
@@ -411,11 +522,10 @@ that could run a check, with the parser that feeds it and how real it is:
 | Where the check runs | Parser it uses | Plugin shape | How real today |
 | --- | --- | --- | --- |
 | The `oxlint` `oxc-tsrx` installs, on ordinary `.js`/`.ts`/`.tsx` | OXC's own parser | An Oxlint JS plugin | Shipping; this is the walkthrough above |
-| The `oxlint` `oxc-tsrx` installs, on `.tsrx` | The native Rust TSRX parser | Native Rust rules only | Shipping; it lints `.tsrx` and refuses JS plugins |
+| The `oxlint` `oxc-tsrx` installs, on `.tsrx` | The native Rust TSRX parser, then the TSX projection | The same Oxlint JS plugin, plus native Rust rules | Shipping; one extra parse per file, disclosed on stderr |
 | Upstream `oxlint`, on `.tsrx` | none | none | Released upstream Oxlint cannot parse `.tsrx` at all |
-| ESLint (its own process) | A `parseForESLint` adapter you copy | A normal ESLint plugin | Works for AST-only rules; proven by an ESLint 10 test |
+| ESLint (its own process) | A `parseForESLint` adapter you copy | A normal ESLint plugin | Works for AST-only rules that need authored TSRX nodes; proven by an ESLint 10 test |
 | A Vite plugin (dev/build process) | The repo's TSRX parser service | An ordinary Vite plugin calling `this.warn` | Works, but only as a source-local example in this repo |
-| Draft upstream Oxlint, on `.tsrx` | The same `parseForESLint` adapter | Oxlint JS plugins plus a draft custom-parser hook | An unmerged upstream draft, built from source |
 | Native `oxc-tsrx-lsp` | The native Rust TSRX projection | Native Rust rules only | Shipping today, but Rust only; it runs no JavaScript |
 | `oxc-tsrx/lint/plugins-dev` | none | Re-exports Oxlint's `RuleTester` | Real, and useful for unit-testing a rule; it is not a host |
 
@@ -431,8 +541,8 @@ A Vite plugin can read the authored TSRX AST too, through a pre-transform parser
 service that parses each `.tsrx` file once and caches it. That is a source-local
 example rather than an installable API; see
 [Vite and Vite+](/integrations/vite-plus) for how it composes. Vite+ surfaces
-Oxlint's `jsPlugins` in its `lint` block, which is the same split as everywhere
-else on this page: ordinary files get your JS plugins, `.tsrx` does not.
+Oxlint's `jsPlugins` in its `lint` block, and those plugins reach both halves of
+the project the same way they do from a plain `.oxlintrc.json`.
 
 The runnable version of everything above lives in
 `examples/custom-js-plugins`. Its tests use the real parser, ESLint 10.7.0,
@@ -441,14 +551,21 @@ pinned and tested at 1.74.0; public releases may have moved past that.
 
 ## Status and what is coming
 
-Running a JavaScript rule against `.tsrx` *inside Oxlint* is an upstream draft,
-not a release. OXC PR
+Running your rule on `.tsrx` works today, from published packages only, using
+the projection route described above. It does not depend on any unmerged
+upstream change.
+
+What is still upstream is running a JavaScript rule against the *authored* TSRX
+tree inside Oxlint, which is what would make `JSXIfExpression` and
+`JSXForExpression` visible to an Oxlint plugin. OXC PR
 [#24262](https://github.com/oxc-project/oxc/pull/24262) adds
 `overrides[].languageOptions.parser` routing for Oxlint's JS-plugin host. As of
-2026-07-24 it is still a Draft, and it is a local source build, not something
+2026-07-26 it is still a Draft, and it is a local source build, not something
 you can install. The wider language-plugin idea ([discussion
 #21936](https://github.com/oxc-project/oxc/discussions/21936)) is still a
-discussion.
+discussion. Until one of them lands, a rule about TSRX control syntax itself
+belongs on [the ESLint
+route](#when-your-rule-must-see-authored-tsrx-nodes-eslint).
 
 `examples/vscode-lints/README.md` has an editor demo of that draft: the official
 OXC VS Code extension, pointed at a workspace-local launcher, showing
