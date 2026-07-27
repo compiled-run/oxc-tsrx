@@ -382,9 +382,9 @@ fn extract_header_value(
 ) -> Result<RecordIndex, TsrxParseError> {
     require_type(tape, call, r#""CallExpression""#)?;
     require_scaffold_callee(tape, call, prefix, tag, ordinal)?;
-    let value = exact_one_value(tape, list_field(tape, call, "arguments")?)?
+    let expression = exact_one_value(tape, list_field(tape, call, "arguments")?)?
         .as_object()
         .ok_or(TsrxParseError::Unsupported("header wrapper value is not an expression"))?;
-    require_authored_object_span(tape, value, segments, authored_span)?;
-    Ok(value)
+    require_authored_object_span(tape, expression, segments, authored_span)?;
+    Ok(expression)
 }

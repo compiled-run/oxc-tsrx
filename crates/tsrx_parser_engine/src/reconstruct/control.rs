@@ -69,13 +69,13 @@ pub(super) fn find_wrapper_call(
     node_index: usize,
     trailing: Option<RecordIndex>,
 ) -> Result<RecordIndex, TsrxParseError> {
-    let mut value = ValueRef::object(control);
+    let mut ancestor = ValueRef::object(control);
     let max_steps = tape.object_count().saturating_add(tape.list_count());
     for _ in 0..max_steps {
-        value = parents
-            .parent_container(value)
+        ancestor = parents
+            .parent_container(ancestor)
             .ok_or(TsrxParseError::Unsupported("control wrapper chain ended early"))?;
-        let Some(object) = value.as_object() else {
+        let Some(object) = ancestor.as_object() else {
             continue;
         };
         if has_type(tape, object, r#""CallExpression""#) {

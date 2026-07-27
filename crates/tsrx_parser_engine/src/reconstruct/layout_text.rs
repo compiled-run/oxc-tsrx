@@ -132,14 +132,14 @@ fn next_json_string_character(chars: &mut std::str::Chars<'_>) -> Result<Option<
         Some('r') => '\r',
         Some('t') => '\t',
         Some('u') => {
-            let mut value = 0_u32;
+            let mut code_point = 0_u32;
             for _ in 0..4 {
                 let Some(digit) = chars.next().and_then(|digit| digit.to_digit(16)) else {
                     return Err(());
                 };
-                value = (value << 4) | digit;
+                code_point = (code_point << 4) | digit;
             }
-            char::from_u32(value).ok_or(())?
+            char::from_u32(code_point).ok_or(())?
         }
         _ => return Err(()),
     };

@@ -63,8 +63,8 @@ pub(super) fn dynamic_scaffold_index(
     kind: char,
     suffix: bool,
 ) -> Option<usize> {
-    let value = encoded.strip_prefix('"')?.strip_suffix('"')?;
-    let digits = value.strip_prefix(prefix)?.strip_prefix(kind)?;
+    let name = encoded.strip_prefix('"')?.strip_suffix('"')?;
+    let digits = name.strip_prefix(prefix)?.strip_prefix(kind)?;
     let digits = if suffix { digits.strip_suffix('_')? } else { digits };
     (!digits.is_empty() && digits.bytes().all(|byte| byte.is_ascii_digit()))
         .then(|| digits.parse().ok())
