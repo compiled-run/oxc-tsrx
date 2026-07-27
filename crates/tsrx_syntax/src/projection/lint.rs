@@ -7,7 +7,7 @@ use super::{
 /// Performs the legacy equal-width projection used by standard-syntax control baselines.
 ///
 /// Expanded JSX-child and expression controls require [`project_for_lint`] or
-/// [`project_for_format`].
+/// [`crate::project_for_format`].
 ///
 /// # Errors
 ///

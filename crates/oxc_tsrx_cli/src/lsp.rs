@@ -263,7 +263,6 @@ fn parse_error_diagnostic(source: &str, error: &LintError) -> EditorDiagnostic {
         | LintError::UnwritableSource { .. }
         | LintError::TextLintWithFixes
         | LintError::CodeActionsWithoutFixes
-        | LintError::FreeTextLintWithFixes
         | LintError::SourceKind(_)
         | LintError::Config(_)
         | LintError::Syntax(_)

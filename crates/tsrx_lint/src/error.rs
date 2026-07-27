@@ -26,8 +26,6 @@ pub enum LintError {
     TextLintWithFixes,
     /// [`LintSession::code_actions`](crate::LintSession::code_actions) needs a fixing session.
     CodeActionsWithoutFixes,
-    /// The free [`lint_text`](crate::lint_text) was asked to apply fixes.
-    FreeTextLintWithFixes,
     /// The authored path carries no extension this linter can project.
     SourceKind(SourceKindError),
     /// The TSRX source could not be scanned or projected.
@@ -65,9 +63,6 @@ impl fmt::Display for LintError {
             Self::CodeActionsWithoutFixes => {
                 formatter.write_str("LintSession::code_actions requires a fix-enabled session")
             }
-            Self::FreeTextLintWithFixes => {
-                formatter.write_str("lint_text does not write or apply fixes; use lint_file")
-            }
             Self::SourceKind(error) => error.fmt(formatter),
             Self::Projection(error) => error.fmt(formatter),
             Self::Config(error) => error.fmt(formatter),
@@ -88,9 +83,7 @@ impl Error for LintError {
             Self::Config(error) => Some(error),
             Self::Syntax(error) => Some(error),
             Self::TypeAware(error) => Some(error),
-            Self::TextLintWithFixes
-            | Self::CodeActionsWithoutFixes
-            | Self::FreeTextLintWithFixes => None,
+            Self::TextLintWithFixes | Self::CodeActionsWithoutFixes => None,
         }
     }
 }
