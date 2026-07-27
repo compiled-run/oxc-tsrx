@@ -107,12 +107,19 @@ jobs:
           done
           node -e '
             const live = require("./capabilities.json")
-            const built = require("./dist/demo-capabilities.json")
             if (!live.ok || !live.wasm || live.mode !== "wasm") {
               throw new Error(`production is not serving the WebAssembly engine: ${JSON.stringify(live)}`)
             }
-            if (JSON.stringify(live) !== JSON.stringify(built)) {
-              throw new Error("production is serving a different build than this run produced")
-            }
-            console.log("production is serving this run'"'"'s WebAssembly build")
           '
+          # demo-capabilities.json is byte-identical across builds, so matching
+          # it would also "pass" against a deploy that never took effect. Hash
+          # the actual page instead: that only matches if production is serving
+          # the artifact this run built.
+          curl -fsS "${origin}/" -o live-index.html
+          live="$(shasum -a 256 < live-index.html | cut -d" " -f1)"
+          built="$(shasum -a 256 < dist/index.html | cut -d" " -f1)"
+          if [ "${live}" != "${built}" ]; then
+            echo "::error::production serves index.html ${live}, this run built ${built}"
+            exit 1
+          fi
+          echo "production is serving this run's build (${built})"
