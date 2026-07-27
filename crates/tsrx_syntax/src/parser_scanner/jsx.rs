@@ -33,8 +33,10 @@ impl Scanner<'_> {
             let owner = to_u32(self.dynamic_tags.len())?;
             let initial_subtree_end =
                 owner.checked_add(1).ok_or(ProjectionError::SourceTooLarge)?;
-            let parser_nested = self.parser_mode && !self.parser_dynamic_parents.is_empty();
-            let embedded_slot = if self.parser_mode && !parser_nested {
+            let parser_nested = !self.parser_dynamic_parents.is_empty();
+            let embedded_slot = if parser_nested {
+                None
+            } else {
                 let slot = self.embedded_tokens.len();
                 self.embedded_tokens.push(EmbeddedToken {
                     kind: EmbeddedKind::DynamicOpen,
@@ -42,78 +44,50 @@ impl Scanner<'_> {
                     owner,
                 });
                 Some(slot)
-            } else {
-                None
             };
-            if self.parser_mode {
-                self.dynamic_tags.push(DynamicTag {
-                    opening: ByteSpan::default(),
-                    closing: ByteSpan::default(),
-                    expression: ByteSpan::default(),
-                    closing_expression: ByteSpan::default(),
-                    subtree_end: initial_subtree_end,
-                    first_closing_comment: NONE,
-                    closing_comment_count: 0,
-                    self_closing: false,
-                });
-                self.parser_dynamic_tokens.push(ParserDynamicToken {
-                    kind: ParserDynamicKind::OpenStart,
-                    offset: to_u32(start)?,
-                    owner,
-                });
-                let nested_start = self.dynamic_tags.len();
-                self.parser_dynamic_parents.push(owner);
-                let result = self.scan_expression_region(index + 1, Some(b'}'));
-                let nested_end = self.dynamic_tags.len();
-                if self.parser_dynamic_parents.pop() != Some(owner) {
-                    return Err(ProjectionError::StructuralMismatch);
-                }
-                let end = result?;
-                let expression = ByteSpan::new(to_u32(index + 1)?, to_u32(end - 1)?);
-                let identity =
-                    self.validate_dynamic_expression(expression, nested_start, nested_end)?;
-                let opening = ByteSpan::new(to_u32(start)?, to_u32(end)?);
-                self.parser_dynamic_tokens.push(ParserDynamicToken {
-                    kind: ParserDynamicKind::OpenEnd,
-                    offset: expression.end,
-                    owner,
-                });
-                let tag = &mut self.dynamic_tags[owner as usize];
-                tag.opening = opening;
-                tag.expression = expression;
-                if let Some(slot) = embedded_slot {
-                    self.embedded_tokens[slot].span = opening;
-                }
-                dynamic_identity = identity;
-                name_end = name_start;
-                index = end;
-                dynamic_embedded = !parser_nested;
-                dynamic_owner = Some(owner);
-            } else {
-                let (expression, end) = self.scan_dynamic_expression(index)?;
-                let identity = self.validate_dynamic_expression(expression, 0, 0)?;
-                let opening = ByteSpan::new(to_u32(start)?, to_u32(end)?);
-                dynamic_identity = identity;
-                name_end = name_start;
-                index = end;
-                self.dynamic_tags.push(DynamicTag {
-                    opening,
-                    closing: ByteSpan::default(),
-                    expression,
-                    closing_expression: ByteSpan::default(),
-                    subtree_end: initial_subtree_end,
-                    first_closing_comment: NONE,
-                    closing_comment_count: 0,
-                    self_closing: false,
-                });
-                self.embedded_tokens.push(EmbeddedToken {
-                    kind: EmbeddedKind::DynamicOpen,
-                    span: opening,
-                    owner,
-                });
-                dynamic_embedded = true;
-                dynamic_owner = Some(owner);
+            self.dynamic_tags.push(DynamicTag {
+                opening: ByteSpan::default(),
+                closing: ByteSpan::default(),
+                expression: ByteSpan::default(),
+                closing_expression: ByteSpan::default(),
+                subtree_end: initial_subtree_end,
+                first_closing_comment: NONE,
+                closing_comment_count: 0,
+                self_closing: false,
+            });
+            self.parser_dynamic_tokens.push(ParserDynamicToken {
+                kind: ParserDynamicKind::OpenStart,
+                offset: to_u32(start)?,
+                owner,
+            });
+            let nested_start = self.dynamic_tags.len();
+            self.parser_dynamic_parents.push(owner);
+            let result = self.scan_expression_region(index + 1, Some(b'}'));
+            let nested_end = self.dynamic_tags.len();
+            if self.parser_dynamic_parents.pop() != Some(owner) {
+                return Err(ProjectionError::StructuralMismatch);
             }
+            let end = result?;
+            let expression = ByteSpan::new(to_u32(index + 1)?, to_u32(end - 1)?);
+            let identity =
+                self.validate_dynamic_expression(expression, nested_start, nested_end)?;
+            let opening = ByteSpan::new(to_u32(start)?, to_u32(end)?);
+            self.parser_dynamic_tokens.push(ParserDynamicToken {
+                kind: ParserDynamicKind::OpenEnd,
+                offset: expression.end,
+                owner,
+            });
+            let tag = &mut self.dynamic_tags[owner as usize];
+            tag.opening = opening;
+            tag.expression = expression;
+            if let Some(slot) = embedded_slot {
+                self.embedded_tokens[slot].span = opening;
+            }
+            dynamic_identity = identity;
+            name_end = name_start;
+            index = end;
+            dynamic_embedded = !parser_nested;
+            dynamic_owner = Some(owner);
         } else {
             index = self.skip_jsx_name(index);
             name_end = index;
@@ -128,7 +102,7 @@ impl Scanner<'_> {
         let style = !fragment && !dynamic && self.bytes[name_start..name_end] == *b"style";
         // Parser owners are preorder identities. Reserve before scanning attributes because a JSX
         // expression attribute can itself contain another style element.
-        let parser_style_owner = if style && self.parser_mode {
+        let parser_style_owner = if style {
             let owner = to_u32(self.style_blocks.len())?;
             self.style_blocks.push(StyleBlock {
                 element: ByteSpan::new(0, 0),
@@ -224,14 +198,8 @@ impl Scanner<'_> {
                 content,
                 self_closing: false,
             };
-            let owner = if let Some(owner) = parser_style_owner {
-                self.style_blocks[owner as usize] = record;
-                owner
-            } else {
-                let owner = to_u32(self.style_blocks.len())?;
-                self.style_blocks.push(record);
-                owner
-            };
+            let owner = parser_style_owner.ok_or(ProjectionError::StructuralMismatch)?;
+            self.style_blocks[owner as usize] = record;
             self.embedded_tokens.push(EmbeddedToken {
                 kind: EmbeddedKind::StyleContent,
                 span: content,
@@ -258,7 +226,7 @@ impl Scanner<'_> {
                         closing_expression,
                         closing_identity,
                     ) = if closing_dynamic {
-                        let (expression, end, identity) = if self.parser_mode && dynamic {
+                        let (expression, end, identity) = if dynamic {
                             let owner = dynamic_owner.ok_or(ProjectionError::StructuralMismatch)?;
                             self.parser_dynamic_tokens.push(ParserDynamicToken {
                                 kind: ParserDynamicKind::CloseStart,
@@ -441,10 +409,6 @@ impl Scanner<'_> {
     fn scan_jsx_code_block(&mut self, start: usize) -> Result<usize, ProjectionError> {
         let token = to_u32(self.tokens.len())?;
         self.push_token(StructuralKind::FunctionBody, start)?;
-        if !self.parser_mode {
-            return Ok(start + 1);
-        }
-
         let manifest = self.parser_code_blocks.len();
         let body_start = to_u32(start + 1)?;
         self.parser_code_blocks

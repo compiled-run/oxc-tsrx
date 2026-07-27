@@ -26,14 +26,9 @@ pub(crate) struct Scanner<'a> {
     pub(super) last_root: u32,
     pub(super) parents: Vec<u32>,
     pub(super) parser_dynamic_parents: TinyStack<u32, 8>,
-    pub(super) parser_mode: bool,
     pub(super) surrogate_probes: Option<Box<RefCell<SurrogateProbes>>>,
 }
 impl<'a> Scanner<'a> {
-    pub(crate) fn new(source: &'a str) -> Self {
-        Self::new_bytes(source.as_bytes())
-    }
-
     fn new_bytes(bytes: &'a [u8]) -> Self {
         Self {
             bytes,
@@ -52,20 +47,16 @@ impl<'a> Scanner<'a> {
             last_root: NONE,
             parents: Vec::with_capacity(8),
             parser_dynamic_parents: TinyStack::new(),
-            parser_mode: false,
             surrogate_probes: None,
         }
     }
 
     pub(crate) fn new_for_parser(source: &'a str) -> Self {
-        let mut scanner = Self::new(source);
-        scanner.parser_mode = true;
-        scanner
+        Self::new_bytes(source.as_bytes())
     }
 
     pub(crate) fn new_for_surrogate_classification(source: &'a [u8], offsets: &[u32]) -> Self {
         let mut scanner = Self::new_bytes(source);
-        scanner.parser_mode = true;
         if !offsets.is_empty() {
             scanner.surrogate_probes = Some(Box::new(RefCell::new(SurrogateProbes::new(offsets))));
         }
