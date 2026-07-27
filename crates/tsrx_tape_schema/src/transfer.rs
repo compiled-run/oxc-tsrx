@@ -640,10 +640,10 @@ impl<'a> ProgramSerializer<'a> {
             match work {
                 Work::Value { value, fix_owner } => self.write_value(value, fix_owner)?,
                 Work::Object { object, next, remaining, first, fix_recorded } => {
-                    self.write_object_field(object, next, remaining, first, fix_recorded)?
+                    self.write_object_field(object, next, remaining, first, fix_recorded)?;
                 }
                 Work::List { next, remaining, index, first } => {
-                    self.write_list_value(next, remaining, index, first)?
+                    self.write_list_value(next, remaining, index, first)?;
                 }
                 Work::PopPath => {
                     self.path.pop().ok_or(TapeBuildError::InvalidRecordIndex)?;
