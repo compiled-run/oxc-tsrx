@@ -120,3 +120,27 @@ fn the_flat_tape_inherent_surface_stays_in_two_impl_blocks() {
          frozen public surface"
     );
 }
+
+#[test]
+fn no_source_file_carries_a_module_wide_lint_suppression() {
+    let crate_root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let mut pending = vec![crate_root.join("src")];
+    while let Some(directory) = pending.pop() {
+        for entry in std::fs::read_dir(&directory).expect("readable source directory") {
+            let path = entry.expect("readable source entry").path();
+            if path.is_dir() {
+                pending.push(path);
+                continue;
+            }
+            if path.extension().is_none_or(|extension| extension != "rs") {
+                continue;
+            }
+            let source = std::fs::read_to_string(&path).expect("readable source file");
+            assert!(
+                !source.contains("#![allow("),
+                "module-wide allow in {}",
+                path.strip_prefix(crate_root).expect("source file under the crate root").display()
+            );
+        }
+    }
+}

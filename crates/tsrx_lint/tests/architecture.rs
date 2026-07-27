@@ -64,6 +64,19 @@ fn the_lint_session_inherent_surface_stays_in_one_impl_block() {
     assert_eq!(blocks, 1, "`cargo public-api` reports one line per inherent impl block");
 }
 
+#[test]
+fn no_source_file_carries_a_module_wide_lint_suppression() {
+    let crate_root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    for path in source_files() {
+        let source = std::fs::read_to_string(&path).expect("readable source file");
+        assert!(
+            !source.contains("#![allow("),
+            "module-wide allow in {}",
+            path.strip_prefix(crate_root).expect("source file under the crate root").display()
+        );
+    }
+}
+
 fn source_files() -> Vec<std::path::PathBuf> {
     let crate_root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let mut files = Vec::new();

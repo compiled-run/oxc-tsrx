@@ -94,6 +94,19 @@ fn the_error_types_a_sibling_crate_names_stay_in_their_defining_modules() {
     }
 }
 
+#[test]
+fn no_source_file_carries_a_module_wide_lint_suppression() {
+    let crate_root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    for path in source_files() {
+        let source = std::fs::read_to_string(&path).expect("readable source file");
+        assert!(
+            !source.contains("#![allow("),
+            "module-wide allow in {}",
+            path.strip_prefix(crate_root).expect("source file under the crate root").display()
+        );
+    }
+}
+
 fn source_files() -> Vec<std::path::PathBuf> {
     let crate_root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let mut files = Vec::new();
