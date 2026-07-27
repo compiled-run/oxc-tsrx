@@ -443,10 +443,10 @@ test("the package is a publishable, dependency-light compatibility facade", asyn
   const manifest = JSON.parse(await readFile(manifestUrl, "utf8"));
 
   assert.equal(manifest.name, "@oxc-tsrx/tsrx-core-compat");
-  assert.equal(manifest.version, "0.1.3");
+  assert.equal(manifest.version, "0.1.4");
   assert.equal(manifest.type, "module");
   assert.equal(manifest.sideEffects, false);
-  assert.equal(manifest.dependencies["oxc-tsrx"], "0.1.3");
+  assert.equal(manifest.dependencies["oxc-tsrx"], "0.1.4");
   assert.equal(manifest.dependencies["@tsrx/core"], undefined);
   assert.deepEqual(Object.keys(manifest.exports).sort(), [
     ".",

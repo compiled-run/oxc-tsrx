@@ -1,6 +1,6 @@
 {
   "name": "oxc-tsrx",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "The complete OXC toolchain for JavaScript, TypeScript, JSX, and TSRX",
   "keywords": [
     "formatter",
@@ -116,14 +116,14 @@
     "tinyglobby": "0.2.17"
   },
   "optionalDependencies": {
-    "@oxc-tsrx/native-darwin-arm64": "0.1.3",
-    "@oxc-tsrx/native-darwin-x64": "0.1.3",
-    "@oxc-tsrx/native-linux-arm64-gnu": "0.1.3",
-    "@oxc-tsrx/native-linux-arm64-musl": "0.1.3",
-    "@oxc-tsrx/native-linux-x64-gnu": "0.1.3",
-    "@oxc-tsrx/native-linux-x64-musl": "0.1.3",
-    "@oxc-tsrx/native-win32-arm64-msvc": "0.1.3",
-    "@oxc-tsrx/native-win32-x64-msvc": "0.1.3"
+    "@oxc-tsrx/native-darwin-arm64": "0.1.4",
+    "@oxc-tsrx/native-darwin-x64": "0.1.4",
+    "@oxc-tsrx/native-linux-arm64-gnu": "0.1.4",
+    "@oxc-tsrx/native-linux-arm64-musl": "0.1.4",
+    "@oxc-tsrx/native-linux-x64-gnu": "0.1.4",
+    "@oxc-tsrx/native-linux-x64-musl": "0.1.4",
+    "@oxc-tsrx/native-win32-arm64-msvc": "0.1.4",
+    "@oxc-tsrx/native-win32-x64-msvc": "0.1.4"
   },
   "engines": {
     "node": "^20.19.0 || >=22.12.0"
