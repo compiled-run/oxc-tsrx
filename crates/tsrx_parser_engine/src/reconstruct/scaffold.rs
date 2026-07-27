@@ -1,6 +1,8 @@
-use super::access::{object_field, require_type, scalar_field};
-use crate::TsrxParseError;
 use tsrx_tape_schema::{FlatTape, RecordIndex};
+
+use crate::TsrxParseError;
+
+use super::access::{object_field, require_type, scalar_field};
 
 pub(super) fn require_scaffold_callee(
     tape: &FlatTape,

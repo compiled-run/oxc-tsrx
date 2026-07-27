@@ -1,13 +1,20 @@
-use super::access::{
-    exact_one_value, exact_two_values, field_value, has_type, is_jsx_child_type, list_field,
-    object_field, require_type, scalar_field,
-};
-use super::edits::{append_empty_metadata, create_expression_statement, order_span_fields_before};
-use super::scaffold::scaffold_name_matches;
-use super::spans::AuthoredStart;
-use crate::{TsrxParseError, tape_index::ParentIndex, tape_index::ParentSlot};
 use tsrx_syntax::{ByteSpan, ControlContext};
 use tsrx_tape_schema::{FlatTape, RecordIndex, ValueRef};
+
+use crate::{
+    TsrxParseError,
+    tape_index::{ParentIndex, ParentSlot},
+};
+
+use super::{
+    access::{
+        exact_one_value, exact_two_values, field_value, has_type, is_jsx_child_type, list_field,
+        object_field, require_type, scalar_field,
+    },
+    edits::{append_empty_metadata, create_expression_statement, order_span_fields_before},
+    scaffold::scaffold_name_matches,
+    spans::AuthoredStart,
+};
 
 pub(super) fn prepare_control_block(
     tape: &mut FlatTape,

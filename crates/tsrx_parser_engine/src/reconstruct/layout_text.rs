@@ -1,7 +1,11 @@
-use super::access::{has_type, scalar_field};
-use super::edits::ListEntryRemoval;
-use crate::TsrxParseError;
 use tsrx_tape_schema::{FlatTape, RecordIndex, ValueRef};
+
+use crate::TsrxParseError;
+
+use super::{
+    access::{has_type, scalar_field},
+    edits::ListEntryRemoval,
+};
 
 /// Applies TSRX's JSX significant-whitespace rule over the serialized child lists in one flat
 /// tape pass. Inline whitespace remains observable text; indentation-only text containing a line

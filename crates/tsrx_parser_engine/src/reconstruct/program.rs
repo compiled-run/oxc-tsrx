@@ -1,20 +1,27 @@
-use super::access::{has_type, list_field, require_type};
-use super::code_blocks::{
-    collect_code_block_plans, mark_direct_custom_clause_blocks, reconstruct_code_blocks,
-};
-use super::control::normalize_control_body_lists;
-use super::dynamic_tags::reconstruct_dynamic_tags;
-use super::if_chain::IfReconstructor;
-use super::layout_text::normalize_template_layout_text;
-use super::loops::{LoopReconstructor, build_header_ordinals};
-use super::objects::ProjectedObjectIndex;
-use super::spans::AuthoredStart;
-use super::style::reconstruct_style_elements;
-use super::switch::SwitchReconstructor;
-use super::try_catch::{TryReconstructor, collect_try_helpers};
-use crate::{TsrxParseError, tape_index::ParentIndex, tape_index::ParentSlot};
 use tsrx_syntax::{OverlayView, ProjectionSegment, StructuralKind};
 use tsrx_tape_schema::{FlatTape, RecordIndex, ValueRef};
+
+use crate::{
+    TsrxParseError,
+    tape_index::{ParentIndex, ParentSlot},
+};
+
+use super::{
+    access::{has_type, list_field, require_type},
+    code_blocks::{
+        collect_code_block_plans, mark_direct_custom_clause_blocks, reconstruct_code_blocks,
+    },
+    control::normalize_control_body_lists,
+    dynamic_tags::reconstruct_dynamic_tags,
+    if_chain::IfReconstructor,
+    layout_text::normalize_template_layout_text,
+    loops::{LoopReconstructor, build_header_ordinals},
+    objects::ProjectedObjectIndex,
+    spans::AuthoredStart,
+    style::reconstruct_style_elements,
+    switch::SwitchReconstructor,
+    try_catch::{TryReconstructor, collect_try_helpers},
+};
 
 pub(crate) fn reconstruct_projected(
     tape: &mut FlatTape,

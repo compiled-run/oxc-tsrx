@@ -1,8 +1,8 @@
 use oxc_adapter::{
     DynamicTagContract,
     parser::{
-        ProjectedParseRequest, ProjectedParseResult, RejectionMetadata, parse_failed_tsrx_metadata,
-        parse_to_projected_tape, parse_to_projected_tape_program_only,
+        ProjectedParseRequest, ProjectedParseResult, RejectionMetadata, RejectionModuleNames,
+        parse_failed_tsrx_metadata, parse_to_projected_tape, parse_to_projected_tape_program_only,
         render_diagnostic_codeframes,
     },
 };
@@ -20,7 +20,6 @@ use crate::{
     results::{reconstruct_diagnostics, reconstruct_module},
     utf16_result::Utf16WorkObserver,
 };
-use oxc_adapter::parser::RejectionModuleNames;
 
 pub(super) fn parse_tsrx_utf8_source<W: Utf16WorkObserver>(
     source: &str,

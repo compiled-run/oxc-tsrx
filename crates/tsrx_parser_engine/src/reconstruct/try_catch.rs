@@ -1,19 +1,25 @@
-use super::access::{
-    exact_two_values, field_value, has_type, list_field, object_field, object_type, require_type,
-    scalar_field, scalar_u32,
-};
-use super::control::{find_wrapper_call, place_control, prepare_control_block};
-use super::edits::append_empty_metadata;
-use super::scaffold::{require_scaffold_callee, scaffold_tag_index, scaffold_tag_matches};
-use super::spans::{AuthoredStart, require_authored_object_span, require_object_span_within};
-use crate::{
-    TsrxParseError, projection::map_endpoint, tape_index::ParentIndex, tape_index::ParentSlot,
-};
 use tsrx_syntax::{
     ByteSpan, ClauseRole, ControlContext, ControlKind, OverlayClause, OverlayView,
     ProjectionSegment,
 };
 use tsrx_tape_schema::{FlatTape, RecordIndex, ValueRef};
+
+use crate::{
+    TsrxParseError,
+    projection::map_endpoint,
+    tape_index::{ParentIndex, ParentSlot},
+};
+
+use super::{
+    access::{
+        exact_two_values, field_value, has_type, list_field, object_field, object_type,
+        require_type, scalar_field, scalar_u32,
+    },
+    control::{find_wrapper_call, place_control, prepare_control_block},
+    edits::append_empty_metadata,
+    scaffold::{require_scaffold_callee, scaffold_tag_index, scaffold_tag_matches},
+    spans::{AuthoredStart, require_authored_object_span, require_object_span_within},
+};
 
 pub(super) struct TryReconstructor<'overlay, 'parse, 'starts> {
     pub(super) authored: &'parse str,

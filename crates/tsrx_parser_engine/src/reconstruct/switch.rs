@@ -1,18 +1,21 @@
-use super::access::{
-    exact_one_value, field_value, list_field, object_field, require_type, scalar_u32,
-};
-use super::control::{find_wrapper_call, place_control};
-use super::edits::{append_empty_metadata, order_span_fields_before, replace_type};
-use super::objects::find_unique_start;
-use super::spans::{AuthoredStart, require_authored_object_span};
-use crate::{
-    TsrxParseError, projection::map_endpoint, projection::project_authored_start,
-    tape_index::ParentIndex,
-};
 use tsrx_syntax::{
     ClauseRole, ControlContext, ControlKind, OverlayClause, OverlayView, ProjectionSegment,
 };
 use tsrx_tape_schema::{FlatTape, RecordIndex, ValueRef};
+
+use crate::{
+    TsrxParseError,
+    projection::{map_endpoint, project_authored_start},
+    tape_index::ParentIndex,
+};
+
+use super::{
+    access::{exact_one_value, field_value, list_field, object_field, require_type, scalar_u32},
+    control::{find_wrapper_call, place_control},
+    edits::{append_empty_metadata, order_span_fields_before, replace_type},
+    objects::find_unique_start,
+    spans::{AuthoredStart, require_authored_object_span},
+};
 
 pub(super) struct SwitchReconstructor<'overlay, 'parse, 'starts> {
     pub(super) overlay: OverlayView<'overlay>,

@@ -1,14 +1,19 @@
-use super::access::{field_value, has_type, object_field, require_type, scalar_u32};
-use super::control::{find_wrapper_call, place_control, prepare_control_block};
-use super::edits::{append_empty_metadata, replace_type};
-use super::objects::find_unique_start;
-use super::spans::AuthoredStart;
-use crate::{
-    TsrxParseError, projection::map_endpoint, projection::project_authored_start,
-    tape_index::ParentIndex,
-};
 use tsrx_syntax::{ControlContext, ControlKind, OverlayView, ProjectionSegment};
 use tsrx_tape_schema::{FlatTape, RecordIndex};
+
+use crate::{
+    TsrxParseError,
+    projection::{map_endpoint, project_authored_start},
+    tape_index::ParentIndex,
+};
+
+use super::{
+    access::{field_value, has_type, object_field, require_type, scalar_u32},
+    control::{find_wrapper_call, place_control, prepare_control_block},
+    edits::{append_empty_metadata, replace_type},
+    objects::find_unique_start,
+    spans::AuthoredStart,
+};
 
 pub(super) struct IfReconstructor<'overlay, 'parse> {
     pub(super) overlay: OverlayView<'overlay>,

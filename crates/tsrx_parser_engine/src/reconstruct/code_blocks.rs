@@ -1,20 +1,26 @@
-use super::access::{
-    field_value, has_type, index_of, index_of_overlay, is_jsx_child_type, list_field, object_field,
-    object_type, require_type, scalar_field, scalar_u32, unwrap_parenthesized_expression,
-};
-use super::edits::{
-    ListEntryRemoval, append_empty_metadata, append_node_head, create_expression_statement,
-    order_span_fields_before, replace_type,
-};
-use super::objects::{find_optional_start, find_unique_start};
-use super::scaffold::scaffold_name_matches;
-use super::spans::{AuthoredStart, record_authored_span};
-use crate::{
-    TsrxParseError, projection::map_endpoint, projection::project_authored_start,
-    tape_index::ParentIndex, tape_index::ParentSlot,
-};
 use tsrx_syntax::{ByteSpan, ControlKind, OverlayView, ProjectionSegment, StructuralKind};
 use tsrx_tape_schema::{FlatTape, RecordIndex, ValueRef};
+
+use crate::{
+    TsrxParseError,
+    projection::{map_endpoint, project_authored_start},
+    tape_index::{ParentIndex, ParentSlot},
+};
+
+use super::{
+    access::{
+        field_value, has_type, index_of, index_of_overlay, is_jsx_child_type, list_field,
+        object_field, object_type, require_type, scalar_field, scalar_u32,
+        unwrap_parenthesized_expression,
+    },
+    edits::{
+        ListEntryRemoval, append_empty_metadata, append_node_head, create_expression_statement,
+        order_span_fields_before, replace_type,
+    },
+    objects::{find_optional_start, find_unique_start},
+    scaffold::scaffold_name_matches,
+    spans::{AuthoredStart, record_authored_span},
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ProjectedCodeBlockKind {

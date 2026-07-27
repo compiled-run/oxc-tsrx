@@ -1,11 +1,17 @@
-use super::access::{field_value, has_type, scalar_u32};
-use super::edits::append_node_head;
-use super::spans::{AuthoredStart, record_authored_span};
-use crate::{
-    TsrxParseError, projection::map_endpoint, tape_index::ParentIndex, tape_index::ParentSlot,
-};
 use tsrx_syntax::{ByteSpan, ProjectionSegment};
 use tsrx_tape_schema::{FlatTape, ListValueInsertion, ObjectRecord, RecordIndex, ValueRef};
+
+use crate::{
+    TsrxParseError,
+    projection::map_endpoint,
+    tape_index::{ParentIndex, ParentSlot},
+};
+
+use super::{
+    access::{field_value, has_type, scalar_u32},
+    edits::append_node_head,
+    spans::{AuthoredStart, record_authored_span},
+};
 
 #[expect(
     clippy::too_many_arguments,

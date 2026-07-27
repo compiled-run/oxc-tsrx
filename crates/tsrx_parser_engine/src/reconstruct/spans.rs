@@ -1,9 +1,13 @@
-use super::access::{index_of, scalar_u32};
-use crate::{
-    TsrxParseError, lexical::FinalizationIndex, lexical::SpanFields, projection::map_endpoint,
-};
 use tsrx_syntax::{ByteSpan, ProjectionSegment};
 use tsrx_tape_schema::{FlatTape, RecordIndex, ValueRef};
+
+use crate::{
+    TsrxParseError,
+    lexical::{FinalizationIndex, SpanFields},
+    projection::map_endpoint,
+};
+
+use super::access::{index_of, scalar_u32};
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct AuthoredStart {

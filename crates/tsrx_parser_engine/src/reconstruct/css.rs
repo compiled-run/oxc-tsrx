@@ -1,9 +1,13 @@
-use super::edits::append_node_head;
-use super::spans::{AuthoredStart, record_authored_span};
-use crate::TsrxParseError;
 use tsrx_syntax::ByteSpan;
 use tsrx_tape_schema::{
     FlatTape, ListRecord, ListValueRecord, ObjectRecord, RecordIndex, ValueRef,
+};
+
+use crate::TsrxParseError;
+
+use super::{
+    edits::append_node_head,
+    spans::{AuthoredStart, record_authored_span},
 };
 
 #[derive(Debug, Clone, Copy, Default)]

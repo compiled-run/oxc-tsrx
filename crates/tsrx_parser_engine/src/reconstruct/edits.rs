@@ -1,7 +1,9 @@
-use super::access::{field_value, list_field};
-use crate::TsrxParseError;
 use tsrx_syntax::ByteSpan;
 use tsrx_tape_schema::{FlatTape, ListRecord, ObjectRecord, RecordIndex, ValueRef};
+
+use crate::TsrxParseError;
+
+use super::access::{field_value, list_field};
 
 #[derive(Debug, Clone, Copy)]
 pub(super) struct ListEntryRemoval {

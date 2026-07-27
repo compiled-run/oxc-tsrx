@@ -1,14 +1,18 @@
-use super::access::{
-    exact_one_value, field_value, has_type, list_field, object_field, require_type, scalar_field,
-    scalar_u32, unwrap_parenthesized_expression,
-};
-use super::edits::{append_empty_metadata, append_node_head, require_empty_metadata};
-use super::jsx_statements::normalize_custom_jsx_statement;
-use super::scaffold::{dynamic_scaffold_index, require_dynamic_identifier};
-use super::spans::{AuthoredStart, record_authored_span};
-use crate::{TsrxParseError, projection::map_endpoint, tape_index::ParentIndex};
 use tsrx_syntax::{ByteSpan, OverlayView, ProjectionSegment};
 use tsrx_tape_schema::{FlatTape, ListValueInsertion, RecordIndex, ValueKind, ValueRef};
+
+use crate::{TsrxParseError, projection::map_endpoint, tape_index::ParentIndex};
+
+use super::{
+    access::{
+        exact_one_value, field_value, has_type, list_field, object_field, require_type,
+        scalar_field, scalar_u32, unwrap_parenthesized_expression,
+    },
+    edits::{append_empty_metadata, append_node_head, require_empty_metadata},
+    jsx_statements::normalize_custom_jsx_statement,
+    scaffold::{dynamic_scaffold_index, require_dynamic_identifier},
+    spans::{AuthoredStart, record_authored_span},
+};
 
 #[derive(Debug, Clone, Copy, Default)]
 struct DynamicTokenSpans {

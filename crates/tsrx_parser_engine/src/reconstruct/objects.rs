@@ -1,5 +1,6 @@
-use crate::TsrxParseError;
 use tsrx_tape_schema::RecordIndex;
+
+use crate::TsrxParseError;
 
 fn is_module_declaration_type(kind: &str) -> bool {
     matches!(

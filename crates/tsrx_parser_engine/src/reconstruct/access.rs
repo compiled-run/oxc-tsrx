@@ -1,5 +1,6 @@
-use crate::TsrxParseError;
 use tsrx_tape_schema::{FlatTape, RecordIndex, ValueRef};
+
+use crate::TsrxParseError;
 
 pub(super) fn unwrap_parenthesized_expression(
     tape: &FlatTape,
