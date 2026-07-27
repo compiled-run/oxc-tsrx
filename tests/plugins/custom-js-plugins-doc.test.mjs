@@ -47,7 +47,15 @@ function fences(markdown) {
   return found;
 }
 
-function run(cwd, executable, args, environment = process.env) {
+// Oxlint switches to GitHub's annotation reporter (`##[warning]`, `::error`)
+// when it detects Actions. These assertions are about the default human-readable
+// format, not about which reporter CI picks, so the detection is turned off here
+// and one expected output holds on a laptop and on a runner.
+const LINT_ENVIRONMENT = { ...process.env };
+delete LINT_ENVIRONMENT.GITHUB_ACTIONS;
+delete LINT_ENVIRONMENT.CI;
+
+function run(cwd, executable, args, environment = LINT_ENVIRONMENT) {
   return new Promise((resolvePromise, reject) => {
     const child = spawn(executable, args, {
       cwd,

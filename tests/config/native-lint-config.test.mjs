@@ -23,7 +23,15 @@ const companion = resolve(join(root, "packages/toolchain/bin/oxlint"));
 // The `oxc-tsrx` command itself: providers, status, and the standard flags.
 const provider = resolve(join(root, "packages/toolchain/bin/oxc-tsrx"));
 
-function run(cwd, args, executable = binary, environment = process.env) {
+// Oxlint switches to GitHub's annotation reporter (`##[warning]`, `::error`)
+// when it detects Actions. These assertions are about the default human-readable
+// format, not about which reporter CI picks, so the detection is turned off here
+// and one expected output holds on a laptop and on a runner.
+const LINT_ENVIRONMENT = { ...process.env };
+delete LINT_ENVIRONMENT.GITHUB_ACTIONS;
+delete LINT_ENVIRONMENT.CI;
+
+function run(cwd, args, executable = binary, environment = LINT_ENVIRONMENT) {
   return new Promise((resolvePromise, reject) => {
     const child = spawn(executable, args, {
       cwd,
