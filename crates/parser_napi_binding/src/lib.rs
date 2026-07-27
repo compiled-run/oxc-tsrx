@@ -126,7 +126,12 @@ fn reset_observer_counters() {
 
 #[cfg(feature = "stage4-observer")]
 fn counter_as_number(counter: &AtomicU64) -> f64 {
-    #[allow(clippy::cast_precision_loss)]
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "every `Stage4OrdinaryCounters` field is `f64` because a napi object carries \
+                  JavaScript numbers, and the only writer, `saturating_counter_add`, already clamps \
+                  each counter to `JS_MAX_SAFE_INTEGER`, so the cast cannot lose a digit"
+    )]
     let value = counter.load(Ordering::Relaxed) as f64;
     value
 }
@@ -483,7 +488,12 @@ fn lazy_result(env: &Env, payload: ParsedPayload) -> napi::Result<Object<'static
 /// Materializes exactly the two lanes consumed immediately by the synchronous `@tsrx/core`
 /// compatibility facade. Keeping this private route inside the existing `parseSync` call avoids
 /// four unused native getter closures and two additional Node-API callbacks per source file.
-#[allow(clippy::trivially_copy_pass_by_ref)]
+#[expect(
+    clippy::trivially_copy_pass_by_ref,
+    reason = "the borrow is forwarded unchanged to `materialize_program`, `materialize_diagnostics` \
+              and `Object::new`, and it matches the sibling `lazy_result` lane so both `parse_sync` \
+              branches hand the environment on the same way"
+)]
 fn eager_compat_result(
     env: &Env,
     payload: ParsedPayload,
