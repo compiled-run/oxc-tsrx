@@ -42,6 +42,73 @@ fn syntax_core_has_upstream_oriented_private_module_boundaries() {
 }
 
 #[test]
+fn the_parser_lanes_mirror_the_base_scanner_and_projection_module_boundaries() {
+    let crate_root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    for path in [
+        "src/parser_scanner/mod.rs",
+        "src/parser_scanner/stack.rs",
+        "src/parser_scanner/state.rs",
+        "src/parser_scanner/region.rs",
+        "src/parser_scanner/control.rs",
+        "src/parser_scanner/header.rs",
+        "src/parser_scanner/jsx.rs",
+        "src/parser_scanner/lexical.rs",
+        "src/parser_scanner/overlay.rs",
+        "src/parser_scanner/dynamic.rs",
+        "src/parser_scanner/surrogates.rs",
+        "src/parser_projection/mod.rs",
+        "src/parser_projection/mapping.rs",
+        "src/parser_projection/builder.rs",
+        "src/parser_projection/actions.rs",
+        "src/parser_projection/validate.rs",
+        "src/parser_projection/marker.rs",
+        "src/parser_projection/entry.rs",
+    ] {
+        assert!(crate_root.join(path).is_file(), "missing {path}");
+    }
+
+    for path in ["src/parser_scanner.rs", "src/parser_projection.rs"] {
+        assert!(!crate_root.join(path).exists(), "legacy monolith remains: {path}");
+    }
+
+    // Every submodule the parser lanes share with the base lanes keeps the base lane's name, so a
+    // reader who knows `scanner/jsx.rs` knows where to look in `parser_scanner/`.
+    for shared in ["stack.rs", "control.rs", "header.rs", "jsx.rs", "lexical.rs", "overlay.rs"] {
+        assert!(crate_root.join("src/scanner").join(shared).is_file(), "missing scanner/{shared}");
+    }
+    for shared in ["mapping.rs", "builder.rs", "marker.rs"] {
+        assert!(
+            crate_root.join("src/projection").join(shared).is_file(),
+            "missing projection/{shared}"
+        );
+    }
+}
+
+#[test]
+fn no_source_file_carries_a_module_wide_lint_suppression() {
+    let crate_root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let mut pending = vec![crate_root.join("src")];
+    while let Some(directory) = pending.pop() {
+        for entry in fs::read_dir(&directory).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                pending.push(path);
+                continue;
+            }
+            if path.extension().is_none_or(|extension| extension != "rs") {
+                continue;
+            }
+            let source = fs::read_to_string(&path).unwrap();
+            assert!(
+                !source.contains("#![allow("),
+                "module-wide allow in {}",
+                path.strip_prefix(crate_root).unwrap().display()
+            );
+        }
+    }
+}
+
+#[test]
 fn syntax_core_uses_only_the_oxc_unicode_table_and_exposes_its_root_api() {
     let crate_root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let manifest = fs::read_to_string(crate_root.join("Cargo.toml")).unwrap();
