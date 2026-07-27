@@ -1,5 +1,7 @@
 //! Native TSRX formatting orchestration over canonical Oxfmt.
 
+mod error;
+
 use std::{
     collections::BTreeMap,
     fs,
@@ -16,7 +18,10 @@ use serde::Deserialize;
 use serde_json::Value;
 use tsrx_syntax::{lift_formatted, project_for_format, scan};
 
+pub use error::{ConfigScope, FormatError, GlobField};
 pub use oxc_adapter::OXC_REVISION;
+
+use crate::error::{ConfigScope as Scope, GlobField as Field};
 
 /// Deliberate embedded-CSS boundary for this release.
 ///
@@ -149,7 +154,7 @@ impl FormatSession {
     ///
     /// Returns an error for conflicts, invalid config, JS/TS config modules, unsupported
     /// TSRX-affecting options, or malformed glob/ignore patterns.
-    pub fn new(cwd: &Path, explicit_config: Option<&Path>) -> Result<Self, String> {
+    pub fn new(cwd: &Path, explicit_config: Option<&Path>) -> Result<Self, FormatError> {
         Self::new_with_config_base(cwd, explicit_config, None)
     }
 
@@ -162,17 +167,17 @@ impl FormatSession {
         cwd: &Path,
         explicit_config: Option<&Path>,
         config_base: Option<&Path>,
-    ) -> Result<Self, String> {
+    ) -> Result<Self, FormatError> {
         let started = Instant::now();
         let cwd = cwd.canonicalize().unwrap_or_else(|_| cwd.to_path_buf());
         if config_base.is_some() && explicit_config.is_none() {
-            return Err("a config base requires an explicit materialized Oxfmt config".to_string());
+            return Err(FormatError::BaseWithoutMaterializedConfig);
         }
         reject_editorconfig(&cwd, explicit_config)?;
         let config_path = resolve_oxfmt_config(&cwd, explicit_config)?;
         let (base, overrides, ignore_patterns, config_root) = if let Some(path) = &config_path {
             let raw = read_oxfmt_config(path)?;
-            let base = raw.options.resolve("root Oxfmt config")?;
+            let base = raw.options.resolve(Scope::Root)?;
             let overrides = raw
                 .overrides
                 .into_iter()
@@ -232,7 +237,7 @@ impl FormatSession {
     /// # Errors
     ///
     /// Returns no partial output for configuration, projection, parser, formatter, or lift errors.
-    pub fn format_text(&self, path: &Path, source: &str) -> Result<FormatOutput, String> {
+    pub fn format_text(&self, path: &Path, source: &str) -> Result<FormatOutput, FormatError> {
         let options = self.options_for(path);
         format_text_with_options(path, source, Some(&options))
     }
@@ -257,13 +262,13 @@ impl FormatSession {
     }
 }
 
-fn resolve_existing_config_base(cwd: &Path, base: &Path) -> Result<PathBuf, String> {
+fn resolve_existing_config_base(cwd: &Path, base: &Path) -> Result<PathBuf, FormatError> {
     let base = if base.is_absolute() { base.to_path_buf() } else { cwd.join(base) };
-    let base = base.canonicalize().map_err(|error| {
-        format!("unable to resolve Oxfmt config base {}: {error}", base.display())
-    })?;
+    let base = base
+        .canonicalize()
+        .map_err(|error| FormatError::UnresolvableBase { path: base.clone(), error })?;
     if !base.is_dir() {
-        return Err(format!("Oxfmt config base is not a directory: {}", base.display()));
+        return Err(FormatError::BaseNotDirectory { path: base });
     }
     Ok(base)
 }
@@ -302,23 +307,21 @@ impl FileFormatOptions {
 }
 
 impl FormatOverride {
-    fn new(raw: RawFormatOverride, index: usize) -> Result<Self, String> {
+    fn new(raw: RawFormatOverride, index: usize) -> Result<Self, FormatError> {
         if raw.files.is_empty() {
-            return Err(format!("Oxfmt override {index} requires at least one files pattern"));
+            return Err(FormatError::OverrideWithoutFiles { index });
         }
+        let scope = Scope::Override { index };
         Ok(Self {
-            files: build_globs(&raw.files, &format!("Oxfmt override {index} files"))?,
-            exclude_files: build_globs(
-                &raw.exclude_files,
-                &format!("Oxfmt override {index} excludeFiles"),
-            )?,
-            options: raw.options.resolve(&format!("Oxfmt override {index}"))?,
+            files: build_globs(&raw.files, scope, Field::Files)?,
+            exclude_files: build_globs(&raw.exclude_files, scope, Field::ExcludeFiles)?,
+            options: raw.options.resolve(scope)?,
         })
     }
 }
 
 impl RawFormatOptions {
-    fn resolve(self, context: &str) -> Result<FileFormatOptions, String> {
+    fn resolve(self, scope: ConfigScope) -> Result<FileFormatOptions, FormatError> {
         let Self {
             schema,
             use_tabs,
@@ -351,23 +354,17 @@ impl RawFormatOptions {
         } = self;
         let _language_irrelevant =
             (schema, prose_wrap, sort_package_json, svelte, vue_indent_script_and_style);
-        if let Some((name, _)) = unknown.into_iter().next() {
-            return Err(format!(
-                "unsupported Oxfmt option `{name}` in {context}; OXC for TSRX never silently ignores unknown TSRX-affecting options"
-            ));
+        if let Some((option, _)) = unknown.into_iter().next() {
+            return Err(FormatError::UnknownOption { option, scope });
         }
-        reject_enabled_value(context, "sortImports", sort_imports)?;
-        reject_enabled_value(context, "sortTailwindcss", sort_tailwindcss)?;
-        reject_enabled_value(context, "jsdoc", jsdoc)?;
+        reject_enabled_value(scope, "sortImports", sort_imports)?;
+        reject_enabled_value(scope, "sortTailwindcss", sort_tailwindcss)?;
+        reject_enabled_value(scope, "jsdoc", jsdoc)?;
         if embedded_language_formatting.is_some() {
-            return Err(format!(
-                "Oxfmt `embeddedLanguageFormatting` is not available for TSRX in {context}: canonical embedded-language callbacks are outside the public pinned formatter boundary"
-            ));
+            return Err(FormatError::EmbeddedLanguageFormattingUnavailable { scope });
         }
         if experimental_operator_position.is_some() || experimental_ternaries.is_some() {
-            return Err(format!(
-                "experimental Oxfmt options are not supported by the pinned formatter in {context}"
-            ));
+            return Err(FormatError::ExperimentalOptions { scope });
         }
         Ok(FileFormatOptions {
             engine: EngineFormatOptions {
@@ -393,50 +390,63 @@ impl RawFormatOptions {
     }
 }
 
-fn reject_enabled_value(context: &str, name: &str, value: Option<Value>) -> Result<(), String> {
+fn reject_enabled_value(
+    scope: ConfigScope,
+    option: &'static str,
+    value: Option<Value>,
+) -> Result<(), FormatError> {
     if value.is_some_and(|value| !value.is_null() && value != Value::Bool(false)) {
-        return Err(format!(
-            "Oxfmt `{name}` is not available for TSRX in {context}: it needs a callback/config surface outside the public pinned formatter boundary"
-        ));
+        return Err(FormatError::UnavailableOption { option, scope });
     }
     Ok(())
 }
 
-fn build_globs(patterns: &[String], context: &str) -> Result<GlobSet, String> {
+fn build_globs(
+    patterns: &[String],
+    scope: ConfigScope,
+    field: GlobField,
+) -> Result<GlobSet, FormatError> {
     let mut builder = GlobSetBuilder::new();
     for pattern in patterns {
-        builder.add(
-            Glob::new(pattern)
-                .map_err(|error| format!("invalid {context} pattern `{pattern}`: {error}"))?,
-        );
+        builder.add(Glob::new(pattern).map_err(|error| FormatError::InvalidGlob {
+            scope,
+            field,
+            pattern: pattern.clone(),
+            detail: error.to_string(),
+        })?);
     }
-    builder.build().map_err(|error| format!("unable to build {context}: {error}"))
+    builder.build().map_err(|error| FormatError::UnbuildableGlobSet {
+        scope,
+        field,
+        detail: error.to_string(),
+    })
 }
 
-fn build_ignore(root: &Path, patterns: &[String]) -> Result<Option<Gitignore>, String> {
+fn build_ignore(root: &Path, patterns: &[String]) -> Result<Option<Gitignore>, FormatError> {
     if patterns.is_empty() {
         return Ok(None);
     }
     let mut builder = GitignoreBuilder::new(root);
     for pattern in patterns {
-        builder
-            .add_line(None, pattern)
-            .map_err(|error| format!("invalid Oxfmt ignorePatterns entry `{pattern}`: {error}"))?;
+        builder.add_line(None, pattern).map_err(|error| FormatError::InvalidIgnorePattern {
+            pattern: pattern.clone(),
+            detail: error.to_string(),
+        })?;
     }
     builder
         .build()
         .map(Some)
-        .map_err(|error| format!("unable to build Oxfmt ignorePatterns: {error}"))
+        .map_err(|error| FormatError::UnbuildableIgnore { detail: error.to_string() })
 }
 
-fn resolve_oxfmt_config(cwd: &Path, explicit: Option<&Path>) -> Result<Option<PathBuf>, String> {
+fn resolve_oxfmt_config(
+    cwd: &Path,
+    explicit: Option<&Path>,
+) -> Result<Option<PathBuf>, FormatError> {
     if let Some(path) = explicit {
         let path = if path.is_absolute() { path.to_path_buf() } else { cwd.join(path) };
         if is_js_config(&path) {
-            return Err(
-                "JavaScript/TypeScript Oxfmt config modules require the future thin npm host; use JSON or JSONC for the native CLI"
-                    .to_string(),
-            );
+            return Err(FormatError::ExplicitJsConfigModule);
         }
         return Ok(Some(path.canonicalize().unwrap_or(path)));
     }
@@ -468,23 +478,16 @@ fn resolve_oxfmt_config(cwd: &Path, explicit: Option<&Path>) -> Result<Option<Pa
         match entries.as_slice() {
             [] => {}
             [path] if is_js_config(path) => {
-                return Err(
-                    "JavaScript/TypeScript Oxfmt config modules require the future thin npm host; use .oxfmtrc.json or .oxfmtrc.jsonc for the native CLI"
-                        .to_string(),
-                );
+                return Err(FormatError::DiscoveredJsConfigModule);
             }
             [path] => return Ok(Some(path.canonicalize().unwrap_or_else(|_| path.clone()))),
             _ => {
                 let names = entries
                     .iter()
                     .filter_map(|path| path.file_name())
-                    .map(|name| name.to_string_lossy())
-                    .collect::<Vec<_>>();
-                return Err(format!(
-                    "multiple Oxfmt configuration files found in {}: {}",
-                    directory.display(),
-                    names.join(", ")
-                ));
+                    .map(|name| name.to_string_lossy().into_owned())
+                    .collect();
+                return Err(FormatError::ConflictingConfigFiles { directory, names });
             }
         }
         if !directory.pop() {
@@ -493,21 +496,15 @@ fn resolve_oxfmt_config(cwd: &Path, explicit: Option<&Path>) -> Result<Option<Pa
     }
 }
 
-fn reject_editorconfig(cwd: &Path, explicit: Option<&Path>) -> Result<(), String> {
+fn reject_editorconfig(cwd: &Path, explicit: Option<&Path>) -> Result<(), FormatError> {
     if explicit.is_some_and(|path| path.file_name().is_some_and(|name| name == ".editorconfig")) {
-        return Err(
-            ".editorconfig is not supported by the native TSRX formatter yet; its settings are never silently ignored"
-                .to_string(),
-        );
+        return Err(FormatError::EditorConfigRejected);
     }
     let mut directory = cwd.to_path_buf();
     loop {
         let path = directory.join(".editorconfig");
         if path.is_file() {
-            return Err(format!(
-                ".editorconfig is not supported by the native TSRX formatter yet: {}; its settings are never silently ignored",
-                path.display()
-            ));
+            return Err(FormatError::EditorConfigDiscovered { path });
         }
         if !directory.pop() {
             return Ok(());
@@ -522,13 +519,17 @@ fn is_js_config(path: &Path) -> bool {
     )
 }
 
-fn read_oxfmt_config(path: &Path) -> Result<RawOxfmtrc, String> {
-    let mut source = fs::read_to_string(path)
-        .map_err(|error| format!("unable to read Oxfmt config {}: {error}", path.display()))?;
-    json_strip_comments::strip(&mut source)
-        .map_err(|error| format!("invalid JSONC in {}: {error}", path.display()))?;
-    serde_json::from_str(&source)
-        .map_err(|error| format!("invalid Oxfmt config {}: {error}", path.display()))
+fn read_oxfmt_config(path: &Path) -> Result<RawOxfmtrc, FormatError> {
+    let mut source =
+        fs::read_to_string(path).map_err(|error| FormatError::unreadable_config(path, error))?;
+    json_strip_comments::strip(&mut source).map_err(|error| FormatError::InvalidJsonc {
+        path: path.to_path_buf(),
+        detail: error.to_string(),
+    })?;
+    serde_json::from_str(&source).map_err(|error| FormatError::InvalidConfig {
+        path: path.to_path_buf(),
+        detail: error.to_string(),
+    })
 }
 
 /// Formats source already owned by a caller without filesystem I/O.
@@ -543,7 +544,7 @@ fn read_oxfmt_config(path: &Path) -> Result<RawOxfmtrc, String> {
 ///
 /// Returns an error for unsupported extensions, unsupported TSRX grammar, invalid projected TSX,
 /// canonical Oxfmt failures, or any marker/source-fidelity violation.
-pub fn format_text(path: &Path, source: &str) -> Result<FormatOutput, String> {
+pub fn format_text(path: &Path, source: &str) -> Result<FormatOutput, FormatError> {
     format_text_with_options(path, source, None)
 }
 
@@ -551,7 +552,7 @@ fn format_text_with_options(
     path: &Path,
     source: &str,
     options: Option<&FileFormatOptions>,
-) -> Result<FormatOutput, String> {
+) -> Result<FormatOutput, FormatError> {
     let is_tsrx = path.extension().is_some_and(|extension| extension == "tsrx");
     if !is_tsrx {
         return format_direct(path, source, options);
@@ -559,11 +560,11 @@ fn format_text_with_options(
 
     let mut timings = FormatTimings::default();
     let started = Instant::now();
-    let overlay = scan(source).map_err(|error| error.to_string())?;
+    let overlay = scan(source)?;
     timings.scan_ns = elapsed_ns(started);
 
     let started = Instant::now();
-    let projection = project_for_format(source, &overlay).map_err(|error| error.to_string())?;
+    let projection = project_for_format(source, &overlay)?;
     timings.projection_ns = elapsed_ns(started);
 
     let engine = oxc_adapter::format(&FormatRequest {
@@ -580,8 +581,7 @@ fn format_text_with_options(
     let style_count = projection.style_count();
 
     let started = Instant::now();
-    let code =
-        lift_formatted(&engine.code, source, &projection).map_err(|error| error.to_string())?;
+    let code = lift_formatted(&engine.code, source, &projection)?;
     let code = apply_final_newline(code, options);
     timings.lift_ns = elapsed_ns(started);
 
@@ -608,7 +608,7 @@ fn format_direct(
     path: &Path,
     source: &str,
     options: Option<&FileFormatOptions>,
-) -> Result<FormatOutput, String> {
+) -> Result<FormatOutput, FormatError> {
     let engine = oxc_adapter::format(&FormatRequest {
         parse_source: source,
         source_kind: SourceKind::from_path(path)?,
