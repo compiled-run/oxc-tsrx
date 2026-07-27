@@ -1,3 +1,6 @@
+//! The explicit work stack both serializers share, so a deeply nested Program never recurses on
+//! the host stack.
+
 use crate::{FlatTape, RecordIndex, TapeBuildError, ValueRef};
 
 use super::buffer::{BoundedString, push_json_string};

@@ -1,3 +1,6 @@
+//! The row types of the four record tables. Source order is carried by `next` links rather than
+//! by array position, so a record can be appended without moving its siblings.
+
 use crate::{RecordIndex, StringRange};
 
 use super::value::ValueRef;

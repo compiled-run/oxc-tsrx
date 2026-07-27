@@ -1,3 +1,6 @@
+//! The results JSON's schema, and the host facts recorded beside it so an archived run stays
+//! comparable to a later one.
+
 use std::{env, fs, path::Path, process::Command};
 
 use oxc_adapter::OXC_REVISION;

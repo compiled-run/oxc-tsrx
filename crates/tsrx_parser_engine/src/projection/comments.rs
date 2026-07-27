@@ -1,3 +1,6 @@
+//! Recovering the authored comment table from the projected one, consuming the projection's own
+//! marker comments on the way instead of leaking them to callers.
+
 use tsrx_syntax::{OverlayView, ProjectionSegment};
 use tsrx_tape_schema::{CommentTable, ProjectedCommentKind};
 

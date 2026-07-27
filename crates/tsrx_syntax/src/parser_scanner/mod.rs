@@ -1,3 +1,6 @@
+//! The byte-level structural scan that locates TSRX syntax in an authored source without parsing
+//! it.
+
 mod control;
 mod dynamic;
 mod header;

@@ -1,3 +1,6 @@
+//! Working out, per lexical context, which UTF-16 code unit each private-use placeholder in a
+//! projected value stands for, and writing them back over it.
+
 use crate::TsrxParseError;
 
 pub(super) fn apply_pua_markers(

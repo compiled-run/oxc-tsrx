@@ -1,3 +1,6 @@
+//! Per-construct clause checks, so a later pass can index clauses by role without re-deriving
+//! their bounds from the source.
+
 use tsrx_syntax::{ByteSpan, ClauseRole, ForHeader, NONE_INDEX, OverlayView};
 
 use crate::TsrxParseError;

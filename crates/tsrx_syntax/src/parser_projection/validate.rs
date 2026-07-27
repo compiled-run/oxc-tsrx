@@ -1,3 +1,6 @@
+//! What this lane refuses. Some code-block and dynamic-tag arrangements scan cleanly yet cannot
+//! be projected into TSX a single OXC parse would accept.
+
 use crate::{
     diagnostics::{ProjectionError, to_u32},
     model::{Overlay, ParserDynamicKind, StructuralKind},

@@ -1,3 +1,6 @@
+//! Repairing module-table strings, and finding the module names that must never reach a public
+//! result at all because they were spelled with a rejected surrogate.
+
 use tsrx_syntax::OpaqueSurrogateContext;
 use tsrx_tape_schema::{ModuleNameRecord, ModuleTable, TapeSpan, ValueSpanRecord};
 

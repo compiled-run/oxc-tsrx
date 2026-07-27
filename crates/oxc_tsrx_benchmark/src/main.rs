@@ -1,3 +1,6 @@
+//! The lint performance harness: it measures this project against stock Oxlint on equivalent
+//! sources and fails the run when a declared budget is missed.
+
 // Benchmark math intentionally converts bounded byte/nanosecond counters to floating point for
 // human-readable rates. TSX/TSRX names and `_ns` fields are units, not accidental similarities.
 #![expect(

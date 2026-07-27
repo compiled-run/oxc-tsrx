@@ -1,3 +1,6 @@
+//! The serialized shape the CLI, the editor, and the benchmarks all consume, and the aggregation
+//! that folds a whole batch into one of them.
+
 use std::path::Path;
 
 use oxc_adapter::{EngineDiagnostic, OXC_REVISION};

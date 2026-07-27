@@ -1,3 +1,6 @@
+//! Repairing comment values, which are re-derived from the original span rather than patched,
+//! because a comment's delimiters are known and its interior is otherwise opaque.
+
 use tsrx_syntax::OpaqueSurrogateContext;
 use tsrx_tape_schema::{CommentTable, ProjectedCommentKind};
 

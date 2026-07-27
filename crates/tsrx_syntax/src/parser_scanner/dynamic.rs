@@ -1,3 +1,6 @@
+//! Dynamic tags, whose closing expression has to match its opening token for token before the
+//! element is accepted at all.
+
 use crate::{
     diagnostics::{ProjectionError, to_u32},
     model::ByteSpan,

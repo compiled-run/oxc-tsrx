@@ -1,3 +1,7 @@
+//! What all four control constructs share: preparing block bodies, proving a projected wrapper
+//! call is generated scaffolding, and re-seating the rewritten node in its authored statement,
+//! expression, or JSX-child slot.
+
 use tsrx_syntax::{ByteSpan, ControlContext};
 use tsrx_tape_schema::{FlatTape, RecordIndex, ValueRef};
 

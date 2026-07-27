@@ -1,3 +1,6 @@
+//! The scanner's own state: the flat vectors an overlay is assembled from, and the two entry
+//! points that fill them, one for the parser lane and one for surrogate classification.
+
 use std::cell::RefCell;
 
 use crate::{

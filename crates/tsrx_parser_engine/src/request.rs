@@ -1,3 +1,5 @@
+//! What a caller hands in: the two source forms, and the options both of them accept.
+
 #[derive(Debug, Clone, Copy)]
 pub struct TsrxParseRequest<'a> {
     pub source: &'a str,

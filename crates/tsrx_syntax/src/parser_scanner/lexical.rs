@@ -1,3 +1,6 @@
+//! Skipping the JavaScript token forms whose interiors must not be searched for TSRX syntax:
+//! strings, templates, regexes, comments, numbers, and identifiers.
+
 use crate::diagnostics::{ProjectionError, to_u32};
 
 use super::Scanner;

@@ -1,3 +1,6 @@
+//! Emitting the projected text while recording which spans were copied verbatim, since only
+//! those spans can carry a fix back to the author afterwards.
+
 use std::fmt::Write as _;
 
 use super::mapping::MappedProjection;

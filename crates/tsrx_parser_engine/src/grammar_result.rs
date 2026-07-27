@@ -1,3 +1,6 @@
+//! Turning rejected authored grammar into an ordinary failed [`TsrxParseResult`], because a
+//! caller sees rejection as data and never as an `Err`.
+
 use oxc_adapter::parser::{
     AuthoredGrammarFailure, RejectionModuleNames, parse_failed_tsrx_metadata,
     render_diagnostic_codeframes,

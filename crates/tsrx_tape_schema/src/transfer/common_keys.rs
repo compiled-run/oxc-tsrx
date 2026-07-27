@@ -1,3 +1,5 @@
+//! The fixed `ESTree` key vocabulary the binary format encodes as a small id instead of a string.
+
 pub(super) const BINARY_COMMON_KEY_FLAG: u32 = 1 << 31;
 
 pub(super) fn common_key_id(key: &str) -> Option<u32> {

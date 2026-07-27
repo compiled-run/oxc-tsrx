@@ -1,3 +1,6 @@
+//! The subprocess measurements: cold start, peak resident memory, and CLI diagnostic parity, none
+//! of which are observable from inside this process.
+
 use std::{
     env, fs,
     hint::black_box,

@@ -1,3 +1,6 @@
+//! Recording into the overlay, and the checkpoint/rollback that lets a speculative construct be
+//! abandoned without leaving half-built nodes behind.
+
 use crate::{
     diagnostics::{ProjectionError, to_u32},
     model::{

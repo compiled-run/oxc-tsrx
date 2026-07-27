@@ -1,3 +1,6 @@
+//! The in-process measurements, which is where the per-phase timings come from: a subprocess can
+//! only ever report a total.
+
 use std::{fs, hint::black_box, path::Path, time::Instant};
 
 use oxc_adapter::{LintEngine, LintRequest, SourceKind};

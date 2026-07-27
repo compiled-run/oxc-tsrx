@@ -1,3 +1,6 @@
+//! Serializing a borrowed Program straight to JSON text, without materializing an intermediate
+//! tree to walk.
+
 use crate::{FlatTape, RecordIndex, TapeBuildError, ValueKind, ValueRef};
 
 use super::buffer::{BoundedString, push_json_string};

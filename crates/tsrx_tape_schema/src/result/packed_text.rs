@@ -1,3 +1,6 @@
+//! The single string arena every result table points into, and the sparse fixups that keep an
+//! unpaired UTF-16 surrogate lossless without ever publishing it as a private-use scalar.
+
 use std::{fmt, mem};
 
 use crate::{StringRange, TapeBuildError};

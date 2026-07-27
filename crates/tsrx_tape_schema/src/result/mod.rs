@@ -1,3 +1,6 @@
+//! The owned tables a finished parse hands back: module, comment, and diagnostic rows, plus the
+//! packed text they index into.
+
 use std::{fmt, mem};
 
 use crate::{ListRange, ProjectedCommentKind, RecordIndex, StringRange, TapeBuildError, TapeSpan};

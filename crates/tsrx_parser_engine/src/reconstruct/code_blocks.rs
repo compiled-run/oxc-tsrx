@@ -1,3 +1,6 @@
+//! Authored `@{ ... }` bodies in both statement and JSX-child position, and the policy that
+//! decides whether a projected semicolon belongs to the block or to the list around it.
+
 use tsrx_syntax::{ByteSpan, ControlKind, OverlayView, ProjectionSegment, StructuralKind};
 use tsrx_tape_schema::{FlatTape, RecordIndex, ValueRef};
 

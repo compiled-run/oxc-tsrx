@@ -1,3 +1,6 @@
+//! The counting seam the repair lanes report through, so the nonshipping measurement sibling can
+//! see every copy while production compiles the instrumentation away.
+
 use tsrx_tape_schema::FlatTape;
 
 use crate::source_bridge::PreparedSource;

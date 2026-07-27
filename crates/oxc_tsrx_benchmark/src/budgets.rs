@@ -1,3 +1,6 @@
+//! The budget file's schema, and the argument parsing that locates it. Every threshold this
+//! harness asserts is declared there rather than in code.
+
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};

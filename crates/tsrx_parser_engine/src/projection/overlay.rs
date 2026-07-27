@@ -1,3 +1,6 @@
+//! Proving the scanner overlay still describes this source: every structural token resolves to
+//! an owner node of the kind it claims.
+
 use tsrx_syntax::{ControlKind, NONE_INDEX, OverlayView, StructuralKind};
 
 use crate::TsrxParseError;

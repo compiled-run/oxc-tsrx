@@ -1,3 +1,6 @@
+//! The same JSON lane for a tape the serializer takes ownership of, which is what lets the output
+//! outlive the storage it was read from.
+
 use crate::{FlatTape, RecordIndex, TapeBuildError, ValueKind};
 
 use super::buffer::{BoundedString, push_json_string};

@@ -1,3 +1,6 @@
+//! Reducing a diagnostic to the four fields parity is judged on, so this project and stock Oxlint
+//! can be compared without their rendering having to agree.
+
 use serde::Serialize;
 use serde_json::Value;
 

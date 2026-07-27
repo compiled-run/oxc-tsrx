@@ -1,3 +1,6 @@
+//! Decoding the collision-free identifiers the projection injected, so a projected helper call
+//! can be proven to belong to one specific overlay node rather than to authored code.
+
 use tsrx_tape_schema::{FlatTape, RecordIndex};
 
 use crate::TsrxParseError;

@@ -1,3 +1,6 @@
+//! The read-only `ESTree` vocabulary every pass shares: a missing or mistyped field fails closed
+//! as `Unsupported` instead of panicking.
+
 use tsrx_tape_schema::{FlatTape, RecordIndex, ValueRef};
 
 use crate::TsrxParseError;

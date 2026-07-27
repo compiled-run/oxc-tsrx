@@ -1,3 +1,6 @@
+//! What the parser receives alongside the projected text: the affine map, the scaffold
+//! namespaces, and the spans it needs to tell generated code from authored code.
+
 use std::ops::Range;
 
 use crate::{

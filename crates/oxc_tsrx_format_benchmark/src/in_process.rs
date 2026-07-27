@@ -1,3 +1,6 @@
+//! The in-process measurements, which is where the per-phase timings and the config-reuse counts
+//! come from: a subprocess can only ever report a total.
+
 use std::{fs, path::Path, time::Instant};
 
 use oxc_adapter::{FormatRequest, SourceKind};

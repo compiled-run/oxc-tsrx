@@ -1,3 +1,7 @@
+//! The single entry point, and the order the passes have to run in.
+//! Indexing comes first because every later pass finds its node by projected start, and list
+//! removals are batched to the very end so no pass invalidates another pass's indices.
+
 use tsrx_syntax::{OverlayView, ProjectionSegment, StructuralKind};
 use tsrx_tape_schema::{FlatTape, RecordIndex, ValueRef};
 

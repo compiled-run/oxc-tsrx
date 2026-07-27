@@ -1,3 +1,5 @@
+//! Applying safe fixes, and shaping those same fixes for an editor that will apply them itself.
+
 use std::{cmp::Reverse, collections::HashSet, fs, path::Path};
 
 use oxc_adapter::{DynamicTagContract, EngineDiagnostic, LintRequest, SourceKind};

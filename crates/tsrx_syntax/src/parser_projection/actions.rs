@@ -1,3 +1,6 @@
+//! The projection expressed as an edit stream. Each kind of rewrite is derived from the overlay
+//! on its own, then all of them are merged back into one source-ordered pass.
+
 use super::builder::Builder;
 use crate::{
     diagnostics::{ProjectionError, to_u32},

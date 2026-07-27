@@ -1,3 +1,6 @@
+//! The main loop: walking one balanced region byte by byte and dispatching to whichever construct
+//! begins at the cursor.
+
 use crate::{
     diagnostics::{ProjectionError, to_u32},
     model::StructuralKind,

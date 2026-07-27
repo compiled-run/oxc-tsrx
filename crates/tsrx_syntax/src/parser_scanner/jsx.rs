@@ -1,3 +1,5 @@
+//! JSX elements, and the commitment rule that decides when a `<` genuinely opens one.
+
 use crate::{
     diagnostics::{ProjectionError, to_u32},
     model::{

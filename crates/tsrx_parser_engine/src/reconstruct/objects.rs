@@ -1,3 +1,6 @@
+//! Bucketing the projected tape's objects by `ESTree` type and sorting them by start offset, so a
+//! pass locates its node by position instead of walking the tree again.
+
 use tsrx_tape_schema::RecordIndex;
 
 use crate::TsrxParseError;

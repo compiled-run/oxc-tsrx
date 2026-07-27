@@ -1,3 +1,5 @@
+//! Walking a record's `next` chain as an iterator, with and without the index of each step.
+
 use crate::RecordIndex;
 
 use super::FlatTape;

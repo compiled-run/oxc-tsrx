@@ -1,3 +1,6 @@
+//! The formatter performance harness: it measures this project against the stock Oxfmt lane on
+//! the equivalent TSX and fails the run when a declared budget is missed.
+
 // Benchmark math intentionally converts bounded byte/nanosecond counters to floating point for
 // readable rates. The harness is release-only and retains every raw latency/RSS sample.
 #![expect(

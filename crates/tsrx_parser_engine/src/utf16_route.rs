@@ -1,3 +1,6 @@
+//! The UTF-16 route: bridge the caller's exact code units into a parseable UTF-8 source, run the
+//! same pipeline, then repair the result back into those units.
+
 use oxc_adapter::parser::{RejectionModuleNames, render_diagnostic_codeframes};
 use tsrx_syntax::OpaqueSurrogateContext;
 use tsrx_tape_schema::{

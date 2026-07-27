@@ -1,3 +1,6 @@
+//! Explicitly nullable spans and string ranges, and the fallible mapper each table applies when a
+//! whole result is moved into another coordinate domain.
+
 use crate::{StringRange, TapeSpan};
 
 /// Explicit nullable span. A present empty span remains distinct from `None`.

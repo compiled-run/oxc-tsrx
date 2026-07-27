@@ -1,3 +1,6 @@
+//! The flat `ESTree` tape itself: parallel record tables addressed by index, with no per-node
+//! allocation and no borrow of the source.
+
 use std::{error::Error, fmt};
 
 use crate::{RecordIndex, SCHEMA_VERSION, StringRange};

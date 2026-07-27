@@ -1,3 +1,6 @@
+//! Building the children of a raw `<style>` element straight from its authored text. OXC never
+//! parses CSS, so the rules, declarations, and their spans are all produced here.
+
 use tsrx_syntax::ByteSpan;
 use tsrx_tape_schema::{
     FlatTape, ListRecord, ListValueRecord, ObjectRecord, RecordIndex, ValueRef,

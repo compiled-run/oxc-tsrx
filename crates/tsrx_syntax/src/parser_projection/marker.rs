@@ -1,3 +1,6 @@
+//! The two preconditions for projecting at all: the overlay still matches this source, and a
+//! scaffold prefix exists that cannot collide with anything in it.
+
 use crate::{diagnostics::ProjectionError, model::Overlay, scanner::source_fingerprint};
 
 pub(super) fn validate_overlay_source(

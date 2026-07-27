@@ -1,3 +1,6 @@
+//! The grammar of a projected marker comment: how one is encoded, and which ones a `for` header
+//! is required to have emitted.
+
 #[derive(Debug, Clone, Copy)]
 pub(super) enum MarkerKind {
     Token(u32),

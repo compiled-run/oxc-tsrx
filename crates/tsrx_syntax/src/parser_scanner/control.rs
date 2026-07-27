@@ -1,3 +1,6 @@
+//! The four control constructs, each recorded as one node plus the clauses its header and bodies
+//! occupy.
+
 use crate::{
     diagnostics::{ProjectionError, to_u32},
     model::{ByteSpan, ClauseRole, ControlContext, ControlKind, ForHeader, StructuralKind},

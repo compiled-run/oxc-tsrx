@@ -1,3 +1,6 @@
+//! The affine offset map. A projected offset translates back only where a byte was copied
+//! verbatim; a generated gap is never resolved approximately to either side.
+
 use tsrx_syntax::ProjectionSegment;
 
 pub(crate) fn map_endpoint(

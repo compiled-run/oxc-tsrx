@@ -1,3 +1,6 @@
+//! Overlay checks for the two embedded languages, dynamic tags and raw `<style>`, whose
+//! interiors OXC never sees and therefore never validates.
+
 use tsrx_syntax::{OverlayView, ParserDynamicKind};
 
 use crate::TsrxParseError;

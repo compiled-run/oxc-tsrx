@@ -1,3 +1,6 @@
+//! The three `for` forms, and the ordinals that tie each projected header helper back to the
+//! loop clause it was generated for.
+
 use tsrx_syntax::{
     ClauseRole, ControlContext, ControlKind, ForHeader, OverlayClause, OverlayView,
     ProjectionSegment,

@@ -1,3 +1,6 @@
+//! The small set of in-place tape rewrites a pass is allowed to perform: retype a node, give it
+//! a span head, reorder its fields, wrap it in a statement.
+
 use tsrx_syntax::ByteSpan;
 use tsrx_tape_schema::{FlatTape, ListRecord, ObjectRecord, RecordIndex, ValueRef};
 

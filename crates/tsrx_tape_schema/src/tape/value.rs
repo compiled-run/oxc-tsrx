@@ -1,3 +1,6 @@
+//! How one tape value packs its storage lane and its index into a single `u32`, and which tag
+//! values are reserved to make that unambiguous.
+
 use crate::{RecordIndex, StringRange};
 
 const FIX_SCALAR_TAG: u32 = u32::MAX - 4;

@@ -1,3 +1,6 @@
+//! Splitting a control header into clauses, which is where the authored grammar is really
+//! decided: the `for` form, the `case` label, the optional catch binding.
+
 use crate::{
     diagnostics::{ProjectionError, to_u32},
     model::{ByteSpan, ClauseRole, ForHeader},

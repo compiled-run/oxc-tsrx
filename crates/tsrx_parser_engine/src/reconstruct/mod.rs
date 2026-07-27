@@ -1,3 +1,7 @@
+//! Rewriting a projected OXC tape in place into the tree the author actually wrote.
+//! `program` fixes the order the passes run in and `spans` closes them out, mapping every
+//! reachable node back into authored coordinates.
+
 mod access;
 mod code_blocks;
 mod control;

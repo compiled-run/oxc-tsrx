@@ -1,3 +1,5 @@
+//! Getting one Program out of the tape and across a process or language boundary.
+
 mod binary;
 mod binary_records;
 mod buffer;

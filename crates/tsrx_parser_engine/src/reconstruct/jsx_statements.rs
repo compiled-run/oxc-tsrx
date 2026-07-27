@@ -1,3 +1,6 @@
+//! Custom JSX elements standing as statements: unwrapping the parentheses the projection added
+//! and restoring the authored statement boundary together with its semicolon.
+
 use tsrx_syntax::{ByteSpan, ProjectionSegment};
 use tsrx_tape_schema::{FlatTape, ListValueInsertion, ObjectRecord, RecordIndex, ValueRef};
 

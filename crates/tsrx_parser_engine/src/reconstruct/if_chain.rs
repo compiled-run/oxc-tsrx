@@ -1,3 +1,6 @@
+//! The `if` construct taken as one whole chain: every `else if` alternate is prepared before the
+//! root is retyped, so no link is visited twice.
+
 use tsrx_syntax::{ControlContext, ControlKind, OverlayView, ProjectionSegment};
 use tsrx_tape_schema::{FlatTape, RecordIndex};
 

@@ -1,3 +1,6 @@
+//! Repairing rendered diagnostic codeframes, the one lane with no spans left to work from: the
+//! text is already laid out, so each unit is located by aligning rendered lines against source.
+
 use tsrx_tape_schema::DiagnosticTable;
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;

@@ -1,3 +1,6 @@
+//! The envelope constants both formats are versioned by, and the tape methods that produce each
+//! of them.
+
 use crate::{FlatTape, SCHEMA_VERSION, TapeBuildError};
 
 use super::binary::BinaryProgramSerializer;

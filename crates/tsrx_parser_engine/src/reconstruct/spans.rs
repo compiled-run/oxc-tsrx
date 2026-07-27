@@ -1,3 +1,6 @@
+//! Authored offsets recorded as nodes are rewritten, and the closing pass that lifts every
+//! reachable span out of projected coordinates and back onto the author's source.
+
 use tsrx_syntax::{ByteSpan, ProjectionSegment};
 use tsrx_tape_schema::{FlatTape, RecordIndex, ValueRef};
 

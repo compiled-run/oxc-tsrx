@@ -1,3 +1,6 @@
+//! The subprocess measurements: cold start, batch throughput, stdin latency, and peak resident
+//! memory, none of which are observable from inside this process.
+
 use std::{
     env, fs,
     hint::black_box,

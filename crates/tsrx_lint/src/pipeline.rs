@@ -1,3 +1,6 @@
+//! What happens to one file between being loaded and being reported: projection, the syntax lane,
+//! the optional type lane, and the timings each of them records.
+
 use std::{
     ffi::OsString,
     path::{Path, PathBuf},

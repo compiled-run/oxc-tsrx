@@ -1,3 +1,7 @@
+//! The one operational error the public entry points return.
+//! Rejected authored grammar is result data, not an error, so only unsupported coordinates,
+//! exhausted capacity, and broken internal invariants arrive here.
+
 use std::{error::Error, fmt};
 
 use oxc_adapter::parser::ProjectedParseError;

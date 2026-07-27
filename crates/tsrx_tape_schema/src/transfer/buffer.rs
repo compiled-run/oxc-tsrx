@@ -1,3 +1,6 @@
+//! A byte sink that refuses to grow past the transfer limit, so an oversized Program fails while
+//! it is being built instead of after.
+
 use crate::TapeBuildError;
 
 use super::PROGRAM_TRANSFER_MAX_BYTES;

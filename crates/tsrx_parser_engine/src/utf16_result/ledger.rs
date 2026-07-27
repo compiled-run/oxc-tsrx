@@ -1,3 +1,6 @@
+//! Proof that every source substitution ends up with exactly one semantic owner. A fixup claimed
+//! twice, or never claimed at all, is a defect in the repair lanes rather than in the input.
+
 use tsrx_syntax::OpaqueSurrogateContext;
 use tsrx_tape_schema::{ParseCompleteness, TapeSpan};
 

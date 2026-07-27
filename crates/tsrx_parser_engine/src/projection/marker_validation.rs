@@ -1,3 +1,6 @@
+//! Tallying the markers actually present in the projected comments against the ones the overlay
+//! demands, so a missing or duplicated marker is caught before reconstruction starts.
+
 use tsrx_syntax::{
     ClauseRole, ControlContext, ControlKind, NONE_INDEX, OverlayView, ProjectionSegment,
     StructuralKind,

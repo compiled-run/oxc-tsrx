@@ -1,3 +1,6 @@
+//! Proving a projection is the authored source plus an enumerated set of generated gaps, and
+//! nothing else.
+
 use tsrx_syntax::{
     ByteSpan, NONE_INDEX, OverlayView, ParserDynamicKind, ProjectionView, StructuralKind,
 };

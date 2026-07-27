@@ -1,3 +1,6 @@
+//! Moving diagnostics out of projected coordinates back onto the author's source, and dropping
+//! the ones that landed in generated scaffolding the author never wrote.
+
 use oxc_adapter::EngineDiagnostic;
 use tsrx_syntax::{MappedProjection, TypeProjection};
 

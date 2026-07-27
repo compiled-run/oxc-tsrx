@@ -1,3 +1,6 @@
+//! What a caller gets back: the Program tape, the module, comment, and diagnostic tables, and
+//! the completeness that says which of them are populated.
+
 use oxc_adapter::parser::RejectionModuleNames;
 use tsrx_tape_schema::{
     CommentTable, Completeness, CoordinateDomain, DiagnosticTable, FlatTape, ModuleTable,

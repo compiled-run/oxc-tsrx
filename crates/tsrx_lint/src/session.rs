@@ -1,3 +1,6 @@
+//! The batch boundary: one compiled configuration reused across every file, and the type-aware
+//! lane that has to see the whole batch at once.
+
 use std::{
     collections::HashMap,
     fs,

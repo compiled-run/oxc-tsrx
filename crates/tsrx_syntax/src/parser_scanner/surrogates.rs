@@ -1,3 +1,6 @@
+//! Classifying which opaque lexical context each lone UTF-16 surrogate falls in. This is the one
+//! job the scanner does for the UTF-16 bridge rather than for projection.
+
 use crate::diagnostics::ProjectionError;
 
 use super::Scanner;

@@ -1,3 +1,6 @@
+//! Dynamic tags, whose opening and closing names reach OXC as two separate scaffold identifiers
+//! and are folded back here into a single authored element.
+
 use tsrx_syntax::{ByteSpan, OverlayView, ProjectionSegment};
 use tsrx_tape_schema::{FlatTape, ListValueInsertion, RecordIndex, ValueKind, ValueRef};
 

@@ -1,3 +1,6 @@
+//! The single entry point, and the order the repair lanes run in: values first, then span
+//! mapping, then compaction, so no lane rewrites text a later lane still has to locate.
+
 use tsrx_syntax::OpaqueSurrogateContext;
 use tsrx_tape_schema::TapeSpan;
 

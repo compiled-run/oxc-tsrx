@@ -1,3 +1,6 @@
+//! The private binary graph format: a fixed header, interned keys, and fixed-width records the
+//! receiving side can address without parsing.
+
 use crate::{
     FlatTape, RecordIndex, SCHEMA_VERSION, StringRange, TapeBuildError, ValueKind, ValueRef,
 };

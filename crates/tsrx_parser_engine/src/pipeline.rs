@@ -1,3 +1,6 @@
+//! The UTF-8 route: scan for TSRX syntax, then either hand the source straight to OXC or project
+//! it, parse it, and reconstruct the authored tree from the result.
+
 use oxc_adapter::{
     DynamicTagContract,
     parser::{

@@ -1,3 +1,6 @@
+//! Generating the synthetic TSRX corpus every measurement runs over, at the size the budget file
+//! asks for.
+
 use std::{
     env,
     fmt::Write as _,

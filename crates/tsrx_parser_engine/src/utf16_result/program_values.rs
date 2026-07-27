@@ -1,3 +1,6 @@
+//! Repairing the tape's own string values, where the correct decoding depends on which lexical
+//! context the value came from: JSX text, quoted string, template, or raw style.
+
 use tsrx_syntax::OpaqueSurrogateContext;
 use tsrx_tape_schema::{FlatTape, RecordIndex, TapeSpan};
 

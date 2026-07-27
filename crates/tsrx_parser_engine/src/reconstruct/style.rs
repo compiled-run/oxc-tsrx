@@ -1,3 +1,6 @@
+//! Raw `<style>` elements: pairing each projected JSX element with the scanner-owned authored
+//! block it came from, then rebuilding its opening, closing, and payload nodes.
+
 use tsrx_syntax::{ByteSpan, OverlayView, ProjectionSegment};
 use tsrx_tape_schema::{FlatTape, ListValueInsertion, RecordIndex, ValueRef};
 

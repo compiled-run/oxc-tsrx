@@ -1,3 +1,6 @@
+//! The public entry points. Each one is only a fixed arrangement of options over the shared
+//! route, so no caller policy leaks into the pipeline itself.
+
 #[cfg(feature = "stage4-observer")]
 use crate::Stage4WorkCounters;
 use crate::{

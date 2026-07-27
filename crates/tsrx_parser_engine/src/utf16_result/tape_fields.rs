@@ -1,3 +1,6 @@
+//! The narrow slice of tape access the repair lanes need, including decoding and re-encoding a
+//! JSON string value in place.
+
 use tsrx_tape_schema::{FlatTape, RecordIndex, TapeSpan, ValueKind, ValueRef};
 
 use crate::TsrxParseError;

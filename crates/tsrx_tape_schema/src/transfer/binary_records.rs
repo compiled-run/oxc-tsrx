@@ -1,3 +1,6 @@
+//! The binary format's on-wire row shapes and its key-interning table, kept apart from the
+//! serializer so the layout can be read without the code that emits it.
+
 use crate::{RecordIndex, TapeBuildError};
 
 pub(super) const BINARY_SCALAR_TAG: u32 = 0;

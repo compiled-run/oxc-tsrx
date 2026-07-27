@@ -1,3 +1,6 @@
+//! Restoring exact JavaScript UTF-16 into a result that was parsed from the bridged UTF-8
+//! source, and mapping its spans back onto the caller's code units.
+
 mod codeframe;
 mod comments;
 mod finalize;

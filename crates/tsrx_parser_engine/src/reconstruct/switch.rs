@@ -1,3 +1,6 @@
+//! The `switch` construct, whose cases own their clause spans and need their span fields moved
+//! ahead of the case body before the authored node is valid.
+
 use tsrx_syntax::{
     ClauseRole, ControlContext, ControlKind, OverlayClause, OverlayView, ProjectionSegment,
 };

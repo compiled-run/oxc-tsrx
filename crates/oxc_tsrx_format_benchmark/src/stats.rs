@@ -1,3 +1,5 @@
+//! Percentiles, throughput, and the pass/fail assertion records the report carries.
+
 use std::time::Instant;
 
 use serde::Serialize;

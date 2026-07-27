@@ -1,3 +1,6 @@
+//! The `try` construct, which reaches OXC as a helper call carrying method clauses, so every
+//! clause and the optional catch binding are validated before an authored node is rebuilt.
+
 use tsrx_syntax::{
     ByteSpan, ClauseRole, ControlContext, ControlKind, OverlayClause, OverlayView,
     ProjectionSegment,

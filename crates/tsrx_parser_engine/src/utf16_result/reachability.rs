@@ -1,3 +1,6 @@
+//! Which tape objects the public Program can still reach, so span mapping and compaction never
+//! spend work on storage that is already orphaned.
+
 use tsrx_tape_schema::{FlatTape, ValueKind, ValueRef};
 
 use crate::{TsrxParseError, source_bridge::PreparedSource};

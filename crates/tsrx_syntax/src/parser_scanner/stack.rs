@@ -1,3 +1,5 @@
+//! A stack that keeps its first `N` entries inline, so ordinary nesting depths never allocate.
+
 pub(super) struct TinyStack<T: Copy, const N: usize> {
     inline: [Option<T>; N],
     length: usize,

@@ -1,3 +1,6 @@
+//! One fixed-width row per module, comment, and diagnostic entry. Text and children live in
+//! ranges, never in the row itself, so a table stays a flat array.
+
 use std::fmt;
 
 use crate::{ListRange, ProjectedCommentKind, StringRange, TapeSpan};

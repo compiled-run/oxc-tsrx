@@ -1,3 +1,6 @@
+//! Dropping records the root can no longer reach and renumbering every surviving reference in one
+//! pass, so indices stay dense after reconstruction has rewritten the tree.
+
 use crate::{RecordIndex, TapeBuildError};
 
 use super::FlatTape;

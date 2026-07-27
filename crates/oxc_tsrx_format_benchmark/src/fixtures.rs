@@ -1,3 +1,6 @@
+//! Generating the two synthetic corpora: the ordinary one, and the control-heavy one that keeps
+//! the generalized control path from being measured only incidentally.
+
 use std::{env, fmt::Write as _, fs, path::PathBuf};
 
 use crate::report::now_millis;
