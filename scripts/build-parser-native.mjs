@@ -34,12 +34,12 @@ function parseArguments(argv) {
   return options;
 }
 
-function run(executable, args) {
+function run(executable, args, env = process.env) {
   return new Promise((resolveRun, rejectRun) => {
     execFile(
       executable,
       args,
-      { cwd: root, env: process.env, maxBuffer: 16 * 1024 * 1024 },
+      { cwd: root, env, maxBuffer: 16 * 1024 * 1024 },
       (error, stdout, stderr) => {
         if (error) rejectRun(new Error(stderr || stdout, { cause: error }));
         else resolveRun({ stdout, stderr });
@@ -84,16 +84,34 @@ if (target === undefined) {
   throw new Error(`unsupported parser addon target: ${options.target}`);
 }
 
+// Rust's musl targets default to a fully static CRT, and a static target cannot
+// produce a cdylib at all: cargo refuses with "does not support these crate
+// types". A Node addon has to be a dynamic library, so the musl addon is built
+// against the dynamic musl CRT instead. Node on Alpine is itself musl-linked and
+// supplies that loader. This applies only to the addon: the shipped executables
+// are a separate cargo invocation and stay statically linked, which the release
+// workflow verifies with its own ABI policy check.
+const cargoEnvironment = target.libc === "musl"
+  ? {
+      ...process.env,
+      RUSTFLAGS: `${process.env.RUSTFLAGS ?? ""} -C target-feature=-crt-static`.trim(),
+    }
+  : process.env;
+
 if (!options["skip-build"]) {
-  await run("cargo", [
-    "build",
-    "--release",
-    "--locked",
-    "--offline",
-    "-p",
-    "parser_napi_binding",
-    ...(options.target === null ? [] : ["--target", options.target]),
-  ]);
+  await run(
+    "cargo",
+    [
+      "build",
+      "--release",
+      "--locked",
+      "--offline",
+      "-p",
+      "parser_napi_binding",
+      ...(options.target === null ? [] : ["--target", options.target]),
+    ],
+    cargoEnvironment,
+  );
 }
 
 const targetDirectory = isAbsolute(options["target-dir"])

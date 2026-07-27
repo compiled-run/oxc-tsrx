@@ -767,8 +767,11 @@ test("the maintainer guide defines a source-backed upstream transplant contract"
     /human contributor\s+must review, test, understand, and take responsibility/i,
   );
 
+  // The extension is optional because these two may link either at the file in
+  // this repository or at the published site, which serves clean URLs. What has
+  // to hold is that both still point a reader at the upstream map.
   for (const source of [readme, editor]) {
-    assert.match(source, /architecture\/upstreaming-to-oxc(?:\.md|\.html)/);
+    assert.match(source, /architecture\/upstreaming-to-oxc(?:\.md|\.html)?/);
   }
   assert.match(siteConfig, /link:\s*['"]\/architecture\/upstreaming-to-oxc['"]/);
   assert.match(core, /(?:\.\/|architecture\/)upstreaming-to-oxc\.md/);
