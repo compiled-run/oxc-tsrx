@@ -47,15 +47,7 @@ function fences(markdown) {
   return found;
 }
 
-// Oxlint switches to GitHub's annotation reporter (`##[warning]`, `::error`)
-// when it detects Actions. These assertions are about the default human-readable
-// format, not about which reporter CI picks, so the detection is turned off here
-// and one expected output holds on a laptop and on a runner.
-const LINT_ENVIRONMENT = { ...process.env };
-delete LINT_ENVIRONMENT.GITHUB_ACTIONS;
-delete LINT_ENVIRONMENT.CI;
-
-function run(cwd, executable, args, environment = LINT_ENVIRONMENT) {
+function run(cwd, executable, args, environment = process.env) {
   return new Promise((resolvePromise, reject) => {
     const child = spawn(executable, args, {
       cwd,
@@ -78,6 +70,60 @@ function oxlint(cwd, args) {
     ...process.env,
     OXC_TSRX_LINT_BIN: binary,
   });
+}
+
+// The page's commands carry no `--format`, so Oxlint picks a reporter from the
+// environment: the compact `agent` form inside a coding agent, GitHub's
+// annotations when GITHUB_ACTIONS is exactly `true`, and the graphical form with
+// source excerpts otherwise. The rule is restated here independently of
+// packages/toolchain/dist/lint-cli.js, which reproduces it so a composed `.tsrx`
+// batch and an ordinary one answer in the same shape. These assertions ask for
+// the diagnostic in whichever reporter this environment selects rather than
+// pinning one, because a divergence between the two is a real defect on a
+// runner. The graphical reporter cannot be rebuilt from JSON, so a composed
+// batch falls back to the compact form for it, and so does this expectation.
+const AGENT_ENVIRONMENT_VARIABLES = [
+  "AI_AGENT",
+  "CLAUDECODE",
+  "CLAUDE_CODE",
+  "CODEX_SANDBOX",
+  "CODEX_THREAD_ID",
+  "COPILOT_CLI",
+  "CURSOR_AGENT",
+  "GEMINI_CLI",
+  "JUNIE_DATA",
+  "JUNIE_SHIM_PATH",
+  "OPENCODE",
+  "REPL_ID",
+];
+
+function ambientReporter(env = process.env) {
+  if (AGENT_ENVIRONMENT_VARIABLES.some((name) => (env[name] ?? "") !== "")) return "agent";
+  if ((env.EDITOR ?? "").includes("devin")) return "agent";
+  if (env.TERM_PROGRAM === "kiro") return "agent";
+  if (env.GITHUB_ACTIONS === "true") return "github";
+  return "default";
+}
+
+// A batch canonical Oxlint answers by itself uses the environment's reporter; a
+// batch that had to be composed here falls back from the graphical one.
+const canonicalReporter = ambientReporter();
+const composedReporter = canonicalReporter === "default" ? "agent" : canonicalReporter;
+
+function diagnosticPattern(reporter, { file, line = "\\d+", column = "\\d+", severity, code }) {
+  const escaped = file.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  const title = code.replace(/[()/]/gu, "\\$&");
+  if (reporter === "github") {
+    return new RegExp(
+      `^::${severity} file=${escaped},line=${line},endLine=\\d+,col=${column},endColumn=\\d+,title=${title}::`,
+      "mu",
+    );
+  }
+  if (reporter === "agent") {
+    return new RegExp(`^${escaped}:${line}:${column}: ${severity} ${title}: `, "mu");
+  }
+  // The graphical reporter prints the code above a `,-[file:line:col]` rule.
+  return new RegExp(`${title}:[\\s\\S]*?,-\\[${escaped}:${line}:${column}\\]`, "u");
 }
 
 // The page's project is the examples directory plus an installed oxc-tsrx. The
@@ -199,7 +245,17 @@ test("the page's commands really do what the page says", async (t) => {
       await rm(join(project, ".oxlintrc.json"));
       const result = await oxlint(project, ["src/TaskList.tsrx"]);
       assert.equal(result.code, 0, result.stderr);
-      assert.match(result.stdout, /src\/TaskList\.tsrx:4:3: warning eslint\(no-debugger\)/u);
+      assert.match(
+        result.stdout,
+        diagnosticPattern(composedReporter, {
+          file: "src/TaskList.tsrx",
+          line: 4,
+          column: 3,
+          severity: "warning",
+          code: "eslint(no-debugger)",
+        }),
+        result.stdout,
+      );
       await cp(join(examples, ".oxlintrc.json"), join(project, ".oxlintrc.json"));
     });
 
@@ -208,7 +264,14 @@ test("the page's commands really do what the page says", async (t) => {
       assert.equal(result.code, 1, result.stderr);
       assert.match(
         result.stdout + result.stderr,
-        /src\/TaskRow\.tsx:\d+:\d+: error tsrx-demo\(require-keyed-map\)/u,
+        // Canonical Oxlint answers an ordinary file on its own, so this is its
+        // own reporter rather than the composed one.
+        diagnosticPattern(canonicalReporter, {
+          file: "src/TaskRow.tsx",
+          severity: "error",
+          code: "tsrx-demo(require-keyed-map)",
+        }),
+        result.stdout + result.stderr,
       );
     });
 

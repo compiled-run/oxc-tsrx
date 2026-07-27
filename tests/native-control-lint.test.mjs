@@ -13,19 +13,11 @@ const fixture = join(root, 'tests/fixtures/control/control-lint.tsrx');
 const advancedFixture = join(root, 'tests/fixtures/control/control-lint-advanced.tsrx');
 const dynamicStyleFixture = join(root, 'tests/fixtures/control/dynamic-style-lint.tsrx');
 
-// Oxlint switches to GitHub's annotation reporter (`##[warning]`, `::error`)
-// when it detects Actions. These assertions are about the default human-readable
-// format, not about which reporter CI picks, so the detection is turned off here
-// and one expected output holds on a laptop and on a runner.
-const LINT_ENVIRONMENT = { ...process.env };
-delete LINT_ENVIRONMENT.GITHUB_ACTIONS;
-delete LINT_ENVIRONMENT.CI;
-
 function run(args) {
   return new Promise((resolvePromise, reject) => {
     const child = spawn(binary, args, {
       cwd: root,
-      env: LINT_ENVIRONMENT,
+      env: process.env,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     let stdout = '';

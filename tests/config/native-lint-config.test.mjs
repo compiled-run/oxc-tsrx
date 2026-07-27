@@ -23,15 +23,7 @@ const companion = resolve(join(root, "packages/toolchain/bin/oxlint"));
 // The `oxc-tsrx` command itself: providers, status, and the standard flags.
 const provider = resolve(join(root, "packages/toolchain/bin/oxc-tsrx"));
 
-// Oxlint switches to GitHub's annotation reporter (`##[warning]`, `::error`)
-// when it detects Actions. These assertions are about the default human-readable
-// format, not about which reporter CI picks, so the detection is turned off here
-// and one expected output holds on a laptop and on a runner.
-const LINT_ENVIRONMENT = { ...process.env };
-delete LINT_ENVIRONMENT.GITHUB_ACTIONS;
-delete LINT_ENVIRONMENT.CI;
-
-function run(cwd, args, executable = binary, environment = LINT_ENVIRONMENT) {
+function run(cwd, args, executable = binary, environment = process.env) {
   return new Promise((resolvePromise, reject) => {
     const child = spawn(executable, args, {
       cwd,
@@ -77,6 +69,91 @@ function diagnostic(output, filename, rule, base) {
     : (candidate) => candidate === filename;
   return output.diagnostics.find(
     (item) => sameFile(item.filename) && (item.rule === rule || item.code.includes(`(${rule})`)),
+  );
+}
+
+// --- Which reporter this environment gets ---
+//
+// Canonical Oxlint picks a reporter for itself when the command line does not
+// name one, so the same command prints a different shape on a laptop, inside a
+// coding agent, and on a runner. The rules, restated here independently of
+// packages/toolchain/dist/lint-cli.js so the two have to agree:
+//
+//   * any coding-agent variable selects `agent`, the compact
+//     `file:line:col: severity code: message` form, and it outranks Actions;
+//   * GITHUB_ACTIONS set to exactly `true` selects `github`, the workflow
+//     annotations;
+//   * otherwise `default`, the graphical report with source excerpts.
+//
+// A composed batch is rendered by the wrapper instead of by canonical Oxlint,
+// so it has to reach the same reporter. These tests therefore run in whatever
+// environment they are given and compare the wrapper against a live canonical
+// run in it, rather than pinning the reporter and hiding a divergence.
+const AGENT_ENVIRONMENT_VARIABLES = [
+  "AI_AGENT",
+  "CLAUDECODE",
+  "CLAUDE_CODE",
+  "CODEX_SANDBOX",
+  "CODEX_THREAD_ID",
+  "COPILOT_CLI",
+  "CURSOR_AGENT",
+  "GEMINI_CLI",
+  "JUNIE_DATA",
+  "JUNIE_SHIM_PATH",
+  "OPENCODE",
+  "REPL_ID",
+];
+
+function ambientReporter(env = process.env) {
+  if (AGENT_ENVIRONMENT_VARIABLES.some((name) => (env[name] ?? "") !== "")) return "agent";
+  if ((env.EDITOR ?? "").includes("devin")) return "agent";
+  if (env.TERM_PROGRAM === "kiro") return "agent";
+  if (env.GITHUB_ACTIONS === "true") return "github";
+  return "default";
+}
+
+// The graphical reporter draws source excerpts, carets, and box rules that
+// cannot be rebuilt from the JSON the two halves of a composed batch hand back,
+// so the wrapper falls back to the compact reporter for it. Ask the control for
+// that same reporter in that one environment, so a comparison stays a byte-for-
+// byte comparison of one reporter instead of a comparison of two.
+const composedReporter = ambientReporter() === "default" ? "agent" : ambientReporter();
+const controlFormat = ambientReporter() === "default" ? ["--format=agent"] : [];
+
+// Which reporter really produced this output, read off the output itself. Every
+// comparison below asserts this against the rule restated above, so the day
+// canonical Oxlint changes when it switches, these fail instead of drifting.
+function reporterOf(stdout) {
+  const lines = stdout.split("\n").filter((line) => line.length > 0);
+  if (lines.some((line) => line.startsWith("::"))) return "github";
+  if (lines.some((line) => /^\S+:\d+:\d+: (?:warning|error)\b/u.test(line))) return "agent";
+  return "default";
+}
+
+// Both summary lines report one process's own counts, elapsed time, rule count,
+// and thread count. A one-file control run and a three-file composed batch can
+// never share them, so a line-for-line comparison is about the diagnostics.
+function diagnosticLines(stdout) {
+  return stdout
+    .split("\n")
+    .filter(
+      (line) =>
+        line.length > 0 && !/^Found \d+ /u.test(line) && !/^Finished in /u.test(line),
+    );
+}
+
+// The same diagnostic, spelled the way the reporter in play spells it.
+function diagnosticPattern(reporter, { file, line = "\\d+", column = "\\d+", severity, code }) {
+  const escaped = file.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  if (reporter === "github") {
+    return new RegExp(
+      `^::${severity} file=${escaped},line=${line},endLine=\\d+,col=${column},endColumn=\\d+,title=${code.replace(/[()]/gu, "\\$&")}::`,
+      "mu",
+    );
+  }
+  return new RegExp(
+    `^${escaped}:${line}:${column}: ${severity} ${code.replace(/[()]/gu, "\\$&")}: `,
+    "mu",
   );
 }
 
@@ -183,13 +260,17 @@ test("npm wrapper matches canonical Oxlint line and UTF-8 byte columns after Uni
       );
       assert.match(
         human.stdout,
-        new RegExp(
-          // Canonical Oxlint separates the code from the message with `: `, so
-          // the merged report must too. See the fidelity test below.
-          `^${fixture.name}\\.tsrx:${controlSpan.line}:${controlSpan.column}: error eslint\\(${rule}\\): `,
-          "mu",
-        ),
-        `${fixture.name}: ${rule}`,
+        // Canonical Oxlint separates the code from the message, and puts the
+        // position in the same place, whichever reporter this environment
+        // selects. The merged report must too. See the fidelity test below.
+        diagnosticPattern(composedReporter, {
+          file: `${fixture.name}.tsrx`,
+          line: controlSpan.line,
+          column: controlSpan.column,
+          severity: "error",
+          code: `eslint(${rule})`,
+        }),
+        `${fixture.name}: ${rule}\n${human.stdout}`,
       );
     }
   }
@@ -504,18 +585,32 @@ test("a .tsrx file in the batch leaves ordinary diagnostics byte-identical to ca
   const cwd = await mixedProject("report-fidelity");
 
   // The control is what the user saw before they adopted TSRX: canonical Oxlint
-  // on the ordinary file alone.
-  const control = await run(cwd, ["src/util.ts"], stock);
+  // on the ordinary file alone, in this environment's own reporter.
+  const control = await run(cwd, [...controlFormat, "src/util.ts"], stock);
   assert.equal(control.code, 0, control.stderr || control.stdout);
-  const controlLines = control.stdout.split("\n").filter((line) => line.length > 0);
+  assert.equal(
+    reporterOf(control.stdout),
+    composedReporter,
+    `canonical Oxlint no longer picks the reporter this environment was expected to give it:\n${control.stdout}`,
+  );
+  const controlLines = diagnosticLines(control.stdout);
   assert.ok(controlLines.length >= 2, control.stdout);
+  const shape =
+    composedReporter === "github"
+      ? /^::warning file=\S+,line=\d+,endLine=\d+,col=\d+,endColumn=\d+,title=eslint\([a-z-]+\)::./u
+      : /: warning eslint\([a-z-]+\): .* help: /u;
   assert.ok(
-    controlLines.every((line) => /: warning eslint\([a-z-]+\): .* help: /u.test(line)),
-    `the control lost its own code separator or help text:\n${control.stdout}`,
+    controlLines.every((line) => shape.test(line)),
+    `the control lost its own code separator, position, or help text:\n${control.stdout}`,
   );
 
   const merged = await runCompanion(cwd, ["src/util.ts", "src/Counter.tsrx"]);
   assert.equal(merged.code, 0, merged.stderr || merged.stdout);
+  assert.equal(
+    reporterOf(merged.stdout),
+    composedReporter,
+    `adding a .tsrx file changed which reporter answered:\n${merged.stdout}`,
+  );
   const mergedLines = merged.stdout.split("\n");
   for (const line of controlLines) {
     assert.ok(
@@ -524,20 +619,28 @@ test("a .tsrx file in the batch leaves ordinary diagnostics byte-identical to ca
     );
   }
   // The TSRX half has no help text of its own to print yet, but it must still
-  // separate its code from its message the way every other line does.
+  // carry its position and separate its code from its message the way every
+  // other diagnostic in the same report does.
   assert.match(
     merged.stdout,
-    /^src\/Counter\.tsrx:2:7: warning eslint\(no-unused-vars\): Variable 'legacy'/mu,
+    diagnosticPattern(composedReporter, {
+      file: "src/Counter.tsrx",
+      line: 2,
+      column: 7,
+      severity: "warning",
+      code: "eslint(no-unused-vars)",
+    }),
     merged.stdout,
   );
+  assert.match(merged.stdout, /Variable 'legacy'/u, merged.stdout);
 });
 
 test("a .tsrx syntax error is a positioned diagnostic that leaves the rest of the batch reporting", async () => {
   const cwd = await mixedProject("report-syntax-error");
 
-  const control = await run(cwd, ["src/util.ts"], stock);
+  const control = await run(cwd, [...controlFormat, "src/util.ts"], stock);
   assert.equal(control.code, 0, control.stderr || control.stdout);
-  const controlLines = control.stdout.split("\n").filter((line) => line.length > 0);
+  const controlLines = diagnosticLines(control.stdout);
 
   // The invocation that used to be the worst case: a good ordinary file, a good
   // `.tsrx` file, and one `.tsrx` file that cannot be projected. It exited 2 with
@@ -565,9 +668,16 @@ test("a .tsrx syntax error is a positioned diagnostic that leaves the rest of th
   // is the half no wrapper change could ever have reached.
   assert.match(
     result.stdout,
-    /^src\/Counter\.tsrx:2:7: warning eslint\(no-unused-vars\): Variable 'legacy'/mu,
+    diagnosticPattern(composedReporter, {
+      file: "src/Counter.tsrx",
+      line: 2,
+      column: 7,
+      severity: "warning",
+      code: "eslint(no-unused-vars)",
+    }),
     result.stdout,
   );
+  assert.match(result.stdout, /Variable 'legacy'/u, result.stdout);
 
   // The syntax error names its own file and carries a real line:col. Derive the
   // expected position from the byte offset the native leaf emitted rather than
@@ -590,20 +700,44 @@ test("a .tsrx syntax error is a positioned diagnostic that leaves the rest of th
     sourceLines[position.line - 1].slice(position.column - 1, position.column + 5),
     "<main>",
   );
+  // A diagnostic that carries no rule code is titled `oxlint` by the annotation
+  // reporter, which is what canonical Oxlint titles its own parse errors.
   assert.match(
     result.stdout,
-    new RegExp(`^src/Broken\\.tsrx:${position.line}:${position.column}: error: .*unterminated`, "mu"),
-    `the syntax error did not render as file:line:col:\n${result.stdout}`,
+    composedReporter === "github"
+      ? new RegExp(
+          `^::error file=src/Broken\\.tsrx,line=${position.line},endLine=\\d+,col=${position.column},endColumn=\\d+,title=oxlint::.*unterminated`,
+          "mu",
+        )
+      : new RegExp(
+          `^src/Broken\\.tsrx:${position.line}:${position.column}: error: .*unterminated`,
+          "mu",
+        ),
+    `the syntax error did not render as a positioned diagnostic:\n${result.stdout}`,
   );
 
-  assert.match(result.stdout, /^Found 1 error\(s\) and 3 warning\(s\)\.$/mu, result.stdout);
+  assert.match(
+    result.stdout,
+    composedReporter === "github"
+      ? /^Found 3 warnings and 1 error\.$/mu
+      : /^Found 1 error\(s\) and 3 warning\(s\)\.$/mu,
+    result.stdout,
+  );
 });
 
 test("a nonexistent .tsrx positional reports canonical Oxlint's unmatched-pattern error", async () => {
   const cwd = await mixedProject("report-unmatched");
 
   // Canonical Oxlint on a nonexistent ordinary file is the precedent: one line
-  // on stdout and exit 1.
+  // on stdout and exit 1. Its `Finished in <elapsed> on <n> files with <n> rules
+  // using <n> threads.` footer reports the run it did anyway, which a wrapper
+  // that answered before starting either half never had; the message and the
+  // exit code are the contract, so compare those.
+  const withoutTiming = (stdout) =>
+    stdout
+      .split("\n")
+      .filter((line) => !/^Finished in /u.test(line))
+      .join("\n");
   const control = await run(cwd, ["src/Missing.ts"], stock);
   assert.equal(control.code, 1, control.stderr || control.stdout);
   assert.match(control.stdout, /No files found to lint/u, control.stdout);
@@ -614,7 +748,7 @@ test("a nonexistent .tsrx positional reports canonical Oxlint's unmatched-patter
     control.code,
     `a mistyped .tsrx filename exited ${missing.code} with stdout:\n${missing.stdout}`,
   );
-  assert.equal(missing.stdout, control.stdout);
+  assert.equal(withoutTiming(missing.stdout), withoutTiming(control.stdout));
 
   // The opt-out canonical Oxlint already publishes keeps working.
   const controlAllowed = await run(
@@ -625,7 +759,7 @@ test("a nonexistent .tsrx positional reports canonical Oxlint's unmatched-patter
   assert.equal(controlAllowed.code, 0, controlAllowed.stderr || controlAllowed.stdout);
   const allowed = await runCompanion(cwd, ["--no-error-on-unmatched-pattern", "src/Missing.tsrx"]);
   assert.equal(allowed.code, controlAllowed.code, allowed.stderr || allowed.stdout);
-  assert.equal(allowed.stdout, controlAllowed.stdout);
+  assert.equal(withoutTiming(allowed.stdout), withoutTiming(controlAllowed.stdout));
 
   // Canonical Oxlint only errors when the whole invocation matched nothing, so a
   // batch that still has work to do must keep exiting on that work alone.
@@ -633,7 +767,17 @@ test("a nonexistent .tsrx positional reports canonical Oxlint's unmatched-patter
   const mixed = await runCompanion(cwd, ["src/Missing.tsrx", "src/util.ts"]);
   assert.equal(controlMixed.code, 0, controlMixed.stderr || controlMixed.stdout);
   assert.equal(mixed.code, controlMixed.code, mixed.stderr || mixed.stdout);
-  assert.match(mixed.stdout, /src\/util\.ts:2:7: warning eslint\(no-unused-vars\): /u, mixed.stdout);
+  assert.match(
+    mixed.stdout,
+    diagnosticPattern(composedReporter, {
+      file: "src/util.ts",
+      line: 2,
+      column: 7,
+      severity: "warning",
+      code: "eslint(no-unused-vars)",
+    }),
+    mixed.stdout,
+  );
 });
 
 // --- Saying what actually happened, to the command the user actually typed ---
