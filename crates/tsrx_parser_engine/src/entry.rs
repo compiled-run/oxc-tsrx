@@ -14,7 +14,7 @@ use crate::{
 /// # Errors
 ///
 /// Malformed, unsupported, or OXC-rejected authored grammar is returned as a structured
-/// [`ParseCompleteness::Failed`] result with null `program` and `module` records. Returns
+/// [`ParseCompleteness::Failed`](tsrx_tape_schema::ParseCompleteness::Failed) result with null `program` and `module` records. Returns
 /// [`TsrxParseError`] only for operational failures such as unsupported coordinate domains,
 /// capacity exhaustion, or an internal projection/reconstruction invariant.
 pub fn parse_tsrx(request: &TsrxParseRequest<'_>) -> Result<TsrxParseResult, TsrxParseError> {
@@ -26,7 +26,7 @@ pub fn parse_tsrx(request: &TsrxParseRequest<'_>) -> Result<TsrxParseResult, Tsr
 /// # Errors
 ///
 /// Malformed, unsupported, or OXC-rejected authored grammar is returned as a structured
-/// [`ParseCompleteness::Failed`] result with null `program` and `module` records. Requested
+/// [`ParseCompleteness::Failed`](tsrx_tape_schema::ParseCompleteness::Failed) result with null `program` and `module` records. Requested
 /// semantic diagnostics are likewise returned as structured result data. Returns an error only
 /// for operational failures such as unsupported coordinate domains, capacity exhaustion, or an
 /// internal projection/reconstruction invariant.
