@@ -55,6 +55,20 @@ script, refuses direct or unrecognized package collisions, and is idempotent.
 Use `oxc-tsrx status` to inspect it and `oxc-tsrx remove` to restore transitive
 official packages. Run `setup` again after a clean dependency install.
 
+Editor diagnostics need one more setting in a Vite+ project. Vite+ owns
+`node_modules/.bin/oxlint`, which is where the official OXC extension looks, so
+`setup` alone leaves the editor with no `.tsrx` diagnostics and no error saying
+why. Add to `.vscode/settings.json`:
+
+```json
+{
+  "oxc.path.oxlint": "node_modules/oxc-tsrx/bin/oxlint"
+}
+```
+
+See [the editor page](/integrations/editor#in-a-vite-project-you-must-set-oxcpathoxlint)
+for what the lookup actually resolves to.
+
 So Vite+ is two steps: the install, then `setup`. Every other host is one step,
 the install on its own. The table of all three is in
 [Getting Started](/guide/getting-started#the-minimum-steps-per-host).

@@ -236,11 +236,36 @@ contributed by your framework:
 }
 ```
 
-Use normal `.oxlintrc.json` and `.oxfmtrc.json` files for TSRX settings. The
-official extension's `oxc.path.oxlint` setting may explicitly select
-`node_modules/.bin/oxlint`, but the extension's normal project-local lookup of
-that command name is tested and does not require it. During source development only, `OXC_TSRX_LSP_BIN` points
-the harness at a release binary.
+Use normal `.oxlintrc.json` and `.oxfmtrc.json` files for TSRX settings. During
+source development only, `OXC_TSRX_LSP_BIN` points the harness at a release
+binary.
+
+### In a Vite+ project you must set `oxc.path.oxlint`
+
+The official extension finds its linter by looking for `oxlint` in
+`node_modules`. In a project that also installs Vite+, that lookup does not
+reach this package: `node_modules/.bin/oxlint` is Vite+'s own wrapper, which
+execs
+
+```text
+node_modules/.pnpm/vite-plus@<version>/node_modules/vite-plus/bin/oxlint
+```
+
+and knows nothing about `.tsrx`. `oxc-tsrx setup` fixes *package* resolution, so
+`vp lint` works, but it does not own the `.bin` shim the extension reads. The
+result is an editor with no `.tsrx` diagnostics at all and no error explaining
+why.
+
+Point the extension at this package explicitly:
+
+```json
+{
+  "oxc.path.oxlint": "node_modules/oxc-tsrx/bin/oxlint"
+}
+```
+
+Then reload the window. Outside Vite+ the ordinary lookup does find this
+package and the setting is unnecessary.
 
 ## Optional legacy client
 
