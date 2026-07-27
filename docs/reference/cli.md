@@ -66,9 +66,10 @@ Usage: oxc-tsrx providers [--project <directory>] [--json]
 | `status` | Reports whether those four slots are present. |
 | `remove` | Removes them and restores any transitive official package it displaced. |
 
-Run it with no subcommand for the same usage block. A wrong subcommand names the
-bad word and exits 2. Note that `--help` and `--version` are not accepted here;
-use no arguments, or `help`.
+Run it with no subcommand for the same usage block. `--help`, `-h`, and `help`
+print it too, and `--version`, `-V`, and `version` print `oxc-tsrx 0.1.3`. A
+wrong subcommand names the bad word, prints the usage block after it, and exits
+2.
 
 ### The fourth slot is one key in `.vscode/settings.json`
 

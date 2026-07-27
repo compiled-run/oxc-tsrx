@@ -547,22 +547,32 @@ export default defineConfig({
 });
 ```
 
-The deletion is `lint.options`. A `vp create` scaffold writes
-`options: { typeAware: true, typeCheck: true }`, and either key on its own is
-enough to make `vp lint` exit 2 the moment one `.tsrx` file is in the batch. It
-is the same refusal you get from a plain `.oxlintrc.json` carrying the same
-option, which is capturable here:
+The deletion is `lint.options`, and only on Vite+ 0.2.6. What that key does
+depends on which Vite+ you are on, so measure yours rather than assuming:
+
+| Vite+ | `lint.options` present, batch contains `.tsrx` |
+| --- | --- |
+| 0.2.4 | works. Type-aware runs on `.tsrx`, reporting `typescript(TS…)` at your authored positions |
+| 0.2.6 | exits 2: `unsupported tsgolint version 7.0.2001` |
+
+Vite+ 0.2.6 depends on `oxlint-tsgolint` 7.0.2001. This package pins 0.24.0 and
+refuses any other version rather than running an unverified one, so on 0.2.6 the
+type-aware lane cannot start. Deleting `lint.options` gives up type-aware and
+gets you a working `vp lint`; staying on Vite+ 0.2.4 keeps both.
+
+A batch with no `.tsrx` file in it is unaffected either way, which is why a
+stock scaffold lints fine until you add your first TSRX component.
+
+This used to be a different and worse bug: any `lint.options` key killed the
+whole batch even on 0.2.4, because the projection lane built a full lint session
+and tripped the type-aware opt-in gate. That is fixed. What remains is a genuine
+version disagreement about `oxlint-tsgolint`, not a refusal this package can
+wave through. The same opt-in refusal still applies to a plain `.oxlintrc.json`
+carrying the option, which is capturable here:
 
 <!-- terminal-demo:custom-plugins-typeaware -->
 
-`vp lint` prints that message under one more line of its own, `the native TSRX
-projection needed for JS plugins failed`, and stops before reporting anything at
-all. Passing `--type-aware` on the command line does not satisfy it either; both
-were measured. A batch with no `.tsrx` file in it is unaffected, which is why a
-stock scaffold lints fine until you add your first TSRX component. Delete
-`lint.options` and the same `vp lint` reports both files at the same positions
-the CLI did. You lose the type-aware lane in exchange, and
-[the Vite+ page](/integrations/vite-plus#one-template-default-you-have-to-turn-off-first)
+[The Vite+ page](/integrations/vite-plus#one-template-default-you-have-to-turn-off-first)
 has the rest of that trade.
 
 ## How it runs, and what it costs

@@ -301,3 +301,148 @@ test("the oxc-tsrx lint bridge enables type awareness from resolved Vite+ config
   assert.equal(output.oxcTsrx.typeAware, true);
   assert.equal(output.oxcTsrx.typeAwareProcesses, 1);
 });
+
+// The shape a `vp create` scaffold really has: Vite+ writes
+// `lint.options: { typeAware: true, typeCheck: true }` and a `jsPlugins` entry
+// for its own Oxlint plugin into the same `lint` block, so a stock project asks
+// for both lanes at once. Both lanes then ask the native binary for something:
+// the type-aware lane lints, and the JavaScript plugin lane asks for each
+// `.tsrx` file's TSX projection. The projection request used to be refused for
+// carrying a type-aware config without the `--type-aware` opt-in, even though it
+// starts no rule and prints no diagnostic, and that refusal took the whole batch
+// down: a stock scaffold reported nothing at all on any run that contained a
+// `.tsrx` file.
+test("a stock scaffold's type-aware and jsPlugins lanes both report on .tsrx", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "oxc-tsrx-type-stock-scaffold-"));
+  const source = join(cwd, "View.tsrx");
+  const modules = join(cwd, "node_modules");
+  await mkdir(modules, { recursive: true });
+  await writeFile(
+    join(cwd, "package.json"),
+    `${JSON.stringify({ name: "oxc-tsrx-stock-scaffold-consumer", private: true, type: "module" }, null, 2)}\n`,
+  );
+  await installPhysicalToolPackages(modules, "vite-plus-current");
+  await copyFile(singleSource, source);
+  await copyFile(join(singleRoot, "tsconfig.json"), join(cwd, "tsconfig.json"));
+  // An ordinary Oxlint JavaScript plugin, in the project's own directory, the
+  // way a scaffold's `jsPlugins` entry points at one.
+  await writeFile(
+    join(cwd, "house-rules.mjs"),
+    `const noJsxMain = {
+  meta: {
+    type: "suggestion",
+    docs: { description: "Prefer a section over a main element" },
+    messages: { main: "Use <section> instead of <main>." },
+    schema: [],
+  },
+  create(context) {
+    return {
+      JSXOpeningElement(node) {
+        if (node.name?.name !== "main") return;
+        context.report({ node, messageId: "main" });
+      },
+    };
+  },
+};
+
+export default {
+  meta: { name: "house-rules", version: "1.0.0" },
+  rules: { "no-jsx-main": noJsxMain },
+};
+`,
+  );
+  await writeFile(
+    join(cwd, "vite.config.ts"),
+    `export default {
+  lint: {
+    plugins: ["typescript"],
+    rules: {
+      "typescript/no-floating-promises": "error",
+      "house-rules/no-jsx-main": "warn",
+    },
+    options: {
+      typeAware: true,
+      typeCheck: true,
+    },
+    jsPlugins: [
+      {
+        name: "house-rules",
+        specifier: "./house-rules.mjs",
+      },
+    ],
+  },
+};
+`,
+  );
+  const result = await run(
+    cwd,
+    ["--format=json", source],
+    {
+      ...process.env,
+      OXC_TSRX_LINT_BIN: binary,
+      OXLINT_TSGOLINT_PATH: tsgolint,
+      NODE_PATH: [modules, join(root, "node_modules")].join(delimiter),
+      VP_COMMAND: "lint",
+      VP_VERSION: "0.2.4",
+    },
+    join(modules, "oxlint/bin/oxlint"),
+  );
+
+  assert.equal(result.code, 1, result.stderr || result.stdout);
+  const output = parseJson(result);
+  assert.equal(output.oxcTsrx.typeAware, true);
+  assert.equal(output.oxcTsrx.typeAwareProcesses, 1);
+  const typeAware = output.diagnostics.filter((item) => item.rule === "no-floating-promises");
+  assert.equal(typeAware.length, 1, result.stdout);
+  assert.equal(typeAware[0].filename, source);
+  const plugin = output.diagnostics.filter((item) =>
+    String(item.code ?? "").startsWith("house-rules("),
+  );
+  assert.equal(plugin.length, 1, result.stdout);
+  assert.equal(plugin[0].filename, source);
+  assert.equal(output.oxcTsrx.jsPluginProjection.files, 1, result.stdout);
+  assert.equal(output.oxcTsrx.jsPluginProjection.unmapped, 0, result.stdout);
+});
+
+// The opt-in gate itself is unchanged: it guards a run that evaluates rules, and
+// only the projection request is exempt from it. Both halves are asserted here
+// so a future change cannot buy the projection fix by dropping the gate.
+test("the projection request is exempt from the type-aware opt-in, a lint run is not", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "oxc-tsrx-projection-opt-in-"));
+  const source = join(cwd, "View.tsrx");
+  await copyFile(singleSource, source);
+  const config = join(cwd, ".oxlintrc.json");
+  await writeFile(
+    config,
+    `${JSON.stringify({ options: { typeAware: true, typeCheck: true } }, null, 2)}\n`,
+  );
+
+  const projection = await run(cwd, [
+    "--emit-plugin-projection",
+    "--config",
+    config,
+    "--config-base",
+    cwd,
+    source,
+  ]);
+  assert.equal(projection.code, 0, projection.stderr || projection.stdout);
+  const projections = parseJson(projection).projections;
+  assert.equal(projections.length, 1, projection.stdout);
+  assert.equal(projections[0].path, source);
+  assert.match(projections[0].projected, /save\(\)/u);
+
+  const linting = await run(cwd, [
+    "--format=json",
+    "--config",
+    config,
+    "--config-base",
+    cwd,
+    source,
+  ]);
+  assert.equal(linting.code, 2, linting.stdout);
+  assert.equal(linting.stdout, "");
+  assert.match(
+    linting.stderr,
+    /type-aware tsgolint\/type-check mode requires the explicit --type-aware or --type-check opt-in/u,
+  );
+});

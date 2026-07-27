@@ -170,6 +170,36 @@ test(
             ["oxc-tsrx"],
           );
           const cli = join(consumer, "node_modules/oxc-tsrx/bin/oxc-tsrx");
+
+          // The four ways a reader asks this command what it is, before any of
+          // them can change the project. `--help` and `--version` are the first
+          // two flags anyone tries and they are not subcommands, so this pins
+          // that they are answered rather than reported as unknown commands.
+          // The reference page states this contract, and it stated the opposite
+          // of it for as long as nothing here held it still.
+          for (const argument of ["--help", "-h", "help"]) {
+            const help = await mustRun(process.execPath, [cli, argument], {
+              cwd: consumer,
+              env: environment,
+            });
+            assert.match(help.stdout, /^oxc-tsrx\n\nUsage:\n/u, argument);
+            assert.match(help.stdout, /oxc-tsrx setup \[--project <directory>\]/u, argument);
+          }
+          for (const argument of ["--version", "-V", "version"]) {
+            const version = await mustRun(process.execPath, [cli, argument], {
+              cwd: consumer,
+              env: environment,
+            });
+            assert.equal(version.stdout, "oxc-tsrx 0.1.3\n", argument);
+          }
+          const unknown = await run(process.execPath, [cli, "frobnicate"], {
+            cwd: consumer,
+            env: environment,
+          });
+          assert.equal(unknown.status, 2);
+          assert.match(unknown.stderr, /unknown command: frobnicate/u);
+          assert.match(unknown.stderr, /Usage:/u);
+
           const first = await mustRun(
             process.execPath,
             [cli, "setup", "--json"],

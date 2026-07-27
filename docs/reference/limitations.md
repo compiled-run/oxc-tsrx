@@ -97,15 +97,23 @@ your editor. Running the result in a browser is not part of this project yet.
   mismatched tooling fails instead of silently downgrading. The editor
   analyzes each requested document; cross-document unsaved project semantics
   are not claimed.
-- **Type-aware linting and JavaScript plugins on `.tsrx` are mutually exclusive
-  in a Vite+ project today.** A `vp create` scaffold writes
-  `lint.options: { typeAware: true, typeCheck: true }` into `vite.config.ts`,
-  and either key on its own makes `vp lint` exit 2 the moment one `.tsrx` file
-  is in the batch, with the type-aware opt-in refusal above. Passing
-  `--type-aware` does not satisfy it, because the opt-in is not forwarded to the
-  projection lane. Deleting `lint.options` restores the run and gives up the
-  type-aware lane; a batch with no `.tsrx` file in it is unaffected. Measured on
-  a fresh Vite+ 0.2.6 scaffold with `oxc-tsrx` 0.1.3.
+- **The `oxlint-tsgolint` version has to match, and Vite+ 0.2.6 ships a
+  different one.** This package runs the type-aware lane against
+  `oxlint-tsgolint` 0.24.0 and refuses any other version rather than guess at
+  the protocol. Vite+ 0.2.4 depends on exactly that version, so a scaffold on
+  0.2.4 runs the type-aware lane on `.tsrx` normally. Vite+ 0.2.6 depends on
+  `oxlint-tsgolint` 7.0.2001, which its own `oxlint` uses happily and this
+  package will not: with `lint.options.typeAware` or `typeCheck` set, `vp lint`
+  over a batch containing a `.tsrx` file stops with `unsupported tsgolint
+  version 7.0.2001` and exits 2. A batch with no `.tsrx` file in it is
+  unaffected, because that batch never reaches this package's type-aware lane.
+  Until the supported version moves, the way through on Vite+ 0.2.6 is to
+  remove `options.typeAware`/`options.typeCheck` from the `lint` block of
+  `vite.config.ts`, which gives up the type-aware lane and leaves every other
+  rule, including your JavaScript plugins, reporting on `.tsrx`. Measured on a
+  scaffold created with `create-vite`'s `react-ts` template and migrated by
+  Vite+ itself, with `oxc-tsrx` built from this repository, on both 0.2.4 and
+  0.2.6.
 - **`vp lint` and your editor read different config files.** Vite+ owns lint
   configuration in the `lint` block of `vite.config.ts` and folds any scaffolded
   `.oxlintrc.json` into it, while the language server reads `.oxlintrc.json`.

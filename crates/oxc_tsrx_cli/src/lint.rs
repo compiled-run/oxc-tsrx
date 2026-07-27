@@ -102,7 +102,17 @@ fn run(arguments: impl Iterator<Item = String>) -> Result<u8, String> {
 
     let cwd =
         env::current_dir().map_err(|error| format!("unable to read current directory: {error}"))?;
-    let session = if type_aware {
+    // The projection mode builds a session for one thing only: the config's ignore rules, so the
+    // JavaScript plugin lane sees exactly the files a lint run would have reported on. It
+    // evaluates no rule and prints no diagnostic, so the type-aware opt-in gate the engine
+    // applies to a real run has nothing to protect here. Leaving the gate in front of it is what
+    // made a stock `vp create` scaffold unlintable: that scaffold writes
+    // `lint.options.typeAware`, the resolved Vite+ config carries it into the config this mode
+    // loads, and the refusal came back as a hard failure that took the whole batch down before a
+    // single `.tsrx` file was projected. The type-aware lane itself is unaffected: it is still
+    // started only by `--type-aware`/`--type-check` on a run that actually lints, which is where
+    // `reject_unavailable_lint_capabilities` still stands.
+    let session = if type_aware || emit_projection {
         LintSession::new_type_aware_with_config_base(
             &cwd,
             config_path.as_deref(),

@@ -138,10 +138,22 @@ So Vite+ is two steps: the install, then `setup`. Every other host is one step,
 the install on its own. The table of all three is in
 [Getting Started](/guide/getting-started#the-minimum-steps-per-host).
 
-### One template default you have to turn off first
+### One template default you may have to turn off, depending on your Vite+
 
-Measured against Vite+ 0.2.6 and `oxc-tsrx` 0.1.3 on a fresh `vp create` React
-scaffold. That scaffold writes a `lint` block into `vite.config.ts` like this:
+Measured on a fresh `vp create` React scaffold. Whether you need this edit at
+all depends on your Vite+ version:
+
+| Vite+ | stock `lint.options`, batch contains `.tsrx` |
+| --- | --- |
+| 0.2.4 | works, no edit needed. Type-aware runs on `.tsrx` |
+| 0.2.6 | exits 2: `unsupported tsgolint version 7.0.2001`; remove `options` |
+
+Vite+ 0.2.6 depends on `oxlint-tsgolint` 7.0.2001 while this package pins
+0.24.0 and refuses any other version rather than running an unverified one. That
+is a version disagreement, not something either side can wave through, so on
+0.2.6 you choose between the type-aware lane and a working `vp lint` on `.tsrx`.
+
+That scaffold writes a `lint` block into `vite.config.ts` like this:
 
 ```ts
 lint: {
@@ -150,7 +162,7 @@ lint: {
     "react/rules-of-hooks": "error",         // keep
     "vite-plus/prefer-vite-plus-imports": "error",   // keep
   },
-  options: { typeAware: true, typeCheck: true },     // remove
+  options: { typeAware: true, typeCheck: true },     // remove on Vite+ 0.2.6 only
   jsPlugins: [
     { name: "vite-plus", specifier: "vite-plus/oxlint-plugin" },   // keep
   ],
