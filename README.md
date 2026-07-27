@@ -19,11 +19,11 @@ _OXC for TSRX is an independent community project. It is not affiliated with, en
 
 [**Docs**](https://oxc-tsrx-docs.vercel.app/) &nbsp;·&nbsp; [**Getting started**](https://oxc-tsrx-docs.vercel.app/guide/getting-started) &nbsp;·&nbsp; [**Playground**](https://oxc-tsrx-docs.vercel.app/playground)
 
-- **One install, no setup.** `npm install --save-dev oxc-tsrx` gives you `oxlint` and `oxfmt` commands that understand `.tsrx`. No config file, no ignore file, no install script, and nothing written into `node_modules` afterwards.
-- **No fork, no patches, one parse.** Canonical OXC is a normal Cargo dependency pinned at one exact commit, every call that depends on that revision lives in `crates/oxc_adapter`, and a normal lint or format is exactly one canonical OXC parse. [How that works](https://oxc-tsrx-docs.vercel.app/architecture/rust-oxc-core).
+- **One install for the command line and your editor.** `npm install --save-dev oxc-tsrx` gives you `oxlint` and `oxfmt` commands that understand `.tsrx`. No config file, no ignore file, no install script, and nothing written into `node_modules` afterwards. Vite+ needs one extra command, and nothing else does.
+- **No fork, no patches, one parse.** Canonical OXC is a normal Cargo dependency, the Rust equivalent of a `package.json` dependency, pinned at one exact commit. Every call that depends on that commit lives in `crates/oxc_adapter`, and a normal lint or format is exactly one canonical OXC parse. [How that works](https://oxc-tsrx-docs.vercel.app/architecture/rust-oxc-core).
 - **Real Oxlint rules, on your bytes.** Diagnostics point at line and column numbers in your original `.tsrx` source, never at a transformed copy.
 - **Ordinary JavaScript and TypeScript are untouched.** `.js`, `.ts`, `.jsx`, and `.tsx` go straight to the official OXC code paths, measured at 45.92 ms next to official Oxlint's 40.68 ms on the same 1,000-file TSX corpus with one rule ([evidence](docs/acceptance/matrix.md)).
-- **You do not need Rust installed.** The package ships eight prebuilt native binaries as optional dependencies, and a normal install downloads exactly one, the one matching your platform.
+- **You do not need Rust installed.** The package declares eight optional dependency packages, each carrying one prebuilt native binary, and a normal install downloads exactly one, the one matching your platform.
 - **Works with the released OXC [VS Code extension](https://oxc-tsrx-docs.vercel.app/integrations/editor) and with [Vite+](https://oxc-tsrx-docs.vercel.app/integrations/vite-plus).**
 
 ## Install
@@ -36,7 +36,7 @@ You need Node.js 20.19 or newer in the 20.x line, or 22.12 or newer. Node 21 and
 
 ## Usage
 
-Save this as `src/Cart.tsrx`. The `var total` and `debugger` lines are there on purpose, because they give the linter something to catch.
+Save this as `src/Cart.tsrx`. `Props`, `Row`, and `Empty` are placeholders for your own type and components. The `var total` and `debugger` lines are there on purpose, because they give the linter something to catch.
 
 ```tsrx
 export function Cart({ items }: Props) @{
@@ -90,10 +90,9 @@ These are the exact committed fixtures in [tests/fixtures/control](tests/fixture
 
 ## What works today
 
-`.tsrx` support covers `@{` statement containers, `@if` / `@else if` / `@else`, `@for` / `@empty`, `@switch` / `@case` / `@default`, `@try` / `@pending` / `@catch`, matched dynamic JSX tags written as `<{expression}>`, and lowercase raw `<style>` elements.
+`.tsrx` support covers `@{` statement containers, `@if` / `@else if` / `@else`, `@for` / `@empty`, `@switch` / `@case` / `@default`, `@try` / `@pending` / `@catch`, matched dynamic JSX tags written as `<{expression}>`, and lowercase raw `<style>` elements. Anything outside that list **fails closed**. Instead of guessing what your code means and possibly producing wrong output, the command stops and reports what it found and where. Four limits are worth knowing before you start, and the first one is the big one:
 
-Anything outside that list **fails closed**. Instead of guessing what your code means and possibly producing wrong output, the command stops and reports what it found and where. Three limits are worth knowing before you start:
-
+- **You cannot build or run a `.tsrx` file with this package.** It lints, formats, parses, and powers your editor. It does not compile `.tsrx` into anything a browser runs, so importing one into your app makes the bundler read it as ordinary TypeScript and fail on the first `@{`. Building and running a `.tsrx` application needs your framework's own TSRX Vite plugin, which is a separate package.
 - Bytes inside a raw `<style>` element are preserved exactly. They are not CSS-formatted and not CSS-validated.
 - Custom JavaScript lint plugins run on your ordinary files. On `.tsrx` they fail loudly with an explicit error instead of being silently ignored.
 - A dynamic tag whose name expression contains more dynamic JSX is not supported yet.
@@ -106,7 +105,7 @@ Install the released official OXC extension, `oxc.oxc-vscode`. With `oxc-tsrx` i
 
 ## Vite and Vite+
 
-Vite plugins keep complete ownership of `.tsrx` runtime compilation, CSS, source maps, and Hot Module Replacement (HMR). This project adds no Vite transform and no Vite parser. Vite+ is the one place where installing is not enough:
+This project adds no Vite transform and no Vite parser, so it does not compile your `.tsrx` files. Your framework's own TSRX Vite plugin, a separate package such as `@tsrx/vite-plugin-react`, owns runtime compilation, CSS, source maps, and Hot Module Replacement (HMR), and your build and dev server flow through that plugin unchanged. What `oxc-tsrx` adds here is `.tsrx` linting and formatting, and Vite+ is the one place where installing it is not enough:
 
 ```sh
 pnpm add -D vite-plus oxc-tsrx

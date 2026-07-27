@@ -34,6 +34,14 @@ use tsrx_parser_engine::{
     parse_tsrx_with_options_for_compat_transfer, parse_tsrx_with_options_for_transfer,
 };
 
+// mimalloc is a C library, so building it for a musl target needs a musl cross
+// C++ compiler that the release runners do not have: the build script fails
+// with `ToolNotFound: aarch64-linux-musl-g++`. The executables do not hit this
+// because they have no C dependency at all. Rather than carry a cross toolchain
+// only this one crate needs, musl builds keep the platform allocator, and every
+// other target keeps mimalloc. This is an allocator choice, not a behavioural
+// one: nothing in the parser's output depends on which allocator served it.
+#[cfg(not(target_env = "musl"))]
 #[global_allocator]
 static GLOBAL_ALLOCATOR: mimalloc_safe::MiMalloc = mimalloc_safe::MiMalloc;
 

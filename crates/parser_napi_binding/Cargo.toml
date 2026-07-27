@@ -16,12 +16,16 @@ crate-type = ["cdylib"]
 stage4-observer = ["tsrx_parser_engine/stage4-observer"]
 
 [dependencies]
-mimalloc-safe = "=0.1.64"
 napi = { version = "=3.10.5", default-features = false, features = ["napi8"] }
 napi-derive = "=3.5.10"
 oxc_adapter = { path = "../oxc_adapter", default-features = false, features = ["parser"] }
 tsrx_parser_engine = { path = "../tsrx_parser_engine" }
 tsrx_tape_schema = { path = "../tsrx_tape_schema" }
+
+# See the global allocator note in src/lib.rs: musl targets cannot build this
+# without a cross C++ toolchain the release runners do not carry.
+[target.'cfg(not(target_env = "musl"))'.dependencies]
+mimalloc-safe = "=0.1.64"
 
 [build-dependencies]
 napi-build = "=2.3.2"
