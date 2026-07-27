@@ -15,8 +15,8 @@ use crate::toolchain::{
 };
 
 pub(crate) struct PreparedTypeBatch<'a> {
-    pub(crate) payload: ProtocolPayload,
-    pub(super) severities: FxHashMap<PathBuf, FxHashMap<String, AllowWarnDeny>>,
+    pub(crate) payload: ProtocolPayload<'a>,
+    pub(super) severities: FxHashMap<PathBuf, FxHashMap<&'static str, AllowWarnDeny>>,
     pub(super) directives: FxHashMap<PathBuf, &'a DisableDirectives>,
 }
 
@@ -30,7 +30,7 @@ pub(crate) fn prepare_type_batch<'a>(
     let mut directives = FxHashMap::default();
     for file in files {
         let virtual_path = file.virtual_path.to_string_lossy().into_owned();
-        source_overrides.insert(virtual_path.clone(), file.projected_source.to_string());
+        source_overrides.insert(virtual_path.clone(), file.projected_source);
         let (rules, file_severities) = resolved_protocol_rules(engine, file.authored_path)?;
         if !rules.is_empty() || engine.type_check_enabled() {
             let signature = serde_json::to_string(&rules)
@@ -65,7 +65,7 @@ pub(crate) fn prepare_type_batch<'a>(
 fn resolved_protocol_rules(
     engine: &LintEngine,
     authored_path: &Path,
-) -> Result<(Vec<ProtocolRule>, FxHashMap<String, AllowWarnDeny>), String> {
+) -> Result<(Vec<ProtocolRule>, FxHashMap<&'static str, AllowWarnDeny>), String> {
     let resolved = engine.config_store.resolve(authored_path);
     let mut rules = Vec::new();
     let mut severities = FxHashMap::default();
@@ -83,11 +83,11 @@ fn resolved_protocol_rules(
             }
             None => None,
         };
-        rules.push(ProtocolRule { name: rule.name().to_string(), options });
-        severities.insert(rule.name().to_string(), *severity);
+        rules.push(ProtocolRule { name: rule.name(), options });
+        severities.insert(rule.name(), *severity);
     }
     rules.sort_by(|left, right| {
-        left.name.cmp(&right.name).then_with(|| {
+        left.name.cmp(right.name).then_with(|| {
             serde_json::to_string(&left.options)
                 .unwrap_or_default()
                 .cmp(&serde_json::to_string(&right.options).unwrap_or_default())
@@ -98,7 +98,7 @@ fn resolved_protocol_rules(
 
 pub(super) fn protocol_diagnostic(
     message: ProtocolDiagnostic,
-    severities: &FxHashMap<PathBuf, FxHashMap<String, AllowWarnDeny>>,
+    severities: &FxHashMap<PathBuf, FxHashMap<&'static str, AllowWarnDeny>>,
     directives: &FxHashMap<PathBuf, &DisableDirectives>,
 ) -> Option<TypeBatchDiagnostic> {
     let virtual_path = message.file_path.map(PathBuf::from);
@@ -107,7 +107,7 @@ pub(super) fn protocol_diagnostic(
         let severity = virtual_path
             .as_ref()
             .and_then(|path| severities.get(path))
-            .and_then(|rules| rules.get(&rule))?;
+            .and_then(|rules| rules.get(rule.as_str()))?;
         if let (Some(path), Some(range)) = (virtual_path.as_ref(), message.range.as_ref())
             && directives.get(path).is_some_and(|directives| {
                 directives.contains(&rule, Span::new(range.pos, range.end))

@@ -71,9 +71,11 @@ fn parse_protocol_error(payload: &[u8]) -> Result<String, String> {
         .map_err(|error| format!("invalid tsgolint error frame: {error}"))
 }
 
+/// `RuleEnum::name` returns `&'static str`, so the grouped payload borrows every rule name that
+/// OXC already owns for the lifetime of the process.
 #[derive(Debug, Clone, Serialize)]
 pub(super) struct ProtocolRule {
-    pub(super) name: String,
+    pub(super) name: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) options: Option<serde_json::Value>,
 }
@@ -84,11 +86,13 @@ pub(crate) struct ProtocolConfigGroup {
     pub(super) rules: Vec<ProtocolRule>,
 }
 
+/// The payload borrows each projected source rather than copying it: `serde_json` writes the same
+/// bytes from a `&str`, and the batch that owns those projections outlives this encode.
 #[derive(Debug, Serialize)]
-pub(crate) struct ProtocolPayload {
+pub(crate) struct ProtocolPayload<'a> {
     pub(super) version: u8,
     pub(crate) configs: Vec<ProtocolConfigGroup>,
-    pub(super) source_overrides: FxHashMap<String, String>,
+    pub(super) source_overrides: FxHashMap<String, &'a str>,
     pub(super) report_syntactic: bool,
     pub(super) report_semantic: bool,
 }
