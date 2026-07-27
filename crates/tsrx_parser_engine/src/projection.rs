@@ -12,11 +12,7 @@ enum MarkerKind {
     Style(u32),
     WrapperStart(u32),
     WrapperEnd(u32),
-    Header {
-        ordinal: u32,
-        part: HeaderPart,
-        boundary: MarkerBoundary,
-    },
+    Header { ordinal: u32, part: HeaderPart, boundary: MarkerBoundary },
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -83,9 +79,7 @@ pub(super) fn validate_overlay(view: OverlayView<'_>) -> Result<(), TsrxParseErr
         }
     }
     if root_tokens.iter().any(|seen| !seen) {
-        return Err(TsrxParseError::Unsupported(
-            "control node has no unique root token",
-        ));
+        return Err(TsrxParseError::Unsupported("control node has no unique root token"));
     }
     for (node_index, node) in view.nodes.iter().enumerate() {
         match node.kind {
@@ -96,9 +90,7 @@ pub(super) fn validate_overlay(view: OverlayView<'_>) -> Result<(), TsrxParseErr
         }
     }
     if view.nodes.is_empty() && view.first_root != NONE_INDEX {
-        return Err(TsrxParseError::Unsupported(
-            "invalid empty control topology",
-        ));
+        return Err(TsrxParseError::Unsupported("invalid empty control topology"));
     }
     Ok(())
 }
@@ -107,17 +99,13 @@ fn code_block_owner_matches(view: OverlayView<'_>, token: tsrx_syntax::Structura
     if token.owner == NONE_INDEX {
         return true;
     }
-    let Some(node) = usize::try_from(token.owner)
-        .ok()
-        .and_then(|owner| view.nodes.get(owner))
+    let Some(node) = usize::try_from(token.owner).ok().and_then(|owner| view.nodes.get(owner))
     else {
         return false;
     };
     let mut clause = node.first_clause;
     while clause != NONE_INDEX {
-        let Some(current) = usize::try_from(clause)
-            .ok()
-            .and_then(|index| view.clauses.get(index))
+        let Some(current) = usize::try_from(clause).ok().and_then(|index| view.clauses.get(index))
         else {
             return false;
         };
@@ -163,9 +151,7 @@ fn validate_dynamic_overlay(view: OverlayView<'_>) -> Result<(), TsrxParseError>
                     || token.span.start.checked_add(2) != Some(tag.expression.start)
                     || tag.expression.end.checked_add(1) != Some(token.span.end)
                 {
-                    return Err(TsrxParseError::Unsupported(
-                        "malformed dynamic opening token",
-                    ));
+                    return Err(TsrxParseError::Unsupported("malformed dynamic opening token"));
                 }
                 if !tag.self_closing {
                     active.push(token.owner);
@@ -204,25 +190,19 @@ fn validate_dynamic_overlay(view: OverlayView<'_>) -> Result<(), TsrxParseError>
                     || token.span.start.checked_add(3) != Some(tag.closing_expression.start)
                     || closing_min_end > token.span.end
                 {
-                    return Err(TsrxParseError::Unsupported(
-                        "malformed dynamic closing token",
-                    ));
+                    return Err(TsrxParseError::Unsupported("malformed dynamic closing token"));
                 }
             }
             tsrx_syntax::EmbeddedKind::StyleContent => {
                 if token.span.start < previous_style_end {
-                    return Err(TsrxParseError::Unsupported(
-                        "style payload tokens are unordered",
-                    ));
+                    return Err(TsrxParseError::Unsupported("style payload tokens are unordered"));
                 }
                 previous_style_end = token.span.end;
             }
         }
     }
     if !active.is_empty() {
-        return Err(TsrxParseError::Unsupported(
-            "dynamic projection nesting is incomplete",
-        ));
+        return Err(TsrxParseError::Unsupported("dynamic projection nesting is incomplete"));
     }
     if view.parser_dynamic.is_empty() {
         if view
@@ -231,9 +211,7 @@ fn validate_dynamic_overlay(view: OverlayView<'_>) -> Result<(), TsrxParseError>
             .enumerate()
             .any(|(index, tag)| !opened[index] || closed[index] == tag.self_closing)
         {
-            return Err(TsrxParseError::Unsupported(
-                "incomplete dynamic embedded token set",
-            ));
+            return Err(TsrxParseError::Unsupported("incomplete dynamic embedded token set"));
         }
     } else {
         validate_parser_dynamic_boundaries(view)?;
@@ -251,9 +229,7 @@ fn validate_dynamic_overlay(view: OverlayView<'_>) -> Result<(), TsrxParseError>
                     || tag.closing_expression.is_empty()
                     || tag.closing_expression.end.saturating_add(2) > tag.closing.end))
         {
-            return Err(TsrxParseError::Unsupported(
-                "malformed dynamic authored spans",
-            ));
+            return Err(TsrxParseError::Unsupported("malformed dynamic authored spans"));
         }
         if tag.self_closing {
             if !tag.closing_expression.is_empty() || tag.closing_comment_count != 0 {
@@ -267,23 +243,17 @@ fn validate_dynamic_overlay(view: OverlayView<'_>) -> Result<(), TsrxParseError>
             .map_err(|_| TsrxParseError::Unsupported("dynamic comment index overflow"))?;
         let end = first
             .checked_add(tag.closing_comment_count as usize)
-            .ok_or(TsrxParseError::Unsupported(
-                "dynamic comment range overflow",
-            ))?;
+            .ok_or(TsrxParseError::Unsupported("dynamic comment range overflow"))?;
         for (offset, comment) in view
             .dynamic_comments
             .get(first..end)
-            .ok_or(TsrxParseError::Unsupported(
-                "dynamic comment range outside overlay",
-            ))?
+            .ok_or(TsrxParseError::Unsupported("dynamic comment range outside overlay"))?
             .iter()
             .enumerate()
         {
             let seen = comments_seen
                 .get_mut(first + offset)
-                .ok_or(TsrxParseError::Unsupported(
-                    "dynamic comment index is unknown",
-                ))?;
+                .ok_or(TsrxParseError::Unsupported("dynamic comment index is unknown"))?;
             if comment.is_empty()
                 || comment.start < tag.closing_expression.start
                 || comment.end > tag.closing_expression.end
@@ -296,19 +266,15 @@ fn validate_dynamic_overlay(view: OverlayView<'_>) -> Result<(), TsrxParseError>
         }
     }
     if comments_seen.iter().any(|seen| !seen) {
-        return Err(TsrxParseError::Unsupported(
-            "unowned dynamic closing comment",
-        ));
+        return Err(TsrxParseError::Unsupported("unowned dynamic closing comment"));
     }
     Ok(())
 }
 
 fn validate_style_overlay(view: OverlayView<'_>) -> Result<(), TsrxParseError> {
     let mut payloads = vec![false; view.style_blocks.len()];
-    for token in view
-        .embedded
-        .iter()
-        .filter(|token| token.kind == tsrx_syntax::EmbeddedKind::StyleContent)
+    for token in
+        view.embedded.iter().filter(|token| token.kind == tsrx_syntax::EmbeddedKind::StyleContent)
     {
         let index = usize::try_from(token.owner)
             .map_err(|_| TsrxParseError::Unsupported("style owner index overflow"))?;
@@ -325,24 +291,18 @@ fn validate_style_overlay(view: OverlayView<'_>) -> Result<(), TsrxParseError> {
                 true,
             )
         {
-            return Err(TsrxParseError::Unsupported(
-                "malformed or duplicated style payload token",
-            ));
+            return Err(TsrxParseError::Unsupported("malformed or duplicated style payload token"));
         }
     }
 
     let mut previous_start = None;
     let mut ancestors: Vec<tsrx_syntax::OverlayStyleBlock> = Vec::with_capacity(4);
     for (index, style) in view.style_blocks.iter().enumerate() {
-        while ancestors
-            .last()
-            .is_some_and(|ancestor| ancestor.element.end <= style.element.start)
-        {
+        while ancestors.last().is_some_and(|ancestor| ancestor.element.end <= style.element.start) {
             ancestors.pop();
         }
-        let nested_in_opening = ancestors
-            .last()
-            .is_none_or(|ancestor| style.element.end <= ancestor.content.start);
+        let nested_in_opening =
+            ancestors.last().is_none_or(|ancestor| style.element.end <= ancestor.content.start);
         let spans_are_valid = previous_start.is_none_or(|start| style.element.start > start)
             && nested_in_opening
             && !style.element.is_empty()
@@ -356,9 +316,7 @@ fn validate_style_overlay(view: OverlayView<'_>) -> Result<(), TsrxParseError> {
                 style.content.end < style.element.end && payloads[index]
             };
         if !spans_are_valid {
-            return Err(TsrxParseError::Unsupported(
-                "malformed authored style spans",
-            ));
+            return Err(TsrxParseError::Unsupported("malformed authored style spans"));
         }
         previous_start = Some(style.element.start);
         ancestors.push(*style);
@@ -372,9 +330,7 @@ fn validate_parser_dynamic_boundaries(view: OverlayView<'_>) -> Result<(), TsrxP
     let mut previous = 0_u32;
     for (ordinal, token) in view.parser_dynamic.iter().enumerate() {
         if ordinal != 0 && token.offset < previous {
-            return Err(TsrxParseError::Unsupported(
-                "parser dynamic boundaries are unordered",
-            ));
+            return Err(TsrxParseError::Unsupported("parser dynamic boundaries are unordered"));
         }
         previous = token.offset;
         let index = usize::try_from(token.owner)
@@ -412,9 +368,7 @@ fn validate_parser_dynamic_boundaries(view: OverlayView<'_>) -> Result<(), TsrxP
                 *phase = 4;
             }
             _ => {
-                return Err(TsrxParseError::Unsupported(
-                    "malformed parser dynamic boundary",
-                ));
+                return Err(TsrxParseError::Unsupported("malformed parser dynamic boundary"));
             }
         }
     }
@@ -424,9 +378,7 @@ fn validate_parser_dynamic_boundaries(view: OverlayView<'_>) -> Result<(), TsrxP
             .zip(view.dynamic_tags)
             .any(|(&phase, tag)| phase != if tag.self_closing { 2 } else { 4 })
     {
-        return Err(TsrxParseError::Unsupported(
-            "incomplete parser dynamic boundary set",
-        ));
+        return Err(TsrxParseError::Unsupported("incomplete parser dynamic boundary set"));
     }
     Ok(())
 }
@@ -435,10 +387,8 @@ fn validate_try_clauses(view: OverlayView<'_>, node_index: usize) -> Result<(), 
     let node = view.nodes[node_index];
     let first_index = usize::try_from(node.first_clause)
         .map_err(|_| TsrxParseError::Unsupported("invalid try clause index"))?;
-    let first = view
-        .clauses
-        .get(first_index)
-        .ok_or(TsrxParseError::Unsupported("missing try clause"))?;
+    let first =
+        view.clauses.get(first_index).ok_or(TsrxParseError::Unsupported("missing try clause"))?;
     if first.role != ClauseRole::Try
         || first.keyword.start != node.span.start
         || !valid_plain_clause(*first, node.span)
@@ -484,9 +434,7 @@ fn validate_try_clauses(view: OverlayView<'_>, node_index: usize) -> Result<(), 
     let last_clause = view.clauses[usize::try_from(last)
         .map_err(|_| TsrxParseError::Unsupported("invalid try clause index"))?];
     if last_clause.body.end != node.span.end {
-        return Err(TsrxParseError::Unsupported(
-            "try span does not end with its last clause",
-        ));
+        return Err(TsrxParseError::Unsupported("try span does not end with its last clause"));
     }
     Ok(())
 }
@@ -554,9 +502,7 @@ fn validate_switch_clauses(view: OverlayView<'_>, node_index: usize) -> Result<(
         clause_index = clause.next;
     }
     if last != node.last_clause {
-        return Err(TsrxParseError::Unsupported(
-            "incomplete switch clause chain",
-        ));
+        return Err(TsrxParseError::Unsupported("incomplete switch clause chain"));
     }
     Ok(())
 }
@@ -588,10 +534,8 @@ fn validate_for_clauses(view: OverlayView<'_>, node_index: usize) -> Result<(), 
     let node = view.nodes[node_index];
     let first_index = usize::try_from(node.first_clause)
         .map_err(|_| TsrxParseError::Unsupported("invalid for clause index"))?;
-    let first = view
-        .clauses
-        .get(first_index)
-        .ok_or(TsrxParseError::Unsupported("missing for clause"))?;
+    let first =
+        view.clauses.get(first_index).ok_or(TsrxParseError::Unsupported("missing for clause"))?;
     if first.role != ClauseRole::For || first.body.is_empty() {
         return Err(TsrxParseError::Unsupported("malformed for clause"));
     }
@@ -604,18 +548,14 @@ fn validate_for_clauses(view: OverlayView<'_>, node_index: usize) -> Result<(), 
             || !header.index.is_empty() && !span_contains(first.header, header.index)
             || !header.key.is_empty() && !span_contains(first.header, header.key)
         {
-            return Err(TsrxParseError::Unsupported(
-                "malformed annotated for header",
-            ));
+            return Err(TsrxParseError::Unsupported("malformed annotated for header"));
         }
     } else if !header.left.is_empty()
         || !header.right.is_empty()
         || !header.index.is_empty()
         || !header.key.is_empty()
     {
-        return Err(TsrxParseError::Unsupported(
-            "unannotated for header carries annotations",
-        ));
+        return Err(TsrxParseError::Unsupported("unannotated for header carries annotations"));
     }
 
     let mut last = node.first_clause;
@@ -688,9 +628,7 @@ pub(super) fn validate_projection(
     overlay: OverlayView<'_>,
 ) -> Result<(), TsrxParseError> {
     if view.segments.is_empty() {
-        return Err(TsrxParseError::Unsupported(
-            "projection has no affine source",
-        ));
+        return Err(TsrxParseError::Unsupported("projection has no affine source"));
     }
     let source_len = u32::try_from(source.len())
         .map_err(|_| TsrxParseError::Unsupported("source above 4 GiB"))?;
@@ -722,9 +660,7 @@ pub(super) fn validate_projection(
                 &mut gap_index,
             )
         {
-            return Err(TsrxParseError::Unsupported(
-                "non-canonical affine projection map",
-            ));
+            return Err(TsrxParseError::Unsupported("non-canonical affine projection map"));
         }
         let projected = slice(view.source, segment.projected.start, segment.projected.end)?;
         let authored = slice(source, segment.original_start, original_end)?;
@@ -760,14 +696,11 @@ fn build_allowed_gaps(
             StructuralKind::Pending => 8,
             _ => 1,
         };
-        let end =
-            token
-                .span
-                .start
-                .checked_add(omitted_length)
-                .ok_or(TsrxParseError::Unsupported(
-                    "structural token span overflow",
-                ))?;
+        let end = token
+            .span
+            .start
+            .checked_add(omitted_length)
+            .ok_or(TsrxParseError::Unsupported("structural token span overflow"))?;
         if token.span.start >= end || end > source_len {
             return Err(TsrxParseError::Unsupported("invalid structural token gap"));
         }
@@ -780,9 +713,7 @@ fn build_allowed_gaps(
             let clause = usize::try_from(clause_index)
                 .ok()
                 .and_then(|index| overlay.clauses.get(index))
-                .ok_or(TsrxParseError::Unsupported(
-                    "header gap has no owning clause",
-                ))?;
+                .ok_or(TsrxParseError::Unsupported("header gap has no owning clause"))?;
             let header = clause.for_header;
             if header.annotated {
                 let mut cursor = clause.header.start;
@@ -829,13 +760,7 @@ fn build_allowed_gaps(
                 }
                 tsrx_syntax::EmbeddedKind::StyleContent => continue,
             };
-            add_dynamic_gaps(
-                source,
-                source_len,
-                token.span,
-                expression,
-                &mut dynamic_gaps,
-            )?;
+            add_dynamic_gaps(source, source_len, token.span, expression, &mut dynamic_gaps)?;
         }
     } else {
         for token in overlay.parser_dynamic {
@@ -858,19 +783,13 @@ fn build_allowed_gaps(
             .ok_or(TsrxParseError::Unsupported("style gap has no owner"))?;
         validate_style_source(source, source_len, *style)?;
         if style.content != token.span {
-            return Err(TsrxParseError::Unsupported(
-                "style gap differs from its payload token",
-            ));
+            return Err(TsrxParseError::Unsupported("style gap differs from its payload token"));
         }
         if !style.content.is_empty() {
             style_gaps.push(style.content);
         }
     }
-    for style in overlay
-        .style_blocks
-        .iter()
-        .filter(|style| style.self_closing)
-    {
+    for style in overlay.style_blocks.iter().filter(|style| style.self_closing) {
         validate_style_source(source, source_len, *style)?;
     }
 
@@ -908,15 +827,9 @@ fn validate_style_source(
     style: tsrx_syntax::OverlayStyleBlock,
 ) -> Result<(), TsrxParseError> {
     if style.element.end > source_len || style.content.end > source_len {
-        return Err(TsrxParseError::Unsupported(
-            "style span lies outside authored source",
-        ));
+        return Err(TsrxParseError::Unsupported("style span lies outside authored source"));
     }
-    let opening_end = if style.self_closing {
-        style.element.end
-    } else {
-        style.content.start
-    };
+    let opening_end = if style.self_closing { style.element.end } else { style.content.start };
     let opening = slice(source, style.element.start, opening_end)?;
     let boundary = opening.as_bytes().get("<style".len()).copied();
     if !opening.starts_with("<style")
@@ -928,9 +841,7 @@ fn validate_style_source(
                 || slice(source, style.content.end, style.element.end)? != "</style>"
         }
     {
-        return Err(TsrxParseError::Unsupported(
-            "style source boundary is not canonical",
-        ));
+        return Err(TsrxParseError::Unsupported("style source boundary is not canonical"));
     }
     Ok(())
 }
@@ -938,9 +849,7 @@ fn validate_style_source(
 fn push_merged_gap(merged: &mut Vec<ByteSpan>, gap: ByteSpan) -> Result<(), TsrxParseError> {
     if let Some(previous) = merged.last_mut() {
         if gap.start < previous.end {
-            return Err(TsrxParseError::Unsupported(
-                "overlapping structural projection gaps",
-            ));
+            return Err(TsrxParseError::Unsupported("overlapping structural projection gaps"));
         }
         if gap.start == previous.end {
             previous.end = gap.end;
@@ -961,40 +870,28 @@ fn add_parser_dynamic_gap(
     let tag = usize::try_from(token.owner)
         .ok()
         .and_then(|index| overlay.dynamic_tags.get(index))
-        .ok_or(TsrxParseError::Unsupported(
-            "parser dynamic gap has no owner",
-        ))?;
+        .ok_or(TsrxParseError::Unsupported("parser dynamic gap has no owner"))?;
     let (gap, expected) = match token.kind {
-        ParserDynamicKind::OpenStart => (
-            ByteSpan::new(tag.opening.start, tag.expression.start),
-            b"<{".as_slice(),
-        ),
-        ParserDynamicKind::OpenEnd => (
-            ByteSpan::new(tag.expression.end, tag.opening.end),
-            b"}".as_slice(),
-        ),
-        ParserDynamicKind::CloseStart => (
-            ByteSpan::new(tag.closing.start, tag.closing_expression.start),
-            b"</{".as_slice(),
-        ),
+        ParserDynamicKind::OpenStart => {
+            (ByteSpan::new(tag.opening.start, tag.expression.start), b"<{".as_slice())
+        }
+        ParserDynamicKind::OpenEnd => {
+            (ByteSpan::new(tag.expression.end, tag.opening.end), b"}".as_slice())
+        }
+        ParserDynamicKind::CloseStart => {
+            (ByteSpan::new(tag.closing.start, tag.closing_expression.start), b"</{".as_slice())
+        }
         ParserDynamicKind::CloseEnd => {
             let gap = ByteSpan::new(tag.closing_expression.end, tag.closing.end);
             if gap.start >= gap.end || gap.end > source_len {
-                return Err(TsrxParseError::Unsupported(
-                    "invalid parser dynamic closing gap",
-                ));
+                return Err(TsrxParseError::Unsupported("invalid parser dynamic closing gap"));
             }
-            let suffix = source
-                .as_bytes()
-                .get(gap.start as usize..gap.end as usize)
-                .ok_or(TsrxParseError::Unsupported(
-                    "parser dynamic closing gap lies outside source",
-                ))?;
+            let suffix = source.as_bytes().get(gap.start as usize..gap.end as usize).ok_or(
+                TsrxParseError::Unsupported("parser dynamic closing gap lies outside source"),
+            )?;
             if suffix.first() != Some(&b'}')
                 || suffix.last() != Some(&b'>')
-                || !suffix[1..suffix.len() - 1]
-                    .iter()
-                    .all(u8::is_ascii_whitespace)
+                || !suffix[1..suffix.len() - 1].iter().all(u8::is_ascii_whitespace)
             {
                 return Err(TsrxParseError::AuthoredGrammar(
                     "parser dynamic closing suffix is malformed".to_string(),
@@ -1008,9 +905,7 @@ fn add_parser_dynamic_gap(
         || gap.end > source_len
         || source.as_bytes().get(gap.start as usize..gap.end as usize) != Some(expected)
     {
-        return Err(TsrxParseError::Unsupported(
-            "parser dynamic boundary gap is malformed",
-        ));
+        return Err(TsrxParseError::Unsupported("parser dynamic boundary gap is malformed"));
     }
     gaps.push(gap);
     Ok(())
@@ -1028,29 +923,20 @@ fn add_dynamic_gaps(
         || expression.end >= syntax.end
         || syntax.end > source_len
     {
-        return Err(TsrxParseError::Unsupported(
-            "invalid dynamic projection gap",
-        ));
+        return Err(TsrxParseError::Unsupported("invalid dynamic projection gap"));
     }
     let suffix_start = usize::try_from(expression.end)
         .map_err(|_| TsrxParseError::Unsupported("dynamic suffix overflow"))?;
     let suffix_end = usize::try_from(syntax.end)
         .map_err(|_| TsrxParseError::Unsupported("dynamic suffix overflow"))?;
-    let suffix =
-        source
-            .as_bytes()
-            .get(suffix_start..suffix_end)
-            .ok_or(TsrxParseError::Unsupported(
-                "dynamic suffix lies outside source",
-            ))?;
-    if suffix.first() != Some(&b'}') {
-        return Err(TsrxParseError::Unsupported(
-            "dynamic suffix has no closing brace",
-        ));
-    }
-    if source
+    let suffix = source
         .as_bytes()
-        .get(syntax.start as usize..expression.start as usize)
+        .get(suffix_start..suffix_end)
+        .ok_or(TsrxParseError::Unsupported("dynamic suffix lies outside source"))?;
+    if suffix.first() != Some(&b'}') {
+        return Err(TsrxParseError::Unsupported("dynamic suffix has no closing brace"));
+    }
+    if source.as_bytes().get(syntax.start as usize..expression.start as usize)
         != Some(if syntax.start.saturating_add(2) == expression.start {
             b"<{".as_slice()
         } else {
@@ -1058,13 +944,9 @@ fn add_dynamic_gaps(
         })
         || suffix.len() > 1
             && (suffix.last() != Some(&b'>')
-                || !suffix[1..suffix.len() - 1]
-                    .iter()
-                    .all(u8::is_ascii_whitespace))
+                || !suffix[1..suffix.len() - 1].iter().all(u8::is_ascii_whitespace))
     {
-        return Err(TsrxParseError::Unsupported(
-            "dynamic syntax contains unsupported trivia",
-        ));
+        return Err(TsrxParseError::Unsupported("dynamic syntax contains unsupported trivia"));
     }
     gaps.push(ByteSpan::new(syntax.start, expression.start));
     gaps.push(ByteSpan::new(expression.end, syntax.end));
@@ -1126,11 +1008,9 @@ impl MarkerValidation {
             }
             MarkerKind::WrapperStart(index) => self.record_wrapper(index, true, overlay),
             MarkerKind::WrapperEnd(index) => self.record_wrapper(index, false, overlay),
-            MarkerKind::Header {
-                ordinal,
-                part,
-                boundary,
-            } => self.record_header(ordinal, part, boundary, comment, segments, overlay),
+            MarkerKind::Header { ordinal, part, boundary } => {
+                self.record_header(ordinal, part, boundary, comment, segments, overlay)
+            }
         }
     }
 
@@ -1149,9 +1029,7 @@ impl MarkerValidation {
             .get(index)
             .ok_or(TsrxParseError::Unsupported("unknown style marker"))?;
         if style.self_closing {
-            return Err(TsrxParseError::Unsupported(
-                "self-closing style has a payload marker",
-            ));
+            return Err(TsrxParseError::Unsupported("self-closing style has a payload marker"));
         }
         let scaffold_start = project_authored_end(segments, style.content.start)
             .ok_or(TsrxParseError::Unsupported("unmapped style marker start"))?;
@@ -1165,9 +1043,7 @@ impl MarkerValidation {
             .get_mut(index)
             .ok_or(TsrxParseError::Unsupported("unknown style marker"))?;
         if std::mem::replace(seen, true) || !positioned {
-            return Err(TsrxParseError::Unsupported(
-                "duplicated or displaced style marker",
-            ));
+            return Err(TsrxParseError::Unsupported("duplicated or displaced style marker"));
         }
         Ok(())
     }
@@ -1183,10 +1059,8 @@ impl MarkerValidation {
     ) -> Result<(), TsrxParseError> {
         let index = usize::try_from(raw)
             .map_err(|_| TsrxParseError::Unsupported("marker index overflow"))?;
-        let token = overlay
-            .tokens
-            .get(index)
-            .ok_or(TsrxParseError::Unsupported("unknown token marker"))?;
+        let token =
+            overlay.tokens.get(index).ok_or(TsrxParseError::Unsupported("unknown token marker"))?;
         let positioned = match token.kind {
             StructuralKind::Empty => {
                 let body_start = empty_clause_for_owner(overlay, token.owner)?.body.start;
@@ -1227,9 +1101,7 @@ impl MarkerValidation {
             }
         };
         if self.token_markers[index] || !positioned {
-            return Err(TsrxParseError::Unsupported(
-                "duplicated or displaced token marker",
-            ));
+            return Err(TsrxParseError::Unsupported("duplicated or displaced token marker"));
         }
         self.token_markers[index] = true;
         Ok(())
@@ -1248,15 +1120,10 @@ impl MarkerValidation {
             .get(index)
             .ok_or(TsrxParseError::Unsupported("unknown wrapper marker"))?;
         if node.context == ControlContext::Statement {
-            return Err(TsrxParseError::Unsupported(
-                "statement control has a synthetic wrapper",
-            ));
+            return Err(TsrxParseError::Unsupported("statement control has a synthetic wrapper"));
         }
-        let seen = if start {
-            &mut self.wrapper_starts[index]
-        } else {
-            &mut self.wrapper_ends[index]
-        };
+        let seen =
+            if start { &mut self.wrapper_starts[index] } else { &mut self.wrapper_ends[index] };
         if *seen {
             return Err(TsrxParseError::Unsupported("duplicated wrapper marker"));
         }
@@ -1286,9 +1153,7 @@ impl MarkerValidation {
             HeaderPart::Key => clause.for_header.key,
         };
         if authored_span.is_empty() {
-            return Err(TsrxParseError::Unsupported(
-                "marker for absent header value",
-            ));
+            return Err(TsrxParseError::Unsupported("marker for absent header value"));
         }
         let projected_start = project_authored_start(segments, authored_span.start)
             .ok_or(TsrxParseError::Unsupported("unmapped header marker"))?;
@@ -1304,9 +1169,7 @@ impl MarkerValidation {
             .get_mut(index)
             .ok_or(TsrxParseError::Unsupported("unknown header marker"))?;
         if !positioned || *seen & bit != 0 {
-            return Err(TsrxParseError::Unsupported(
-                "duplicated or displaced header marker",
-            ));
+            return Err(TsrxParseError::Unsupported("duplicated or displaced header marker"));
         }
         *seen |= bit;
         Ok(())
@@ -1410,9 +1273,9 @@ fn strip_scaffold_name<'a>(
 }
 
 fn synthetic_comma_precedes(projected: &str, point: u32) -> Result<bool, TsrxParseError> {
-    let start = point.checked_sub(1).ok_or(TsrxParseError::Unsupported(
-        "try-family marker at projection start",
-    ))?;
+    let start = point
+        .checked_sub(1)
+        .ok_or(TsrxParseError::Unsupported("try-family marker at projection start"))?;
     Ok(slice(projected, start, point)? == ",")
 }
 
@@ -1425,18 +1288,14 @@ fn try_clause_for_token(
         StructuralKind::Pending => ClauseRole::Pending,
         StructuralKind::Catch => ClauseRole::Catch,
         _ => {
-            return Err(TsrxParseError::Unsupported(
-                "non-try token requested a try clause",
-            ));
+            return Err(TsrxParseError::Unsupported("non-try token requested a try clause"));
         }
     };
     let node = usize::try_from(token.owner)
         .ok()
         .and_then(|index| overlay.nodes.get(index))
         .filter(|node| node.kind == ControlKind::Try)
-        .ok_or(TsrxParseError::Unsupported(
-            "try-family token has no try owner",
-        ))?;
+        .ok_or(TsrxParseError::Unsupported("try-family token has no try owner"))?;
     let mut clause_index = node.first_clause;
     let mut found = None;
     while clause_index != NONE_INDEX {
@@ -1445,17 +1304,13 @@ fn try_clause_for_token(
             .and_then(|index| overlay.clauses.get(index))
             .ok_or(TsrxParseError::Unsupported("invalid try clause index"))?;
         if clause.role == expected_role && found.replace(*clause).is_some() {
-            return Err(TsrxParseError::Unsupported(
-                "duplicated try-family clause role",
-            ));
+            return Err(TsrxParseError::Unsupported("duplicated try-family clause role"));
         }
         clause_index = clause.next;
     }
     found
         .filter(|clause| clause.keyword == token.span)
-        .ok_or(TsrxParseError::Unsupported(
-            "try-family token does not match its clause",
-        ))
+        .ok_or(TsrxParseError::Unsupported("try-family token does not match its clause"))
 }
 
 pub(super) fn reconstruct_comments<'a>(
@@ -1484,9 +1339,9 @@ pub(super) fn reconstruct_comments<'a>(
             };
             let value = match comment.kind {
                 ProjectedCommentKind::Line => source.strip_prefix("//"),
-                ProjectedCommentKind::Block => source
-                    .strip_prefix("/*")
-                    .and_then(|value| value.strip_suffix("*/")),
+                ProjectedCommentKind::Block => {
+                    source.strip_prefix("/*").and_then(|value| value.strip_suffix("*/"))
+                }
             };
             if source != projected_source
                 || !kind_matches
@@ -1507,35 +1362,24 @@ pub(super) fn reconstruct_comments<'a>(
         }
         if !require_complete_markers {
             if comment.kind != ProjectedCommentKind::Block {
-                return Err(TsrxParseError::Unsupported(
-                    "unknown non-block projection comment",
-                ));
+                return Err(TsrxParseError::Unsupported("unknown non-block projection comment"));
             }
             continue;
         }
         if comment.kind != ProjectedCommentKind::Block {
-            return Err(TsrxParseError::Unsupported(
-                "unknown non-block projection comment",
-            ));
+            return Err(TsrxParseError::Unsupported("unknown non-block projection comment"));
         }
         let text = slice(projected, comment.span.start, comment.span.end)?;
         let (comment_prefix, marker) =
             parse_marker(text).ok_or(TsrxParseError::Unsupported("unknown projected comment"))?;
-        if prefix
-            .replace(comment_prefix)
-            .is_some_and(|seen| seen != comment_prefix)
-        {
-            return Err(TsrxParseError::Unsupported(
-                "mixed projection marker namespaces",
-            ));
+        if prefix.replace(comment_prefix).is_some_and(|seen| seen != comment_prefix) {
+            return Err(TsrxParseError::Unsupported("mixed projection marker namespaces"));
         }
         markers.record(marker, &comment, authored, projected, segments, overlay)?;
     }
     drop(projected_strings);
     if require_complete_markers && !markers.is_complete(overlay) {
-        return Err(TsrxParseError::Unsupported(
-            "incomplete projection marker set",
-        ));
+        return Err(TsrxParseError::Unsupported("incomplete projection marker set"));
     }
     if require_complete_markers {
         let marker_prefix =
@@ -1580,17 +1424,13 @@ fn empty_clause_for_owner(
     let first = usize::try_from(node.first_clause)
         .ok()
         .and_then(|index| overlay.clauses.get(index))
-        .ok_or(TsrxParseError::Unsupported(
-            "empty token owner has no clause",
-        ))?;
+        .ok_or(TsrxParseError::Unsupported("empty token owner has no clause"))?;
     usize::try_from(first.next)
         .ok()
         .and_then(|index| overlay.clauses.get(index))
         .copied()
         .filter(|clause| clause.role == ClauseRole::Empty)
-        .ok_or(TsrxParseError::Unsupported(
-            "empty token has no empty clause",
-        ))
+        .ok_or(TsrxParseError::Unsupported("empty token has no empty clause"))
 }
 
 fn parse_marker(comment: &str) -> Option<(&str, MarkerKind)> {
@@ -1612,10 +1452,8 @@ fn parse_marker(comment: &str) -> Option<(&str, MarkerKind)> {
         }
         return None;
     }
-    if let Some(index) = marker
-        .strip_prefix('S')
-        .and_then(|tail| tail.strip_suffix("__"))
-        .and_then(parse_decimal)
+    if let Some(index) =
+        marker.strip_prefix('S').and_then(|tail| tail.strip_suffix("__")).and_then(parse_decimal)
     {
         return Some((prefix, MarkerKind::Style(index)));
     }
@@ -1634,21 +1472,13 @@ fn parse_marker(comment: &str) -> Option<(&str, MarkerKind)> {
         if let Some(index) = tail.strip_suffix("S__").and_then(parse_decimal) {
             return Some((
                 prefix,
-                MarkerKind::Header {
-                    ordinal: index,
-                    part,
-                    boundary: MarkerBoundary::Start,
-                },
+                MarkerKind::Header { ordinal: index, part, boundary: MarkerBoundary::Start },
             ));
         }
         if let Some(index) = tail.strip_suffix("E__").and_then(parse_decimal) {
             return Some((
                 prefix,
-                MarkerKind::Header {
-                    ordinal: index,
-                    part,
-                    boundary: MarkerBoundary::End,
-                },
+                MarkerKind::Header { ordinal: index, part, boundary: MarkerBoundary::End },
             ));
         }
         return None;
@@ -1699,9 +1529,7 @@ fn slice(source: &str, start: u32, end: u32) -> Result<&str, TsrxParseError> {
         .map_err(|_| TsrxParseError::Unsupported("span start exceeds host usize"))?;
     let end = usize::try_from(end)
         .map_err(|_| TsrxParseError::Unsupported("span end exceeds host usize"))?;
-    source
-        .get(start..end)
-        .ok_or(TsrxParseError::Unsupported("span is not a source boundary"))
+    source.get(start..end).ok_or(TsrxParseError::Unsupported("span is not a source boundary"))
 }
 
 fn packed_string(source: &str, range: StringRange) -> Option<&str> {
@@ -1716,11 +1544,7 @@ pub(super) fn map_endpoint(
     is_start: bool,
 ) -> Option<u32> {
     let index = segments.partition_point(|segment| {
-        if is_start {
-            segment.projected.start <= point
-        } else {
-            segment.projected.start < point
-        }
+        if is_start { segment.projected.start <= point } else { segment.projected.start < point }
     });
     let segment = segments.get(index.checked_sub(1)?)?;
     let contains = if is_start {
@@ -1756,9 +1580,7 @@ pub(super) fn map_affine_span(
                 Some(right)
             }
             (Some(left), None)
-                if segments
-                    .last()
-                    .is_some_and(|segment| segment.projected.end == span.end) =>
+                if segments.last().is_some_and(|segment| segment.projected.end == span.end) =>
             {
                 Some(left)
             }
@@ -1815,14 +1637,8 @@ mod affine_mapping_tests {
         assert_eq!(map_endpoint(&gapped, 10, true), Some(200));
         assert_eq!(map_endpoint(&gapped, 15, false), Some(205));
         assert_eq!(map_endpoint(&gapped, 15, true), None);
-        assert_eq!(
-            map_affine_span(&gapped, TapeSpan::new(0, 0)),
-            Some(TapeSpan::new(100, 100))
-        );
-        assert_eq!(
-            map_affine_span(&gapped, TapeSpan::new(15, 15)),
-            Some(TapeSpan::new(205, 205))
-        );
+        assert_eq!(map_affine_span(&gapped, TapeSpan::new(0, 0)), Some(TapeSpan::new(100, 100)));
+        assert_eq!(map_affine_span(&gapped, TapeSpan::new(15, 15)), Some(TapeSpan::new(205, 205)));
         assert_eq!(map_affine_span(&gapped, TapeSpan::new(5, 5)), None);
         assert_eq!(map_affine_span(&gapped, TapeSpan::new(10, 10)), None);
         assert_eq!(map_affine_span(&gapped, TapeSpan::new(4, 11)), None);

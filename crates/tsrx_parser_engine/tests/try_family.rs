@@ -27,10 +27,7 @@ fn assert_control_block(
 ) -> Vec<RecordIndex> {
     require_type(tape, block, "BlockStatement");
     assert_eq!(span(tape, block), expected_span);
-    assert_eq!(
-        field_names(tape, block),
-        ["type", "start", "end", "body", "metadata"]
-    );
+    assert_eq!(field_names(tape, block), ["type", "start", "end", "body", "metadata"]);
     assert_empty_path(tape, block);
     list_field(tape, block, "body")
         .into_iter()
@@ -46,10 +43,7 @@ fn assert_try_head(
 ) -> RecordIndex {
     require_type(tape, node, "JSXTryExpression");
     assert_eq!(span(tape, node), expected_span);
-    assert_eq!(
-        scalar_field(tape, node, "statementType"),
-        r#""TryStatement""#
-    );
+    assert_eq!(scalar_field(tape, node, "statementType"), r#""TryStatement""#);
     assert_eq!(
         field_names(tape, node),
         [
@@ -79,10 +73,7 @@ fn assert_handler(
 ) -> RecordIndex {
     require_type(tape, handler, "CatchClause");
     assert_eq!(span(tape, handler), expected_span);
-    assert_eq!(
-        field_names(tape, handler),
-        ["type", "start", "end", "param", "resetParam", "body"]
-    );
+    assert_eq!(field_names(tape, handler), ["type", "start", "end", "param", "resetParam", "body"]);
     let body = object_field(tape, handler, "body");
     assert_control_block(tape, body, body_span);
     body
@@ -106,10 +97,7 @@ fn reconstructs_statement_try_as_an_expression_statement() {
     let param = object_field(tape, handler, "param");
     require_type(tape, param, "Identifier");
     assert_eq!(span(tape, param), (31, 36));
-    assert_eq!(
-        tape.scalar(field(tape, handler, "resetParam")),
-        Some("null")
-    );
+    assert_eq!(tape.scalar(field(tape, handler, "resetParam")), Some("null"));
     assert_no_scaffold(tape);
 }
 
@@ -147,10 +135,7 @@ fn preserves_headerless_catch_with_explicit_null_bindings() {
     let handler = nullable_object(tape, node, "handler").expect("handler");
     assert_handler(tape, handler, (22, 34), (28, 34));
     assert_eq!(tape.scalar(field(tape, handler, "param")), Some("null"));
-    assert_eq!(
-        tape.scalar(field(tape, handler, "resetParam")),
-        Some("null")
-    );
+    assert_eq!(tape.scalar(field(tape, handler, "resetParam")), Some("null"));
     assert_no_scaffold(tape);
 }
 
@@ -167,11 +152,7 @@ fn preserves_one_and_two_catch_bindings_in_authored_order() {
     let param = object_field(one.program(), handler, "param");
     require_type(one.program(), param, "Identifier");
     assert_eq!(span(one.program(), param), (29, 34));
-    assert_eq!(
-        one.program()
-            .scalar(field(one.program(), handler, "resetParam")),
-        Some("null")
-    );
+    assert_eq!(one.program().scalar(field(one.program(), handler, "resetParam")), Some("null"));
     assert_no_scaffold(one.program());
 
     let two = parse_tsrx(&TsrxParseRequest {
@@ -198,11 +179,7 @@ fn preserves_one_and_two_catch_bindings_in_authored_order() {
         values[0].as_object().expect("reset statement"),
         "ExpressionStatement",
     );
-    require_type(
-        two.program(),
-        values[1].as_object().expect("catch JSX"),
-        "JSXElement",
-    );
+    require_type(two.program(), values[1].as_object().expect("catch JSX"), "JSXElement");
     assert_no_scaffold(two.program());
 }
 
@@ -239,19 +216,14 @@ fn accepts_destructured_and_typed_catch_bindings_in_the_canonical_js_view() {
     );
     assert_no_scaffold(tape);
 
-    let array = parse_tsrx(&TsrxParseRequest {
-        source: "const value=@try{ok}@catch([error]){error};",
-    })
-    .expect("array catch binding");
+    let array =
+        parse_tsrx(&TsrxParseRequest { source: "const value=@try{ok}@catch([error]){error};" })
+            .expect("array catch binding");
     let declaration = one_object(&program_body(array.program()));
     let declarator = one_object(&list_field(array.program(), declaration, "declarations"));
     let node = object_field(array.program(), declarator, "init");
     let handler = nullable_object(array.program(), node, "handler").expect("handler");
-    require_type(
-        array.program(),
-        object_field(array.program(), handler, "param"),
-        "ArrayPattern",
-    );
+    require_type(array.program(), object_field(array.program(), handler, "param"), "ArrayPattern");
     assert_no_scaffold(array.program());
 }
 
@@ -342,10 +314,8 @@ fn preserves_pending_then_catch_and_all_explicit_fields() {
 
 #[test]
 fn reconstructs_jsx_child_try_without_an_expression_container() {
-    let source = concat!(
-        "function View() @{<main>@try{<b/>}@pending{<u/>}",
-        "@catch(error){<i/>}</main>}"
-    );
+    let source =
+        concat!("function View() @{<main>@try{<b/>}@pending{<u/>}", "@catch(error){<i/>}</main>}");
     let result = parse_tsrx(&TsrxParseRequest { source }).expect("JSX-child @try");
     let tape = result.program();
     let function = one_object(&program_body(tape));
@@ -362,10 +332,8 @@ fn reconstructs_jsx_child_try_without_an_expression_container() {
 
 #[test]
 fn promotes_a_terminal_statement_try_to_code_block_render() {
-    let source = concat!(
-        "function View() @{ @try{<b/>}@pending{<u/>}",
-        "@catch(error, reset){<i/>} }"
-    );
+    let source =
+        concat!("function View() @{ @try{<b/>}@pending{<u/>}", "@catch(error, reset){<i/>} }");
     let result = parse_tsrx(&TsrxParseRequest { source }).expect("terminal @try");
     let tape = result.program();
     let function = one_object(&program_body(tape));
@@ -407,10 +375,7 @@ fn composes_switch_if_and_for_inside_try_clauses() {
 #[test]
 fn reconstructs_try_inside_switch_and_nested_try_inside_out() {
     let inside_switch = parse_tsrx(&TsrxParseRequest {
-        source: concat!(
-            "function View() @{ @switch(x){@case 1:{",
-            "@try{<b/>}@catch{<i/>}}} }"
-        ),
+        source: concat!("function View() @{ @switch(x){@case 1:{", "@try{<b/>}@catch{<i/>}}} }"),
     })
     .expect("try inside switch");
     let function = one_object(&program_body(inside_switch.program()));
@@ -422,10 +387,7 @@ fn reconstructs_try_inside_switch_and_nested_try_inside_out() {
     assert_no_scaffold(inside_switch.program());
 
     let nested = parse_tsrx(&TsrxParseRequest {
-        source: concat!(
-            "function View() @{ @try{",
-            "@try{<b/>}@catch{<i/>}}@catch{<u/>} }"
-        ),
+        source: concat!("function View() @{ @try{", "@try{<b/>}@catch{<i/>}}@catch{<u/>} }"),
     })
     .expect("nested tries");
     let function = one_object(&program_body(nested.program()));
@@ -439,10 +401,7 @@ fn reconstructs_try_inside_switch_and_nested_try_inside_out() {
 
 #[test]
 fn leaves_an_ordinary_javascript_try_unchanged() {
-    let source = concat!(
-        "function View() @{ try { <b/>; } catch(error) { <i/>; } ",
-        "<main/> }"
-    );
+    let source = concat!("function View() @{ try { <b/>; } catch(error) { <i/>; } ", "<main/> }");
     let result = parse_tsrx(&TsrxParseRequest { source }).expect("ordinary try");
     let tape = result.program();
     let function = one_object(&program_body(tape));

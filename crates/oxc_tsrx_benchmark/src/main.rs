@@ -327,10 +327,7 @@ fn run() -> Result<(), String> {
 
     let args = parse_args(env::args().skip(1))?;
     let budget_source = fs::read_to_string(&args.budget_path).map_err(|error| {
-        format!(
-            "unable to read budgets {}: {error}",
-            args.budget_path.display()
-        )
+        format!("unable to read budgets {}: {error}", args.budget_path.display())
     })?;
     let budgets: Budgets = serde_json::from_str(&budget_source)
         .map_err(|error| format!("invalid benchmark budgets: {error}"))?;
@@ -338,10 +335,8 @@ fn run() -> Result<(), String> {
     ensure_binary(&budgets.candidate_binary, "candidate")?;
     ensure_binary(&budgets.stock_oxlint_binary, "stock Oxlint")?;
 
-    let filters = vec![ConfigRuleFilter {
-        severity: ConfigRuleSeverity::Deny,
-        name: RULE.to_string(),
-    }];
+    let filters =
+        vec![ConfigRuleFilter { severity: ConfigRuleSeverity::Deny, name: RULE.to_string() }];
     let source = build_corpus(budgets.corpus_target_bytes);
     let overlay = scan(&source).map_err(|error| error.to_string())?;
     let equivalent_tsx = project(&source, &overlay).map_err(|error| error.to_string())?;
@@ -360,22 +355,10 @@ fn run() -> Result<(), String> {
     let tsx_path = temporary.join("benchmark.tsx");
     let warm_path = temporary.join("warm-10k.tsrx");
     for _ in 0..budgets.warmups {
-        black_box(measure_control(
-            &control_engine,
-            &tsx_path,
-            &equivalent_tsx,
-        )?);
-        black_box(measure_product(
-            &product_session,
-            &tsx_path,
-            &equivalent_tsx,
-        )?);
+        black_box(measure_control(&control_engine, &tsx_path, &equivalent_tsx)?);
+        black_box(measure_product(&product_session, &tsx_path, &equivalent_tsx)?);
         black_box(measure_product(&product_session, &tsrx_path, &source)?);
-        black_box(measure_control(
-            &control_engine,
-            &tsx_path,
-            &equivalent_tsx,
-        )?);
+        black_box(measure_control(&control_engine, &tsx_path, &equivalent_tsx)?);
     }
 
     let mut control_before = Vec::with_capacity(budgets.samples);
@@ -383,36 +366,20 @@ fn run() -> Result<(), String> {
     let mut standard = Vec::with_capacity(budgets.samples);
     let mut projected = Vec::with_capacity(budgets.samples);
     for _ in 0..budgets.samples {
-        control_before.push(measure_control(
-            &control_engine,
-            &tsx_path,
-            &equivalent_tsx,
-        )?);
-        standard.push(measure_product(
-            &product_session,
-            &tsx_path,
-            &equivalent_tsx,
-        )?);
+        control_before.push(measure_control(&control_engine, &tsx_path, &equivalent_tsx)?);
+        standard.push(measure_product(&product_session, &tsx_path, &equivalent_tsx)?);
         projected.push(measure_product(&product_session, &tsrx_path, &source)?);
-        control_after.push(measure_control(
-            &control_engine,
-            &tsx_path,
-            &equivalent_tsx,
-        )?);
+        control_after.push(measure_control(&control_engine, &tsx_path, &equivalent_tsx)?);
     }
 
     let expected = &control_before[0].signatures;
-    let diagnostic_parity = control_before
-        .iter()
-        .chain(&control_after)
-        .all(|sample| sample.signatures == *expected)
-        && standard.iter().all(|sample| sample.signatures == *expected);
-    let projected_parity = projected
-        .iter()
-        .all(|sample| sample.signatures == *expected);
+    let diagnostic_parity =
+        control_before.iter().chain(&control_after).all(|sample| sample.signatures == *expected)
+            && standard.iter().all(|sample| sample.signatures == *expected);
+    let projected_parity = projected.iter().all(|sample| sample.signatures == *expected);
     if !diagnostic_parity || !projected_parity {
         return Err(
-            "diagnostic output changed between control, standard, and TSRX paths".to_string(),
+            "diagnostic output changed between control, standard, and TSRX paths".to_string()
         );
     }
     let direct_bypass = standard.iter().all(|sample| {
@@ -426,10 +393,7 @@ fn run() -> Result<(), String> {
     for _ in 0..budgets.warm_10k_samples {
         let sample = measure_product(&product_session, &warm_path, &warm_source)?;
         warm_10k.push(
-            sample
-                .scan_ns
-                .saturating_add(sample.projection_ns)
-                .saturating_add(sample.parse_ns),
+            sample.scan_ns.saturating_add(sample.projection_ns).saturating_add(sample.parse_ns),
         );
     }
 
@@ -446,25 +410,13 @@ fn run() -> Result<(), String> {
         .chain(&control_after)
         .map(|sample| sample.total_ns)
         .collect::<Vec<_>>();
-    let standard_ns = standard
-        .iter()
-        .map(|sample| sample.total_ns)
-        .collect::<Vec<_>>();
-    let projected_ns = projected
-        .iter()
-        .map(|sample| sample.total_ns)
-        .collect::<Vec<_>>();
-    let standard_parse_ns = standard
-        .iter()
-        .map(|sample| sample.parse_ns)
-        .collect::<Vec<_>>();
+    let standard_ns = standard.iter().map(|sample| sample.total_ns).collect::<Vec<_>>();
+    let projected_ns = projected.iter().map(|sample| sample.total_ns).collect::<Vec<_>>();
+    let standard_parse_ns = standard.iter().map(|sample| sample.parse_ns).collect::<Vec<_>>();
     let projected_parse_path_ns = projected
         .iter()
         .map(|sample| {
-            sample
-                .scan_ns
-                .saturating_add(sample.projection_ns)
-                .saturating_add(sample.parse_ns)
+            sample.scan_ns.saturating_add(sample.projection_ns).saturating_add(sample.parse_ns)
         })
         .collect::<Vec<_>>();
     let control_distribution = distribution(&control_ns, source.len())?;
@@ -480,16 +432,10 @@ fn run() -> Result<(), String> {
         .chain(&processes.stock_cli_after)
         .map(|sample| sample.total_ns)
         .collect::<Vec<_>>();
-    let candidate_standard_cli_ns = processes
-        .candidate_standard_cli
-        .iter()
-        .map(|sample| sample.total_ns)
-        .collect::<Vec<_>>();
-    let candidate_tsrx_cli_ns = processes
-        .candidate_tsrx_cli
-        .iter()
-        .map(|sample| sample.total_ns)
-        .collect::<Vec<_>>();
+    let candidate_standard_cli_ns =
+        processes.candidate_standard_cli.iter().map(|sample| sample.total_ns).collect::<Vec<_>>();
+    let candidate_tsrx_cli_ns =
+        processes.candidate_tsrx_cli.iter().map(|sample| sample.total_ns).collect::<Vec<_>>();
     let stock_cli_distribution = distribution(&stock_cli_ns, source.len())?;
     let candidate_standard_cli_distribution =
         distribution(&candidate_standard_cli_ns, source.len())?;
@@ -500,21 +446,14 @@ fn run() -> Result<(), String> {
 
     let p01_median_ratio = ratio(standard_distribution.p50_ns, control_distribution.p50_ns);
     let p01_p95_ratio = ratio(standard_distribution.p95_ns, control_distribution.p95_ns);
-    let p01_cli_ratio = ratio(
-        candidate_standard_cli_distribution.p50_ns,
-        stock_cli_distribution.p50_ns,
-    );
+    let p01_cli_ratio =
+        ratio(candidate_standard_cli_distribution.p50_ns, stock_cli_distribution.p50_ns);
     let p02_equivalent_ratio = projected_parse_distribution.median_mib_per_second
         / standard_parse_distribution.median_mib_per_second;
     let p03_hot_ratio = ratio(projected_distribution.p50_ns, standard_distribution.p50_ns);
-    let p03_cli_ratio = ratio(
-        candidate_tsrx_cli_distribution.p50_ns,
-        candidate_standard_cli_distribution.p50_ns,
-    );
-    let p05_ratio = ratio(
-        candidate_cold_distribution.p95_ns,
-        stock_cold_distribution.p95_ns,
-    );
+    let p03_cli_ratio =
+        ratio(candidate_tsrx_cli_distribution.p50_ns, candidate_standard_cli_distribution.p50_ns);
+    let p05_ratio = ratio(candidate_cold_distribution.p95_ns, stock_cold_distribution.p95_ns);
 
     let candidate_tsrx_rss = processes.candidate_tsrx_rss;
     let candidate_tsx_rss = processes.candidate_tsx_rss;
@@ -626,10 +565,7 @@ fn run() -> Result<(), String> {
             "P03 config one parse per file",
             config_session.files == 1 && config_session.parse_count == config_session.files,
         ),
-        boolean(
-            "P03 configured rule applied",
-            config_session.configured_rule_applied,
-        ),
+        boolean("P03 configured rule applied", config_session.configured_rule_applied),
         maximum(
             "P05 fresh-process TSRX p95 latency",
             p05.candidate_tsrx_cold_process.p95_ms,
@@ -668,18 +604,9 @@ fn run() -> Result<(), String> {
             note: "Retains the original statement-control workload for longitudinal lint comparisons; the supported TSRX grammar is broader than this corpus.",
         },
         config_session,
-        summaries: Summaries {
-            p01,
-            p02,
-            p03,
-            p05,
-            p07,
-        },
+        summaries: Summaries { p01, p02, p03, p05, p07 },
         raw_samples: RawSamples {
-            control_before_ns: control_before
-                .iter()
-                .map(|sample| sample.total_ns)
-                .collect(),
+            control_before_ns: control_before.iter().map(|sample| sample.total_ns).collect(),
             control_after_ns: control_after.iter().map(|sample| sample.total_ns).collect(),
             candidate_standard_total_ns: standard_ns,
             candidate_standard_parse_ns: standard_parse_ns,
@@ -729,31 +656,16 @@ fn run() -> Result<(), String> {
     fs::write(&output_path, format!("{encoded}\n"))
         .map_err(|error| format!("unable to write {}: {error}", output_path.display()))?;
 
-    println!(
-        "OXC for TSRX native lint benchmark: {}",
-        if passed { "PASS" } else { "FAIL" }
-    );
+    println!("OXC for TSRX native lint benchmark: {}", if passed { "PASS" } else { "FAIL" });
     println!("raw report: {}", output_path.display());
     println!(
         "P02 scan+copy+parse: {:.2} MiB/s median, {:.2} MiB/s at p95",
-        report
-            .summaries
-            .p02
-            .projected_scan_copy_parse
-            .median_mib_per_second,
-        report
-            .summaries
-            .p02
-            .projected_scan_copy_parse
-            .p95_mib_per_second
+        report.summaries.p02.projected_scan_copy_parse.median_mib_per_second,
+        report.summaries.p02.projected_scan_copy_parse.p95_mib_per_second
     );
     println!(
         "P03 CLI lint: {:.2} MiB/s median, {:.3}x equivalent TSX",
-        report
-            .summaries
-            .p03
-            .cli_projected_lint
-            .median_mib_per_second,
+        report.summaries.p03.cli_projected_lint.median_mib_per_second,
         report.summaries.p03.cli_latency_ratio
     );
     println!(
@@ -830,27 +742,15 @@ fn run_process_measurements(
         .iter()
         .chain(&stock_cli_after)
         .all(|sample| sample.signatures == *expected)
-        && candidate_standard_cli
-            .iter()
-            .all(|sample| sample.signatures == *expected)
-        && candidate_tsrx_cli
-            .iter()
-            .all(|sample| sample.signatures == *expected);
+        && candidate_standard_cli.iter().all(|sample| sample.signatures == *expected)
+        && candidate_tsrx_cli.iter().all(|sample| sample.signatures == *expected);
     if !diagnostic_parity {
         return Err("CLI diagnostic parity failed".to_string());
     }
 
     for _ in 0..2 {
-        black_box(run_cli_with_rules(
-            &budgets.stock_oxlint_binary,
-            &warm_tsx,
-            &STARTUP_RULES,
-        )?);
-        black_box(run_cli_with_rules(
-            &budgets.candidate_binary,
-            &warm_tsrx,
-            &STARTUP_RULES,
-        )?);
+        black_box(run_cli_with_rules(&budgets.stock_oxlint_binary, &warm_tsx, &STARTUP_RULES)?);
+        black_box(run_cli_with_rules(&budgets.candidate_binary, &warm_tsrx, &STARTUP_RULES)?);
     }
     let mut stock_cold_cli_ns = Vec::with_capacity(budgets.cold_process_samples);
     let mut candidate_cold_cli_ns = Vec::with_capacity(budgets.cold_process_samples);
@@ -910,10 +810,7 @@ fn measure_control(
     let total_ns = elapsed_ns(started);
     let signatures = control_signatures(&result.diagnostics);
     black_box(&result);
-    Ok(ControlSample {
-        total_ns,
-        signatures,
-    })
+    Ok(ControlSample { total_ns, signatures })
 }
 
 fn measure_product(
@@ -951,11 +848,8 @@ fn measure_config_session(root: &Path) -> Result<ConfigSessionSummary, String> {
         "export function Configured() @{ debugger; }\n",
     )?;
     let aggregate = session.aggregate(vec![output]);
-    let configured_rule_diagnostics = aggregate
-        .diagnostics
-        .iter()
-        .filter(|diagnostic| diagnostic.rule == RULE)
-        .count();
+    let configured_rule_diagnostics =
+        aggregate.diagnostics.iter().filter(|diagnostic| diagnostic.rule == RULE).count();
     Ok(ConfigSessionSummary {
         config_loads: aggregate.metadata.config_loads,
         config_load_ns: aggregate.metadata.timings.config_ns,
@@ -990,10 +884,7 @@ fn run_cli_with_rules(binary: &Path, source: &Path, rules: &[&str]) -> Result<Cl
             String::from_utf8_lossy(&output.stderr)
         )
     })?;
-    Ok(CliSample {
-        total_ns,
-        signatures: json_signatures(&value)?,
-    })
+    Ok(CliSample { total_ns, signatures: json_signatures(&value)? })
 }
 
 fn sample_peak_rss(source: &Path) -> Result<u64, String> {
@@ -1004,10 +895,7 @@ fn sample_peak_rss(source: &Path) -> Result<u64, String> {
         .output()
         .map_err(|error| format!("unable to run {}: {error}", binary.display()))?;
     if !output.status.success() {
-        return Err(format!(
-            "memory child failed: {}",
-            String::from_utf8_lossy(&output.stderr)
-        ));
+        return Err(format!("memory child failed: {}", String::from_utf8_lossy(&output.stderr)));
     }
     String::from_utf8_lossy(&output.stdout)
         .trim()
@@ -1038,10 +926,8 @@ fn run_memory_child(path: &Path) -> Result<(), String> {
     let result = (|| {
         let source = fs::read_to_string(path)
             .map_err(|error| format!("unable to read {}: {error}", path.display()))?;
-        let filters = [ConfigRuleFilter {
-            severity: ConfigRuleSeverity::Deny,
-            name: RULE.to_string(),
-        }];
+        let filters =
+            [ConfigRuleFilter { severity: ConfigRuleSeverity::Deny, name: RULE.to_string() }];
         let session = LintSession::new(
             path.parent().unwrap_or_else(|| Path::new(".")),
             None,
@@ -1054,9 +940,7 @@ fn run_memory_child(path: &Path) -> Result<(), String> {
         Ok::<(), String>(())
     })();
     running.store(false, Ordering::Relaxed);
-    sampler
-        .join()
-        .map_err(|_| "RSS sampler thread panicked".to_string())?;
+    sampler.join().map_err(|_| "RSS sampler thread panicked".to_string())?;
     result?;
     let peak = peak.load(Ordering::Relaxed);
     if peak == 0 {
@@ -1116,21 +1000,12 @@ fn json_signatures(value: &Value) -> Result<Vec<DiagnosticSignature>, String> {
         .ok_or("JSON report has no diagnostics array")?;
     let mut signatures = Vec::new();
     for diagnostic in diagnostics {
-        let code = diagnostic
-            .get("code")
-            .and_then(Value::as_str)
-            .unwrap_or_default();
-        let rule = diagnostic
-            .get("rule")
-            .and_then(Value::as_str)
-            .unwrap_or_default();
+        let code = diagnostic.get("code").and_then(Value::as_str).unwrap_or_default();
+        let rule = diagnostic.get("rule").and_then(Value::as_str).unwrap_or_default();
         if !code.contains(RULE) && rule != RULE {
             continue;
         }
-        let message = diagnostic
-            .get("message")
-            .and_then(Value::as_str)
-            .unwrap_or_default();
+        let message = diagnostic.get("message").and_then(Value::as_str).unwrap_or_default();
         let labels = diagnostic
             .get("labels")
             .and_then(Value::as_array)
@@ -1206,23 +1081,11 @@ fn elapsed_ns(started: Instant) -> u64 {
 }
 
 fn minimum(name: &'static str, observed: f64, threshold: f64) -> Assertion {
-    Assertion {
-        name,
-        comparison: ">=",
-        observed,
-        threshold,
-        pass: observed >= threshold,
-    }
+    Assertion { name, comparison: ">=", observed, threshold, pass: observed >= threshold }
 }
 
 fn maximum(name: &'static str, observed: f64, threshold: f64) -> Assertion {
-    Assertion {
-        name,
-        comparison: "<=",
-        observed,
-        threshold,
-        pass: observed <= threshold,
-    }
+    Assertion { name, comparison: "<=", observed, threshold, pass: observed <= threshold }
 }
 
 fn boolean(name: &'static str, observed: bool) -> Assertion {
@@ -1240,11 +1103,7 @@ fn build_corpus(target_bytes: usize) -> String {
     source.push_str("type BenchmarkProps = { ready: boolean; value: number };\n\n");
     let mut index = 0usize;
     while source.len() < target_bytes {
-        let debugger = if index.is_multiple_of(64) {
-            "    debugger;\n"
-        } else {
-            ""
-        };
+        let debugger = if index.is_multiple_of(64) { "    debugger;\n" } else { "" };
         write!(
             source,
             "export function View{index:05}({{ ready, value }}: BenchmarkProps) @{{\n\
@@ -1278,14 +1137,12 @@ fn parse_args(arguments: impl Iterator<Item = String>) -> Result<Args, String> {
     while let Some(argument) = arguments.next() {
         match argument.as_str() {
             "--assert" => {
-                budget_path = Some(PathBuf::from(
-                    arguments.next().ok_or("--assert requires a budget file")?,
-                ));
+                budget_path =
+                    Some(PathBuf::from(arguments.next().ok_or("--assert requires a budget file")?));
             }
             "--output" => {
-                output_path = Some(PathBuf::from(
-                    arguments.next().ok_or("--output requires a path")?,
-                ));
+                output_path =
+                    Some(PathBuf::from(arguments.next().ok_or("--output requires a path")?));
             }
             "--help" | "-h" => {
                 return Err(
@@ -1296,18 +1153,12 @@ fn parse_args(arguments: impl Iterator<Item = String>) -> Result<Args, String> {
             value => return Err(format!("unknown benchmark option: {value}")),
         }
     }
-    Ok(Args {
-        budget_path: budget_path.ok_or("--assert <budgets.json> is required")?,
-        output_path,
-    })
+    Ok(Args { budget_path: budget_path.ok_or("--assert <budgets.json> is required")?, output_path })
 }
 
 fn validate_budgets(budgets: &Budgets) -> Result<(), String> {
     if budgets.schema_version != 1 {
-        return Err(format!(
-            "unsupported budget schema version {}",
-            budgets.schema_version
-        ));
+        return Err(format!("unsupported budget schema version {}", budgets.schema_version));
     }
     if budgets.warmups < 5
         || budgets.samples < 15
@@ -1337,14 +1188,10 @@ fn ensure_binary(path: &Path, label: &str) -> Result<(), String> {
 }
 
 fn create_temp_directory() -> Result<PathBuf, String> {
-    let nonce = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_err(|error| error.to_string())?
-        .as_nanos();
-    let directory = env::temp_dir().join(format!(
-        "oxc-tsrx-native-lint-benchmark-{}-{nonce}",
-        std::process::id()
-    ));
+    let nonce =
+        SystemTime::now().duration_since(UNIX_EPOCH).map_err(|error| error.to_string())?.as_nanos();
+    let directory = env::temp_dir()
+        .join(format!("oxc-tsrx-native-lint-benchmark-{}-{nonce}", std::process::id()));
     fs::create_dir(&directory)
         .map_err(|error| format!("unable to create {}: {error}", directory.display()))?;
     Ok(directory)
@@ -1360,12 +1207,7 @@ fn host(budgets: &Budgets) -> Host {
         .filter(|path| path.is_file())
         .and_then(|path| fs::read_to_string(path).ok())
         .and_then(|source| serde_json::from_str::<Value>(&source).ok())
-        .and_then(|value| {
-            value
-                .get("version")
-                .and_then(Value::as_str)
-                .map(str::to_string)
-        })
+        .and_then(|value| value.get("version").and_then(Value::as_str).map(str::to_string))
         .unwrap_or_else(|| "unknown".to_string());
     Host {
         os: env::consts::OS,

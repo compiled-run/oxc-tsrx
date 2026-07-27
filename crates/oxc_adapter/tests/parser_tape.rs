@@ -19,9 +19,7 @@ fn write_value(tape: &FlatTape, value: ValueRef, output: &mut String) {
         }
         ValueKind::Object => {
             output.push('{');
-            for (index, field) in tape
-                .fields(value.as_object().expect("object index"))
-                .enumerate()
+            for (index, field) in tape.fields(value.as_object().expect("object index")).enumerate()
             {
                 if index != 0 {
                     output.push(',');
@@ -35,10 +33,7 @@ fn write_value(tape: &FlatTape, value: ValueRef, output: &mut String) {
         }
         ValueKind::List => {
             output.push('[');
-            for (index, item) in tape
-                .values(value.as_list().expect("list index"))
-                .enumerate()
-            {
+            for (index, item) in tape.values(value.as_list().expect("list index")).enumerate() {
                 if index != 0 {
                     output.push(',');
                 }
@@ -115,10 +110,7 @@ fn flat_serializer_matches_public_oxc_estree_serialization() {
     let tape = projected.program.expect("complete Program tape");
     let mut flat_json = String::new();
     write_value(&tape, tape.root(), &mut flat_json);
-    assert_eq!(
-        ordinary.program_and_fixes,
-        format!("{{\"node\":\n{flat_json}\n,\"fixes\":[]}}")
-    );
+    assert_eq!(ordinary.program_and_fixes, format!("{{\"node\":\n{flat_json}\n,\"fixes\":[]}}"));
 }
 
 #[test]
@@ -134,11 +126,7 @@ fn ordinary_tsx_uses_the_direct_public_oxc_result_shape() {
         show_semantic_errors: false,
     });
     assert!(result.errors.is_empty());
-    assert!(
-        result
-            .program_and_fixes
-            .starts_with("{\"node\":\n{\"type\":\"Program\"")
-    );
+    assert!(result.program_and_fixes.starts_with("{\"node\":\n{\"type\":\"Program\""));
     assert!(result.program_and_fixes.ends_with(r#","fixes":[]}"#));
 }
 use std::fmt::Write as _;

@@ -113,9 +113,8 @@ fn reconstruct_static_imports(
     let mut suppressed = 0;
     let (records, entries) = projected.take_static_imports();
     for record in records {
-        let entries = range_slice(&entries, record.entries).ok_or(TsrxParseError::Unsupported(
-            "projected static-import entry range is invalid",
-        ))?;
+        let entries = range_slice(&entries, record.entries)
+            .ok_or(TsrxParseError::Unsupported("projected static-import entry range is invalid"))?;
         let mut state = MappingState::default();
         let span = mapped_module_span(segments, record.span, &mut state);
         let module_request = mapped_value(segments, record.module_request, &mut state);
@@ -126,12 +125,10 @@ fn reconstruct_static_imports(
             suppressed += 1;
             continue;
         }
-        let span = span.ok_or(TsrxParseError::Unsupported(
-            "authored static import has no statement span",
-        ))?;
-        let module_request = module_request.ok_or(TsrxParseError::Unsupported(
-            "authored static import has no module request",
-        ))?;
+        let span = span
+            .ok_or(TsrxParseError::Unsupported("authored static import has no statement span"))?;
+        let module_request = module_request
+            .ok_or(TsrxParseError::Unsupported("authored static import has no module request"))?;
         let entry_start = authored.begin_static_import_entries()?;
         for entry in entries {
             let mut entry_state = MappingState::default();
@@ -145,11 +142,7 @@ fn reconstruct_static_imports(
         }
         let entries = authored.finish_static_import_entries(entry_start, record.entries.length)?;
         let module_request = copy_value(projected_strings, authored, module_request)?;
-        authored.push_static_import(StaticImportRecord {
-            span,
-            module_request,
-            entries,
-        })?;
+        authored.push_static_import(StaticImportRecord { span, module_request, entries })?;
     }
     Ok(suppressed)
 }
@@ -163,9 +156,8 @@ fn reconstruct_static_exports(
     let mut suppressed = 0;
     let (records, entries) = projected.take_static_exports();
     for record in records {
-        let entries = range_slice(&entries, record.entries).ok_or(TsrxParseError::Unsupported(
-            "projected static-export entry range is invalid",
-        ))?;
+        let entries = range_slice(&entries, record.entries)
+            .ok_or(TsrxParseError::Unsupported("projected static-export entry range is invalid"))?;
         let mut state = MappingState::default();
         let span = mapped_module_span(segments, record.span, &mut state);
         for entry in entries {
@@ -175,9 +167,8 @@ fn reconstruct_static_exports(
             suppressed += 1;
             continue;
         }
-        let span = span.ok_or(TsrxParseError::Unsupported(
-            "authored static export has no statement span",
-        ))?;
+        let span = span
+            .ok_or(TsrxParseError::Unsupported("authored static export has no statement span"))?;
         let mut module_request_cache = None;
         let entry_start = authored.begin_static_export_entries()?;
         for entry in entries {
@@ -187,12 +178,8 @@ fn reconstruct_static_exports(
                 &entry_state,
                 "authored static-export mapping changed between validation and emission",
             )?;
-            let entry = copy_export_entry(
-                projected_strings,
-                authored,
-                entry,
-                &mut module_request_cache,
-            )?;
+            let entry =
+                copy_export_entry(projected_strings, authored, entry, &mut module_request_cache)?;
             authored.push_static_export_entry(entry)?;
         }
         let entries = authored.finish_static_export_entries(entry_start, record.entries.length)?;
@@ -240,9 +227,9 @@ fn reconstruct_import_metas(
             suppressed += 1;
             continue;
         }
-        authored.push_import_meta(mapped.ok_or(TsrxParseError::Unsupported(
-            "authored import.meta has no span",
-        ))?)?;
+        authored.push_import_meta(
+            mapped.ok_or(TsrxParseError::Unsupported("authored import.meta has no span"))?,
+        )?;
     }
     Ok(suppressed)
 }
@@ -258,9 +245,8 @@ pub(super) fn reconstruct_diagnostics(
     debug_assert!(projected.is_storage_released());
     drop(projected);
     for record in records {
-        let labels = range_slice(&labels, record.labels).ok_or(TsrxParseError::Unsupported(
-            "projected diagnostic label range is invalid",
-        ))?;
+        let labels = range_slice(&labels, record.labels)
+            .ok_or(TsrxParseError::Unsupported("projected diagnostic label range is invalid"))?;
         if labels.is_empty() {
             let label_start = authored.begin_labels()?;
             let labels = authored.finish_labels(label_start, record.labels.length)?;
@@ -331,10 +317,8 @@ fn mapped_value(
     value: ValueSpanRecord,
     state: &mut MappingState,
 ) -> Option<MappedValueSpan> {
-    mapped_span(segments, value.span, state).map(|span| MappedValueSpan {
-        value: value.value,
-        span,
-    })
+    mapped_span(segments, value.span, state)
+        .map(|span| MappedValueSpan { value: value.value, span })
 }
 
 fn mapped_name<K: Copy>(
@@ -345,10 +329,7 @@ fn mapped_name<K: Copy>(
     MappedName {
         kind: name.kind,
         name: name.name,
-        span: name
-            .span
-            .get()
-            .and_then(|span| mapped_span(segments, span, state)),
+        span: name.span.get().and_then(|span| mapped_span(segments, span, state)),
     }
 }
 
@@ -383,11 +364,7 @@ fn mapped_export_entry(
 }
 
 fn ensure_retained(state: &MappingState, changed: &'static str) -> Result<(), TsrxParseError> {
-    if state.retain(changed)? {
-        Ok(())
-    } else {
-        Err(TsrxParseError::Unsupported(changed))
-    }
+    if state.retain(changed)? { Ok(()) } else { Err(TsrxParseError::Unsupported(changed)) }
 }
 
 fn mapped_span(
@@ -449,9 +426,9 @@ fn copy_export_entry(
         },
     )?;
     Ok(StaticExportEntryRecord {
-        span: entry.span.ok_or(TsrxParseError::Unsupported(
-            "authored static-export entry has no span",
-        ))?,
+        span: entry
+            .span
+            .ok_or(TsrxParseError::Unsupported("authored static-export entry has no span"))?,
         module_request,
         import_name: copy_name(projected_strings, authored, entry.import_name)?,
         export_name: copy_name(projected_strings, authored, entry.export_name)?,
@@ -477,10 +454,7 @@ fn copy_shared_value(
             packed
         }
     };
-    Ok(ValueSpanRecord {
-        value: packed,
-        span: value.span,
-    })
+    Ok(ValueSpanRecord { value: packed, span: value.span })
 }
 
 fn copy_value(
@@ -488,13 +462,9 @@ fn copy_value(
     authored: &mut ModuleTable,
     value: MappedValueSpan,
 ) -> Result<ValueSpanRecord, TsrxParseError> {
-    let string = packed_string(projected_strings, value.value).ok_or(
-        TsrxParseError::Unsupported("projected module string range is invalid"),
-    )?;
-    Ok(ValueSpanRecord {
-        value: authored.push_string(string)?,
-        span: value.span,
-    })
+    let string = packed_string(projected_strings, value.value)
+        .ok_or(TsrxParseError::Unsupported("projected module string range is invalid"))?;
+    Ok(ValueSpanRecord { value: authored.push_string(string)?, span: value.span })
 }
 
 fn copy_name<K: Copy>(
@@ -503,26 +473,24 @@ fn copy_name<K: Copy>(
     name: MappedName<K>,
 ) -> Result<ModuleNameRecord<K>, TsrxParseError> {
     let packed = match name.name.get() {
-        Some(range) => OptionalStringRange::some(authored.push_string(
-            packed_string(projected_strings, range).ok_or(TsrxParseError::Unsupported(
-                "projected module-name range is invalid",
-            ))?,
-        )?),
+        Some(range) => OptionalStringRange::some(
+            authored
+                .push_string(packed_string(projected_strings, range).ok_or(
+                    TsrxParseError::Unsupported("projected module-name range is invalid"),
+                )?)?,
+        ),
         None => OptionalStringRange::NONE,
     };
     Ok(ModuleNameRecord {
         kind: name.kind,
         name: packed,
-        span: name
-            .span
-            .map_or(OptionalTapeSpan::NONE, OptionalTapeSpan::some),
+        span: name.span.map_or(OptionalTapeSpan::NONE, OptionalTapeSpan::some),
     })
 }
 
 fn required_string(storage: &str, range: StringRange) -> Result<&str, TsrxParseError> {
-    packed_string(storage, range).ok_or(TsrxParseError::Unsupported(
-        "projected diagnostic string range is invalid",
-    ))
+    packed_string(storage, range)
+        .ok_or(TsrxParseError::Unsupported("projected diagnostic string range is invalid"))
 }
 
 fn optional_string(
@@ -530,11 +498,9 @@ fn optional_string(
     range: OptionalStringRange,
 ) -> Result<Option<&str>, TsrxParseError> {
     range.get().map_or(Ok(None), |range| {
-        packed_string(storage, range)
-            .map(Some)
-            .ok_or(TsrxParseError::Unsupported(
-                "projected optional diagnostic string range is invalid",
-            ))
+        packed_string(storage, range).map(Some).ok_or(TsrxParseError::Unsupported(
+            "projected optional diagnostic string range is invalid",
+        ))
     })
 }
 
@@ -555,11 +521,7 @@ mod tests {
     use super::{reconstruct_diagnostics, reconstruct_module};
 
     fn authored_segment() -> [ProjectionSegment; 1] {
-        [ProjectionSegment {
-            projected: ByteSpan::new(0, 10),
-            original_start: 100,
-            fixable: true,
-        }]
+        [ProjectionSegment { projected: ByteSpan::new(0, 10), original_start: 100, fixable: true }]
     }
 
     #[test]
@@ -572,9 +534,7 @@ mod tests {
                 TapeSpan::new(22, 25),
             ))
             .expect("synthetic dynamic import");
-        synthetic
-            .push_import_meta(TapeSpan::new(31, 42))
-            .expect("synthetic import.meta");
+        synthetic.push_import_meta(TapeSpan::new(31, 42)).expect("synthetic import.meta");
         let (authored, suppressed) =
             reconstruct_module(synthetic, &segments).expect("synthetic suppression");
         assert_eq!(suppressed, 2);
@@ -596,9 +556,7 @@ mod tests {
     fn coordinate_free_diagnostics_survive_while_synthetic_and_mixed_labels_do_not() {
         let segments = authored_segment();
         let mut coordinate_free = DiagnosticTable::new();
-        let labels = coordinate_free
-            .append_labels(std::iter::empty())
-            .expect("empty label range");
+        let labels = coordinate_free.append_labels(std::iter::empty()).expect("empty label range");
         coordinate_free
             .push_diagnostic(
                 DiagnosticPhase::Grammar,
@@ -622,10 +580,7 @@ mod tests {
         assert_eq!(authored.optional_string(record.note), Some("note"));
         assert_eq!(authored.optional_string(record.code_scope), Some("scope"));
         assert_eq!(authored.optional_string(record.code_number), Some("number"));
-        assert_eq!(
-            authored.optional_string(record.url),
-            Some("https://example.invalid")
-        );
+        assert_eq!(authored.optional_string(record.url), Some("https://example.invalid"));
 
         let mut synthetic = DiagnosticTable::new();
         let labels = synthetic
@@ -690,9 +645,7 @@ mod tests {
         ];
         for span in [TapeSpan::new(3, 12), TapeSpan::new(5, 5)] {
             let mut projected = DiagnosticTable::new();
-            let labels = projected
-                .append_labels([(span, None, true)])
-                .expect("projected labels");
+            let labels = projected.append_labels([(span, None, true)]).expect("projected labels");
             projected
                 .push_diagnostic(
                     DiagnosticPhase::Grammar,

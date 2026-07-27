@@ -107,11 +107,8 @@ impl Scanner<'_> {
             });
         }
         let first_start = self.skip_ascii_whitespace(inner_start, inner_end);
-        let first_end = trim_ascii_end(
-            self.bytes,
-            first_start,
-            commas.first().copied().unwrap_or(inner_end),
-        );
+        let first_end =
+            trim_ascii_end(self.bytes, first_start, commas.first().copied().unwrap_or(inner_end));
         if first_start == first_end {
             return Err(ProjectionError::MalformedSyntax {
                 offset: to_u32(first_start)?,

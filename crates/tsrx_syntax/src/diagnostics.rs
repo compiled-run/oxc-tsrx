@@ -3,39 +3,17 @@ use std::{error::Error, fmt};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProjectionError {
     SourceTooLarge,
-    SourceChanged {
-        offset: u32,
-    },
-    UnsupportedSyntax {
-        offset: u32,
-        construct: &'static str,
-    },
-    UnterminatedSyntax {
-        offset: u32,
-        construct: &'static str,
-    },
-    MalformedSyntax {
-        offset: u32,
-        expected: &'static str,
-    },
+    SourceChanged { offset: u32 },
+    UnsupportedSyntax { offset: u32, construct: &'static str },
+    UnterminatedSyntax { offset: u32, construct: &'static str },
+    MalformedSyntax { offset: u32, expected: &'static str },
     MarkerSpaceExhausted,
-    MarkerMissing {
-        index: usize,
-    },
-    MarkerDuplicated {
-        index: usize,
-    },
-    MarkerReordered {
-        index: usize,
-    },
-    MarkerTargetChanged {
-        index: usize,
-        expected: &'static str,
-    },
+    MarkerMissing { index: usize },
+    MarkerDuplicated { index: usize },
+    MarkerReordered { index: usize },
+    MarkerTargetChanged { index: usize, expected: &'static str },
     MarkerResidual,
-    ScaffoldMismatch {
-        index: usize,
-    },
+    ScaffoldMismatch { index: usize },
     StructuralMismatch,
 }
 
@@ -78,16 +56,10 @@ impl fmt::Display for ProjectionError {
                 write!(formatter, "unsupported TSRX {construct} at byte {offset}")
             }
             Self::UnterminatedSyntax { offset, construct } => {
-                write!(
-                    formatter,
-                    "unterminated {construct} starting at byte {offset}"
-                )
+                write!(formatter, "unterminated {construct} starting at byte {offset}")
             }
             Self::MalformedSyntax { offset, expected } => {
-                write!(
-                    formatter,
-                    "malformed TSRX at byte {offset}: expected {expected}"
-                )
+                write!(formatter, "malformed TSRX at byte {offset}: expected {expected}")
             }
             Self::MarkerSpaceExhausted => {
                 formatter.write_str("unable to create a collision-free TSRX marker namespace")
@@ -128,18 +100,9 @@ mod tests {
     fn byte_offset_covers_exactly_the_positioned_variants() {
         let positioned = [
             ProjectionError::SourceChanged { offset: 7 },
-            ProjectionError::UnsupportedSyntax {
-                offset: 7,
-                construct: "construct",
-            },
-            ProjectionError::UnterminatedSyntax {
-                offset: 7,
-                construct: "construct",
-            },
-            ProjectionError::MalformedSyntax {
-                offset: 7,
-                expected: "expected",
-            },
+            ProjectionError::UnsupportedSyntax { offset: 7, construct: "construct" },
+            ProjectionError::UnterminatedSyntax { offset: 7, construct: "construct" },
+            ProjectionError::MalformedSyntax { offset: 7, expected: "expected" },
         ];
         for error in &positioned {
             assert_eq!(error.byte_offset(), Some(7), "{error}");
@@ -155,10 +118,7 @@ mod tests {
             ProjectionError::MarkerMissing { index: 3 },
             ProjectionError::MarkerDuplicated { index: 3 },
             ProjectionError::MarkerReordered { index: 3 },
-            ProjectionError::MarkerTargetChanged {
-                index: 3,
-                expected: "{",
-            },
+            ProjectionError::MarkerTargetChanged { index: 3, expected: "{" },
             ProjectionError::MarkerResidual,
             ProjectionError::ScaffoldMismatch { index: 3 },
             ProjectionError::StructuralMismatch,
@@ -175,9 +135,7 @@ mod tests {
             "export function Broken() @{\n  let \u{3c0} = 1;\n  <main>\n    <h1>hi</h1>\n}\n";
         let error =
             crate::scan(source).expect_err("an unterminated JSX element must fail the scan");
-        let offset = error
-            .byte_offset()
-            .expect("an unterminated construct is positioned");
+        let offset = error.byte_offset().expect("an unterminated construct is positioned");
         // A UTF-8 byte index into the authored source, not a code unit and not an index into any
         // projection: the multi-byte identifier above shifts it and the assertion follows.
         assert_eq!(offset as usize, source.find("<main>").expect("fixture"));

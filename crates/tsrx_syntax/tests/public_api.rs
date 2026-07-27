@@ -10,16 +10,8 @@ fn equal_width_projection_masks_only_structural_sigils() {
     let source = "function View() @{ @if (ready) {} @else {} }";
     let overlay = scan(source).unwrap();
     assert_eq!(
-        overlay
-            .tokens()
-            .iter()
-            .map(|token| token.kind)
-            .collect::<Vec<_>>(),
-        [
-            StructuralKind::FunctionBody,
-            StructuralKind::If,
-            StructuralKind::Else
-        ]
+        overlay.tokens().iter().map(|token| token.kind).collect::<Vec<_>>(),
+        [StructuralKind::FunctionBody, StructuralKind::If, StructuralKind::Else]
     );
     let projected = project(source, &overlay).unwrap();
     assert_eq!(projected, "function View()  {  if (ready) {}  else {} }");
@@ -51,11 +43,7 @@ fn recognizes_direct_jsx_and_expression_control_families() {
     let overlay = scan(source).unwrap();
     assert_eq!(overlay.control_count(), 3);
     assert_eq!(
-        overlay
-            .tokens()
-            .iter()
-            .map(|token| token.kind)
-            .collect::<Vec<_>>(),
+        overlay.tokens().iter().map(|token| token.kind).collect::<Vec<_>>(),
         [
             StructuralKind::FunctionBody,
             StructuralKind::If,
@@ -110,11 +98,7 @@ fn type_projection_preserves_loop_bindings_and_identity_fix_boundaries() {
     assert!(projection.source().contains("for(const item of items)"));
     assert!(projection.source().contains("let i = 0;"));
     assert!(projection.source().contains("void (item.id);"));
-    assert!(
-        projection
-            .source()
-            .contains("if (false) return null as any;")
-    );
+    assert!(projection.source().contains("if (false) return null as any;"));
 
     let projected_start = u32::try_from(projection.source().find("item.save()").unwrap()).unwrap();
     let authored_start = u32::try_from(source.find("item.save()").unwrap()).unwrap();
@@ -148,20 +132,15 @@ fn dynamic_tag_expression_is_affine_but_style_payload_is_synthetic() {
 
 #[test]
 fn paired_dynamic_names_map_labels_but_not_one_sided_fixes() {
-    for (source, fixable) in [
-        ("function View() @{ <{tag} /> }", true),
-        ("function View() @{ <{tag}></{tag}> }", false),
-    ] {
+    for (source, fixable) in
+        [("function View() @{ <{tag} /> }", true), ("function View() @{ <{tag}></{tag}> }", false)]
+    {
         let projection = project_for_lint(source, &scan(source).unwrap()).unwrap();
         let marker = projection.source().find("A0_={tag").unwrap();
         let start = u32::try_from(marker + "A0_={".len()).unwrap();
         let range = start..start + 3;
         assert!(projection.map_range(range.clone()).is_some(), "{source}");
-        assert_eq!(
-            projection.map_fix_range(range).is_some(),
-            fixable,
-            "{source}"
-        );
+        assert_eq!(projection.map_fix_range(range).is_some(), fixable, "{source}");
     }
 }
 
@@ -246,10 +225,7 @@ fn rejects_malformed_switch_and_try_clause_shapes() {
         "function View() @{ @try {} @catch (error, reset, extra) {} }",
         "function View() @{ @try {} @catch (error, { reset }) {} }",
     ] {
-        assert!(
-            matches!(scan(source), Err(ProjectionError::MalformedSyntax { .. })),
-            "{source}"
-        );
+        assert!(matches!(scan(source), Err(ProjectionError::MalformedSyntax { .. })), "{source}");
     }
 }
 
@@ -338,10 +314,7 @@ fn rejects_orphan_clauses_and_invalid_index_annotation() {
         "function View() @{ @empty {} }",
         "function View() @{ @for(const x of xs;index x.value){} }",
     ] {
-        assert!(matches!(
-            scan(source),
-            Err(ProjectionError::MalformedSyntax { .. })
-        ));
+        assert!(matches!(scan(source), Err(ProjectionError::MalformedSyntax { .. })));
     }
 }
 
@@ -487,11 +460,7 @@ fn unicode_identifier_suffixes_do_not_form_tsrx_controls() {
         let source = format!("function View() @{{<main>@if{suffix} is JSX text</main>}}");
         let overlay = scan(&source).unwrap_or_else(|error| panic!("JSX text {suffix}: {error}"));
         assert_eq!(
-            overlay
-                .tokens()
-                .iter()
-                .map(|token| token.kind)
-                .collect::<Vec<_>>(),
+            overlay.tokens().iter().map(|token| token.kind).collect::<Vec<_>>(),
             [StructuralKind::FunctionBody],
             "JSX text {suffix}"
         );

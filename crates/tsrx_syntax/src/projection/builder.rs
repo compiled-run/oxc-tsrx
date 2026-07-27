@@ -34,13 +34,9 @@ impl Action {
             Self::WrapperStart(node) => (overlay.nodes[node as usize].span.start, 2),
             Self::Token(token) => (overlay.tokens[token as usize].span.start, 3),
             Self::Header { clause, .. } => (overlay.clauses[clause as usize].header.start, 3),
-            Self::ForBody(clause) => (
-                overlay.clauses[clause as usize]
-                    .body
-                    .start
-                    .saturating_add(1),
-                0,
-            ),
+            Self::ForBody(clause) => {
+                (overlay.clauses[clause as usize].body.start.saturating_add(1), 0)
+            }
             Self::Embedded(token) => (overlay.embedded_tokens[token as usize].span.start, 3),
         }
     }
@@ -142,10 +138,8 @@ impl<'a> Builder<'a> {
         let Some(value) = self.source.get(start..end) else {
             return Err(ProjectionError::SourceChanged { offset: span.start });
         };
-        let projected_start = self
-            .record_segments
-            .then(|| to_u32(self.output.len()))
-            .transpose()?;
+        let projected_start =
+            self.record_segments.then(|| to_u32(self.output.len())).transpose()?;
         self.output.push_str(value);
         let Some(projected_start) = projected_start else {
             return Ok(());
@@ -227,9 +221,7 @@ impl<'a> Builder<'a> {
             StructuralKind::Catch => b"@catch",
         };
         if self.source.as_bytes().get(start..start + spelling.len()) != Some(spelling) {
-            return Err(ProjectionError::SourceChanged {
-                offset: token.span.start,
-            });
+            return Err(ProjectionError::SourceChanged { offset: token.span.start });
         }
         match token.kind {
             StructuralKind::FunctionBody if self.type_semantic => {
@@ -237,9 +229,7 @@ impl<'a> Builder<'a> {
                     .expect("writing to a String cannot fail");
                 self.cursor = start + 1;
                 if self.source.as_bytes().get(self.cursor) != Some(&b'{') {
-                    return Err(ProjectionError::SourceChanged {
-                        offset: token.span.start,
-                    });
+                    return Err(ProjectionError::SourceChanged { offset: token.span.start });
                 }
                 self.copy_to(self.cursor + 1)?;
                 self.output.push_str("\nif (false) return null as any;\n");
@@ -316,40 +306,26 @@ impl<'a> Builder<'a> {
         }
         let header = clause.for_header;
         if !header.annotated {
-            return Err(ProjectionError::ScaffoldMismatch {
-                index: ordinal as usize,
-            });
+            return Err(ProjectionError::ScaffoldMismatch { index: ordinal as usize });
         }
         self.copy_to(clause.header.start as usize)?;
         self.output.push('(');
         self.copy_original(header.left)?;
-        write!(
-            self.output,
-            " of {}H{ordinal}_(/*{}R{ordinal}S__*/",
-            self.prefix, self.prefix
-        )
-        .expect("writing to a String cannot fail");
+        write!(self.output, " of {}H{ordinal}_(/*{}R{ordinal}S__*/", self.prefix, self.prefix)
+            .expect("writing to a String cannot fail");
         self.copy_original(header.right)?;
         write!(self.output, "/*{}R{ordinal}E__*/", self.prefix)
             .expect("writing to a String cannot fail");
         if !header.index.is_empty() {
-            write!(
-                self.output,
-                ",{}IH{ordinal}_(/*{}I{ordinal}S__*/",
-                self.prefix, self.prefix
-            )
-            .expect("writing to a String cannot fail");
+            write!(self.output, ",{}IH{ordinal}_(/*{}I{ordinal}S__*/", self.prefix, self.prefix)
+                .expect("writing to a String cannot fail");
             self.copy_original(header.index)?;
             write!(self.output, "/*{}I{ordinal}E__*/)", self.prefix)
                 .expect("writing to a String cannot fail");
         }
         if !header.key.is_empty() {
-            write!(
-                self.output,
-                ",{}KH{ordinal}_(/*{}K{ordinal}S__*/",
-                self.prefix, self.prefix
-            )
-            .expect("writing to a String cannot fail");
+            write!(self.output, ",{}KH{ordinal}_(/*{}K{ordinal}S__*/", self.prefix, self.prefix)
+                .expect("writing to a String cannot fail");
             self.copy_original(header.key)?;
             write!(self.output, "/*{}K{ordinal}E__*/)", self.prefix)
                 .expect("writing to a String cannot fail");
@@ -373,9 +349,7 @@ impl<'a> Builder<'a> {
         let left = self
             .source
             .get(header.left.start as usize..header.left.end as usize)
-            .ok_or(ProjectionError::SourceChanged {
-                offset: header.left.start,
-            })?;
+            .ok_or(ProjectionError::SourceChanged { offset: header.left.start })?;
         let trimmed = left.trim_start();
         if !trimmed.starts_with("const ")
             && !trimmed.starts_with("let ")
@@ -435,9 +409,7 @@ impl<'a> Builder<'a> {
                     || tag.expression.end + 1 != token.span.end
                     || self.source.as_bytes().get(tag.expression.end as usize) != Some(&b'}')
                 {
-                    return Err(ProjectionError::SourceChanged {
-                        offset: token.span.start,
-                    });
+                    return Err(ProjectionError::SourceChanged { offset: token.span.start });
                 }
                 write!(
                     self.output,
@@ -456,9 +428,7 @@ impl<'a> Builder<'a> {
                 if self.source.as_bytes().get(span_start..span_start + 3) != Some(b"</{")
                     || self.source.as_bytes().get(span_end.saturating_sub(1)) != Some(&b'>')
                 {
-                    return Err(ProjectionError::SourceChanged {
-                        offset: token.span.start,
-                    });
+                    return Err(ProjectionError::SourceChanged { offset: token.span.start });
                 }
                 let tag = self
                     .overlay
@@ -479,9 +449,7 @@ impl<'a> Builder<'a> {
                         .source
                         .as_bytes()
                         .get(comment.start as usize..comment.end as usize)
-                        .ok_or(ProjectionError::SourceChanged {
-                            offset: comment.start,
-                        })?;
+                        .ok_or(ProjectionError::SourceChanged { offset: comment.start })?;
                     if comment.start < tag.closing_expression.start
                         || comment.end > tag.closing_expression.end
                         || (!comment_source.starts_with(b"//")
@@ -506,12 +474,8 @@ impl<'a> Builder<'a> {
                 if style.content != token.span {
                     return Err(ProjectionError::StructuralMismatch);
                 }
-                write!(
-                    self.output,
-                    "{{/*{}S{}__*/ null}}",
-                    self.prefix, token.owner
-                )
-                .expect("writing to a String cannot fail");
+                write!(self.output, "{{/*{}S{}__*/ null}}", self.prefix, token.owner)
+                    .expect("writing to a String cannot fail");
                 self.cursor = span_end;
             }
         }
@@ -618,19 +582,10 @@ pub(super) fn build_projection_with_purpose(
     if record_segments && !overlay.dynamic_tags.is_empty() {
         mapped.dynamic_prefix = Some(prefix.clone());
         mapped.dynamic_count = to_u32(overlay.dynamic_tags.len())?;
-        mapped.dynamic_offsets = overlay
-            .dynamic_tags
-            .iter()
-            .map(|tag| tag.expression.start)
-            .collect();
+        mapped.dynamic_offsets =
+            overlay.dynamic_tags.iter().map(|tag| tag.expression.start).collect();
     }
-    Ok(BuiltProjection {
-        mapped,
-        prefix,
-        wrappers,
-        headers,
-        tries,
-    })
+    Ok(BuiltProjection { mapped, prefix, wrappers, headers, tries })
 }
 
 fn build_wrapper_actions(
@@ -657,10 +612,7 @@ fn build_wrapper_actions(
             }
             actions.push(Action::WrapperStart(node_index));
             active.push(node_index);
-            manifests.push(WrapperManifest {
-                node: node_index,
-                context: node.context,
-            });
+            manifests.push(WrapperManifest { node: node_index, context: node.context });
         }
     }
     while let Some(active) = active.pop() {
@@ -681,10 +633,7 @@ fn build_header_actions(
             let clause = overlay.clauses[clause_index as usize];
             if clause.for_header.annotated || type_semantic && clause.role == ClauseRole::For {
                 let ordinal = to_u32(manifests.len())?;
-                actions.push(Action::Header {
-                    clause: clause_index,
-                    ordinal,
-                });
+                actions.push(Action::Header { clause: clause_index, ordinal });
                 if clause.for_header.annotated {
                     manifests.push(HeaderManifest {
                         ordinal,
@@ -715,9 +664,7 @@ fn build_try_actions(
         while active.last().is_some_and(|&node_index: &u32| {
             overlay.nodes[node_index as usize].span.end <= node.span.start
         }) {
-            actions.push(Action::TryEnd(
-                active.pop().ok_or(ProjectionError::StructuralMismatch)?,
-            ));
+            actions.push(Action::TryEnd(active.pop().ok_or(ProjectionError::StructuralMismatch)?));
         }
         if node.kind != ControlKind::Try {
             continue;
@@ -750,11 +697,7 @@ fn build_try_actions(
             flags |= TryManifest::AUTHORED_SEMICOLON;
         }
         active.push(node_index);
-        manifests.push(TryManifest {
-            node: node_index,
-            context: node.context,
-            flags,
-        });
+        manifests.push(TryManifest { node: node_index, context: node.context, flags });
     }
     while let Some(node) = active.pop() {
         actions.push(Action::TryEnd(node));

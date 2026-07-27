@@ -37,10 +37,7 @@ fn syntax_core_has_upstream_oriented_private_module_boundaries() {
     }
 
     for path in ["src/scanner.rs", "src/projection.rs"] {
-        assert!(
-            !crate_root.join(path).exists(),
-            "legacy monolith remains: {path}"
-        );
+        assert!(!crate_root.join(path).exists(), "legacy monolith remains: {path}");
     }
 }
 

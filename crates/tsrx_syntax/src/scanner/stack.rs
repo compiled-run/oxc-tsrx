@@ -6,11 +6,7 @@ pub(super) struct TinyStack<T: Copy, const N: usize> {
 
 impl<T: Copy, const N: usize> TinyStack<T, N> {
     pub(super) fn new() -> Self {
-        Self {
-            inline: [None; N],
-            length: 0,
-            spill: Vec::new(),
-        }
+        Self { inline: [None; N], length: 0, spill: Vec::new() }
     }
 
     pub(super) fn push(&mut self, value: T) {

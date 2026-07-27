@@ -44,10 +44,7 @@ impl TypeProjection {
 
     #[must_use]
     pub fn view(&self) -> ProjectionView<'_> {
-        ProjectionView {
-            source: &self.projected,
-            segments: &self.segments,
-        }
+        ProjectionView { source: &self.projected, segments: &self.segments }
     }
 
     /// Maps a diagnostic whose first and last bytes are both anchored in authored source.
@@ -61,9 +58,7 @@ impl TypeProjection {
             return None;
         }
         if range.is_empty() {
-            return self
-                .map_endpoint(range.start, true)
-                .map(|point| point..point);
+            return self.map_endpoint(range.start, true).map(|point| point..point);
         }
         let start = self.map_endpoint(range.start, true)?;
         let end = self.map_endpoint(range.end, false)?;
@@ -96,10 +91,7 @@ impl MappedProjection {
 
     #[must_use]
     pub fn view(&self) -> ProjectionView<'_> {
-        ProjectionView {
-            source: &self.projected,
-            segments: &self.segments,
-        }
+        ProjectionView { source: &self.projected, segments: &self.segments }
     }
 
     /// Maps a projected range only when every byte belongs to one unchanged authored segment.
@@ -143,9 +135,7 @@ impl MappedProjection {
     /// scaffolding. Generator-specific built-in diagnostics in these ranges are synthetic.
     #[must_use]
     pub fn is_synthetic_generator_range(&self, range: Range<u32>) -> bool {
-        self.synthetic_generator_spans
-            .iter()
-            .any(|span| span.intersects(range.start, range.end))
+        self.synthetic_generator_spans.iter().any(|span| span.intersects(range.start, range.end))
     }
 
     /// Projected byte spans of helper callees introduced by this projection.
@@ -304,24 +294,16 @@ impl Action {
     fn key(self, overlay: &Overlay) -> (u32, u8) {
         match self {
             Self::TryEnd(node) => (overlay.nodes[node as usize].span.end, 0),
-            Self::ParserCodeBlockEnd(block) => (
-                overlay.parser_code_blocks[block as usize]
-                    .body
-                    .end
-                    .saturating_sub(1),
-                0,
-            ),
+            Self::ParserCodeBlockEnd(block) => {
+                (overlay.parser_code_blocks[block as usize].body.end.saturating_sub(1), 0)
+            }
             Self::WrapperEnd(node) => (overlay.nodes[node as usize].span.end, 1),
             Self::WrapperStart(node) => (overlay.nodes[node as usize].span.start, 2),
             Self::Token(token) => (overlay.tokens[token as usize].span.start, 3),
             Self::Header { clause, .. } => (overlay.clauses[clause as usize].header.start, 3),
-            Self::ForBody(clause) => (
-                overlay.clauses[clause as usize]
-                    .body
-                    .start
-                    .saturating_add(1),
-                0,
-            ),
+            Self::ForBody(clause) => {
+                (overlay.clauses[clause as usize].body.start.saturating_add(1), 0)
+            }
             Self::Embedded(token) => (overlay.embedded_tokens[token as usize].span.start, 3),
             Self::ParserDynamic(token) => (overlay.parser_dynamic_tokens[token as usize].offset, 2),
         }
@@ -404,8 +386,7 @@ impl<'a> Builder<'a> {
     }
 
     fn record_synthetic_callee(&mut self, start: usize) -> Result<(), ProjectionError> {
-        self.synthetic_callee_spans
-            .push((to_u32(start)?, to_u32(self.output.len())?));
+        self.synthetic_callee_spans.push((to_u32(start)?, to_u32(self.output.len())?));
         Ok(())
     }
 
@@ -437,10 +418,8 @@ impl<'a> Builder<'a> {
         let Some(value) = self.source.get(start..end) else {
             return Err(ProjectionError::SourceChanged { offset: span.start });
         };
-        let projected_start = self
-            .record_segments
-            .then(|| to_u32(self.output.len()))
-            .transpose()?;
+        let projected_start =
+            self.record_segments.then(|| to_u32(self.output.len())).transpose()?;
         self.output.push_str(value);
         let Some(projected_start) = projected_start else {
             return Ok(());
@@ -526,9 +505,7 @@ impl<'a> Builder<'a> {
             StructuralKind::Catch => b"@catch",
         };
         if self.source.as_bytes().get(start..start + spelling.len()) != Some(spelling) {
-            return Err(ProjectionError::SourceChanged {
-                offset: token.span.start,
-            });
+            return Err(ProjectionError::SourceChanged { offset: token.span.start });
         }
         match token.kind {
             StructuralKind::FunctionBody if self.purpose == ProjectionPurpose::Parser => {
@@ -539,9 +516,7 @@ impl<'a> Builder<'a> {
                     .expect("writing to a String cannot fail");
                 self.cursor = start + 1;
                 if self.source.as_bytes().get(self.cursor) != Some(&b'{') {
-                    return Err(ProjectionError::SourceChanged {
-                        offset: token.span.start,
-                    });
+                    return Err(ProjectionError::SourceChanged { offset: token.span.start });
                 }
                 self.copy_to(self.cursor + 1)?;
                 self.output.push_str("\nif (false) return null as any;\n");
@@ -626,10 +601,7 @@ impl<'a> Builder<'a> {
     }
 
     fn parser_code_block(&self, token: u32) -> Option<usize> {
-        self.overlay
-            .parser_code_blocks
-            .binary_search_by_key(&token, |block| block.token)
-            .ok()
+        self.overlay.parser_code_blocks.binary_search_by_key(&token, |block| block.token).ok()
     }
 
     fn parser_code_block_end(&mut self, block_index: u32) -> Result<(), ProjectionError> {
@@ -641,11 +613,8 @@ impl<'a> Builder<'a> {
             .parser_code_blocks
             .get(block_index as usize)
             .ok_or(ProjectionError::StructuralMismatch)?;
-        let closing = block
-            .body
-            .end
-            .checked_sub(1)
-            .ok_or(ProjectionError::StructuralMismatch)? as usize;
+        let closing =
+            block.body.end.checked_sub(1).ok_or(ProjectionError::StructuralMismatch)? as usize;
         if self.source.as_bytes().get(closing) != Some(&b'}') {
             return Err(ProjectionError::SourceChanged {
                 offset: block.body.end.saturating_sub(1),
@@ -675,9 +644,7 @@ impl<'a> Builder<'a> {
         }
         let header = clause.for_header;
         if !header.annotated {
-            return Err(ProjectionError::ScaffoldMismatch {
-                index: ordinal as usize,
-            });
+            return Err(ProjectionError::ScaffoldMismatch { index: ordinal as usize });
         }
         self.copy_to(clause.header.start as usize)?;
         self.output.push('(');
@@ -734,9 +701,7 @@ impl<'a> Builder<'a> {
         let left = self
             .source
             .get(header.left.start as usize..header.left.end as usize)
-            .ok_or(ProjectionError::SourceChanged {
-                offset: header.left.start,
-            })?;
+            .ok_or(ProjectionError::SourceChanged { offset: header.left.start })?;
         let trimmed = left.trim_start();
         if !trimmed.starts_with("const ")
             && !trimmed.starts_with("let ")
@@ -797,9 +762,7 @@ impl<'a> Builder<'a> {
                     || tag.expression.end + 1 != token.span.end
                     || self.source.as_bytes().get(tag.expression.end as usize) != Some(&b'}')
                 {
-                    return Err(ProjectionError::SourceChanged {
-                        offset: token.span.start,
-                    });
+                    return Err(ProjectionError::SourceChanged { offset: token.span.start });
                 }
                 write!(
                     self.output,
@@ -827,9 +790,7 @@ impl<'a> Builder<'a> {
                 if self.source.as_bytes().get(span_start..span_start + 3) != Some(b"</{")
                     || self.source.as_bytes().get(span_end.saturating_sub(1)) != Some(&b'>')
                 {
-                    return Err(ProjectionError::SourceChanged {
-                        offset: token.span.start,
-                    });
+                    return Err(ProjectionError::SourceChanged { offset: token.span.start });
                 }
                 let tag = self
                     .overlay
@@ -861,9 +822,7 @@ impl<'a> Builder<'a> {
                             .source
                             .as_bytes()
                             .get(comment.start as usize..comment.end as usize)
-                            .ok_or(ProjectionError::SourceChanged {
-                                offset: comment.start,
-                            })?;
+                            .ok_or(ProjectionError::SourceChanged { offset: comment.start })?;
                         if comment.start < tag.closing_expression.start
                             || comment.end > tag.closing_expression.end
                             || (!comment_source.starts_with(b"//")
@@ -889,12 +848,8 @@ impl<'a> Builder<'a> {
                 if style.content != token.span {
                     return Err(ProjectionError::StructuralMismatch);
                 }
-                write!(
-                    self.output,
-                    "{{/*{}S{}__*/ null}}",
-                    self.prefix, token.owner
-                )
-                .expect("writing to a String cannot fail");
+                write!(self.output, "{{/*{}S{}__*/ null}}", self.prefix, token.owner)
+                    .expect("writing to a String cannot fail");
                 self.cursor = span_end;
             }
         }
@@ -1044,30 +999,21 @@ pub fn project_for_types(
     let built = build_projection_with_purpose(source, overlay, true, ProjectionPurpose::Types)?;
     let mut projected = built.mapped.projected;
     append_type_helper_declarations(&mut projected, overlay, &built.prefix);
-    Ok(TypeProjection {
-        projected,
-        segments: built.mapped.segments,
-    })
+    Ok(TypeProjection { projected, segments: built.mapped.segments })
 }
 
 fn append_type_helper_declarations(output: &mut String, overlay: &Overlay, prefix: &str) {
     if overlay.nodes.is_empty()
         && overlay.dynamic_tags.is_empty()
-        && overlay
-            .clauses
-            .iter()
-            .all(|clause| !clause.for_header.annotated)
+        && overlay.clauses.iter().all(|clause| !clause.for_header.annotated)
     {
         return;
     }
     output.push_str("\n/* OXC for TSRX type-only projection helpers. */\n");
     for (index, node) in overlay.nodes.iter().enumerate() {
         if node.context != ControlContext::Statement {
-            writeln!(
-                output,
-                "declare function {prefix}W{index}_<T>(value: T, end: unknown): any;"
-            )
-            .expect("writing to a String cannot fail");
+            writeln!(output, "declare function {prefix}W{index}_<T>(value: T, end: unknown): any;")
+                .expect("writing to a String cannot fail");
             writeln!(output, "declare const {prefix}E{index}_: unique symbol;")
                 .expect("writing to a String cannot fail");
         }
@@ -1081,11 +1027,8 @@ fn append_type_helper_declarations(output: &mut String, overlay: &Overlay, prefi
                 .expect("writing to a String cannot fail");
         }
     }
-    for (ordinal, clause) in overlay
-        .clauses
-        .iter()
-        .filter(|clause| clause.for_header.annotated)
-        .enumerate()
+    for (ordinal, clause) in
+        overlay.clauses.iter().filter(|clause| clause.for_header.annotated).enumerate()
     {
         writeln!(
             output,
@@ -1093,18 +1036,12 @@ fn append_type_helper_declarations(output: &mut String, overlay: &Overlay, prefi
         )
         .expect("writing to a String cannot fail");
         if !clause.for_header.index.is_empty() {
-            writeln!(
-                output,
-                "declare function {prefix}IH{ordinal}_<T>(value: T): T;"
-            )
-            .expect("writing to a String cannot fail");
+            writeln!(output, "declare function {prefix}IH{ordinal}_<T>(value: T): T;")
+                .expect("writing to a String cannot fail");
         }
         if !clause.for_header.key.is_empty() {
-            writeln!(
-                output,
-                "declare function {prefix}KH{ordinal}_<T>(value: T): T;"
-            )
-            .expect("writing to a String cannot fail");
+            writeln!(output, "declare function {prefix}KH{ordinal}_<T>(value: T): T;")
+                .expect("writing to a String cannot fail");
         }
         writeln!(output, "declare const {prefix}HE{ordinal}_: unique symbol;")
             .expect("writing to a String cannot fail");
@@ -1129,13 +1066,8 @@ pub fn project_for_format(
     for (slot, manifest) in built.tries.iter().enumerate() {
         try_slots[manifest.node as usize] = to_u32(slot)?;
     }
-    let styles = overlay
-        .style_blocks
-        .iter()
-        .map(|style| StyleManifest {
-            payload: style.content,
-        })
-        .collect();
+    let styles =
+        overlay.style_blocks.iter().map(|style| StyleManifest { payload: style.content }).collect();
     let dynamic_count = to_u32(overlay.dynamic_tags.len())?;
     Ok(FormatProjection {
         projected: built.mapped.projected,
@@ -1143,10 +1075,7 @@ pub fn project_for_format(
         tokens: overlay
             .tokens
             .iter()
-            .map(|token| TokenManifest {
-                kind: token.kind,
-                owner: token.owner,
-            })
+            .map(|token| TokenManifest { kind: token.kind, owner: token.owner })
             .collect(),
         wrappers: built.wrappers,
         headers: built.headers,
@@ -1155,16 +1084,10 @@ pub fn project_for_format(
         dynamics: overlay
             .dynamic_tags
             .iter()
-            .map(|tag| DynamicManifest {
-                self_closing: tag.self_closing,
-            })
+            .map(|tag| DynamicManifest { self_closing: tag.self_closing })
             .collect(),
         dynamic_count,
-        dynamic_offsets: overlay
-            .dynamic_tags
-            .iter()
-            .map(|tag| tag.expression.start)
-            .collect(),
+        dynamic_offsets: overlay.dynamic_tags.iter().map(|tag| tag.expression.start).collect(),
         dynamic_comments: overlay.dynamic_comments.clone(),
         styles,
         shape_fingerprint: structural_fingerprint(overlay),
@@ -1232,19 +1155,10 @@ fn build_projection_with_purpose(
     }
     if record_segments && !overlay.dynamic_tags.is_empty() {
         mapped.dynamic_count = to_u32(overlay.dynamic_tags.len())?;
-        mapped.dynamic_offsets = overlay
-            .dynamic_tags
-            .iter()
-            .map(|tag| tag.expression.start)
-            .collect();
+        mapped.dynamic_offsets =
+            overlay.dynamic_tags.iter().map(|tag| tag.expression.start).collect();
     }
-    Ok(BuiltProjection {
-        mapped,
-        prefix,
-        wrappers,
-        headers,
-        tries,
-    })
+    Ok(BuiltProjection { mapped, prefix, wrappers, headers, tries })
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1267,9 +1181,8 @@ fn project_actions(
     loop {
         let wrapper = wrapper_actions.get(wrapper_cursor).copied();
         let try_end = try_end_actions.get(try_end_cursor).copied();
-        let parser_code_block_end = parser_code_block_end_actions
-            .get(parser_code_block_end_cursor)
-            .copied();
+        let parser_code_block_end =
+            parser_code_block_end_actions.get(parser_code_block_end_cursor).copied();
         let token = (token_cursor < overlay.tokens.len())
             .then(|| to_u32(token_cursor).map(Action::Token))
             .transpose()?;
@@ -1281,18 +1194,12 @@ fn project_actions(
             && parser_dynamic_cursor < overlay.parser_dynamic_tokens.len())
         .then(|| to_u32(parser_dynamic_cursor).map(Action::ParserDynamic))
         .transpose()?;
-        let Some(action) = [
-            wrapper,
-            try_end,
-            parser_code_block_end,
-            token,
-            header,
-            embedded,
-            parser_dynamic,
-        ]
-        .into_iter()
-        .flatten()
-        .min_by_key(|action| action.key(overlay)) else {
+        let Some(action) =
+            [wrapper, try_end, parser_code_block_end, token, header, embedded, parser_dynamic]
+                .into_iter()
+                .flatten()
+                .min_by_key(|action| action.key(overlay))
+        else {
             break;
         };
         match action {
@@ -1361,10 +1268,8 @@ fn validate_projection_lane(
 fn validate_parser_code_blocks(overlay: &Overlay) -> Result<(), ProjectionError> {
     let mut previous_token = None;
     for block in &overlay.parser_code_blocks {
-        let token = overlay
-            .tokens
-            .get(block.token as usize)
-            .ok_or(ProjectionError::StructuralMismatch)?;
+        let token =
+            overlay.tokens.get(block.token as usize).ok_or(ProjectionError::StructuralMismatch)?;
         if token.kind != StructuralKind::FunctionBody
             || block.body.start != token.span.end
             || block.body.end <= block.body.start
@@ -1416,9 +1321,7 @@ fn validate_parser_dynamic_boundaries(overlay: &Overlay) -> Result<(), Projectio
                     return Err(ProjectionError::StructuralMismatch);
                 }
                 stack.push((token.owner, 1));
-                next_owner = next_owner
-                    .checked_add(1)
-                    .ok_or(ProjectionError::SourceTooLarge)?;
+                next_owner = next_owner.checked_add(1).ok_or(ProjectionError::SourceTooLarge)?;
             }
             ParserDynamicKind::OpenEnd => {
                 if stack.last() != Some(&(token.owner, 1)) || token.offset != tag.expression.end {
@@ -1534,10 +1437,7 @@ fn build_wrapper_actions(
             }
             actions.push(Action::WrapperStart(node_index));
             active.push(node_index);
-            manifests.push(WrapperManifest {
-                node: node_index,
-                context: node.context,
-            });
+            manifests.push(WrapperManifest { node: node_index, context: node.context });
         }
     }
     while let Some(active) = active.pop() {
@@ -1558,10 +1458,7 @@ fn build_header_actions(
             let clause = overlay.clauses[clause_index as usize];
             if clause.for_header.annotated || type_semantic && clause.role == ClauseRole::For {
                 let ordinal = to_u32(manifests.len())?;
-                actions.push(Action::Header {
-                    clause: clause_index,
-                    ordinal,
-                });
+                actions.push(Action::Header { clause: clause_index, ordinal });
                 if clause.for_header.annotated {
                     manifests.push(HeaderManifest {
                         ordinal,
@@ -1592,9 +1489,7 @@ fn build_try_actions(
         while active.last().is_some_and(|&node_index: &u32| {
             overlay.nodes[node_index as usize].span.end <= node.span.start
         }) {
-            actions.push(Action::TryEnd(
-                active.pop().ok_or(ProjectionError::StructuralMismatch)?,
-            ));
+            actions.push(Action::TryEnd(active.pop().ok_or(ProjectionError::StructuralMismatch)?));
         }
         if node.kind != ControlKind::Try {
             continue;
@@ -1627,11 +1522,7 @@ fn build_try_actions(
             flags |= TryManifest::AUTHORED_SEMICOLON;
         }
         active.push(node_index);
-        manifests.push(TryManifest {
-            node: node_index,
-            context: node.context,
-            flags,
-        });
+        manifests.push(TryManifest { node: node_index, context: node.context, flags });
     }
     while let Some(node) = active.pop() {
         actions.push(Action::TryEnd(node));
@@ -1689,12 +1580,7 @@ fn lift_embedded(
         .styles
         .iter()
         .map(|manifest| (manifest.payload.end - manifest.payload.start) as usize)
-        .chain(
-            projection
-                .dynamic_comments
-                .iter()
-                .map(|span| (span.end - span.start) as usize),
-        )
+        .chain(projection.dynamic_comments.iter().map(|span| (span.end - span.start) as usize))
         .fold(0usize, usize::saturating_add);
     let mut output = String::with_capacity(source.len().saturating_add(restored_bytes));
     let mut copied = 0usize;
@@ -1705,10 +1591,7 @@ fn lift_embedded(
             let (ordinal, digits_end) =
                 parse_decimal(bytes, digits_start).ok_or(ProjectionError::MarkerResidual)?;
             let index = ordinal as usize;
-            let manifest = projection
-                .dynamics
-                .get(index)
-                .ok_or(ProjectionError::MarkerResidual)?;
+            let manifest = projection.dynamics.get(index).ok_or(ProjectionError::MarkerResidual)?;
             if manifest.self_closing || closed[index] || expressions[index].is_missing() {
                 return Err(ProjectionError::ScaffoldMismatch { index });
             }
@@ -1769,10 +1652,7 @@ fn lift_embedded(
             output.push('}');
             copied = sentinel_end;
             cursor = copied;
-            expressions[index] = ScaffoldSpan {
-                start: expression.start,
-                end: expression.end,
-            };
+            expressions[index] = ScaffoldSpan { start: expression.start, end: expression.end };
             opened[index] = true;
             continue;
         }
@@ -1782,10 +1662,8 @@ fn lift_embedded(
             let (ordinal, digits_end) =
                 parse_decimal(bytes, digits_start).ok_or(ProjectionError::MarkerResidual)?;
             let index = ordinal as usize;
-            let span = *projection
-                .dynamic_comments
-                .get(index)
-                .ok_or(ProjectionError::MarkerResidual)?;
+            let span =
+                *projection.dynamic_comments.get(index).ok_or(ProjectionError::MarkerResidual)?;
             if comments[index] || source.as_bytes().get(digits_end..digits_end + 4) != Some(b"__*/")
             {
                 return Err(ProjectionError::ScaffoldMismatch { index });
@@ -1808,10 +1686,7 @@ fn lift_embedded(
             let (ordinal, digits_end) =
                 parse_decimal(bytes, digits_start).ok_or(ProjectionError::MarkerResidual)?;
             let index = ordinal as usize;
-            let manifest = projection
-                .styles
-                .get(index)
-                .ok_or(ProjectionError::MarkerResidual)?;
+            let manifest = projection.styles.get(index).ok_or(ProjectionError::MarkerResidual)?;
             if styles[index] || source.as_bytes().get(digits_end..digits_end + 4) != Some(b"__*/") {
                 return Err(ProjectionError::ScaffoldMismatch { index });
             }
@@ -1856,10 +1731,7 @@ struct ScaffoldSpan {
 }
 
 impl ScaffoldSpan {
-    const MISSING: Self = Self {
-        start: MISSING_POSITION,
-        end: MISSING_POSITION,
-    };
+    const MISSING: Self = Self { start: MISSING_POSITION, end: MISSING_POSITION };
 
     const fn is_missing(self) -> bool {
         self.start == MISSING_POSITION
@@ -2045,13 +1917,7 @@ fn lift_scaffolds(
         let slot = try_slot(projection, token.owner)?;
         let manifest = projection.tries[slot];
         let positions = indexed.tries[slot];
-        try_edits.push(try_clause_edit(
-            formatted,
-            token_index,
-            token.kind,
-            manifest,
-            positions,
-        )?);
+        try_edits.push(try_clause_edit(formatted, token_index, token.kind, manifest, positions)?);
     }
     let edits = merge_edits(header_edits, try_edits);
     render_scaffolds(formatted, &wrappers, &edits)
@@ -2208,17 +2074,11 @@ fn index_scaffolds(
             || positions.end_marker.is_missing()
             || positions.end_sentinel.is_missing()
         {
-            return Err(ProjectionError::ScaffoldMismatch {
-                index: manifest.node as usize,
-            });
+            return Err(ProjectionError::ScaffoldMismatch { index: manifest.node as usize });
         }
     }
     for (manifest, positions) in projection.headers.iter().copied().zip(&headers) {
-        let index_positions = [
-            positions.index_helper,
-            positions.index_start,
-            positions.index_end,
-        ];
+        let index_positions = [positions.index_helper, positions.index_start, positions.index_end];
         let key_positions = [positions.key_helper, positions.key_start, positions.key_end];
         let index_positions_valid = if manifest.has_index {
             index_positions.iter().all(|span| !span.is_missing())
@@ -2237,9 +2097,7 @@ fn index_scaffolds(
             || !index_positions_valid
             || !key_positions_valid
         {
-            return Err(ProjectionError::ScaffoldMismatch {
-                index: manifest.ordinal as usize,
-            });
+            return Err(ProjectionError::ScaffoldMismatch { index: manifest.ordinal as usize });
         }
     }
     for (manifest, positions) in projection.tries.iter().copied().zip(&tries) {
@@ -2260,39 +2118,26 @@ fn index_scaffolds(
             || !pending_valid
             || !catch_valid
         {
-            return Err(ProjectionError::ScaffoldMismatch {
-                index: manifest.node as usize,
-            });
+            return Err(ProjectionError::ScaffoldMismatch { index: manifest.node as usize });
         }
     }
-    Ok(IndexedScaffolds {
-        wrappers,
-        headers,
-        tries,
-    })
+    Ok(IndexedScaffolds { wrappers, headers, tries })
 }
 
 fn wrapper_slot(projection: &FormatProjection, node: u32) -> Result<usize, ProjectionError> {
     projection
         .wrappers
         .binary_search_by_key(&node, |wrapper| wrapper.node)
-        .map_err(|_| ProjectionError::ScaffoldMismatch {
-            index: node as usize,
-        })
+        .map_err(|_| ProjectionError::ScaffoldMismatch { index: node as usize })
 }
 
 fn try_slot(projection: &FormatProjection, node: u32) -> Result<usize, ProjectionError> {
-    let slot =
-        *projection
-            .try_slots
-            .get(node as usize)
-            .ok_or(ProjectionError::ScaffoldMismatch {
-                index: node as usize,
-            })?;
+    let slot = *projection
+        .try_slots
+        .get(node as usize)
+        .ok_or(ProjectionError::ScaffoldMismatch { index: node as usize })?;
     if slot == NONE {
-        return Err(ProjectionError::ScaffoldMismatch {
-            index: node as usize,
-        });
+        return Err(ProjectionError::ScaffoldMismatch { index: node as usize });
     }
     Ok(slot as usize)
 }
@@ -2303,9 +2148,7 @@ fn header_positions_mut(
 ) -> Result<&mut IndexedHeader, ProjectionError> {
     headers
         .get_mut(ordinal as usize)
-        .ok_or(ProjectionError::ScaffoldMismatch {
-            index: ordinal as usize,
-        })
+        .ok_or(ProjectionError::ScaffoldMismatch { index: ordinal as usize })
 }
 
 fn set_scaffold_span(
@@ -2326,13 +2169,8 @@ fn parse_identifier_occurrence(
     digits_start: usize,
 ) -> Option<(u32, ScaffoldSpan)> {
     let (ordinal, digits_end) = parse_decimal(bytes, digits_start)?;
-    (bytes.get(digits_end) == Some(&b'_')).then_some((
-        ordinal,
-        ScaffoldSpan {
-            start: prefix_start,
-            end: digits_end + 1,
-        },
-    ))
+    (bytes.get(digits_end) == Some(&b'_'))
+        .then_some((ordinal, ScaffoldSpan { start: prefix_start, end: digits_end + 1 }))
 }
 
 fn parse_token_marker_occurrence(
@@ -2347,13 +2185,7 @@ fn parse_token_marker_occurrence(
     {
         return None;
     }
-    Some((
-        ordinal,
-        ScaffoldSpan {
-            start: prefix_start - 2,
-            end: digits_end + 2,
-        },
-    ))
+    Some((ordinal, ScaffoldSpan { start: prefix_start - 2, end: digits_end + 2 }))
 }
 
 fn parse_marker_occurrence(
@@ -2370,23 +2202,14 @@ fn parse_marker_occurrence(
     {
         return None;
     }
-    Some((
-        ordinal,
-        side,
-        ScaffoldSpan {
-            start: prefix_start - 2,
-            end: digits_end + 5,
-        },
-    ))
+    Some((ordinal, side, ScaffoldSpan { start: prefix_start - 2, end: digits_end + 5 }))
 }
 
 fn parse_decimal(bytes: &[u8], mut index: usize) -> Option<(u32, usize)> {
     let start = index;
     let mut value = 0u32;
     while let Some(byte @ b'0'..=b'9') = bytes.get(index) {
-        value = value
-            .checked_mul(10)?
-            .checked_add(u32::from(*byte - b'0'))?;
+        value = value.checked_mul(10)?.checked_add(u32::from(*byte - b'0'))?;
         index += 1;
     }
     (index > start).then_some((value, index))
@@ -2543,12 +2366,9 @@ fn try_clause_edit(
     positions: IndexedTry,
 ) -> Result<ScaffoldEdit, ProjectionError> {
     let (marker, method, replacement, has_header) = match kind {
-        StructuralKind::Pending => (
-            positions.pending_marker,
-            positions.pending_method,
-            EditReplacement::Pending,
-            false,
-        ),
+        StructuralKind::Pending => {
+            (positions.pending_marker, positions.pending_method, EditReplacement::Pending, false)
+        }
         StructuralKind::Catch => (
             positions.catch_marker,
             positions.catch_method,
@@ -2580,12 +2400,7 @@ fn try_clause_edit(
         }
         body_start
     };
-    Ok(ScaffoldEdit {
-        index: token_index,
-        start: previous_body_close + 1,
-        end,
-        replacement,
-    })
+    Ok(ScaffoldEdit { index: token_index, start: previous_body_close + 1, end, replacement })
 }
 
 fn merge_wrappers(left: Vec<WrapperEdit>, right: Vec<WrapperEdit>) -> Vec<WrapperEdit> {
@@ -2786,9 +2601,7 @@ fn render_scaffolds(
         let next_wrapper_start = next_wrapper.map_or(usize::MAX, |wrapper| wrapper.replace_start);
         let next_edit_start = next_edit.map_or(usize::MAX, |edit| edit.start);
         let next_start = next_wrapper_start.min(next_edit_start);
-        let next_end = active
-            .last()
-            .map_or(usize::MAX, |&index| wrappers[index].content_end);
+        let next_end = active.last().map_or(usize::MAX, |&index| wrappers[index].content_end);
 
         if !active.is_empty() && next_end <= next_start {
             if source_cursor > next_end {
@@ -2815,9 +2628,7 @@ fn render_scaffolds(
         if next_edit_start <= next_wrapper_start {
             let edit = *next_edit.ok_or(ProjectionError::StructuralMismatch)?;
             if edit.start > edit.end
-                || active
-                    .last()
-                    .is_some_and(|&index| edit.end > wrappers[index].content_end)
+                || active.last().is_some_and(|&index| edit.end > wrappers[index].content_end)
             {
                 return Err(ProjectionError::ScaffoldMismatch { index: edit.index });
             }
@@ -2834,16 +2645,13 @@ fn render_scaffolds(
                     .last()
                     .is_some_and(|&index| wrapper.replace_end > wrappers[index].content_end)
             {
-                return Err(ProjectionError::ScaffoldMismatch {
-                    index: wrapper.index,
-                });
+                return Err(ProjectionError::ScaffoldMismatch { index: wrapper.index });
             }
             writer.write(&source[source_cursor..wrapper.replace_start], active_dedent);
             writer.write(wrapper.replacement.text(), active_dedent);
             source_cursor = wrapper.content_start;
-            active_dedent = active_dedent
-                .checked_add(wrapper.dedent)
-                .ok_or(ProjectionError::SourceTooLarge)?;
+            active_dedent =
+                active_dedent.checked_add(wrapper.dedent).ok_or(ProjectionError::SourceTooLarge)?;
             active.push(wrapper_cursor);
             wrapper_cursor += 1;
         }
@@ -2879,9 +2687,7 @@ impl LiftWriter {
             if self.line_start && self.state != TextState::Template {
                 let mut removed = 0usize;
                 while removed < dedent
-                    && bytes
-                        .get(index)
-                        .is_some_and(|byte| matches!(byte, b' ' | b'\t'))
+                    && bytes.get(index).is_some_and(|byte| matches!(byte, b' ' | b'\t'))
                 {
                     index += 1;
                     removed += 1;
@@ -2997,36 +2803,25 @@ fn lift_tokens(lifted: &str, projection: &FormatProjection) -> Result<String, Pr
             .parse::<usize>()
             .map_err(|_| ProjectionError::MarkerResidual)?;
         if actual_index < expected_index {
-            return Err(ProjectionError::MarkerDuplicated {
-                index: actual_index,
-            });
+            return Err(ProjectionError::MarkerDuplicated { index: actual_index });
         }
         if actual_index > expected_index {
-            return Err(ProjectionError::MarkerReordered {
-                index: expected_index,
-            });
+            return Err(ProjectionError::MarkerReordered { index: expected_index });
         }
         let Some(token) = projection.tokens.get(expected_index) else {
-            return Err(ProjectionError::MarkerDuplicated {
-                index: actual_index,
-            });
+            return Err(ProjectionError::MarkerDuplicated { index: actual_index });
         };
         let kind = token.kind;
         let marker_end = digits_end + 2;
         let target_start = skip_ascii_whitespace(lifted, marker_end);
         let expected = kind.projected_token();
         if !token_at(lifted, target_start, expected) {
-            return Err(ProjectionError::MarkerTargetChanged {
-                index: expected_index,
-                expected,
-            });
+            return Err(ProjectionError::MarkerTargetChanged { index: expected_index, expected });
         }
         let (replace_start, replace_end, replacement) = if kind == StructuralKind::Empty {
             let condition_start = skip_ascii_whitespace(lifted, target_start + expected.len());
             if !lifted[condition_start..].starts_with("(false)") {
-                return Err(ProjectionError::ScaffoldMismatch {
-                    index: expected_index,
-                });
+                return Err(ProjectionError::ScaffoldMismatch { index: expected_index });
             }
             let whitespace_start = previous_non_whitespace(lifted, marker_start)
                 .filter(|position| lifted.as_bytes()[*position] == b'}')
@@ -3054,9 +2849,7 @@ fn lift_tokens(lifted: &str, projection: &FormatProjection) -> Result<String, Pr
         expected_index = next_lifted_token(&projection.tokens, expected_index + 1);
     }
     if expected_index != projection.tokens.len() {
-        return Err(ProjectionError::MarkerMissing {
-            index: expected_index,
-        });
+        return Err(ProjectionError::MarkerMissing { index: expected_index });
     }
     output.push_str(&lifted[source_cursor..]);
     Ok(output)
@@ -3064,10 +2857,7 @@ fn lift_tokens(lifted: &str, projection: &FormatProjection) -> Result<String, Pr
 
 fn next_lifted_token(tokens: &[TokenManifest], mut index: usize) -> usize {
     while tokens.get(index).is_some_and(|token| {
-        matches!(
-            token.kind,
-            StructuralKind::Try | StructuralKind::Pending | StructuralKind::Catch
-        )
+        matches!(token.kind, StructuralKind::Try | StructuralKind::Pending | StructuralKind::Catch)
     }) {
         index += 1;
     }
@@ -3090,17 +2880,11 @@ fn scaffold_call_end(
 }
 
 fn previous_non_whitespace(source: &str, before: usize) -> Option<usize> {
-    source.as_bytes()[..before]
-        .iter()
-        .rposition(|byte| !byte.is_ascii_whitespace())
+    source.as_bytes()[..before].iter().rposition(|byte| !byte.is_ascii_whitespace())
 }
 
 fn skip_ascii_whitespace(source: &str, mut index: usize) -> usize {
-    while source
-        .as_bytes()
-        .get(index)
-        .is_some_and(u8::is_ascii_whitespace)
-    {
+    while source.as_bytes().get(index).is_some_and(u8::is_ascii_whitespace) {
         index += 1;
     }
     index
@@ -3149,12 +2933,9 @@ fn structural_fingerprint(overlay: &Overlay) -> u128 {
     let mut first = 0x517c_c1b7_2722_0a95_u64;
     let mut second = 0x6eed_0e9d_a4d9_4a4f_u64;
     let mut mix = |value: u64| {
-        first = (first ^ value)
-            .wrapping_mul(0x9e37_79b1_85eb_ca87)
-            .rotate_left(23);
-        second = (second ^ value.rotate_left(29))
-            .wrapping_mul(0xc2b2_ae3d_27d4_eb4f)
-            .rotate_left(31);
+        first = (first ^ value).wrapping_mul(0x9e37_79b1_85eb_ca87).rotate_left(23);
+        second =
+            (second ^ value.rotate_left(29)).wrapping_mul(0xc2b2_ae3d_27d4_eb4f).rotate_left(31);
     };
     mix(overlay.tokens.len() as u64);
     for token in &overlay.tokens {

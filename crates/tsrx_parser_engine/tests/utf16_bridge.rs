@@ -45,9 +45,7 @@ fn measure_release_parse(source: &[u16], semantic: bool) -> u128 {
         let started = Instant::now();
         for _ in 0..iterations {
             let result = parse_tsrx_utf16_with_options(
-                &TsrxUtf16ParseRequest {
-                    source: black_box(source),
-                },
+                &TsrxUtf16ParseRequest { source: black_box(source) },
                 TsrxParseOptions {
                     filename: "Scaling.tsrx",
                     show_semantic_errors: semantic,
@@ -76,11 +74,7 @@ fn assert_linear_scaling(label: &str, counts: &[usize], medians: &[u128]) {
     let last_count =
         u128::try_from(*counts.last().expect("last record count")).expect("last record count");
     let normalized_first = medians[0].saturating_mul(last_count);
-    let normalized_last = medians
-        .last()
-        .copied()
-        .expect("last median")
-        .saturating_mul(first_count);
+    let normalized_last = medians.last().copied().expect("last median").saturating_mul(first_count);
     assert!(
         normalized_last <= normalized_first.saturating_mul(3) / 2 + 20_000,
         "{label} per-record cost grew beyond 1.5x across the retained 8x range"
@@ -108,10 +102,7 @@ fn assert_no_private_markers_in_diagnostics(diagnostics: &DiagnosticTable) {
         {
             assert_clean(diagnostics.text(range).expect("diagnostic text range"));
         }
-        for label in diagnostics
-            .labels(diagnostic.labels)
-            .expect("diagnostic label range")
-        {
+        for label in diagnostics.labels(diagnostic.labels).expect("diagnostic label range") {
             if let Some(range) = label.message.get() {
                 assert_clean(diagnostics.text(range).expect("label text range"));
             }
@@ -194,10 +185,7 @@ fn text_units(text: PackedTextRef<'_>) -> Vec<u16> {
 }
 
 fn contains_units(haystack: &[u16], needle: &[u16]) -> bool {
-    needle.is_empty()
-        || haystack
-            .windows(needle.len())
-            .any(|window| window == needle)
+    needle.is_empty() || haystack.windows(needle.len()).any(|window| window == needle)
 }
 
 fn utf16(value: &str) -> Vec<u16> {
@@ -213,10 +201,7 @@ fn well_formed_unicode_uses_original_utf16_coordinates_and_values_everywhere() {
 
     let result = parse_units(&units);
     assert_eq!(result.status, ParseCompleteness::Complete);
-    assert_eq!(
-        result.coordinate_domain,
-        CoordinateDomain::OriginalUtf16Units
-    );
+    assert_eq!(result.coordinate_domain, CoordinateDomain::OriginalUtf16Units);
     let tape = result.program();
     let program = tape.root().as_object().expect("Program");
     assert_eq!(span(tape, program), (0, 85));
@@ -241,14 +226,9 @@ fn well_formed_unicode_uses_original_utf16_coordinates_and_values_everywhere() {
 
     let element = object_at(tape, "JSXElement", (55, 83));
     let opening = object_field(tape, element, "openingElement");
-    let attributes = field(tape, opening, "attributes")
-        .as_list()
-        .expect("attributes list");
-    let attribute = tape
-        .values(attributes)
-        .next()
-        .and_then(ValueRef::as_object)
-        .expect("one attribute");
+    let attributes = field(tape, opening, "attributes").as_list().expect("attributes list");
+    let attribute =
+        tape.values(attributes).next().and_then(ValueRef::as_object).expect("one attribute");
     assert_eq!(span(tape, attribute), (61, 72));
     let attribute_value = object_field(tape, attribute, "value");
     assert_eq!(span(tape, attribute_value), (67, 72));
@@ -272,10 +252,7 @@ fn semantic_labels_and_codeframes_use_utf16_after_astral_and_crlf() {
         },
     )
     .expect("Unicode semantic result");
-    assert_eq!(
-        result.coordinate_domain,
-        CoordinateDomain::OriginalUtf16Units
-    );
+    assert_eq!(result.coordinate_domain, CoordinateDomain::OriginalUtf16Units);
     let diagnostic = result
         .errors
         .records()
@@ -285,30 +262,16 @@ fn semantic_labels_and_codeframes_use_utf16_after_astral_and_crlf() {
         })
         .expect("duplicate binding diagnostic");
     for label in result.errors.labels(diagnostic.labels).expect("labels") {
-        assert_eq!(
-            &units[label.span.start as usize..label.span.end as usize],
-            &[u16::from(b'x')]
-        );
+        assert_eq!(&units[label.span.start as usize..label.span.end as usize], &[u16::from(b'x')]);
     }
-    let codeframe = result
-        .errors
-        .optional_text(diagnostic.codeframe)
-        .expect("lossless codeframe")
-        .to_utf16();
+    let codeframe =
+        result.errors.optional_text(diagnostic.codeframe).expect("lossless codeframe").to_utf16();
+    assert!(contains_units(&codeframe, &"const lead=\"😀\";".encode_utf16().collect::<Vec<_>>()));
     assert!(contains_units(
         &codeframe,
-        &"const lead=\"😀\";".encode_utf16().collect::<Vec<_>>()
+        &"function View() @{ let x; let x; <main/> }".encode_utf16().collect::<Vec<_>>()
     ));
-    assert!(contains_units(
-        &codeframe,
-        &"function View() @{ let x; let x; <main/> }"
-            .encode_utf16()
-            .collect::<Vec<_>>()
-    ));
-    assert!(contains_units(
-        &codeframe,
-        &"Semantic.tsrx".encode_utf16().collect::<Vec<_>>()
-    ));
+    assert!(contains_units(&codeframe, &"Semantic.tsrx".encode_utf16().collect::<Vec<_>>()));
 }
 
 // One table-driven case per opaque surface. Splitting it would scatter the
@@ -323,116 +286,61 @@ fn lone_surrogates_round_trip_in_every_opaque_surface() {
         assert_eq!(source.len(), 148);
         let result = parse_units(&source);
         assert_eq!(result.status, ParseCompleteness::Complete);
-        assert_eq!(
-            result.coordinate_domain,
-            CoordinateDomain::OriginalUtf16Units
-        );
+        assert_eq!(result.coordinate_domain, CoordinateDomain::OriginalUtf16Units);
         let tape = result.program();
 
         let module = result.module.as_ref().expect("module table");
         let import = module.static_imports()[0];
         assert_eq!(import.span, tsrx_tape_schema::TapeSpan::new(0, 19));
+        assert_eq!(import.module_request.span, tsrx_tape_schema::TapeSpan::new(14, 18));
         assert_eq!(
-            import.module_request.span,
-            tsrx_tape_schema::TapeSpan::new(14, 18)
-        );
-        assert_eq!(
-            text_units(
-                module
-                    .value_text(import.module_request)
-                    .expect("lossless module value")
-            ),
+            text_units(module.value_text(import.module_request).expect("lossless module value")),
             [u16::from(b'm'), unit]
         );
 
         let literal = object_at(tape, "Literal", (47, 51));
-        assert_eq!(
-            scalar_field(tape, literal, "value"),
-            format!(r#""q\u{escape}""#)
-        );
-        assert_eq!(
-            scalar_field(tape, literal, "raw"),
-            format!(r#""\"q\u{escape}\"""#)
-        );
+        assert_eq!(scalar_field(tape, literal, "value"), format!(r#""q\u{escape}""#));
+        assert_eq!(scalar_field(tape, literal, "raw"), format!(r#""\"q\u{escape}\"""#));
 
         let template_element = object_at(tape, "TemplateElement", (62, 64));
         let template_value = object_field(tape, template_element, "value");
         let expected_template = format!(r#""t\u{escape}""#);
         assert_eq!(scalar_field(tape, template_value, "raw"), expected_template);
-        assert_eq!(
-            scalar_field(tape, template_value, "cooked"),
-            expected_template
-        );
+        assert_eq!(scalar_field(tape, template_value, "cooked"), expected_template);
 
         let regex = object_at(tape, "Literal", (75, 80));
-        assert_eq!(
-            scalar_field(tape, regex, "raw"),
-            format!(r#""/r\u{escape}/u""#)
-        );
+        assert_eq!(scalar_field(tape, regex, "raw"), format!(r#""/r\u{escape}/u""#));
         let regex_fields = object_field(tape, regex, "regex");
-        assert_eq!(
-            scalar_field(tape, regex_fields, "pattern"),
-            format!(r#""r\u{escape}""#)
-        );
+        assert_eq!(scalar_field(tape, regex_fields, "pattern"), format!(r#""r\u{escape}""#));
 
         let comment = &result.comments.records()[0];
         assert_eq!(comment.span, tsrx_tape_schema::TapeSpan::new(82, 88));
         assert_eq!(
-            text_units(
-                result
-                    .comments
-                    .value_text(comment)
-                    .expect("lossless comment")
-            ),
+            text_units(result.comments.value_text(comment).expect("lossless comment")),
             [u16::from(b'c'), unit]
         );
 
         let attribute_value = object_at(tape, "Literal", (101, 105));
-        assert_eq!(
-            scalar_field(tape, attribute_value, "value"),
-            format!(r#""a\u{escape}""#)
-        );
+        assert_eq!(scalar_field(tape, attribute_value, "value"), format!(r#""a\u{escape}""#));
         let jsx_text = object_at(tape, "JSXText", (106, 108));
-        assert_eq!(
-            scalar_field(tape, jsx_text, "value"),
-            format!(r#""x\u{escape}""#)
-        );
-        assert_eq!(
-            scalar_field(tape, jsx_text, "raw"),
-            format!(r#""x\u{escape}""#)
-        );
+        assert_eq!(scalar_field(tape, jsx_text, "value"), format!(r#""x\u{escape}""#));
+        assert_eq!(scalar_field(tape, jsx_text, "raw"), format!(r#""x\u{escape}""#));
 
         let style = object_at(tape, "JSXStyleElement", (108, 139));
-        assert_eq!(
-            scalar_field(tape, style, "css"),
-            format!(r#"".x{{content:\"s\u{escape}\"}}""#)
-        );
-        let style_children = field(tape, style, "children")
-            .as_list()
-            .expect("style children");
+        assert_eq!(scalar_field(tape, style, "css"), format!(r#"".x{{content:\"s\u{escape}\"}}""#));
+        let style_children = field(tape, style, "children").as_list().expect("style children");
         let stylesheet = tape
             .values(style_children)
             .next()
             .and_then(ValueRef::as_object)
             .expect("CSS StyleSheet");
         assert_eq!(span(tape, stylesheet), (0, 16));
-        let rules = field(tape, stylesheet, "children")
-            .as_list()
-            .expect("stylesheet rules");
-        let rule = tape
-            .values(rules)
-            .next()
-            .and_then(ValueRef::as_object)
-            .expect("CSS Rule");
+        let rules = field(tape, stylesheet, "children").as_list().expect("stylesheet rules");
+        let rule = tape.values(rules).next().and_then(ValueRef::as_object).expect("CSS Rule");
         let prelude = object_field(tape, rule, "prelude");
-        let selectors = field(tape, prelude, "children")
-            .as_list()
-            .expect("complex selectors");
-        let selector = tape
-            .values(selectors)
-            .next()
-            .and_then(ValueRef::as_object)
-            .expect("ComplexSelector");
+        let selectors = field(tape, prelude, "children").as_list().expect("complex selectors");
+        let selector =
+            tape.values(selectors).next().and_then(ValueRef::as_object).expect("ComplexSelector");
         assert_eq!(span(tape, selector), (0, 2));
     }
 }
@@ -475,10 +383,7 @@ fn active_lone_surrogates_fail_at_the_exact_utf16_unit_without_a_program() {
             let source = substitute_unit(template, unit);
             let result = parse_units(&source);
             assert_eq!(result.status, ParseCompleteness::Failed, "{template}");
-            assert_eq!(
-                result.coordinate_domain,
-                CoordinateDomain::OriginalUtf16Units
-            );
+            assert_eq!(result.coordinate_domain, CoordinateDomain::OriginalUtf16Units);
             assert!(result.program.is_none());
             assert!(result.module.is_none());
             let diagnostic = &result.errors.records()[0];
@@ -507,10 +412,7 @@ fn authored_noncharacters_and_private_use_scalars_never_collide_with_tracked_fix
         let source = substitute_unit(authored_first, unit);
         let result = parse_units(&source);
         let diagnostic = result.errors.records()[0];
-        assert_eq!(
-            result.errors.string(diagnostic.message),
-            Some("Invalid Character `\u{ffff}`")
-        );
+        assert_eq!(result.errors.string(diagnostic.message), Some("Invalid Character `\u{ffff}`"));
         let expected = u32::try_from(
             authored_first[..authored_first.find('\u{ffff}').expect("authored U+FFFF")]
                 .encode_utf16()
@@ -528,9 +430,7 @@ fn authored_noncharacters_and_private_use_scalars_never_collide_with_tracked_fix
             Some("unexpected unpaired UTF-16 surrogate in active syntax")
         );
         let expected = u32::try_from(
-            poison_first[..poison_first.find("<U>").expect("marker")]
-                .encode_utf16()
-                .count(),
+            poison_first[..poison_first.find("<U>").expect("marker")].encode_utf16().count(),
         )
         .expect("fixture offset");
         assert_failed_at(&result, (expected, expected + 1));
@@ -539,14 +439,10 @@ fn authored_noncharacters_and_private_use_scalars_never_collide_with_tracked_fix
         let source = substitute_unit(adjacent_authored_first, unit);
         let result = parse_units(&source);
         let diagnostic = result.errors.records()[0];
-        assert_eq!(
-            result.errors.string(diagnostic.message),
-            Some("Invalid Character `\u{ffff}`")
-        );
+        assert_eq!(result.errors.string(diagnostic.message), Some("Invalid Character `\u{ffff}`"));
         let expected = u32::try_from(
-            adjacent_authored_first[..adjacent_authored_first
-                .find('\u{ffff}')
-                .expect("authored U+FFFF")]
+            adjacent_authored_first
+                [..adjacent_authored_first.find('\u{ffff}').expect("authored U+FFFF")]
                 .encode_utf16()
                 .count(),
         )
@@ -583,10 +479,7 @@ fn authored_noncharacters_and_private_use_scalars_never_collide_with_tracked_fix
         let source = substitute_unit(pua_authored, unit);
         let result = parse_units(&source);
         let diagnostic = result.errors.records()[0];
-        assert_eq!(
-            result.errors.string(diagnostic.message),
-            Some("Invalid Character `\u{e000}`")
-        );
+        assert_eq!(result.errors.string(diagnostic.message), Some("Invalid Character `\u{e000}`"));
         let expected = u32::try_from(
             pua_authored[..pua_authored.find('\u{e000}').expect("authored U+E000")]
                 .encode_utf16()
@@ -602,16 +495,8 @@ fn authored_private_use_scalars_are_source_ordered_against_active_poison() {
     let authored_message = "Invalid Character `\u{e000}`";
     let rejection_message = "unexpected unpaired UTF-16 surrogate in active syntax";
     let cases = [
-        (
-            "const first=\u{e000}; const second=<U>;",
-            authored_message,
-            "\u{e000}",
-        ),
-        (
-            "const first=<U>; const second=\u{e000};",
-            rejection_message,
-            "<U>",
-        ),
+        ("const first=\u{e000}; const second=<U>;", authored_message, "\u{e000}"),
+        ("const first=<U>; const second=\u{e000};", rejection_message, "<U>"),
         ("const x=\u{e000}<U>;", authored_message, "\u{e000}"),
         ("const x=<U>\u{e000};", rejection_message, "<U>"),
     ];
@@ -637,12 +522,8 @@ fn authored_private_use_scalars_are_source_ordered_against_active_poison() {
 fn multiple_active_poison_markers_reject_the_first_unit_and_are_all_repaired_once() {
     let prefix = "const value=".encode_utf16().collect::<Vec<_>>();
     let suffix = ";".encode_utf16().collect::<Vec<_>>();
-    let cases = [
-        vec![HIGH, HIGH],
-        vec![LOW, LOW],
-        vec![LOW, HIGH],
-        vec![HIGH, u16::from(b'+'), LOW],
-    ];
+    let cases =
+        [vec![HIGH, HIGH], vec![LOW, LOW], vec![LOW, HIGH], vec![HIGH, u16::from(b'+'), LOW]];
     for active in cases {
         let mut source = prefix.clone();
         source.extend(&active);
@@ -658,10 +539,7 @@ fn multiple_active_poison_markers_reject_the_first_unit_and_are_all_repaired_onc
         );
         let labels = result.errors.labels(diagnostic.labels).expect("labels");
         let expected = u32::try_from(prefix.len()).expect("prefix length");
-        assert_eq!(
-            (labels[0].span.start, labels[0].span.end),
-            (expected, expected + 1)
-        );
+        assert_eq!((labels[0].span.start, labels[0].span.end), (expected, expected + 1));
         let codeframe = result
             .errors
             .optional_text(diagnostic.codeframe)
@@ -681,49 +559,17 @@ fn ascii_utf16_entry_is_tape_identical_to_the_existing_zero_map_path() {
     let existing = parse_tsrx(&TsrxParseRequest { source }).expect("existing ASCII path");
     let bridged = parse_units(&units);
 
+    assert_eq!(existing.coordinate_domain, CoordinateDomain::AuthoredUtf8Bytes);
+    assert_eq!(bridged.coordinate_domain, CoordinateDomain::OriginalUtf16Units);
+    assert_eq!(existing.program().scalar_storage(), bridged.program().scalar_storage());
+    assert_eq!(existing.program().object_count(), bridged.program().object_count());
+    assert_eq!(existing.program().field_count(), bridged.program().field_count());
+    assert_eq!(existing.program().list_count(), bridged.program().list_count());
+    assert_eq!(existing.program().list_value_count(), bridged.program().list_value_count());
+    assert_eq!(existing.comments.string_storage(), bridged.comments.string_storage());
     assert_eq!(
-        existing.coordinate_domain,
-        CoordinateDomain::AuthoredUtf8Bytes
-    );
-    assert_eq!(
-        bridged.coordinate_domain,
-        CoordinateDomain::OriginalUtf16Units
-    );
-    assert_eq!(
-        existing.program().scalar_storage(),
-        bridged.program().scalar_storage()
-    );
-    assert_eq!(
-        existing.program().object_count(),
-        bridged.program().object_count()
-    );
-    assert_eq!(
-        existing.program().field_count(),
-        bridged.program().field_count()
-    );
-    assert_eq!(
-        existing.program().list_count(),
-        bridged.program().list_count()
-    );
-    assert_eq!(
-        existing.program().list_value_count(),
-        bridged.program().list_value_count()
-    );
-    assert_eq!(
-        existing.comments.string_storage(),
-        bridged.comments.string_storage()
-    );
-    assert_eq!(
-        existing
-            .module
-            .as_ref()
-            .expect("existing module")
-            .string_storage(),
-        bridged
-            .module
-            .as_ref()
-            .expect("bridged module")
-            .string_storage()
+        existing.module.as_ref().expect("existing module").string_storage(),
+        bridged.module.as_ref().expect("bridged module").string_storage()
     );
 }
 
@@ -798,12 +644,7 @@ fn line_comments_and_later_diagnostics_use_original_units() {
         let comment = result.comments.records()[0];
         assert_eq!(comment.span, tsrx_tape_schema::TapeSpan::new(0, 5));
         assert_eq!(
-            text_units(
-                result
-                    .comments
-                    .value_text(&comment)
-                    .expect("lossless line comment")
-            ),
+            text_units(result.comments.value_text(&comment).expect("lossless line comment")),
             [u16::from(b'a'), unit, u16::from(b'b')]
         );
         let number = object_at(result.program(), "Literal", (15, 16));
@@ -815,11 +656,7 @@ fn line_comments_and_later_diagnostics_use_original_units() {
         assert_eq!(failed.status, ParseCompleteness::Failed);
         let diagnostic = &failed.errors.records()[0];
         let labels = failed.errors.labels(diagnostic.labels).expect("labels");
-        assert!(
-            labels
-                .iter()
-                .all(|label| label.span.start <= 38 && label.span.end <= 38)
-        );
+        assert!(labels.iter().all(|label| label.span.start <= 38 && label.span.end <= 38));
         assert!(labels.iter().any(|label| label.span.start == 37));
         let codeframe = failed
             .errors
@@ -854,17 +691,10 @@ fn semantic_codeframes_keep_duplicate_crlf_lines_and_opaque_surrogates_distinct(
         )
         .expect("semantic duplicate result");
         assert_eq!(result.status, ParseCompleteness::Complete);
-        let diagnostic = result
-            .errors
-            .records()
-            .first()
-            .expect("semantic diagnostic");
+        let diagnostic = result.errors.records().first().expect("semantic diagnostic");
         let labels = result.errors.labels(diagnostic.labels).expect("labels");
         assert_eq!(
-            labels
-                .iter()
-                .map(|label| label.span.start)
-                .collect::<Vec<_>>(),
+            labels.iter().map(|label| label.span.start).collect::<Vec<_>>(),
             expected_starts
         );
         let codeframe = result
@@ -894,10 +724,8 @@ fn codeframes_map_duplicate_clipped_and_tab_expanded_lines_by_identity() {
         assert!(contains_units(&codeframe, &[unit]));
         assert!(!contains_units(&codeframe, &[0xe000]));
         assert!(!contains_units(&codeframe, &[0xffff]));
-        let first_line_end = duplicate
-            .iter()
-            .position(|unit| *unit == u16::from(b'\r'))
-            .expect("first CRLF");
+        let first_line_end =
+            duplicate.iter().position(|unit| *unit == u16::from(b'\r')).expect("first CRLF");
         assert!(contains_units(&codeframe, &duplicate[..first_line_end]));
         let labels = result.errors.labels(diagnostic.labels).expect("labels");
         assert_eq!((labels[0].span.start, labels[0].span.end), (7, 8));
@@ -918,10 +746,7 @@ fn codeframes_map_duplicate_clipped_and_tab_expanded_lines_by_identity() {
         assert!(!contains_units(&codeframe, &[0xffff]));
         let marker = u32::try_from(template.find("<U>").expect("marker")).expect("marker offset");
         let labels = result.errors.labels(diagnostic.labels).expect("labels");
-        assert_eq!(
-            (labels[0].span.start, labels[0].span.end),
-            (marker, marker + 1)
-        );
+        assert_eq!((labels[0].span.start, labels[0].span.end), (marker, marker + 1));
     }
 }
 
@@ -1019,20 +844,15 @@ fn tagged_template_null_cooked_value_remains_oxc_authoritative() {
             .expect("tagged TemplateElement");
         let value = object_field(result.program(), element, "value");
         assert_eq!(scalar_field(result.program(), value, "cooked"), "null");
-        assert_eq!(
-            scalar_field(result.program(), value, "raw"),
-            format!(r#""\\8\u{escape}""#)
-        );
+        assert_eq!(scalar_field(result.program(), value, "raw"), format!(r#""\\8\u{escape}""#));
     }
 }
 
 #[test]
 fn jsx_entities_private_use_and_surrogate_fixups_remain_distinct() {
     for (unit, escape) in [(HIGH, "d800"), (LOW, "dc00")] {
-        let source = substitute_unit(
-            r#"const x=<main title="&#xE000;<U>">&#xE000;<U></main>;"#,
-            unit,
-        );
+        let source =
+            substitute_unit(r#"const x=<main title="&#xE000;<U>">&#xE000;<U></main>;"#, unit);
         let result = parse_units(&source);
         let literals = all_objects(result.program())
             .into_iter()
@@ -1068,20 +888,15 @@ fn jsx_entities_private_use_and_surrogate_fixups_remain_distinct() {
             scalar_field(result.program(), text, "value"),
             format!(r#""&#xE000;\u{escape}""#)
         );
-        assert_eq!(
-            scalar_field(result.program(), text, "raw"),
-            format!(r#""&#xE000;\u{escape}""#)
-        );
+        assert_eq!(scalar_field(result.program(), text, "raw"), format!(r#""&#xE000;\u{escape}""#));
     }
 }
 
 #[test]
 fn style_payload_boundaries_ignore_quoted_greater_than_and_self_closing_attributes() {
     for unit in [HIGH, LOW] {
-        let paired = substitute_unit(
-            r#"const x=<style title="a><U>">.x{content:"<U>"}</style>;"#,
-            unit,
-        );
+        let paired =
+            substitute_unit(r#"const x=<style title="a><U>">.x{content:"<U>"}</style>;"#, unit);
         let result = parse_units(&paired);
         let style = all_objects(result.program())
             .into_iter()
@@ -1134,11 +949,7 @@ fn quoted_import_and_export_names_reject_lone_surrogates() {
                 Some("An export name cannot include a lone surrogate.")
             );
             let labels = result.errors.labels(diagnostic.labels).expect("labels");
-            assert_eq!(
-                (labels[0].span.start, labels[0].span.end),
-                expected_span,
-                "{template}"
-            );
+            assert_eq!((labels[0].span.start, labels[0].span.end), expected_span, "{template}");
             let codeframe = result
                 .errors
                 .optional_text(diagnostic.codeframe)
@@ -1196,10 +1007,7 @@ fn module_name_active_noncharacter_and_grammar_rejections_follow_original_source
         let expected = u32::try_from(active_then_module[..marker].encode_utf16().count())
             .expect("fixture offset");
         let labels = result.errors.labels(diagnostic.labels).expect("labels");
-        assert_eq!(
-            (labels[0].span.start, labels[0].span.end),
-            (expected, expected + 1)
-        );
+        assert_eq!((labels[0].span.start, labels[0].span.end), (expected, expected + 1));
 
         let module_then_authored = r#"export { "a<U>" as x } from "m"; const b=￿;"#;
         let source = substitute_unit(module_then_authored, unit);
@@ -1214,10 +1022,7 @@ fn module_name_active_noncharacter_and_grammar_rejections_follow_original_source
         let source = substitute_unit(authored_then_module, unit);
         let result = parse_units(&source);
         let diagnostic = result.errors.records()[0];
-        assert_eq!(
-            result.errors.string(diagnostic.message),
-            Some("Invalid Character `￿`")
-        );
+        assert_eq!(result.errors.string(diagnostic.message), Some("Invalid Character `￿`"));
 
         let module_then_broken = r#"export { "a<U>" as x } from "m"; const broken = ;"#;
         let source = substitute_unit(module_then_broken, unit);
@@ -1234,10 +1039,7 @@ fn module_name_active_noncharacter_and_grammar_rejections_follow_original_source
         let diagnostic = result.errors.records()[0];
         let message = result.errors.string(diagnostic.message).expect("message");
         assert_ne!(message, "An export name cannot include a lone surrogate.");
-        assert_ne!(
-            message,
-            "unexpected unpaired UTF-16 surrogate in active syntax"
-        );
+        assert_ne!(message, "unexpected unpaired UTF-16 surrogate in active syntax");
 
         let request_then_active = r#"import x from "m<U>"; const b<U>=1;"#;
         let source = substitute_units(request_then_active, &[unit, unit]);
@@ -1270,9 +1072,7 @@ fn shared_module_requests_accept_and_repair_lone_surrogates_once() {
         assert_eq!(result.status, ParseCompleteness::Complete);
         let module = result.module.as_ref().expect("module table");
         let export = module.static_exports()[0];
-        let entries = module
-            .static_export_entries(export.entries)
-            .expect("export entries");
+        let entries = module.static_export_entries(export.entries).expect("export entries");
         assert_eq!(entries.len(), 2);
         for entry in entries {
             let request = entry.module_request.get().expect("module request");
@@ -1281,12 +1081,7 @@ fn shared_module_requests_accept_and_repair_lone_surrogates_once() {
                 [u16::from(b'm'), unit]
             );
         }
-        assert!(
-            result
-                .program()
-                .scalar_storage()
-                .contains(&format!("\\u{escape}"))
-        );
+        assert!(result.program().scalar_storage().contains(&format!("\\u{escape}")));
     }
 }
 
@@ -1311,10 +1106,7 @@ fn release_dense_module_and_diagnostic_scaling_campaign_is_linear() {
         let module_median = measure_release_parse(&modules, false);
         let module_result = parse_units(&modules);
         let module = module_result.module.as_ref().expect("dense module table");
-        assert_eq!(
-            module.static_imports().len() + module.static_exports().len(),
-            count
-        );
+        assert_eq!(module.static_imports().len() + module.static_exports().len(), count);
         println!(
             "full_pipeline lane=modules records={count} units={} median_ns={module_median}",
             modules.len()
@@ -1323,16 +1115,12 @@ fn release_dense_module_and_diagnostic_scaling_campaign_is_linear() {
 
         let mut diagnostics = Vec::new();
         for index in 0..count {
-            diagnostics.extend(substitute_unit(
-                &format!("const s{index}=\"<U>\"; let duplicate;\n"),
-                LOW,
-            ));
+            diagnostics
+                .extend(substitute_unit(&format!("const s{index}=\"<U>\"; let duplicate;\n"), LOW));
         }
         let diagnostic_median = measure_release_parse(&diagnostics, true);
         let diagnostic_result = parse_tsrx_utf16_with_options(
-            &TsrxUtf16ParseRequest {
-                source: &diagnostics,
-            },
+            &TsrxUtf16ParseRequest { source: &diagnostics },
             TsrxParseOptions {
                 filename: "Scaling.tsrx",
                 show_semantic_errors: true,

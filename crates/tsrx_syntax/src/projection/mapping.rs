@@ -36,10 +36,7 @@ impl TypeProjection {
 
     #[must_use]
     pub fn view(&self) -> ProjectionView<'_> {
-        ProjectionView {
-            source: &self.projected,
-            segments: &self.segments,
-        }
+        ProjectionView { source: &self.projected, segments: &self.segments }
     }
 
     /// Maps a diagnostic whose first and last bytes are both anchored in authored source.
@@ -53,9 +50,7 @@ impl TypeProjection {
             return None;
         }
         if range.is_empty() {
-            return self
-                .map_endpoint(range.start, true)
-                .map(|point| point..point);
+            return self.map_endpoint(range.start, true).map(|point| point..point);
         }
         let start = self.map_endpoint(range.start, true)?;
         let end = self.map_endpoint(range.end, false)?;
@@ -88,10 +83,7 @@ impl MappedProjection {
 
     #[must_use]
     pub fn view(&self) -> ProjectionView<'_> {
-        ProjectionView {
-            source: &self.projected,
-            segments: &self.segments,
-        }
+        ProjectionView { source: &self.projected, segments: &self.segments }
     }
 
     /// Maps a projected range only when every byte belongs to one unchanged authored segment.
@@ -131,9 +123,7 @@ impl MappedProjection {
     /// scaffolding. Generator-specific built-in diagnostics in these ranges are synthetic.
     #[must_use]
     pub fn is_synthetic_generator_range(&self, range: Range<u32>) -> bool {
-        self.synthetic_generator_spans
-            .iter()
-            .any(|span| span.intersects(range.start, range.end))
+        self.synthetic_generator_spans.iter().any(|span| span.intersects(range.start, range.end))
     }
 
     /// Projected byte spans of helper callees introduced by this projection.

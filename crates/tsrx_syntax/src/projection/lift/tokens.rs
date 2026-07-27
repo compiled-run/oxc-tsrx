@@ -28,36 +28,25 @@ pub(super) fn lift_tokens(
             .parse::<usize>()
             .map_err(|_| ProjectionError::MarkerResidual)?;
         if actual_index < expected_index {
-            return Err(ProjectionError::MarkerDuplicated {
-                index: actual_index,
-            });
+            return Err(ProjectionError::MarkerDuplicated { index: actual_index });
         }
         if actual_index > expected_index {
-            return Err(ProjectionError::MarkerReordered {
-                index: expected_index,
-            });
+            return Err(ProjectionError::MarkerReordered { index: expected_index });
         }
         let Some(token) = projection.tokens.get(expected_index) else {
-            return Err(ProjectionError::MarkerDuplicated {
-                index: actual_index,
-            });
+            return Err(ProjectionError::MarkerDuplicated { index: actual_index });
         };
         let kind = token.kind;
         let marker_end = digits_end + 2;
         let target_start = skip_ascii_whitespace(lifted, marker_end);
         let expected = kind.projected_token();
         if !token_at(lifted, target_start, expected) {
-            return Err(ProjectionError::MarkerTargetChanged {
-                index: expected_index,
-                expected,
-            });
+            return Err(ProjectionError::MarkerTargetChanged { index: expected_index, expected });
         }
         let (replace_start, replace_end, replacement) = if kind == StructuralKind::Empty {
             let condition_start = skip_ascii_whitespace(lifted, target_start + expected.len());
             if !lifted[condition_start..].starts_with("(false)") {
-                return Err(ProjectionError::ScaffoldMismatch {
-                    index: expected_index,
-                });
+                return Err(ProjectionError::ScaffoldMismatch { index: expected_index });
             }
             let whitespace_start = previous_non_whitespace(lifted, marker_start)
                 .filter(|position| lifted.as_bytes()[*position] == b'}')
@@ -85,9 +74,7 @@ pub(super) fn lift_tokens(
         expected_index = next_lifted_token(&projection.tokens, expected_index + 1);
     }
     if expected_index != projection.tokens.len() {
-        return Err(ProjectionError::MarkerMissing {
-            index: expected_index,
-        });
+        return Err(ProjectionError::MarkerMissing { index: expected_index });
     }
     output.push_str(&lifted[source_cursor..]);
     Ok(output)
@@ -95,10 +82,7 @@ pub(super) fn lift_tokens(
 
 fn next_lifted_token(tokens: &[TokenManifest], mut index: usize) -> usize {
     while tokens.get(index).is_some_and(|token| {
-        matches!(
-            token.kind,
-            StructuralKind::Try | StructuralKind::Pending | StructuralKind::Catch
-        )
+        matches!(token.kind, StructuralKind::Try | StructuralKind::Pending | StructuralKind::Catch)
     }) {
         index += 1;
     }

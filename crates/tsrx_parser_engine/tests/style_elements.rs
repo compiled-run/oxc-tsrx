@@ -52,16 +52,7 @@ fn reconstructs_paired_style_with_exact_canonical_raw_shape() {
     assert_eq!(span(tape, style), (element_start, element_end));
     assert_eq!(
         field_names(tape, style),
-        [
-            "type",
-            "start",
-            "end",
-            "metadata",
-            "children",
-            "openingElement",
-            "closingElement",
-            "css",
-        ]
+        ["type", "start", "end", "metadata", "children", "openingElement", "closingElement", "css",]
     );
     assert_empty_path(tape, style);
     let stylesheet = one_object(&list_field(tape, style, "children"));
@@ -129,21 +120,10 @@ fn distinguishes_empty_paired_self_closing_and_uppercase_style_elements() {
     require_type(tape, style, "JSXStyleElement");
     assert_eq!(
         field_names(tape, style),
-        [
-            "type",
-            "start",
-            "end",
-            "metadata",
-            "children",
-            "openingElement",
-            "closingElement",
-        ]
+        ["type", "start", "end", "metadata", "children", "openingElement", "closingElement",]
     );
     assert!(list_field(tape, style, "children").is_empty());
-    assert_eq!(
-        tape.scalar(field(tape, style, "closingElement")),
-        Some("null")
-    );
+    assert_eq!(tape.scalar(field(tape, style, "closingElement")), Some("null"));
     assert!(optional_field(tape, style, "css").is_none());
     let opening = object_field(tape, style, "openingElement");
     assert_eq!(scalar_field(tape, opening, "selfClosing"), "true");
@@ -243,17 +223,12 @@ fn normalizes_bare_style_statements_and_semicolons_like_dynamic_elements() {
         body[0].as_object().expect("paired style object"),
         "JSXStyleElement",
     );
-    require_type(
-        result.program(),
-        body[1].as_object().expect("empty statement"),
-        "EmptyStatement",
-    );
+    require_type(result.program(), body[1].as_object().expect("empty statement"), "EmptyStatement");
     assert_no_scaffold(result.program());
 
-    for source in [
-        "function f(){<style>.x{}</style> ;}",
-        "function f(){<style>.x{}</style> /* keep */ ;}",
-    ] {
+    for source in
+        ["function f(){<style>.x{}</style> ;}", "function f(){<style>.x{}</style> /* keep */ ;}"]
+    {
         let result = parse_tsrx(&TsrxParseRequest { source }).unwrap_or_else(|error| {
             panic!("separated paired style failed for `{source}`: {error}")
         });
@@ -294,20 +269,11 @@ fn normalizes_bare_style_statements_and_semicolons_like_dynamic_elements() {
     let result = parse_tsrx(&TsrxParseRequest { source }).expect("mixed bare custom JSX");
     let body = ordinary_function_body(result.program());
     assert_eq!(body.len(), 4);
-    for (index, expected) in [
-        "JSXStyleElement",
-        "EmptyStatement",
-        "JSXElement",
-        "EmptyStatement",
-    ]
-    .into_iter()
-    .enumerate()
+    for (index, expected) in ["JSXStyleElement", "EmptyStatement", "JSXElement", "EmptyStatement"]
+        .into_iter()
+        .enumerate()
     {
-        require_type(
-            result.program(),
-            body[index].as_object().expect("body object"),
-            expected,
-        );
+        require_type(result.program(), body[index].as_object().expect("body object"), expected);
     }
     assert_no_scaffold(result.program());
 }
@@ -324,11 +290,7 @@ fn composes_raw_styles_with_dynamic_tags_controls_and_expression_placements() {
     ] {
         let result = parse_tsrx(&TsrxParseRequest { source })
             .unwrap_or_else(|error| panic!("style composition failed for `{source}`: {error}"));
-        assert_eq!(
-            count_type(result.program(), "JSXStyleElement"),
-            1,
-            "{source}"
-        );
+        assert_eq!(count_type(result.program(), "JSXStyleElement"), 1, "{source}");
         assert_no_scaffold(result.program());
     }
 }

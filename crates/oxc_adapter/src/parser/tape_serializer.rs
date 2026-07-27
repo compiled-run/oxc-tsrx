@@ -19,11 +19,7 @@ struct StaticKeyCacheEntry {
 }
 
 impl StaticKeyCacheEntry {
-    const EMPTY: Self = Self {
-        pointer: 0,
-        length: 0,
-        range: StringRange::new(0, 0),
-    };
+    const EMPTY: Self = Self { pointer: 0, length: 0, range: StringRange::new(0, 0) };
 }
 
 pub(super) struct FlatTapeSerializer {
@@ -68,10 +64,7 @@ impl FlatTapeSerializer {
         if let Some(error) = self.error {
             return Err(error);
         }
-        let root = self
-            .last_value
-            .take()
-            .ok_or(TapeBuildError::InvalidRecordIndex)?;
+        let root = self.last_value.take().ok_or(TapeBuildError::InvalidRecordIndex)?;
         self.tape.set_scalar_storage(self.scalars.into_string());
         self.tape.set_root(root);
         Ok(self.tape)
@@ -119,11 +112,8 @@ impl FlatTapeSerializer {
                 }
             }
         };
-        self.key_cache[slot] = StaticKeyCacheEntry {
-            pointer: identity.0,
-            length: identity.1,
-            range,
-        };
+        self.key_cache[slot] =
+            StaticKeyCacheEntry { pointer: identity.0, length: identity.1, range };
         range
     }
 
@@ -229,21 +219,12 @@ pub(super) struct TapeStructSerializer<'s> {
 
 impl<'s> TapeStructSerializer<'s> {
     fn new(serializer: &'s mut FlatTapeSerializer) -> Self {
-        Self {
-            serializer,
-            first: RecordIndex::NONE,
-            last: RecordIndex::NONE,
-            count: 0,
-        }
+        Self { serializer, first: RecordIndex::NONE, last: RecordIndex::NONE, count: 0 }
     }
 
     fn add_value(&mut self, key: &'static str, value: ValueRef) {
         let key = self.serializer.intern_key(key);
-        let field = self.serializer.push_field(FieldRecord {
-            key,
-            value,
-            next: RecordIndex::NONE,
-        });
+        let field = self.serializer.push_field(FieldRecord { key, value, next: RecordIndex::NONE });
         if self.first.is_none() {
             self.first = field;
         } else {
@@ -289,28 +270,22 @@ impl StructSerializer for TapeStructSerializer<'_> {
         self.add_value("start", start);
         self.add_value("end", end);
         if self.ranges() {
-            let first = self.serializer.push_list_value(ListValueRecord {
-                value: start,
-                next: RecordIndex::NONE,
-            });
-            let second = self.serializer.push_list_value(ListValueRecord {
-                value: end,
-                next: RecordIndex::NONE,
-            });
+            let first = self
+                .serializer
+                .push_list_value(ListValueRecord { value: start, next: RecordIndex::NONE });
+            let second = self
+                .serializer
+                .push_list_value(ListValueRecord { value: end, next: RecordIndex::NONE });
             self.serializer.link_list_value(first, second);
-            let range = self.serializer.push_list(ListRecord {
-                first_value: first,
-                length: 2,
-            });
+            let range = self.serializer.push_list(ListRecord { first_value: first, length: 2 });
             self.add_value("range", ValueRef::list(range));
         }
     }
 
     fn end(self) {
-        let object = self.serializer.push_object(ObjectRecord {
-            first_field: self.first,
-            field_count: self.count,
-        });
+        let object = self
+            .serializer
+            .push_object(ObjectRecord { first_field: self.first, field_count: self.count });
         self.serializer.last_value = Some(ValueRef::object(object));
     }
 
@@ -332,22 +307,15 @@ pub(super) struct TapeSequenceSerializer<'s> {
 
 impl<'s> TapeSequenceSerializer<'s> {
     fn new(serializer: &'s mut FlatTapeSerializer) -> Self {
-        Self {
-            serializer,
-            first: RecordIndex::NONE,
-            last: RecordIndex::NONE,
-            count: 0,
-        }
+        Self { serializer, first: RecordIndex::NONE, last: RecordIndex::NONE, count: 0 }
     }
 }
 
 impl SequenceSerializer for TapeSequenceSerializer<'_> {
     fn serialize_element<T: ESTree + ?Sized>(&mut self, value: &T) {
         let value = self.serializer.capture(value);
-        let item = self.serializer.push_list_value(ListValueRecord {
-            value,
-            next: RecordIndex::NONE,
-        });
+        let item =
+            self.serializer.push_list_value(ListValueRecord { value, next: RecordIndex::NONE });
         if self.first.is_none() {
             self.first = item;
         } else {
@@ -361,10 +329,8 @@ impl SequenceSerializer for TapeSequenceSerializer<'_> {
     }
 
     fn end(self) {
-        let list = self.serializer.push_list(ListRecord {
-            first_value: self.first,
-            length: self.count,
-        });
+        let list =
+            self.serializer.push_list(ListRecord { first_value: self.first, length: self.count });
         self.serializer.last_value = Some(ValueRef::list(list));
     }
 }

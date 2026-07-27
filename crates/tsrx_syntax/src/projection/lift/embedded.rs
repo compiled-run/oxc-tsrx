@@ -28,12 +28,7 @@ pub(super) fn lift_embedded(
         .styles
         .iter()
         .map(|manifest| (manifest.payload.end - manifest.payload.start) as usize)
-        .chain(
-            projection
-                .dynamic_comments
-                .iter()
-                .map(|span| (span.end - span.start) as usize),
-        )
+        .chain(projection.dynamic_comments.iter().map(|span| (span.end - span.start) as usize))
         .fold(0usize, usize::saturating_add);
     let mut output = String::with_capacity(source.len().saturating_add(restored_bytes));
     let mut copied = 0usize;
@@ -44,10 +39,7 @@ pub(super) fn lift_embedded(
             let (ordinal, digits_end) =
                 parse_decimal(bytes, digits_start).ok_or(ProjectionError::MarkerResidual)?;
             let index = ordinal as usize;
-            let manifest = projection
-                .dynamics
-                .get(index)
-                .ok_or(ProjectionError::MarkerResidual)?;
+            let manifest = projection.dynamics.get(index).ok_or(ProjectionError::MarkerResidual)?;
             if manifest.self_closing || closed[index] || expressions[index].is_missing() {
                 return Err(ProjectionError::ScaffoldMismatch { index });
             }
@@ -108,10 +100,7 @@ pub(super) fn lift_embedded(
             output.push('}');
             copied = sentinel_end;
             cursor = copied;
-            expressions[index] = ScaffoldSpan {
-                start: expression.start,
-                end: expression.end,
-            };
+            expressions[index] = ScaffoldSpan { start: expression.start, end: expression.end };
             opened[index] = true;
             continue;
         }
@@ -121,10 +110,8 @@ pub(super) fn lift_embedded(
             let (ordinal, digits_end) =
                 parse_decimal(bytes, digits_start).ok_or(ProjectionError::MarkerResidual)?;
             let index = ordinal as usize;
-            let span = *projection
-                .dynamic_comments
-                .get(index)
-                .ok_or(ProjectionError::MarkerResidual)?;
+            let span =
+                *projection.dynamic_comments.get(index).ok_or(ProjectionError::MarkerResidual)?;
             if comments[index] || source.as_bytes().get(digits_end..digits_end + 4) != Some(b"__*/")
             {
                 return Err(ProjectionError::ScaffoldMismatch { index });
@@ -147,10 +134,7 @@ pub(super) fn lift_embedded(
             let (ordinal, digits_end) =
                 parse_decimal(bytes, digits_start).ok_or(ProjectionError::MarkerResidual)?;
             let index = ordinal as usize;
-            let manifest = projection
-                .styles
-                .get(index)
-                .ok_or(ProjectionError::MarkerResidual)?;
+            let manifest = projection.styles.get(index).ok_or(ProjectionError::MarkerResidual)?;
             if styles[index] || source.as_bytes().get(digits_end..digits_end + 4) != Some(b"__*/") {
                 return Err(ProjectionError::ScaffoldMismatch { index });
             }

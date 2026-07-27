@@ -42,32 +42,16 @@ pub fn run_cli(arguments: Vec<String>) -> ExitCode {
 
 fn run(arguments: impl Iterator<Item = String>) -> Result<u8, String> {
     let arguments = arguments.collect::<Vec<_>>();
-    if arguments
-        .iter()
-        .any(|argument| matches!(argument.as_str(), "-h" | "--help"))
-    {
+    if arguments.iter().any(|argument| matches!(argument.as_str(), "-h" | "--help")) {
         print!("{HELP}");
         return Ok(0);
     }
-    if arguments
-        .iter()
-        .any(|argument| matches!(argument.as_str(), "-V" | "--version"))
-    {
-        println!(
-            "oxc-tsrx {} (OXC {OXC_REVISION})",
-            env!("CARGO_PKG_VERSION")
-        );
+    if arguments.iter().any(|argument| matches!(argument.as_str(), "-V" | "--version")) {
+        println!("oxc-tsrx {} (OXC {OXC_REVISION})", env!("CARGO_PKG_VERSION"));
         return Ok(0);
     }
-    let ParsedArguments {
-        filters,
-        files,
-        fix,
-        config_path,
-        config_base,
-        type_aware,
-        type_check,
-    } = parse_arguments(arguments.into_iter())?;
+    let ParsedArguments { filters, files, fix, config_path, config_base, type_aware, type_check } =
+        parse_arguments(arguments.into_iter())?;
 
     let cwd =
         env::current_dir().map_err(|error| format!("unable to read current directory: {error}"))?;
@@ -91,34 +75,20 @@ fn run(arguments: impl Iterator<Item = String>) -> Result<u8, String> {
     };
     let files = files
         .into_iter()
-        .map(|path| {
-            if path.is_absolute() {
-                path
-            } else {
-                cwd.join(path)
-            }
-        })
+        .map(|path| if path.is_absolute() { path } else { cwd.join(path) })
         .filter(|path| !session.should_ignore(path))
         .collect::<Vec<_>>();
     let output = session.aggregate(session.lint_files(&files)?);
-    let errors = output
-        .diagnostics
-        .iter()
-        .filter(|diagnostic| diagnostic.severity == "error")
-        .count();
-    let warnings = output
-        .diagnostics
-        .iter()
-        .filter(|diagnostic| diagnostic.severity == "warning")
-        .count();
+    let errors =
+        output.diagnostics.iter().filter(|diagnostic| diagnostic.severity == "error").count();
+    let warnings =
+        output.diagnostics.iter().filter(|diagnostic| diagnostic.severity == "warning").count();
     println!(
         "{}",
         serde_json::to_string(&output).map_err(|error| format!("JSON output failed: {error}"))?
     );
     let warnings_fail = session.deny_warnings() && warnings > 0;
-    let max_warnings_fail = session
-        .max_warnings()
-        .is_some_and(|maximum| warnings > maximum);
+    let max_warnings_fail = session.max_warnings().is_some_and(|maximum| warnings > maximum);
     Ok(u8::from(errors > 0 || warnings_fail || max_warnings_fail))
 }
 
@@ -167,17 +137,15 @@ fn parse_arguments(arguments: impl Iterator<Item = String>) -> Result<ParsedArgu
                 if config_path.is_some() {
                     return Err("--config may be specified only once".to_string());
                 }
-                config_path = Some(PathBuf::from(
-                    arguments.next().ok_or("--config requires a path")?,
-                ));
+                config_path =
+                    Some(PathBuf::from(arguments.next().ok_or("--config requires a path")?));
             }
             "--config-base" => {
                 if config_base.is_some() {
                     return Err("--config-base may be specified only once".to_string());
                 }
-                config_base = Some(PathBuf::from(
-                    arguments.next().ok_or("--config-base requires a path")?,
-                ));
+                config_base =
+                    Some(PathBuf::from(arguments.next().ok_or("--config-base requires a path")?));
             }
             "--fix" => fix = true,
             "--type-aware" => type_aware = true,
@@ -187,9 +155,7 @@ fn parse_arguments(arguments: impl Iterator<Item = String>) -> Result<ParsedArgu
             }
             "-h" | "--help" | "-V" | "--version" => unreachable!("handled before parsing"),
             value if value.starts_with('-') => {
-                return Err(format!(
-                    "unsupported option in the current native CLI: {value}"
-                ));
+                return Err(format!("unsupported option in the current native CLI: {value}"));
             }
             value => files.push(PathBuf::from(value)),
         }
@@ -199,13 +165,5 @@ fn parse_arguments(arguments: impl Iterator<Item = String>) -> Result<ParsedArgu
         return Err("at least one explicit source file is required".to_string());
     }
 
-    Ok(ParsedArguments {
-        filters,
-        files,
-        fix,
-        config_path,
-        config_base,
-        type_aware,
-        type_check,
-    })
+    Ok(ParsedArguments { filters, files, fix, config_path, config_base, type_aware, type_check })
 }

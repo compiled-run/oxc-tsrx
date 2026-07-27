@@ -30,9 +30,7 @@ impl LiftWriter {
             if self.line_start && self.state != TextState::Template {
                 let mut removed = 0usize;
                 while removed < dedent
-                    && bytes
-                        .get(index)
-                        .is_some_and(|byte| matches!(byte, b' ' | b'\t'))
+                    && bytes.get(index).is_some_and(|byte| matches!(byte, b' ' | b'\t'))
                 {
                     index += 1;
                     removed += 1;

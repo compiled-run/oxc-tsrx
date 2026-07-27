@@ -36,9 +36,7 @@ impl Scanner<'_> {
                 closing: ByteSpan::default(),
                 expression,
                 closing_expression: ByteSpan::default(),
-                subtree_end: owner
-                    .checked_add(1)
-                    .ok_or(ProjectionError::SourceTooLarge)?,
+                subtree_end: owner.checked_add(1).ok_or(ProjectionError::SourceTooLarge)?,
                 first_closing_comment: NONE,
                 closing_comment_count: 0,
                 self_closing: false,
@@ -168,12 +166,7 @@ impl Scanner<'_> {
                     } else {
                         let closing_name_start = index;
                         index = self.skip_jsx_name(index);
-                        (
-                            closing_name_start,
-                            index,
-                            ByteSpan::default(),
-                            ByteSpan::default(),
-                        )
+                        (closing_name_start, index, ByteSpan::default(), ByteSpan::default())
                     };
                     index = self.skip_jsx_tag_trivia(index)?;
                     if self.bytes.get(index) != Some(&b'>') {
@@ -459,10 +452,7 @@ impl Scanner<'_> {
         if normalized_start > trailing_inner_end {
             normalized_start = trailing_inner_end;
         }
-        Ok(ByteSpan::new(
-            to_u32(normalized_start)?,
-            to_u32(trailing_inner_end)?,
-        ))
+        Ok(ByteSpan::new(to_u32(normalized_start)?, to_u32(trailing_inner_end)?))
     }
 
     fn next_dynamic_identity_token(
@@ -562,16 +552,14 @@ impl Scanner<'_> {
         while index < end {
             if self.bytes.get(index..index + 2) == Some(b"//") {
                 let comment_end = self.skip_line_comment(index + 2).min(end);
-                self.dynamic_comments
-                    .push(ByteSpan::new(to_u32(index)?, to_u32(comment_end)?));
+                self.dynamic_comments.push(ByteSpan::new(to_u32(index)?, to_u32(comment_end)?));
                 index = comment_end;
             } else if self.bytes.get(index..index + 2) == Some(b"/*") {
                 let comment_end = self.skip_block_comment(index)?;
                 if comment_end > end {
                     return Err(ProjectionError::StructuralMismatch);
                 }
-                self.dynamic_comments
-                    .push(ByteSpan::new(to_u32(index)?, to_u32(comment_end)?));
+                self.dynamic_comments.push(ByteSpan::new(to_u32(index)?, to_u32(comment_end)?));
                 index = comment_end;
             } else {
                 index += 1;

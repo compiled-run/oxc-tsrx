@@ -33,9 +33,7 @@ impl fmt::Debug for PackedTextRef<'_> {
         if self.fixups.is_empty() {
             debug.field("utf8", &self.utf8);
         } else {
-            debug
-                .field("utf8", &"<lossless UTF-16 text>")
-                .field("fixup_count", &self.fixups.len());
+            debug.field("utf8", &"<lossless UTF-16 text>").field("fixup_count", &self.fixups.len());
         }
         debug.field("byte_start", &self.byte_start).finish()
     }
@@ -45,11 +43,7 @@ impl<'a> PackedTextRef<'a> {
     /// Returns the value as UTF-8 when it contains no unpaired UTF-16 surrogate.
     #[must_use]
     pub const fn as_str(self) -> Option<&'a str> {
-        if self.fixups.is_empty() {
-            Some(self.utf8)
-        } else {
-            None
-        }
+        if self.fixups.is_empty() { Some(self.utf8) } else { None }
     }
 
     /// Appends the exact JavaScript UTF-16 code units to `output`.
@@ -65,10 +59,7 @@ impl<'a> PackedTextRef<'a> {
                 debug_assert!(false, "packed text range overflows 32 bits");
                 return;
             };
-            if fixups
-                .peek()
-                .is_some_and(|fixup| fixup.byte_start == absolute)
-            {
+            if fixups.peek().is_some_and(|fixup| fixup.byte_start == absolute) {
                 if let Some(fixup) = fixups.next() {
                     debug_assert_eq!(character, SURROGATE_PLACEHOLDER);
                     output.push(fixup.unit);
@@ -148,10 +139,7 @@ impl fmt::Debug for PackedTextStorage {
 
 impl PackedTextStorage {
     const fn new() -> Self {
-        Self {
-            utf8: String::new(),
-            fixups: None,
-        }
+        Self { utf8: String::new(), fixups: None }
     }
 
     fn len(&self) -> usize {
@@ -160,10 +148,7 @@ impl PackedTextStorage {
 
     fn is_released(&self) -> bool {
         self.utf8.capacity() == 0
-            && self
-                .fixups
-                .as_ref()
-                .is_none_or(|fixups| fixups.capacity() == 0)
+            && self.fixups.as_ref().is_none_or(|fixups| fixups.capacity() == 0)
     }
 
     fn as_str(&self) -> Option<&str> {
@@ -188,15 +173,12 @@ impl PackedTextStorage {
         while index < value.len() {
             let unit = value[index];
             if (0xd800..=0xdbff).contains(&unit)
-                && value
-                    .get(index + 1)
-                    .is_some_and(|next| (0xdc00..=0xdfff).contains(next))
+                && value.get(index + 1).is_some_and(|next| (0xdc00..=0xdfff).contains(next))
             {
                 let high = u32::from(unit - 0xd800);
                 let low = u32::from(value[index + 1] - 0xdc00);
                 let scalar = 0x1_0000 + (high << 10) + low;
-                self.utf8
-                    .push(char::from_u32(scalar).expect("validated surrogate pair"));
+                self.utf8.push(char::from_u32(scalar).expect("validated surrogate pair"));
                 index += 2;
                 continue;
             }
@@ -206,18 +188,15 @@ impl PackedTextStorage {
                     return Err(TapeBuildError::CapacityOverflow);
                 };
                 self.utf8.push(SURROGATE_PLACEHOLDER);
-                self.fixups
-                    .get_or_insert_with(|| Vec::with_capacity(4))
-                    .push(PackedTextFixup {
-                        byte_start,
-                        unit,
-                        reserved: 0,
-                    });
+                self.fixups.get_or_insert_with(|| Vec::with_capacity(4)).push(PackedTextFixup {
+                    byte_start,
+                    unit,
+                    reserved: 0,
+                });
                 index += 1;
                 continue;
             }
-            self.utf8
-                .push(char::from_u32(u32::from(unit)).expect("non-surrogate BMP scalar"));
+            self.utf8.push(char::from_u32(u32::from(unit)).expect("non-surrogate BMP scalar"));
             index += 1;
         }
         let range = match string_range(start, self.utf8.len() - start) {
@@ -246,10 +225,7 @@ impl PackedTextStorage {
                 return Err(TapeBuildError::InvalidRecordIndex);
             }
             previous_end = Some(
-                range
-                    .start
-                    .checked_add(range.length)
-                    .ok_or(TapeBuildError::CapacityOverflow)?,
+                range.start.checked_add(range.length).ok_or(TapeBuildError::CapacityOverflow)?,
             );
             if let Some(existing) = self.fixups.as_deref() {
                 let end = range
@@ -280,26 +256,17 @@ impl PackedTextStorage {
             .is_some_and(|(old, new)| old.byte_start < new.byte_start)
         {
             self.normalize_rejection_placeholders(&rejection_placeholders)?;
-            self.fixups
-                .as_mut()
-                .expect("checked existing fixup storage")
-                .extend(positioned);
+            self.fixups.as_mut().expect("checked existing fixup storage").extend(positioned);
             return Ok(());
         }
         let existing = self.fixups.as_deref().expect("checked fixup storage");
         let mut merged = Vec::with_capacity(
-            existing
-                .len()
-                .checked_add(positioned.len())
-                .ok_or(TapeBuildError::CapacityOverflow)?,
+            existing.len().checked_add(positioned.len()).ok_or(TapeBuildError::CapacityOverflow)?,
         );
         let mut existing_index = 0_usize;
         let mut repair_index = 0_usize;
         while existing_index < existing.len() && repair_index < positioned.len() {
-            match existing[existing_index]
-                .byte_start
-                .cmp(&positioned[repair_index].byte_start)
-            {
+            match existing[existing_index].byte_start.cmp(&positioned[repair_index].byte_start) {
                 std::cmp::Ordering::Less => {
                     merged.push(existing[existing_index]);
                     existing_index += 1;
@@ -327,18 +294,15 @@ impl PackedTextStorage {
         positioned: &mut Vec<PackedTextFixup>,
         rejection_placeholders: &mut Vec<u32>,
     ) -> Result<(), TapeBuildError> {
-        let existing = slice_range(&self.utf8, range)
-            .ok_or(TapeBuildError::InvalidRecordIndex)?
-            .as_bytes();
+        let existing =
+            slice_range(&self.utf8, range).ok_or(TapeBuildError::InvalidRecordIndex)?.as_bytes();
         let positioned_start = positioned.len();
         let mut byte_offset = 0_usize;
         let mut index = 0_usize;
         while index < value.len() {
             let unit = value[index];
             if (0xd800..=0xdbff).contains(&unit)
-                && value
-                    .get(index + 1)
-                    .is_some_and(|next| (0xdc00..=0xdfff).contains(next))
+                && value.get(index + 1).is_some_and(|next| (0xdc00..=0xdfff).contains(next))
             {
                 let high = u32::from(unit - 0xd800);
                 let low = u32::from(value[index + 1] - 0xdc00);
@@ -364,15 +328,9 @@ impl PackedTextStorage {
                 }
                 let relative =
                     u32::try_from(byte_offset).map_err(|_| TapeBuildError::CapacityOverflow)?;
-                let byte_start = range
-                    .start
-                    .checked_add(relative)
-                    .ok_or(TapeBuildError::CapacityOverflow)?;
-                positioned.push(PackedTextFixup {
-                    byte_start,
-                    unit,
-                    reserved: 0,
-                });
+                let byte_start =
+                    range.start.checked_add(relative).ok_or(TapeBuildError::CapacityOverflow)?;
+                positioned.push(PackedTextFixup { byte_start, unit, reserved: 0 });
                 if placeholder == Some(REJECTION_PLACEHOLDER_UTF8) {
                     rejection_placeholders.push(byte_start);
                 }
@@ -418,18 +376,13 @@ impl PackedTextStorage {
                 return Err(TapeBuildError::InvalidRecordIndex);
             }
             normalized.extend_from_slice(
-                source
-                    .get(cursor..position)
-                    .ok_or(TapeBuildError::InvalidRecordIndex)?,
+                source.get(cursor..position).ok_or(TapeBuildError::InvalidRecordIndex)?,
             );
             normalized.extend_from_slice(SURROGATE_PLACEHOLDER_UTF8);
             cursor = end;
         }
-        normalized.extend_from_slice(
-            source
-                .get(cursor..)
-                .ok_or(TapeBuildError::InvalidRecordIndex)?,
-        );
+        normalized
+            .extend_from_slice(source.get(cursor..).ok_or(TapeBuildError::InvalidRecordIndex)?);
         self.utf8 =
             String::from_utf8(normalized).map_err(|_| TapeBuildError::InvalidRecordIndex)?;
         Ok(())
@@ -444,18 +397,11 @@ impl PackedTextStorage {
         let fixups = all_fixups.get(first..last)?;
         for fixup in fixups {
             let relative = usize::try_from(fixup.byte_start.checked_sub(range.start)?).ok()?;
-            if !utf8
-                .get(relative..)
-                .is_some_and(|tail| tail.starts_with(SURROGATE_PLACEHOLDER))
-            {
+            if !utf8.get(relative..).is_some_and(|tail| tail.starts_with(SURROGATE_PLACEHOLDER)) {
                 return None;
             }
         }
-        Some(PackedTextRef {
-            utf8,
-            byte_start: range.start,
-            fixups,
-        })
+        Some(PackedTextRef { utf8, byte_start: range.start, fixups })
     }
 
     fn truncate(&mut self, utf8_length: usize, fixup_length: usize) {
@@ -469,11 +415,7 @@ impl PackedTextStorage {
     }
 
     fn take_utf8(&mut self) -> Result<String, TapeBuildError> {
-        if self
-            .fixups
-            .as_ref()
-            .is_some_and(|fixups| !fixups.is_empty())
-        {
+        if self.fixups.as_ref().is_some_and(|fixups| !fixups.is_empty()) {
             return Err(TapeBuildError::InvalidRecordIndex);
         }
         self.fixups = None;
@@ -481,9 +423,7 @@ impl PackedTextStorage {
     }
 
     fn take_owned(&mut self) -> OwnedPackedTextStorage {
-        OwnedPackedTextStorage {
-            storage: mem::take(self),
-        }
+        OwnedPackedTextStorage { storage: mem::take(self) }
     }
 }
 
@@ -570,28 +510,16 @@ pub struct OptionalTapeSpan {
 }
 
 impl OptionalTapeSpan {
-    pub const NONE: Self = Self {
-        present: 0,
-        reserved: [0; 3],
-        value: TapeSpan::new(0, 0),
-    };
+    pub const NONE: Self = Self { present: 0, reserved: [0; 3], value: TapeSpan::new(0, 0) };
 
     #[must_use]
     pub const fn some(value: TapeSpan) -> Self {
-        Self {
-            present: 1,
-            reserved: [0; 3],
-            value,
-        }
+        Self { present: 1, reserved: [0; 3], value }
     }
 
     #[must_use]
     pub const fn get(self) -> Option<TapeSpan> {
-        if self.present == 0 {
-            None
-        } else {
-            Some(self.value)
-        }
+        if self.present == 0 { None } else { Some(self.value) }
     }
 
     #[must_use]
@@ -621,28 +549,16 @@ pub struct OptionalStringRange {
 }
 
 impl OptionalStringRange {
-    pub const NONE: Self = Self {
-        present: 0,
-        reserved: [0; 3],
-        value: StringRange::new(0, 0),
-    };
+    pub const NONE: Self = Self { present: 0, reserved: [0; 3], value: StringRange::new(0, 0) };
 
     #[must_use]
     pub const fn some(value: StringRange) -> Self {
-        Self {
-            present: 1,
-            reserved: [0; 3],
-            value,
-        }
+        Self { present: 1, reserved: [0; 3], value }
     }
 
     #[must_use]
     pub const fn get(self) -> Option<StringRange> {
-        if self.present == 0 {
-            None
-        } else {
-            Some(self.value)
-        }
+        if self.present == 0 { None } else { Some(self.value) }
     }
 
     #[must_use]
@@ -695,20 +611,12 @@ impl OptionalValueSpanRecord {
 
     #[must_use]
     pub const fn some(value: ValueSpanRecord) -> Self {
-        Self {
-            present: 1,
-            reserved: [0; 3],
-            value,
-        }
+        Self { present: 1, reserved: [0; 3], value }
     }
 
     #[must_use]
     pub const fn get(self) -> Option<ValueSpanRecord> {
-        if self.present == 0 {
-            None
-        } else {
-            Some(self.value)
-        }
+        if self.present == 0 { None } else { Some(self.value) }
     }
 
     #[must_use]
@@ -760,11 +668,7 @@ impl StaticImportEntryRecord {
         local_name: ValueSpanRecord,
         is_type: bool,
     ) -> Self {
-        Self {
-            import_name,
-            local_name,
-            is_type,
-        }
+        Self { import_name, local_name, is_type }
     }
 }
 
@@ -780,11 +684,7 @@ pub struct StaticImportRecord {
 impl StaticImportRecord {
     #[must_use]
     pub const fn new(span: TapeSpan, module_request: ValueSpanRecord, entries: ListRange) -> Self {
-        Self {
-            span,
-            module_request,
-            entries,
-        }
+        Self { span, module_request, entries }
     }
 }
 
@@ -810,14 +710,7 @@ impl StaticExportEntryRecord {
         local_name: ModuleNameRecord<ExportLocalNameKind>,
         is_type: bool,
     ) -> Self {
-        Self {
-            span,
-            module_request,
-            import_name,
-            export_name,
-            local_name,
-            is_type,
-        }
+        Self { span, module_request, import_name, export_name, local_name, is_type }
     }
 }
 
@@ -847,10 +740,7 @@ pub struct DynamicImportRecord {
 impl DynamicImportRecord {
     #[must_use]
     pub const fn new(span: TapeSpan, module_request: TapeSpan) -> Self {
-        Self {
-            span,
-            module_request,
-        }
+        Self { span, module_request }
     }
 }
 
@@ -933,10 +823,7 @@ impl ModuleTable {
     pub fn take_static_imports(
         &mut self,
     ) -> (Vec<StaticImportRecord>, Vec<StaticImportEntryRecord>) {
-        (
-            mem::take(&mut self.static_imports),
-            mem::take(&mut self.static_import_entries),
-        )
+        (mem::take(&mut self.static_imports), mem::take(&mut self.static_import_entries))
     }
 
     /// Destructively takes the static-export columns for authored reconstruction.
@@ -944,10 +831,7 @@ impl ModuleTable {
     pub fn take_static_exports(
         &mut self,
     ) -> (Vec<StaticExportRecord>, Vec<StaticExportEntryRecord>) {
-        (
-            mem::take(&mut self.static_exports),
-            mem::take(&mut self.static_export_entries),
-        )
+        (mem::take(&mut self.static_exports), mem::take(&mut self.static_export_entries))
     }
 
     /// Destructively takes the dynamic-import column for authored reconstruction.
@@ -1292,10 +1176,7 @@ pub struct CommentTable {
 impl CommentTable {
     #[must_use]
     pub const fn new() -> Self {
-        Self {
-            records: Vec::new(),
-            strings: PackedTextStorage::new(),
-        }
+        Self { records: Vec::new(), strings: PackedTextStorage::new() }
     }
 
     /// Maps every comment source span in one allocation-free pass.
@@ -1456,11 +1337,7 @@ pub struct DiagnosticLabelRecord {
 impl DiagnosticLabelRecord {
     #[must_use]
     pub const fn new(span: TapeSpan, message: OptionalStringRange, primary: bool) -> Self {
-        Self {
-            span,
-            message,
-            primary,
-        }
+        Self { span, message, primary }
     }
 }
 
@@ -1535,11 +1412,7 @@ impl fmt::Write for PackedStringWriter<'_> {
 impl DiagnosticTable {
     #[must_use]
     pub const fn new() -> Self {
-        Self {
-            records: Vec::new(),
-            labels: Vec::new(),
-            strings: PackedTextStorage::new(),
-        }
+        Self { records: Vec::new(), labels: Vec::new(), strings: PackedTextStorage::new() }
     }
 
     /// Maps every diagnostic-label source span in one allocation-free pass.
@@ -1690,10 +1563,7 @@ impl DiagnosticTable {
     ) -> Result<RecordIndex, TapeBuildError> {
         table_has_room(&self.labels)?;
         let message = self.push_optional_string(message)?;
-        push_record(
-            &mut self.labels,
-            DiagnosticLabelRecord::new(span, message, primary),
-        )
+        push_record(&mut self.labels, DiagnosticLabelRecord::new(span, message, primary))
     }
 
     /// Captures the checked start cursor for a directly emitted diagnostic-label group.
@@ -1809,9 +1679,7 @@ impl DiagnosticTable {
         codeframe: Option<&str>,
     ) -> Result<(), TapeBuildError> {
         let index = index_usize(diagnostic);
-        self.records
-            .get(index)
-            .ok_or(TapeBuildError::InvalidRecordIndex)?;
+        self.records.get(index).ok_or(TapeBuildError::InvalidRecordIndex)?;
         let codeframe = self.push_optional_string(codeframe)?;
         self.records[index].codeframe = codeframe;
         Ok(())
@@ -1834,16 +1702,12 @@ impl DiagnosticTable {
         F: FnOnce(&mut PackedStringWriter<'_>) -> fmt::Result,
     {
         let index = index_usize(diagnostic);
-        self.records
-            .get(index)
-            .ok_or(TapeBuildError::InvalidRecordIndex)?;
+        self.records.get(index).ok_or(TapeBuildError::InvalidRecordIndex)?;
         let start = self.strings.len();
         let fixup_start = self.strings.fixups.as_ref().map_or(0, Vec::len);
         u32::try_from(start).map_err(|_| TapeBuildError::CapacityOverflow)?;
         let rendered = {
-            let mut writer = PackedStringWriter {
-                storage: self.strings.utf8_storage_mut(),
-            };
+            let mut writer = PackedStringWriter { storage: self.strings.utf8_storage_mut() };
             render(&mut writer)
         };
         if let Err(error) = rendered {
@@ -1951,9 +1815,8 @@ fn checked_direct_range(
     expected_length: u32,
     actual_end: u32,
 ) -> Result<ListRange, TapeBuildError> {
-    let expected_end = start
-        .checked_add(expected_length)
-        .ok_or(TapeBuildError::CapacityOverflow)?;
+    let expected_end =
+        start.checked_add(expected_length).ok_or(TapeBuildError::CapacityOverflow)?;
     if actual_end != expected_end {
         return Err(TapeBuildError::InvalidRecordIndex);
     }
@@ -1975,18 +1838,14 @@ fn checked_range_cursor(length: usize) -> Result<u32, TapeBuildError> {
 fn list_range(start: usize, length: usize) -> Result<ListRange, TapeBuildError> {
     let start = u32::try_from(start).map_err(|_| TapeBuildError::CapacityOverflow)?;
     let length = u32::try_from(length).map_err(|_| TapeBuildError::CapacityOverflow)?;
-    start
-        .checked_add(length)
-        .ok_or(TapeBuildError::CapacityOverflow)?;
+    start.checked_add(length).ok_or(TapeBuildError::CapacityOverflow)?;
     Ok(ListRange::new(start, length))
 }
 
 fn string_range(start: usize, length: usize) -> Result<StringRange, TapeBuildError> {
     let start = u32::try_from(start).map_err(|_| TapeBuildError::CapacityOverflow)?;
     let length = u32::try_from(length).map_err(|_| TapeBuildError::CapacityOverflow)?;
-    start
-        .checked_add(length)
-        .ok_or(TapeBuildError::CapacityOverflow)?;
+    start.checked_add(length).ok_or(TapeBuildError::CapacityOverflow)?;
     Ok(StringRange::new(start, length))
 }
 
@@ -2029,10 +1888,7 @@ mod tests {
                 OptionalStringRange::NONE,
                 OptionalTapeSpan::some(TapeSpan::new(offset, offset + 1)),
             ),
-            ValueSpanRecord::new(
-                StringRange::new(0, 0),
-                TapeSpan::new(offset + 2, offset + 3),
-            ),
+            ValueSpanRecord::new(StringRange::new(0, 0), TapeSpan::new(offset + 2, offset + 3)),
             false,
         )
     }
@@ -2089,9 +1945,7 @@ mod tests {
         assert!(table.has_module_syntax());
         let import = table.static_imports()[0];
         assert_eq!(table.value(import.module_request), Some("pkg"));
-        let entry = table
-            .static_import_entries(import.entries)
-            .expect("entries")[0];
+        let entry = table.static_import_entries(import.entries).expect("entries")[0];
         assert_eq!(table.name(entry.import_name), Some("value"));
         assert_eq!(table.value(entry.local_name), Some("local"));
     }
@@ -2099,15 +1953,12 @@ mod tests {
     #[test]
     fn independent_comment_and_diagnostic_strings_are_packed() {
         let mut comments = CommentTable::new();
-        comments
-            .push(ProjectedCommentKind::Block, TapeSpan::new(0, 7), "note")
-            .expect("comment");
+        comments.push(ProjectedCommentKind::Block, TapeSpan::new(0, 7), "note").expect("comment");
         assert_eq!(comments.value(&comments.records()[0]), Some("note"));
 
         let mut diagnostics = DiagnosticTable::new();
-        let labels = diagnostics
-            .append_labels([(TapeSpan::new(3, 4), Some("here"), true)])
-            .expect("labels");
+        let labels =
+            diagnostics.append_labels([(TapeSpan::new(3, 4), Some("here"), true)]).expect("labels");
         diagnostics
             .push_diagnostic(
                 DiagnosticPhase::Grammar,
@@ -2124,10 +1975,7 @@ mod tests {
             .expect("diagnostic");
         let record = diagnostics.records()[0];
         assert_eq!(diagnostics.string(record.message), Some("Unexpected token"));
-        assert_eq!(
-            diagnostics.optional_string(record.code_scope),
-            Some("parser")
-        );
+        assert_eq!(diagnostics.optional_string(record.code_scope), Some("parser"));
         assert_eq!(
             diagnostics
                 .optional_string(diagnostics.labels(record.labels).expect("labels")[0].message),
@@ -2136,20 +1984,13 @@ mod tests {
         assert!(diagnostics.labels(record.labels).expect("labels")[0].primary);
 
         diagnostics
-            .write_codeframe(RecordIndex::new(0), |writer| {
-                writer.write_str("rendered frame")
-            })
+            .write_codeframe(RecordIndex::new(0), |writer| writer.write_str("rendered frame"))
             .expect("codeframe capacity")
             .expect("codeframe render");
         let record = diagnostics.records()[0];
-        assert_eq!(
-            diagnostics.optional_string(record.codeframe),
-            Some("rendered frame")
-        );
-        let storage_before_failure = diagnostics
-            .string_storage()
-            .expect("fixup-free diagnostic storage")
-            .to_owned();
+        assert_eq!(diagnostics.optional_string(record.codeframe), Some("rendered frame"));
+        let storage_before_failure =
+            diagnostics.string_storage().expect("fixup-free diagnostic storage").to_owned();
         let codeframe_before_failure = record.codeframe;
         assert!(matches!(
             diagnostics.write_codeframe(RecordIndex::new(0), |writer| {
@@ -2158,10 +1999,7 @@ mod tests {
             }),
             Ok(Err(_))
         ));
-        assert_eq!(
-            diagnostics.string_storage(),
-            Some(storage_before_failure.as_str())
-        );
+        assert_eq!(diagnostics.string_storage(), Some(storage_before_failure.as_str()));
         assert_eq!(diagnostics.records()[0].codeframe, codeframe_before_failure);
     }
 
@@ -2214,10 +2052,7 @@ mod tests {
             )])
             .expect("export entries");
         module
-            .push_static_export(StaticExportRecord::new(
-                TapeSpan::new(9, 10),
-                export_entries,
-            ))
+            .push_static_export(StaticExportRecord::new(TapeSpan::new(9, 10), export_entries))
             .expect("static export");
         module
             .push_dynamic_import(DynamicImportRecord::new(
@@ -2225,9 +2060,7 @@ mod tests {
                 TapeSpan::new(23, 24),
             ))
             .expect("dynamic import");
-        module
-            .push_import_meta(TapeSpan::new(25, 26))
-            .expect("import meta");
+        module.push_import_meta(TapeSpan::new(25, 26)).expect("import meta");
 
         assert_eq!(module.string_storage(), None);
         let module_storage_before = module.strings.utf8.clone();
@@ -2250,10 +2083,7 @@ mod tests {
 
         assert_eq!(
             mapped,
-            (1..=25)
-                .step_by(2)
-                .map(|start| TapeSpan::new(start, start + 1))
-                .collect::<Vec<_>>()
+            (1..=25).step_by(2).map(|start| TapeSpan::new(start, start + 1)).collect::<Vec<_>>()
         );
         assert_eq!(module.strings.utf8, module_storage_before);
         assert_eq!(
@@ -2267,51 +2097,25 @@ mod tests {
             ],
             module_capacities_before
         );
-        assert_eq!(
-            module.strings.utf8.capacity(),
-            module_string_capacity_before
-        );
-        assert_eq!(
-            module.text(text).expect("module text").to_utf16(),
-            text_units
-        );
+        assert_eq!(module.strings.utf8.capacity(), module_string_capacity_before);
+        assert_eq!(module.text(text).expect("module text").to_utf16(), text_units);
         let import = module.static_imports()[0];
         assert_eq!(import.span, TapeSpan::new(101, 102));
         assert_eq!(import.module_request.span, TapeSpan::new(103, 104));
-        let import_entry = module
-            .static_import_entries(import.entries)
-            .expect("import entries")[0];
-        assert_eq!(
-            import_entry.import_name.span.get(),
-            Some(TapeSpan::new(105, 106))
-        );
+        let import_entry = module.static_import_entries(import.entries).expect("import entries")[0];
+        assert_eq!(import_entry.import_name.span.get(), Some(TapeSpan::new(105, 106)));
         assert_eq!(import_entry.local_name.span, TapeSpan::new(107, 108));
         let export = module.static_exports()[0];
         assert_eq!(export.span, TapeSpan::new(109, 110));
-        let export_entry = module
-            .static_export_entries(export.entries)
-            .expect("export entries")[0];
+        let export_entry = module.static_export_entries(export.entries).expect("export entries")[0];
         assert_eq!(export_entry.span, TapeSpan::new(111, 112));
         assert_eq!(
-            export_entry
-                .module_request
-                .get()
-                .expect("module request")
-                .span,
+            export_entry.module_request.get().expect("module request").span,
             TapeSpan::new(113, 114)
         );
-        assert_eq!(
-            export_entry.import_name.span.get(),
-            Some(TapeSpan::new(115, 116))
-        );
-        assert_eq!(
-            export_entry.export_name.span.get(),
-            Some(TapeSpan::new(117, 118))
-        );
-        assert_eq!(
-            export_entry.local_name.span.get(),
-            Some(TapeSpan::new(119, 120))
-        );
+        assert_eq!(export_entry.import_name.span.get(), Some(TapeSpan::new(115, 116)));
+        assert_eq!(export_entry.export_name.span.get(), Some(TapeSpan::new(117, 118)));
+        assert_eq!(export_entry.local_name.span.get(), Some(TapeSpan::new(119, 120)));
         assert_eq!(
             module.dynamic_imports()[0],
             DynamicImportRecord::new(TapeSpan::new(121, 122), TapeSpan::new(123, 124))
@@ -2319,30 +2123,18 @@ mod tests {
         assert_eq!(module.import_metas(), &[TapeSpan::new(125, 126)]);
 
         let mut comments = CommentTable::new();
-        comments
-            .push(ProjectedCommentKind::Line, TapeSpan::new(31, 32), "keep")
-            .expect("comment");
-        let comment_storage_before = comments
-            .string_storage()
-            .expect("fixup-free comment storage")
-            .to_owned();
-        let comment_capacities_before = (
-            comments.records.capacity(),
-            comments.strings.utf8.capacity(),
-        );
+        comments.push(ProjectedCommentKind::Line, TapeSpan::new(31, 32), "keep").expect("comment");
+        let comment_storage_before =
+            comments.string_storage().expect("fixup-free comment storage").to_owned();
+        let comment_capacities_before =
+            (comments.records.capacity(), comments.strings.utf8.capacity());
         comments
             .try_map_spans(|span| Ok::<_, ()>(TapeSpan::new(span.start + 100, span.end + 100)))
             .expect("comment spans");
         assert_eq!(comments.records()[0].span, TapeSpan::new(131, 132));
+        assert_eq!(comments.string_storage(), Some(comment_storage_before.as_str()));
         assert_eq!(
-            comments.string_storage(),
-            Some(comment_storage_before.as_str())
-        );
-        assert_eq!(
-            (
-                comments.records.capacity(),
-                comments.strings.utf8.capacity()
-            ),
+            (comments.records.capacity(), comments.strings.utf8.capacity()),
             comment_capacities_before
         );
         assert_eq!(comments.value(&comments.records()[0]), Some("keep"));
@@ -2368,10 +2160,8 @@ mod tests {
                 None,
             )
             .expect("diagnostic");
-        let diagnostic_storage_before = diagnostics
-            .string_storage()
-            .expect("fixup-free diagnostic storage")
-            .to_owned();
+        let diagnostic_storage_before =
+            diagnostics.string_storage().expect("fixup-free diagnostic storage").to_owned();
         let diagnostic_capacities_before = (
             diagnostics.records.capacity(),
             diagnostics.labels.capacity(),
@@ -2380,15 +2170,10 @@ mod tests {
         diagnostics
             .try_map_spans(|span| Ok::<_, ()>(TapeSpan::new(span.start + 100, span.end + 100)))
             .expect("diagnostic spans");
-        let labels = diagnostics
-            .labels(diagnostics.records()[0].labels)
-            .expect("labels");
+        let labels = diagnostics.labels(diagnostics.records()[0].labels).expect("labels");
         assert_eq!(labels[0].span, TapeSpan::new(141, 142));
         assert_eq!(labels[1].span, TapeSpan::new(143, 144));
-        assert_eq!(
-            diagnostics.string_storage(),
-            Some(diagnostic_storage_before.as_str())
-        );
+        assert_eq!(diagnostics.string_storage(), Some(diagnostic_storage_before.as_str()));
         assert_eq!(
             (
                 diagnostics.records.capacity(),
@@ -2397,20 +2182,14 @@ mod tests {
             ),
             diagnostic_capacities_before
         );
-        assert_eq!(
-            diagnostics.string(diagnostics.records()[0].message),
-            Some("keep diagnostic")
-        );
+        assert_eq!(diagnostics.string(diagnostics.records()[0].message), Some("keep diagnostic"));
     }
 
     #[test]
     fn result_table_span_mappers_return_the_exact_mapper_error() {
         let mut module = ModuleTable::new();
         module
-            .push_dynamic_import(DynamicImportRecord::new(
-                TapeSpan::new(1, 2),
-                TapeSpan::new(3, 4),
-            ))
+            .push_dynamic_import(DynamicImportRecord::new(TapeSpan::new(1, 2), TapeSpan::new(3, 4)))
             .expect("dynamic import");
         assert_eq!(
             module.try_map_spans(|span| {
@@ -2424,18 +2203,14 @@ mod tests {
         );
 
         let mut comments = CommentTable::new();
-        comments
-            .push(ProjectedCommentKind::Line, TapeSpan::new(5, 6), "comment")
-            .expect("comment");
+        comments.push(ProjectedCommentKind::Line, TapeSpan::new(5, 6), "comment").expect("comment");
         assert_eq!(
             comments.try_map_spans(|_| Err::<TapeSpan, _>("comment endpoint is unmapped")),
             Err("comment endpoint is unmapped")
         );
 
         let mut diagnostics = DiagnosticTable::new();
-        diagnostics
-            .append_labels([(TapeSpan::new(7, 8), None, true)])
-            .expect("label");
+        diagnostics.append_labels([(TapeSpan::new(7, 8), None, true)]).expect("label");
         assert_eq!(
             diagnostics.try_map_spans(|_| Err::<TapeSpan, _>("label endpoint is unmapped")),
             Err("label endpoint is unmapped")
@@ -2453,15 +2228,11 @@ mod tests {
             .push_utf16(ProjectedCommentKind::Block, TapeSpan::new(5, 13), &units)
             .expect("lossless comment");
 
-        let plain = comments
-            .value_text(&comments.records()[0])
-            .expect("plain text");
+        let plain = comments.value_text(&comments.records()[0]).expect("plain text");
         assert_eq!(plain.as_str(), Some("plain"));
         assert_eq!(plain.to_utf16(), "plain".encode_utf16().collect::<Vec<_>>());
 
-        let repaired = comments
-            .value_text(&comments.records()[1])
-            .expect("repaired text");
+        let repaired = comments.value_text(&comments.records()[1]).expect("repaired text");
         assert_eq!(repaired.as_str(), None);
         assert_eq!(repaired.to_utf16(), units);
         assert_eq!(comments.string_storage(), None);
@@ -2480,9 +2251,7 @@ mod tests {
             .push_string(&format!("{}x{}", '\u{e000}', '\u{e000}'))
             .expect("placeholder-width module value");
         let units = [0xe000, u16::from(b'x'), 0xd800];
-        module
-            .repair_utf16(range, &units)
-            .expect("position-keyed repair");
+        module.repair_utf16(range, &units).expect("position-keyed repair");
         assert_eq!(module.text(range).expect("module text").to_utf16(), units);
         assert_eq!(
             module.repair_utf16(range, &units),
@@ -2509,12 +2278,7 @@ mod tests {
             .collect::<Vec<_>>();
         let repaired = [0xd800, u16::from(b'x')];
         batch
-            .repair_utf16_batch(
-                ranges
-                    .iter()
-                    .copied()
-                    .map(|range| (range, repaired.as_slice())),
-            )
+            .repair_utf16_batch(ranges.iter().copied().map(|range| (range, repaired.as_slice())))
             .expect("one ordered linear batch");
         assert!(
             ranges
@@ -2524,9 +2288,7 @@ mod tests {
         assert_eq!(batch.strings.fixups.as_ref().map(Vec::len), Some(4_096));
 
         let mut diagnostics = DiagnosticTable::new();
-        let labels = diagnostics
-            .append_labels(std::iter::empty())
-            .expect("empty labels");
+        let labels = diagnostics.append_labels(std::iter::empty()).expect("empty labels");
         diagnostics
             .push_diagnostic(
                 DiagnosticPhase::Grammar,
@@ -2548,10 +2310,7 @@ mod tests {
             .expect("lossless codeframe");
         let record = diagnostics.records()[0];
         assert_eq!(
-            diagnostics
-                .optional_text(record.codeframe)
-                .expect("codeframe text")
-                .to_utf16(),
+            diagnostics.optional_text(record.codeframe).expect("codeframe text").to_utf16(),
             units
         );
     }
@@ -2560,14 +2319,10 @@ mod tests {
     fn rejection_placeholder_repairs_are_position_keyed_and_preserve_authored_noncharacters() {
         let mut module = ModuleTable::new();
         let packed = format!("{}|{}|{}", '\u{ffff}', '\u{ffff}', '\u{e000}');
-        let range = module
-            .push_string(&packed)
-            .expect("same-width rejection fixture");
+        let range = module.push_string(&packed).expect("same-width rejection fixture");
         let units = [0xffff, u16::from(b'|'), 0xd800, u16::from(b'|'), 0xe000];
 
-        module
-            .repair_utf16(range, &units)
-            .expect("position-keyed U+FFFF repair");
+        module.repair_utf16(range, &units).expect("position-keyed U+FFFF repair");
 
         assert_eq!(module.text(range).expect("lossless text").to_utf16(), units);
         assert_eq!(
@@ -2588,25 +2343,15 @@ mod tests {
         let mut table = ModuleTable::new();
 
         let imports = table.begin_static_import_entries().expect("import start");
-        table
-            .push_static_import_entry(direct_import_entry(1))
-            .expect("first import entry");
-        table
-            .push_static_import_entry(direct_import_entry(5))
-            .expect("second import entry");
+        table.push_static_import_entry(direct_import_entry(1)).expect("first import entry");
+        table.push_static_import_entry(direct_import_entry(5)).expect("second import entry");
         assert_eq!(
-            table
-                .finish_static_import_entries(imports, 2)
-                .expect("import range"),
+            table.finish_static_import_entries(imports, 2).expect("import range"),
             ListRange::new(0, 2)
         );
-        let empty_imports = table
-            .begin_static_import_entries()
-            .expect("empty import start");
+        let empty_imports = table.begin_static_import_entries().expect("empty import start");
         assert_eq!(
-            table
-                .finish_static_import_entries(empty_imports, 0)
-                .expect("empty import range"),
+            table.finish_static_import_entries(empty_imports, 0).expect("empty import range"),
             ListRange::new(2, 0)
         );
         assert_eq!(
@@ -2615,22 +2360,14 @@ mod tests {
         );
 
         let exports = table.begin_static_export_entries().expect("export start");
-        table
-            .push_static_export_entry(direct_export_entry(10))
-            .expect("export entry");
+        table.push_static_export_entry(direct_export_entry(10)).expect("export entry");
         assert_eq!(
-            table
-                .finish_static_export_entries(exports, 1)
-                .expect("export range"),
+            table.finish_static_export_entries(exports, 1).expect("export range"),
             ListRange::new(0, 1)
         );
-        let empty_exports = table
-            .begin_static_export_entries()
-            .expect("empty export start");
+        let empty_exports = table.begin_static_export_entries().expect("empty export start");
         assert_eq!(
-            table
-                .finish_static_export_entries(empty_exports, 0)
-                .expect("empty export range"),
+            table.finish_static_export_entries(empty_exports, 0).expect("empty export range"),
             ListRange::new(1, 0)
         );
     }
@@ -2639,37 +2376,15 @@ mod tests {
     fn direct_label_ranges_and_cursor_arithmetic_fail_closed() {
         let mut table = DiagnosticTable::new();
         let labels = table.begin_labels().expect("label start");
-        table
-            .push_labeled(TapeSpan::new(1, 2), Some("one"), true)
-            .expect("first label");
-        table
-            .push_labeled(TapeSpan::new(3, 4), None, false)
-            .expect("second label");
-        assert_eq!(
-            table.finish_labels(labels, 2).expect("label range"),
-            ListRange::new(0, 2)
-        );
+        table.push_labeled(TapeSpan::new(1, 2), Some("one"), true).expect("first label");
+        table.push_labeled(TapeSpan::new(3, 4), None, false).expect("second label");
+        assert_eq!(table.finish_labels(labels, 2).expect("label range"), ListRange::new(0, 2));
         let empty = table.begin_labels().expect("empty label start");
-        assert_eq!(
-            table.finish_labels(empty, 0).expect("empty label range"),
-            ListRange::new(2, 0)
-        );
-        assert_eq!(
-            table.finish_labels(labels, 1),
-            Err(TapeBuildError::InvalidRecordIndex)
-        );
-        assert_eq!(
-            table.finish_labels(u32::MAX, 0),
-            Err(TapeBuildError::InvalidRecordIndex)
-        );
-        assert_eq!(
-            table.finish_labels(u32::MAX - 1, 2),
-            Err(TapeBuildError::CapacityOverflow)
-        );
-        assert_eq!(
-            table.finish_labels(u32::MAX - 1, 1),
-            Err(TapeBuildError::InvalidRecordIndex)
-        );
+        assert_eq!(table.finish_labels(empty, 0).expect("empty label range"), ListRange::new(2, 0));
+        assert_eq!(table.finish_labels(labels, 1), Err(TapeBuildError::InvalidRecordIndex));
+        assert_eq!(table.finish_labels(u32::MAX, 0), Err(TapeBuildError::InvalidRecordIndex));
+        assert_eq!(table.finish_labels(u32::MAX - 1, 2), Err(TapeBuildError::CapacityOverflow));
+        assert_eq!(table.finish_labels(u32::MAX - 1, 1), Err(TapeBuildError::InvalidRecordIndex));
         assert_eq!(
             checked_range_cursor(usize::try_from(u32::MAX).expect("u32 fits usize")),
             Ok(u32::MAX)
@@ -2683,10 +2398,7 @@ mod tests {
                 .map(RecordIndex::into_raw),
             Ok(u32::MAX - 1)
         );
-        assert_eq!(
-            checked_direct_range(u32::MAX, 0, u32::MAX),
-            Ok(ListRange::new(u32::MAX, 0))
-        );
+        assert_eq!(checked_direct_range(u32::MAX, 0, u32::MAX), Ok(ListRange::new(u32::MAX, 0)));
         assert_eq!(
             checked_direct_range(u32::MAX - 1, 1, u32::MAX),
             Ok(ListRange::new(u32::MAX - 1, 1))
@@ -2720,14 +2432,9 @@ mod tests {
 
         let mut comments = CommentTable::new();
         comments.records.reserve(1);
-        comments
-            .strings
-            .push_str("comment")
-            .expect("comment string");
+        comments.strings.push_str("comment").expect("comment string");
         let comment_records = comments.take_records();
-        let comment_strings = comments
-            .take_string_storage()
-            .expect("UTF-8 comment strings");
+        let comment_strings = comments.take_string_storage().expect("UTF-8 comment strings");
         assert!(comment_records.capacity() > 0);
         assert_eq!(comment_strings, "comment");
         assert!(comments.is_storage_released());
@@ -2735,14 +2442,10 @@ mod tests {
         let mut diagnostics = DiagnosticTable::new();
         diagnostics.records.reserve(1);
         diagnostics.labels.reserve(1);
-        diagnostics
-            .strings
-            .push_str("diagnostic")
-            .expect("diagnostic string");
+        diagnostics.strings.push_str("diagnostic").expect("diagnostic string");
         let diagnostic_parts = diagnostics.take_records_and_labels();
-        let diagnostic_strings = diagnostics
-            .take_string_storage()
-            .expect("UTF-8 diagnostic strings");
+        let diagnostic_strings =
+            diagnostics.take_string_storage().expect("UTF-8 diagnostic strings");
         assert!(diagnostic_parts.0.capacity() > 0 && diagnostic_parts.1.capacity() > 0);
         assert_eq!(diagnostic_strings, "diagnostic");
         assert!(diagnostics.is_storage_released());

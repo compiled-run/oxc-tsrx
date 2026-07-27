@@ -116,10 +116,7 @@ struct FixupLedger<'source, 'original> {
 
 impl<'source, 'original> FixupLedger<'source, 'original> {
     fn new(source: &'source PreparedSource<'original>) -> Self {
-        Self {
-            source,
-            states: vec![0; source.fixups().len()],
-        }
+        Self { source, states: vec![0; source.fixups().len()] }
     }
 
     fn claim(
@@ -196,11 +193,7 @@ pub(super) fn finalize_utf16_result<W: Utf16WorkObserver>(
     if source.is_identity() {
         return Ok(());
     }
-    let reachable_objects = result
-        .program
-        .as_ref()
-        .map(program_reachable_objects)
-        .transpose()?;
+    let reachable_objects = result.program.as_ref().map(program_reachable_objects).transpose()?;
     let mut repaired_program_values = false;
     if !source.fixups().is_empty() {
         let mut ledger = FixupLedger::new(source);
@@ -248,9 +241,7 @@ pub(super) fn finalize_utf16_result<W: Utf16WorkObserver>(
     if let Some(module) = result.module.as_mut() {
         module.try_map_spans(|span| map_span(source, span))?;
     }
-    result
-        .comments
-        .try_map_spans(|span| map_span(source, span))?;
+    result.comments.try_map_spans(|span| map_span(source, span))?;
     result.errors.try_map_spans(|span| map_span(source, span))?;
     Ok(())
 }
@@ -261,22 +252,16 @@ pub(super) fn forbidden_module_name_span(
 ) -> Result<Option<TapeSpan>, TsrxParseError> {
     let mut forbidden = None;
     for import in module.static_imports() {
-        for entry in module
-            .static_import_entries(import.entries)
-            .ok_or_else(|| {
-                TsrxParseError::Adapter("invalid static import entry range".to_string())
-            })?
-        {
+        for entry in module.static_import_entries(import.entries).ok_or_else(|| {
+            TsrxParseError::Adapter("invalid static import entry range".to_string())
+        })? {
             retain_forbidden_name(&mut forbidden, &entry.import_name, source);
         }
     }
     for export in module.static_exports() {
-        for entry in module
-            .static_export_entries(export.entries)
-            .ok_or_else(|| {
-                TsrxParseError::Adapter("invalid static export entry range".to_string())
-            })?
-        {
+        for entry in module.static_export_entries(export.entries).ok_or_else(|| {
+            TsrxParseError::Adapter("invalid static export entry range".to_string())
+        })? {
             retain_forbidden_name(&mut forbidden, &entry.import_name, source);
             retain_forbidden_name(&mut forbidden, &entry.export_name, source);
             retain_forbidden_name(&mut forbidden, &entry.local_name, source);
@@ -598,12 +583,7 @@ fn collect_program_values(
             SourceValueKind::RawStyle => OpaqueSurrogateContext::RawStyle,
         };
         if source.has_fixup_context_in(span.start, span.end, context) {
-            values.push(SourceValue {
-                object,
-                kind,
-                context,
-                span,
-            });
+            values.push(SourceValue { object, kind, context, span });
         }
     }
     Ok(values)
@@ -695,24 +675,16 @@ fn repair_program_value<W: Utf16WorkObserver>(
 
 fn quoted_interior(authored: &[u16]) -> Result<&[u16], TsrxParseError> {
     let Some((&first, rest)) = authored.split_first() else {
-        return Err(TsrxParseError::Adapter(
-            "directive literal has no opening quote".to_string(),
-        ));
+        return Err(TsrxParseError::Adapter("directive literal has no opening quote".to_string()));
     };
     if first != u16::from(b'\'') && first != u16::from(b'"') {
-        return Err(TsrxParseError::Adapter(
-            "directive literal is not quoted".to_string(),
-        ));
+        return Err(TsrxParseError::Adapter("directive literal is not quoted".to_string()));
     }
     let Some((&last, interior)) = rest.split_last() else {
-        return Err(TsrxParseError::Adapter(
-            "directive literal has no closing quote".to_string(),
-        ));
+        return Err(TsrxParseError::Adapter("directive literal has no closing quote".to_string()));
     };
     if last != first {
-        return Err(TsrxParseError::Adapter(
-            "directive literal quotes do not match".to_string(),
-        ));
+        return Err(TsrxParseError::Adapter("directive literal quotes do not match".to_string()));
     }
     Ok(interior)
 }
@@ -724,14 +696,7 @@ fn repair_literal<W: Utf16WorkObserver>(
     jsx_attribute: bool,
     observer: &mut W,
 ) -> Result<(), TsrxParseError> {
-    replace_json_field(
-        tape,
-        object,
-        "raw",
-        authored,
-        RepairCopyLane::ProgramRaw,
-        observer,
-    )?;
+    replace_json_field(tape, object, "raw", authored, RepairCopyLane::ProgramRaw, observer)?;
     match authored.first().copied() {
         Some(unit) if unit == u16::from(b'\'') || unit == u16::from(b'"') => {
             let markers = if jsx_attribute {
@@ -791,11 +756,9 @@ fn repair_module_values<W: Utf16WorkObserver>(
         };
         if take_import {
             let import = imports[import_index];
-            let entries = module
-                .static_import_entries(import.entries)
-                .ok_or_else(|| {
-                    TsrxParseError::Adapter("invalid static import entry range".to_string())
-                })?;
+            let entries = module.static_import_entries(import.entries).ok_or_else(|| {
+                TsrxParseError::Adapter("invalid static import entry range".to_string())
+            })?;
             for entry in entries {
                 append_module_name(&mut requests, &entry.import_name)?;
             }
@@ -803,11 +766,9 @@ fn repair_module_values<W: Utf16WorkObserver>(
             import_index += 1;
         } else {
             let export = exports[export_index];
-            let entries = module
-                .static_export_entries(export.entries)
-                .ok_or_else(|| {
-                    TsrxParseError::Adapter("invalid static export entry range".to_string())
-                })?;
+            let entries = module.static_export_entries(export.entries).ok_or_else(|| {
+                TsrxParseError::Adapter("invalid static export entry range".to_string())
+            })?;
             let mut shared_request = None;
             for entry in entries {
                 if let Some(request) = entry.module_request.get() {
@@ -841,9 +802,8 @@ fn repair_module_values<W: Utf16WorkObserver>(
         ) {
             continue;
         }
-        let authored = source
-            .original_span(request.span.start, request.span.end)
-            .ok_or_else(|| {
+        let authored =
+            source.original_span(request.span.start, request.span.end).ok_or_else(|| {
                 TsrxParseError::Adapter("module request span is not exact".to_string())
             })?;
         let markers = javascript_quoted_pua_markers(authored)?;
@@ -857,15 +817,9 @@ fn repair_module_values<W: Utf16WorkObserver>(
         apply_pua_markers(&mut units, &markers)?;
         repairs.push((request.value, units));
     }
-    module.repair_utf16_batch(
-        repairs
-            .iter()
-            .map(|(range, units)| (*range, units.as_slice())),
-    )?;
-    observer.record_copy(
-        RepairCopyLane::Module,
-        repairs.iter().map(|(_, units)| units.len()).sum(),
-    );
+    module.repair_utf16_batch(repairs.iter().map(|(range, units)| (*range, units.as_slice())))?;
+    observer
+        .record_copy(RepairCopyLane::Module, repairs.iter().map(|(_, units)| units.len()).sum());
     Ok(())
 }
 
@@ -945,10 +899,7 @@ fn repair_codeframes<W: Utf16WorkObserver>(
     observer: &mut W,
 ) -> Result<(), TsrxParseError> {
     if diagnostics.is_empty()
-        || diagnostics
-            .records()
-            .iter()
-            .all(|diagnostic| diagnostic.codeframe.get().is_none())
+        || diagnostics.records().iter().all(|diagnostic| diagnostic.codeframe.get().is_none())
     {
         return Ok(());
     }
@@ -964,11 +915,8 @@ fn repair_codeframes<W: Utf16WorkObserver>(
         let units = repair_codeframe_units(codeframe, &source_index)?;
         repaired.push((range, units));
     }
-    diagnostics.repair_utf16_batch(
-        repaired
-            .iter()
-            .map(|(range, units)| (*range, units.as_slice())),
-    )?;
+    diagnostics
+        .repair_utf16_batch(repaired.iter().map(|(range, units)| (*range, units.as_slice())))?;
     observer.record_copy(
         RepairCopyLane::Codeframe,
         repaired.iter().map(|(_, units)| units.len()).sum(),
@@ -1024,9 +972,9 @@ impl<'source, 'original> CodeframeSourceIndex<'source, 'original> {
             if bytes.get(byte_end) == Some(&b'\r') && bytes.get(byte_start) == Some(&b'\n') {
                 byte_start += 1;
             }
-            number = number.checked_add(1).ok_or(TsrxParseError::Unsupported(
-                "codeframe line count exceeds u32",
-            ))?;
+            number = number
+                .checked_add(1)
+                .ok_or(TsrxParseError::Unsupported("codeframe line count exceeds u32"))?;
         }
         Ok(Self { source, lines })
     }
@@ -1075,9 +1023,7 @@ fn repair_codeframe_units(
             .unwrap_or(rendered_with_ending)
             .strip_suffix('\r')
             .unwrap_or_else(|| {
-                rendered_with_ending
-                    .strip_suffix('\n')
-                    .unwrap_or(rendered_with_ending)
+                rendered_with_ending.strip_suffix('\n').unwrap_or(rendered_with_ending)
             });
         let Some(rendered) = parse_rendered_source_line(rendered_text) else {
             line_byte_start += rendered_with_ending.len();
@@ -1112,10 +1058,7 @@ fn repair_codeframe_units(
             )?;
         }
         let line_fixups = source.fixups(source_line);
-        if !mapped
-            && line_fixups
-                .iter()
-                .any(|fixup| rendered.content.contains(fixup.placeholder()))
+        if !mapped && line_fixups.iter().any(|fixup| rendered.content.contains(fixup.placeholder()))
         {
             return Err(TsrxParseError::Adapter(format!(
                 "displayed codeframe line {} could not be mapped losslessly",
@@ -1140,10 +1083,7 @@ fn repair_codeframe_units(
     let mut output = Vec::with_capacity(codeframe.encode_utf16().count());
     let mut patches = patches.into_iter().peekable();
     for (byte_start, character) in codeframe.char_indices() {
-        if patches
-            .peek()
-            .is_some_and(|(patch_start, _, _)| *patch_start == byte_start)
-        {
+        if patches.peek().is_some_and(|(patch_start, _, _)| *patch_start == byte_start) {
             let (_, unit, expected) = patches.next().expect("peeked codeframe patch exists");
             if character != expected {
                 return Err(TsrxParseError::Adapter(
@@ -1175,10 +1115,7 @@ fn parse_rendered_source_line(line: &str) -> Option<RenderedSourceLine<'_>> {
     };
     let number = line.get(..separator)?.trim().parse::<u32>().ok()?;
     let mut content_byte_start = separator.checked_add(separator_width)?;
-    if line
-        .get(content_byte_start..)
-        .is_some_and(|content| content.starts_with(' '))
-    {
+    if line.get(content_byte_start..).is_some_and(|content| content.starts_with(' ')) {
         content_byte_start += 1;
     }
     Some(RenderedSourceLine {
@@ -1239,10 +1176,7 @@ fn expand_tabs(source: &str, tab_width: usize) -> TabProjection {
         }
         column += width;
     }
-    TabProjection {
-        text,
-        source_to_display,
-    }
+    TabProjection { text, source_to_display }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1263,15 +1197,11 @@ fn map_rendered_line(
         .checked_add(alignment.visible_length)
         .ok_or_else(|| TsrxParseError::Adapter("codeframe alignment overflow".to_string()))?;
     for fixup in fixups {
-        let relative = usize::try_from(
-            fixup
-                .byte_start
-                .checked_sub(source_byte_start)
-                .ok_or_else(|| {
-                    TsrxParseError::Adapter("codeframe fixup precedes its line".to_string())
-                })?,
-        )
-        .map_err(|_| TsrxParseError::Adapter("codeframe fixup overflow".to_string()))?;
+        let relative =
+            usize::try_from(fixup.byte_start.checked_sub(source_byte_start).ok_or_else(|| {
+                TsrxParseError::Adapter("codeframe fixup precedes its line".to_string())
+            })?)
+            .map_err(|_| TsrxParseError::Adapter("codeframe fixup overflow".to_string()))?;
         let projected_byte = if let Some(projection) = tab_projection {
             projection
                 .source_to_display
@@ -1319,16 +1249,9 @@ fn align_rendered_content(rendered: &str, projected: &str) -> Option<LineAlignme
     } else {
         (0, rendered)
     };
-    let core = core
-        .strip_suffix("...")
-        .or_else(|| core.strip_suffix('…'))
-        .unwrap_or(core);
+    let core = core.strip_suffix("...").or_else(|| core.strip_suffix('…')).unwrap_or(core);
     let start = unique_substring(projected, core)?;
-    Some(LineAlignment {
-        output_prefix,
-        projected_start: start,
-        visible_length: core.len(),
-    })
+    Some(LineAlignment { output_prefix, projected_start: start, visible_length: core.len() })
 }
 
 fn unique_substring(haystack: &str, needle: &str) -> Option<usize> {
@@ -1411,13 +1334,8 @@ fn replace_json_field<W: Utf16WorkObserver>(
     let field = tape
         .field_index(object, name)
         .ok_or_else(|| TsrxParseError::Adapter(format!("missing `{name}` scalar field")))?;
-    if tape
-        .field_value(field)
-        .is_none_or(|value| value.kind() != ValueKind::Scalar)
-    {
-        return Err(TsrxParseError::Adapter(format!(
-            "`{name}` is not a scalar field"
-        )));
+    if tape.field_value(field).is_none_or(|value| value.kind() != ValueKind::Scalar) {
+        return Err(TsrxParseError::Adapter(format!("`{name}` is not a scalar field")));
     }
     let restored_units = value.len();
     let value = tape.push_json_utf16_scalar(value)?;
@@ -1482,12 +1400,9 @@ fn decode_json_string(value: &str) -> Result<Vec<u16>, TsrxParseError> {
             'u' => {
                 let mut scalar = 0_u16;
                 for _ in 0..4 {
-                    let digit = characters
-                        .next()
-                        .and_then(|value| value.to_digit(16))
-                        .ok_or_else(|| {
-                            TsrxParseError::Adapter("invalid OXC JSON Unicode escape".to_string())
-                        })?;
+                    let digit = characters.next().and_then(|value| value.to_digit(16)).ok_or_else(
+                        || TsrxParseError::Adapter("invalid OXC JSON Unicode escape".to_string()),
+                    )?;
                     scalar = scalar
                         .checked_mul(16)
                         .and_then(|value| value.checked_add(u16::try_from(digit).ok()?))
@@ -1498,9 +1413,7 @@ fn decode_json_string(value: &str) -> Result<Vec<u16>, TsrxParseError> {
                 output.push(scalar);
             }
             _ => {
-                return Err(TsrxParseError::Adapter(
-                    "invalid OXC JSON string escape".to_string(),
-                ));
+                return Err(TsrxParseError::Adapter("invalid OXC JSON string escape".to_string()));
             }
         }
     }
@@ -1530,9 +1443,7 @@ fn apply_pua_markers(value: &mut [u16], markers: &[Option<u16>]) -> Result<(), T
 
 fn javascript_quoted_pua_markers(value: &[u16]) -> Result<Vec<Option<u16>>, TsrxParseError> {
     let Some((&quote, inner)) = value.split_first() else {
-        return Err(TsrxParseError::Adapter(
-            "empty quoted source span".to_string(),
-        ));
+        return Err(TsrxParseError::Adapter("empty quoted source span".to_string()));
     };
     if !matches!(quote, unit if unit == u16::from(b'\'') || unit == u16::from(b'"'))
         || inner.last().copied() != Some(quote)
@@ -1631,9 +1542,7 @@ fn literal_pua_markers(value: &[u16]) -> Vec<Option<u16>> {
 fn push_literal_marker(value: &[u16], index: usize, output: &mut Vec<Option<u16>>) -> usize {
     let unit = value[index];
     if (0xd800..=0xdbff).contains(&unit)
-        && value
-            .get(index + 1)
-            .is_some_and(|next| (0xdc00..=0xdfff).contains(next))
+        && value.get(index + 1).is_some_and(|next| (0xdc00..=0xdfff).contains(next))
     {
         return 2;
     }
@@ -1658,9 +1567,7 @@ fn parse_ascii_radix(value: &[u16], radix: u32) -> Option<u32> {
 
 fn regex_pattern(value: &[u16]) -> Result<&[u16], TsrxParseError> {
     if value.first().copied() != Some(u16::from(b'/')) {
-        return Err(TsrxParseError::Adapter(
-            "RegExp does not start with slash".to_string(),
-        ));
+        return Err(TsrxParseError::Adapter("RegExp does not start with slash".to_string()));
     }
     let mut escaped = false;
     let mut in_class = false;
@@ -1674,9 +1581,7 @@ fn regex_pattern(value: &[u16]) -> Result<&[u16], TsrxParseError> {
             _ => {}
         }
     }
-    Err(TsrxParseError::Adapter(
-        "RegExp has no closing slash".to_string(),
-    ))
+    Err(TsrxParseError::Adapter("RegExp has no closing slash".to_string()))
 }
 
 fn record_index(value: usize) -> Result<RecordIndex, TsrxParseError> {

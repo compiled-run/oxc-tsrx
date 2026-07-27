@@ -20,10 +20,7 @@ struct ScaffoldSpan {
 }
 
 impl ScaffoldSpan {
-    const MISSING: Self = Self {
-        start: MISSING_POSITION,
-        end: MISSING_POSITION,
-    };
+    const MISSING: Self = Self { start: MISSING_POSITION, end: MISSING_POSITION };
 
     const fn is_missing(self) -> bool {
         self.start == MISSING_POSITION

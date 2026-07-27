@@ -6,9 +6,7 @@ pub(super) fn parse_decimal(bytes: &[u8], mut index: usize) -> Option<(u32, usiz
     let start = index;
     let mut value = 0u32;
     while let Some(byte @ b'0'..=b'9') = bytes.get(index) {
-        value = value
-            .checked_mul(10)?
-            .checked_add(u32::from(*byte - b'0'))?;
+        value = value.checked_mul(10)?.checked_add(u32::from(*byte - b'0'))?;
         index += 1;
     }
     (index > start).then_some((value, index))
@@ -79,17 +77,11 @@ pub(super) fn scaffold_call_end(
 }
 
 pub(super) fn previous_non_whitespace(source: &str, before: usize) -> Option<usize> {
-    source.as_bytes()[..before]
-        .iter()
-        .rposition(|byte| !byte.is_ascii_whitespace())
+    source.as_bytes()[..before].iter().rposition(|byte| !byte.is_ascii_whitespace())
 }
 
 pub(super) fn skip_ascii_whitespace(source: &str, mut index: usize) -> usize {
-    while source
-        .as_bytes()
-        .get(index)
-        .is_some_and(u8::is_ascii_whitespace)
-    {
+    while source.as_bytes().get(index).is_some_and(u8::is_ascii_whitespace) {
         index += 1;
     }
     index

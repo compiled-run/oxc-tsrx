@@ -96,10 +96,7 @@ enum ProjectedCodeBlockKind {
 #[derive(Debug, Clone, Copy)]
 enum CodeBlockPlacement {
     DirectField,
-    DirectList {
-        slot: ParentSlot,
-        policy: DirectListPolicy,
-    },
+    DirectList { slot: ParentSlot, policy: DirectListPolicy },
     Wrap(ParentSlot),
 }
 
@@ -146,9 +143,8 @@ pub(super) fn reconstruct_projected(
 ) -> Result<Vec<AuthoredStart>, TsrxParseError> {
     let program = validate_program_shape(tape)?;
     let mut object_index = ProjectedObjectIndex::new();
-    let parents = ParentIndex::build(tape, |object, kind, start| {
-        object_index.record(object, kind, start)
-    })?;
+    let parents =
+        ParentIndex::build(tape, |object, kind, start| object_index.record(object, kind, start))?;
     object_index.sort();
     validate_module_declaration_placement(tape, &parents, program, &object_index.module_objects)?;
     let mut code_blocks = collect_code_block_plans(
@@ -222,15 +218,7 @@ pub(super) fn reconstruct_projected(
         tries.reconstruct_all(tape)?;
     }
     reconstruct_style_elements(tape, authored, overlay, segments, &parents, &mut starts)?;
-    reconstruct_dynamic_tags(
-        tape,
-        authored,
-        overlay,
-        segments,
-        prefix,
-        &parents,
-        &mut starts,
-    )?;
+    reconstruct_dynamic_tags(tape, authored, overlay, segments, prefix, &parents, &mut starts)?;
     normalize_control_body_lists(tape, &body_lists)?;
     let mut list_removals = Vec::new();
     reconstruct_code_blocks(
@@ -244,18 +232,16 @@ pub(super) fn reconstruct_projected(
     )?;
     normalize_template_layout_text(tape, &object_index.layout_containers, &mut list_removals)?;
     tape.remove_list_values(
-        &list_removals
-            .iter()
-            .map(|removal| (removal.list, removal.entry))
-            .collect::<Vec<_>>(),
+        &list_removals.iter().map(|removal| (removal.list, removal.entry)).collect::<Vec<_>>(),
     )?;
     Ok(starts)
 }
 
 fn validate_program_shape(tape: &FlatTape) -> Result<RecordIndex, TsrxParseError> {
-    let program = tape.root().as_object().ok_or(TsrxParseError::Unsupported(
-        "projected root is not a Program",
-    ))?;
+    let program = tape
+        .root()
+        .as_object()
+        .ok_or(TsrxParseError::Unsupported("projected root is not a Program"))?;
     require_type(tape, program, r#""Program""#)?;
     let _ = list_field(tape, program, "body")?;
     Ok(program)
@@ -269,11 +255,10 @@ fn validate_module_declaration_placement(
 ) -> Result<(), TsrxParseError> {
     let program_body = list_field(tape, program, "body")?;
     for &object in module_objects {
-        let direct_program_member = matches!(
-            parents.parent_slot(ValueRef::object(object)),
-            Some(ParentSlot::ListValue(_))
-        ) && parents.parent_container(ValueRef::object(object))
-            == Some(ValueRef::list(program_body));
+        let direct_program_member =
+            matches!(parents.parent_slot(ValueRef::object(object)), Some(ParentSlot::ListValue(_)))
+                && parents.parent_container(ValueRef::object(object))
+                    == Some(ValueRef::list(program_body));
         let typescript_module_member = parents
             .parent_container(ValueRef::object(object))
             .and_then(ValueRef::as_list)
@@ -306,11 +291,8 @@ fn initial_authored_starts(
     authored: &str,
     overlay: OverlayView<'_>,
 ) -> Result<Vec<AuthoredStart>, TsrxParseError> {
-    let code_blocks = overlay
-        .tokens
-        .iter()
-        .filter(|token| token.kind == StructuralKind::FunctionBody)
-        .count();
+    let code_blocks =
+        overlay.tokens.iter().filter(|token| token.kind == StructuralKind::FunctionBody).count();
     let capacity = overlay
         .nodes
         .len()
@@ -351,9 +333,8 @@ impl IfReconstructor<'_, '_> {
             .start
             .checked_add(1)
             .ok_or(TsrxParseError::Unsupported("if root span overflow"))?;
-        let projected_start = project_authored_start(self.segments, authored_after_sigil).ok_or(
-            TsrxParseError::Unsupported("if root is outside affine source"),
-        )?;
+        let projected_start = project_authored_start(self.segments, authored_after_sigil)
+            .ok_or(TsrxParseError::Unsupported("if root is outside affine source"))?;
         let if_object = find_unique_start(self.if_objects, projected_start, "if root")?;
         require_type(tape, if_object, r#""IfStatement""#)?;
         let projected_end = scalar_u32(tape, if_object, "end")?;
@@ -389,11 +370,7 @@ impl IfReconstructor<'_, '_> {
             node.span,
             &mut self.starts,
         )?;
-        self.starts.push(AuthoredStart {
-            object: if_object,
-            start: node.span.start,
-            end: None,
-        });
+        self.starts.push(AuthoredStart { object: if_object, start: node.span.start, end: None });
         Ok(())
     }
 }
@@ -420,9 +397,8 @@ impl LoopReconstructor<'_, '_, '_> {
             .start
             .checked_add(1)
             .ok_or(TsrxParseError::Unsupported("for root span overflow"))?;
-        let projected_start = project_authored_start(self.segments, authored_after_sigil).ok_or(
-            TsrxParseError::Unsupported("for root is outside affine source"),
-        )?;
+        let projected_start = project_authored_start(self.segments, authored_after_sigil)
+            .ok_or(TsrxParseError::Unsupported("for root is outside affine source"))?;
         let loop_object = find_unique_start(self.loop_objects, projected_start, "for root")?;
         let kind = LoopStatementKind::from_object(tape, loop_object)?;
         let projected_end = scalar_u32(tape, loop_object, "end")?;
@@ -466,11 +442,7 @@ impl LoopReconstructor<'_, '_, '_> {
             let body_field = tape
                 .field_index(loop_object, "body")
                 .ok_or(TsrxParseError::Unsupported("for-of has no body field"))?;
-            let index = if let Some(index) = index {
-                index
-            } else {
-                tape.push_scalar("null")?
-            };
+            let index = if let Some(index) = index { index } else { tape.push_scalar("null")? };
             tape.insert_field_before(loop_object, body_field, "index", index)?;
             if let Some(key) = key {
                 tape.insert_field_before(loop_object, body_field, "key", key)?;
@@ -501,11 +473,7 @@ impl LoopReconstructor<'_, '_, '_> {
             node.span,
             self.starts,
         )?;
-        self.starts.push(AuthoredStart {
-            object: loop_object,
-            start: node.span.start,
-            end: None,
-        });
+        self.starts.push(AuthoredStart { object: loop_object, start: node.span.start, end: None });
         Ok(())
     }
 
@@ -515,69 +483,50 @@ impl LoopReconstructor<'_, '_, '_> {
         loop_object: RecordIndex,
         clause: OverlayClause,
     ) -> Result<ProjectedEmpty, TsrxParseError> {
-        let projected_start = project_authored_start(self.segments, clause.body.start).ok_or(
-            TsrxParseError::Unsupported("empty block is outside affine source"),
-        )?;
+        let projected_start = project_authored_start(self.segments, clause.body.start)
+            .ok_or(TsrxParseError::Unsupported("empty block is outside affine source"))?;
         let block = find_unique_start(self.block_objects, projected_start, "empty block")?;
         require_type(tape, block, r#""BlockStatement""#)?;
         let statement = self
             .parents
             .parent_container(ValueRef::object(block))
             .and_then(ValueRef::as_object)
-            .ok_or(TsrxParseError::Unsupported(
-                "empty block has no projected if",
-            ))?;
+            .ok_or(TsrxParseError::Unsupported("empty block has no projected if"))?;
         require_type(tape, statement, r#""IfStatement""#)?;
         if field_value(tape, statement, "consequent")? != ValueRef::object(block)
             || tape.scalar(field_value(tape, statement, "alternate")?) != Some("null")
         {
-            return Err(TsrxParseError::Unsupported(
-                "projected empty if has unexpected branches",
-            ));
+            return Err(TsrxParseError::Unsupported("projected empty if has unexpected branches"));
         }
         let test = object_field(tape, statement, "test")?;
         require_type(tape, test, r#""Literal""#)?;
         if scalar_field(tape, test, "value")? != "false" {
-            return Err(TsrxParseError::Unsupported(
-                "projected empty guard is not false",
-            ));
+            return Err(TsrxParseError::Unsupported("projected empty guard is not false"));
         }
         let ParentSlot::ListValue(entry) = self
             .parents
             .parent_slot(ValueRef::object(statement))
-            .ok_or(TsrxParseError::Unsupported(
-                "projected empty if has no list entry",
-            ))?
+            .ok_or(TsrxParseError::Unsupported("projected empty if has no list entry"))?
         else {
-            return Err(TsrxParseError::Unsupported(
-                "projected empty if is not a statement",
-            ));
+            return Err(TsrxParseError::Unsupported("projected empty if is not a statement"));
         };
         let list = self
             .parents
             .parent_container(ValueRef::object(statement))
             .and_then(ValueRef::as_list)
-            .ok_or(TsrxParseError::Unsupported(
-                "projected empty if has no statement list",
-            ))?;
+            .ok_or(TsrxParseError::Unsupported("projected empty if has no statement list"))?;
         let ParentSlot::ListValue(loop_entry) = self
             .parents
             .parent_slot(ValueRef::object(loop_object))
-            .ok_or(TsrxParseError::Unsupported(
-                "projected loop has no list entry",
-            ))?
+            .ok_or(TsrxParseError::Unsupported("projected loop has no list entry"))?
         else {
-            return Err(TsrxParseError::Unsupported(
-                "projected loop is not a statement",
-            ));
+            return Err(TsrxParseError::Unsupported("projected loop is not a statement"));
         };
         let loop_list = self
             .parents
             .parent_container(ValueRef::object(loop_object))
             .and_then(ValueRef::as_list)
-            .ok_or(TsrxParseError::Unsupported(
-                "projected loop has no statement list",
-            ))?;
+            .ok_or(TsrxParseError::Unsupported("projected loop has no statement list"))?;
         if loop_list != list
             || tape.list_value(loop_entry) != Some(ValueRef::object(loop_object))
             || tape.list_value_next(loop_entry) != Some(entry)
@@ -587,12 +536,7 @@ impl LoopReconstructor<'_, '_, '_> {
                 "projected empty clause does not immediately follow its loop",
             ));
         }
-        Ok(ProjectedEmpty {
-            statement,
-            block,
-            list,
-            entry,
-        })
+        Ok(ProjectedEmpty { statement, block, list, entry })
     }
 
     fn reconstruct_header(
@@ -624,17 +568,8 @@ impl LoopReconstructor<'_, '_, '_> {
             .copied()
             .filter(|ordinal| *ordinal != tsrx_syntax::NONE_INDEX)
             .and_then(|ordinal| usize::try_from(ordinal).ok())
-            .ok_or(TsrxParseError::Unsupported(
-                "annotated for clause has no header ordinal",
-            ))?;
-        extract_annotated_header(
-            tape,
-            loop_object,
-            self.segments,
-            self.prefix,
-            ordinal,
-            header,
-        )
+            .ok_or(TsrxParseError::Unsupported("annotated for clause has no header ordinal"))?;
+        extract_annotated_header(tape, loop_object, self.segments, self.prefix, ordinal, header)
     }
 }
 
@@ -659,9 +594,8 @@ impl SwitchReconstructor<'_, '_, '_> {
             .start
             .checked_add(1)
             .ok_or(TsrxParseError::Unsupported("switch root span overflow"))?;
-        let projected_start = project_authored_start(self.segments, authored_after_sigil).ok_or(
-            TsrxParseError::Unsupported("switch root is outside affine source"),
-        )?;
+        let projected_start = project_authored_start(self.segments, authored_after_sigil)
+            .ok_or(TsrxParseError::Unsupported("switch root is outside affine source"))?;
         let switch = find_unique_start(self.switch_objects, projected_start, "switch root")?;
         require_type(tape, switch, r#""SwitchStatement""#)?;
         let projected_end = scalar_u32(tape, switch, "end")?;
@@ -678,18 +612,17 @@ impl SwitchReconstructor<'_, '_, '_> {
         let mut clause_index = node.first_clause;
         while clause_index != tsrx_syntax::NONE_INDEX {
             if entry.is_none() {
-                return Err(TsrxParseError::Unsupported(
-                    "projected switch has too few cases",
-                ));
+                return Err(TsrxParseError::Unsupported("projected switch has too few cases"));
             }
             let clause = usize::try_from(clause_index)
                 .ok()
                 .and_then(|index| self.overlay.clauses.get(index))
                 .copied()
                 .ok_or(TsrxParseError::Unsupported("invalid switch clause index"))?;
-            let case = tape.list_value(entry).and_then(ValueRef::as_object).ok_or(
-                TsrxParseError::Unsupported("projected switch case is not an object"),
-            )?;
+            let case = tape
+                .list_value(entry)
+                .and_then(ValueRef::as_object)
+                .ok_or(TsrxParseError::Unsupported("projected switch case is not an object"))?;
             let next = tape
                 .list_value_next(entry)
                 .ok_or(TsrxParseError::Unsupported("invalid switch case entry"))?;
@@ -698,9 +631,7 @@ impl SwitchReconstructor<'_, '_, '_> {
             entry = next;
         }
         if !entry.is_none() {
-            return Err(TsrxParseError::Unsupported(
-                "projected switch has too many cases",
-            ));
+            return Err(TsrxParseError::Unsupported("projected switch has too many cases"));
         }
 
         order_span_fields_before(tape, switch, "discriminant")?;
@@ -711,29 +642,12 @@ impl SwitchReconstructor<'_, '_, '_> {
 
         let wrapper = match node.context {
             ControlContext::Statement => None,
-            ControlContext::Expression | ControlContext::JsxChild => Some(find_wrapper_call(
-                tape,
-                self.parents,
-                switch,
-                self.prefix,
-                node_index,
-                None,
-            )?),
+            ControlContext::Expression | ControlContext::JsxChild => {
+                Some(find_wrapper_call(tape, self.parents, switch, self.prefix, node_index, None)?)
+            }
         };
-        place_control(
-            tape,
-            self.parents,
-            switch,
-            node.context,
-            wrapper,
-            node.span,
-            self.starts,
-        )?;
-        self.starts.push(AuthoredStart {
-            object: switch,
-            start: node.span.start,
-            end: None,
-        });
+        place_control(tape, self.parents, switch, node.context, wrapper, node.span, self.starts)?;
+        self.starts.push(AuthoredStart { object: switch, start: node.span.start, end: None });
         Ok(())
     }
 
@@ -760,15 +674,11 @@ impl SwitchReconstructor<'_, '_, '_> {
             }
             ClauseRole::Default => {
                 if tape.scalar(field_value(tape, case, "test")?) != Some("null") {
-                    return Err(TsrxParseError::Unsupported(
-                        "projected default case has a test",
-                    ));
+                    return Err(TsrxParseError::Unsupported("projected default case has a test"));
                 }
             }
             _ => {
-                return Err(TsrxParseError::Unsupported(
-                    "switch has a non-switch clause",
-                ));
+                return Err(TsrxParseError::Unsupported("switch has a non-switch clause"));
             }
         }
 
@@ -778,26 +688,17 @@ impl SwitchReconstructor<'_, '_, '_> {
         let consequent = tape
             .field_value(consequent_field)
             .and_then(ValueRef::as_list)
-            .ok_or(TsrxParseError::Unsupported(
-                "switch case consequent is not a list",
-            ))?;
-        let block =
-            exact_one_value(tape, consequent)?
-                .as_object()
-                .ok_or(TsrxParseError::Unsupported(
-                    "projected case body is not a block",
-                ))?;
+            .ok_or(TsrxParseError::Unsupported("switch case consequent is not a list"))?;
+        let block = exact_one_value(tape, consequent)?
+            .as_object()
+            .ok_or(TsrxParseError::Unsupported("projected case body is not a block"))?;
         require_type(tape, block, r#""BlockStatement""#)?;
         require_authored_object_span(tape, block, self.segments, clause.body)?;
         let body = list_field(tape, block, "body")?;
         tape.set_field_value(consequent_field, ValueRef::list(body))?;
         self.body_lists.push(body);
         order_switch_case_fields(tape, case)?;
-        self.starts.push(AuthoredStart {
-            object: case,
-            start: clause.keyword.start,
-            end: None,
-        });
+        self.starts.push(AuthoredStart { object: case, start: clause.keyword.start, end: None });
         Ok(())
     }
 }
@@ -855,9 +756,8 @@ impl TryReconstructor<'_, '_, '_> {
             prepare_control_block(tape, pending, self.body_lists)?;
         }
         if let Some(handler) = projected.handler {
-            let clause = catch_clause.ok_or(TsrxParseError::Unsupported(
-                "projected catch has no authored clause",
-            ))?;
+            let clause = catch_clause
+                .ok_or(TsrxParseError::Unsupported("projected catch has no authored clause"))?;
             prepare_control_block(tape, handler.body, self.body_lists)?;
             rebuild_catch_clause(tape, handler, clause)?;
             self.starts.push(AuthoredStart {
@@ -868,10 +768,9 @@ impl TryReconstructor<'_, '_, '_> {
         }
 
         let root_start = field_value(tape, projected.block, "start")?;
-        let last_block = projected.handler.map_or_else(
-            || projected.pending.unwrap_or(projected.block),
-            |handler| handler.body,
-        );
+        let last_block = projected
+            .handler
+            .map_or_else(|| projected.pending.unwrap_or(projected.block), |handler| handler.body);
         let root_end = field_value(tape, last_block, "end")?;
         tape.clear_fields(root)?;
         let kind = tape.push_scalar(r#""JSXTryExpression""#)?;
@@ -910,11 +809,7 @@ impl TryReconstructor<'_, '_, '_> {
             self.segments,
             self.starts,
         )?;
-        self.starts.push(AuthoredStart {
-            object: root,
-            start: node.span.start,
-            end: None,
-        });
+        self.starts.push(AuthoredStart { object: root, start: node.span.start, end: None });
         Ok(())
     }
 }
@@ -937,20 +832,14 @@ fn validate_try_helper(
         return Err(TsrxParseError::Unsupported("try helper is optional"));
     }
     let (manifest, end_marker) = exact_two_values(tape, list_field(tape, root, "arguments")?)?;
-    let manifest = manifest
-        .as_object()
-        .ok_or(TsrxParseError::Unsupported("try manifest is not an object"))?;
+    let manifest =
+        manifest.as_object().ok_or(TsrxParseError::Unsupported("try manifest is not an object"))?;
     require_type(tape, manifest, r#""ObjectExpression""#)?;
-    let end_marker = end_marker.as_object().ok_or(TsrxParseError::Unsupported(
-        "try end marker is not an object",
-    ))?;
+    let end_marker = end_marker
+        .as_object()
+        .ok_or(TsrxParseError::Unsupported("try end marker is not an object"))?;
     require_type(tape, end_marker, r#""Identifier""#)?;
-    if !scaffold_tag_matches(
-        scalar_field(tape, end_marker, "name")?,
-        prefix,
-        "TE",
-        node_index,
-    ) {
+    if !scaffold_tag_matches(scalar_field(tape, end_marker, "name")?, prefix, "TE", node_index) {
         return Err(TsrxParseError::Unsupported("unknown try end marker"));
     }
 
@@ -1000,15 +889,9 @@ fn validate_try_helper(
         })
         .transpose()?;
     if values.next().is_some() {
-        return Err(TsrxParseError::Unsupported(
-            "try manifest has unexpected methods",
-        ));
+        return Err(TsrxParseError::Unsupported("try manifest has unexpected methods"));
     }
-    Ok(ProjectedTry {
-        block,
-        pending,
-        handler,
-    })
+    Ok(ProjectedTry { block, pending, handler })
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1032,9 +915,7 @@ fn validate_try_method(
         || scalar_field(tape, property, "shorthand")? != "false"
         || scalar_field(tape, property, "computed")? != "false"
     {
-        return Err(TsrxParseError::Unsupported(
-            "try manifest method has unexpected flags",
-        ));
+        return Err(TsrxParseError::Unsupported("try manifest method has unexpected flags"));
     }
     let key = object_field(tape, property, "key")?;
     require_type(tape, key, r#""Identifier""#)?;
@@ -1048,9 +929,7 @@ fn validate_try_method(
         || scalar_field(tape, function, "async")? != "true"
         || scalar_field(tape, function, "expression")? != "false"
     {
-        return Err(TsrxParseError::Unsupported(
-            "try method is not an async generator",
-        ));
+        return Err(TsrxParseError::Unsupported("try method is not an async generator"));
     }
     let parameters = list_field(tape, function, "params")?;
     let mut values = tape.values(parameters);
@@ -1059,24 +938,20 @@ fn validate_try_method(
     if values.next().is_some()
         || usize::from(param.is_some()) + usize::from(reset_param.is_some()) != binding_count
     {
-        return Err(TsrxParseError::Unsupported(
-            "try method has unexpected parameters",
-        ));
+        return Err(TsrxParseError::Unsupported("try method has unexpected parameters"));
     }
     for (index, value) in [param, reset_param].into_iter().enumerate() {
         let Some(value) = value else {
             continue;
         };
-        let parameter = value.as_object().ok_or(TsrxParseError::Unsupported(
-            "catch binding is not an object",
-        ))?;
+        let parameter = value
+            .as_object()
+            .ok_or(TsrxParseError::Unsupported("catch binding is not an object"))?;
         let authored_span = require_object_span_within(tape, parameter, segments, clause.header)?;
         let valid_kind = matches!(
             (index, object_type(tape, parameter)),
-            (
-                0,
-                Some(r#""Identifier""# | r#""ObjectPattern""# | r#""ArrayPattern""#)
-            ) | (1, Some(r#""Identifier""#))
+            (0, Some(r#""Identifier""# | r#""ObjectPattern""# | r#""ArrayPattern""#))
+                | (1, Some(r#""Identifier""#))
         );
         if !valid_kind || catch_binding_is_optional(authored, authored_span.end, clause.header.end)
         {
@@ -1086,27 +961,20 @@ fn validate_try_method(
         }
     }
     if let (Some(param), Some(reset)) = (param, reset_param) {
-        let param = param.as_object().ok_or(TsrxParseError::Unsupported(
-            "catch binding is not an object",
-        ))?;
-        let reset = reset.as_object().ok_or(TsrxParseError::Unsupported(
-            "catch binding is not an object",
-        ))?;
+        let param = param
+            .as_object()
+            .ok_or(TsrxParseError::Unsupported("catch binding is not an object"))?;
+        let reset = reset
+            .as_object()
+            .ok_or(TsrxParseError::Unsupported("catch binding is not an object"))?;
         if scalar_u32(tape, param, "end")? > scalar_u32(tape, reset, "start")? {
-            return Err(TsrxParseError::Unsupported(
-                "catch bindings are not in authored order",
-            ));
+            return Err(TsrxParseError::Unsupported("catch bindings are not in authored order"));
         }
     }
     let body = object_field(tape, function, "body")?;
     require_type(tape, body, r#""BlockStatement""#)?;
     require_authored_object_span(tape, body, segments, clause.body)?;
-    Ok(ProjectedCatch {
-        function,
-        body,
-        param,
-        reset_param,
-    })
+    Ok(ProjectedCatch { function, body, param, reset_param })
 }
 
 fn projected_try_statement(
@@ -1117,9 +985,7 @@ fn projected_try_statement(
     let statement = parents
         .parent_container(ValueRef::object(root))
         .and_then(ValueRef::as_object)
-        .ok_or(TsrxParseError::Unsupported(
-            "projected try has no expression statement",
-        ))?;
+        .ok_or(TsrxParseError::Unsupported("projected try has no expression statement"))?;
     require_type(tape, statement, r#""ExpressionStatement""#)?;
     if field_value(tape, statement, "expression")? != ValueRef::object(root)
         || !matches!(
@@ -1127,9 +993,7 @@ fn projected_try_statement(
             Some(ParentSlot::ListValue(_))
         )
     {
-        return Err(TsrxParseError::Unsupported(
-            "projected try statement has unexpected topology",
-        ));
+        return Err(TsrxParseError::Unsupported("projected try statement has unexpected topology"));
     }
     Ok(statement)
 }
@@ -1146,23 +1010,14 @@ fn rebuild_catch_clause(
     tape.append_field(handler.function, "type", kind)?;
     tape.append_field(handler.function, "start", start)?;
     tape.append_field(handler.function, "end", end)?;
-    let param = if let Some(param) = handler.param {
-        param
-    } else {
-        tape.push_scalar("null")?
-    };
+    let param = if let Some(param) = handler.param { param } else { tape.push_scalar("null")? };
     tape.append_field(handler.function, "param", param)?;
-    let reset = if let Some(reset) = handler.reset_param {
-        reset
-    } else {
-        tape.push_scalar("null")?
-    };
+    let reset =
+        if let Some(reset) = handler.reset_param { reset } else { tape.push_scalar("null")? };
     tape.append_field(handler.function, "resetParam", reset)?;
     tape.append_field(handler.function, "body", ValueRef::object(handler.body))?;
     if clause.role != ClauseRole::Catch {
-        return Err(TsrxParseError::Unsupported(
-            "try handler does not match catch clause",
-        ));
+        return Err(TsrxParseError::Unsupported("try handler does not match catch clause"));
     }
     Ok(())
 }
@@ -1173,9 +1028,7 @@ impl LoopStatementKind {
             Some(r#""ForStatement""#) => Ok(Self::Classic),
             Some(r#""ForInStatement""#) => Ok(Self::In),
             Some(r#""ForOfStatement""#) => Ok(Self::Of),
-            _ => Err(TsrxParseError::Unsupported(
-                "projected for has an unexpected statement type",
-            )),
+            _ => Err(TsrxParseError::Unsupported("projected for has an unexpected statement type")),
         }
     }
 
@@ -1195,14 +1048,10 @@ fn for_clauses(
     let node = overlay.nodes[node_index];
     let index = usize::try_from(node.first_clause)
         .map_err(|_| TsrxParseError::Unsupported("invalid for clause index"))?;
-    let clause = *overlay
-        .clauses
-        .get(index)
-        .ok_or(TsrxParseError::Unsupported("missing for clause"))?;
+    let clause =
+        *overlay.clauses.get(index).ok_or(TsrxParseError::Unsupported("missing for clause"))?;
     if clause.role != ClauseRole::For {
-        return Err(TsrxParseError::Unsupported(
-            "for node starts with non-for clause",
-        ));
+        return Err(TsrxParseError::Unsupported("for node starts with non-for clause"));
     }
     let empty = if clause.next == tsrx_syntax::NONE_INDEX {
         None
@@ -1213,9 +1062,7 @@ fn for_clauses(
             .copied()
             .ok_or(TsrxParseError::Unsupported("invalid empty clause index"))?;
         if empty.role != ClauseRole::Empty {
-            return Err(TsrxParseError::Unsupported(
-                "for node has an unexpected trailing clause",
-            ));
+            return Err(TsrxParseError::Unsupported("for node has an unexpected trailing clause"));
         }
         Some(empty)
     };
@@ -1300,15 +1147,11 @@ fn extract_annotated_header(
 ) -> Result<(Option<ValueRef>, Option<ValueRef>), TsrxParseError> {
     let right_field = tape
         .field_index(loop_object, "right")
-        .ok_or(TsrxParseError::Unsupported(
-            "annotated for-of has no right field",
-        ))?;
+        .ok_or(TsrxParseError::Unsupported("annotated for-of has no right field"))?;
     let wrapper = tape
         .field_value(right_field)
         .and_then(ValueRef::as_object)
-        .ok_or(TsrxParseError::Unsupported(
-            "annotated for right is not a wrapper call",
-        ))?;
+        .ok_or(TsrxParseError::Unsupported("annotated for right is not a wrapper call"))?;
     require_type(tape, wrapper, r#""CallExpression""#)?;
     require_scaffold_callee(tape, wrapper, prefix, "H", ordinal)?;
     let arguments = list_field(tape, wrapper, "arguments")?;
@@ -1316,9 +1159,7 @@ fn extract_annotated_header(
     let right = values
         .next()
         .and_then(ValueRef::as_object)
-        .ok_or(TsrxParseError::Unsupported(
-            "annotated for right value is not an expression",
-        ))?;
+        .ok_or(TsrxParseError::Unsupported("annotated for right value is not an expression"))?;
     require_authored_object_span(tape, right, segments, header.right)?;
 
     let index = if header.index.is_empty() {
@@ -1328,15 +1169,7 @@ fn extract_annotated_header(
             .next()
             .and_then(ValueRef::as_object)
             .ok_or(TsrxParseError::Unsupported("for index wrapper missing"))?;
-        Some(extract_header_value(
-            tape,
-            call,
-            segments,
-            prefix,
-            "IH",
-            ordinal,
-            header.index,
-        )?)
+        Some(extract_header_value(tape, call, segments, prefix, "IH", ordinal, header.index)?)
     };
     let key = if header.key.is_empty() {
         None
@@ -1345,9 +1178,7 @@ fn extract_annotated_header(
             .next()
             .and_then(ValueRef::as_object)
             .ok_or(TsrxParseError::Unsupported("for key wrapper missing"))?;
-        Some(extract_header_value(
-            tape, call, segments, prefix, "KH", ordinal, header.key,
-        )?)
+        Some(extract_header_value(tape, call, segments, prefix, "KH", ordinal, header.key)?)
     };
     let end = values
         .next()
@@ -1357,9 +1188,7 @@ fn extract_annotated_header(
     if !scaffold_tag_matches(scalar_field(tape, end, "name")?, prefix, "HE", ordinal)
         || values.next().is_some()
     {
-        return Err(TsrxParseError::Unsupported(
-            "for header scaffold has unexpected arguments",
-        ));
+        return Err(TsrxParseError::Unsupported("for header scaffold has unexpected arguments"));
     }
     tape.set_field_value(right_field, ValueRef::object(right))?;
     Ok((index.map(ValueRef::object), key.map(ValueRef::object)))
@@ -1378,9 +1207,7 @@ fn extract_header_value(
     require_scaffold_callee(tape, call, prefix, tag, ordinal)?;
     let value = exact_one_value(tape, list_field(tape, call, "arguments")?)?
         .as_object()
-        .ok_or(TsrxParseError::Unsupported(
-            "header wrapper value is not an expression",
-        ))?;
+        .ok_or(TsrxParseError::Unsupported("header wrapper value is not an expression"))?;
     require_authored_object_span(tape, value, segments, authored_span)?;
     Ok(value)
 }
@@ -1397,9 +1224,7 @@ fn require_scaffold_callee(
     if scaffold_tag_matches(scalar_field(tape, callee, "name")?, prefix, tag, ordinal) {
         Ok(())
     } else {
-        Err(TsrxParseError::Unsupported(
-            "unknown annotated header helper",
-        ))
+        Err(TsrxParseError::Unsupported("unknown annotated header helper"))
     }
 }
 
@@ -1431,9 +1256,7 @@ fn require_authored_object_span(
     {
         Ok(())
     } else {
-        Err(TsrxParseError::Unsupported(
-            "annotated header value span is synthetic",
-        ))
+        Err(TsrxParseError::Unsupported("annotated header value span is synthetic"))
     }
 }
 
@@ -1444,24 +1267,18 @@ fn require_object_span_within(
     authored: tsrx_syntax::ByteSpan,
 ) -> Result<tsrx_syntax::ByteSpan, TsrxParseError> {
     if authored.is_empty() {
-        return Err(TsrxParseError::Unsupported(
-            "catch binding has no authored header",
-        ));
+        return Err(TsrxParseError::Unsupported("catch binding has no authored header"));
     }
     let start = scalar_u32(tape, object, "start")?;
     let end = scalar_u32(tape, object, "end")?;
-    let start = map_endpoint(segments, start, true).ok_or(TsrxParseError::Unsupported(
-        "catch binding start is synthetic",
-    ))?;
-    let end = map_endpoint(segments, end, false).ok_or(TsrxParseError::Unsupported(
-        "catch binding end is synthetic",
-    ))?;
+    let start = map_endpoint(segments, start, true)
+        .ok_or(TsrxParseError::Unsupported("catch binding start is synthetic"))?;
+    let end = map_endpoint(segments, end, false)
+        .ok_or(TsrxParseError::Unsupported("catch binding end is synthetic"))?;
     if authored.start < start && start < end && end < authored.end {
         Ok(tsrx_syntax::ByteSpan::new(start, end))
     } else {
-        Err(TsrxParseError::Unsupported(
-            "catch binding lies outside its authored header",
-        ))
+        Err(TsrxParseError::Unsupported("catch binding lies outside its authored header"))
     }
 }
 
@@ -1586,9 +1403,9 @@ fn collect_projected_styles(
         if scalar_field(tape, name, "name")? != r#""style""# {
             continue;
         }
-        let owner = *expected_order.get(next).ok_or(TsrxParseError::Unsupported(
-            "projected style has no authored owner",
-        ))?;
+        let owner = *expected_order
+            .get(next)
+            .ok_or(TsrxParseError::Unsupported("projected style has no authored owner"))?;
         let expected = overlay
             .style_blocks
             .get(owner)
@@ -1604,37 +1421,24 @@ fn collect_projected_styles(
         let element = parents
             .parent_container(ValueRef::object(opening))
             .and_then(ValueRef::as_object)
-            .ok_or(TsrxParseError::Unsupported(
-                "style opening has no JSX element parent",
-            ))?;
+            .ok_or(TsrxParseError::Unsupported("style opening has no JSX element parent"))?;
         require_type(tape, element, r#""JSXElement""#)?;
         if field_value(tape, element, "openingElement")? != ValueRef::object(opening) {
             return Err(TsrxParseError::Unsupported(
                 "style opening is not owned by its JSX element",
             ));
         }
-        if styles[owner]
-            .replace(ProjectedStyle { element, opening })
-            .is_some()
-        {
-            return Err(TsrxParseError::Unsupported(
-                "projected style owner is duplicated",
-            ));
+        if styles[owner].replace(ProjectedStyle { element, opening }).is_some() {
+            return Err(TsrxParseError::Unsupported("projected style owner is duplicated"));
         }
         next += 1;
     }
     if next != overlay.style_blocks.len() {
-        return Err(TsrxParseError::Unsupported(
-            "projected style element set is incomplete",
-        ));
+        return Err(TsrxParseError::Unsupported("projected style element set is incomplete"));
     }
     styles
         .into_iter()
-        .map(|style| {
-            style.ok_or(TsrxParseError::Unsupported(
-                "projected style owner is missing",
-            ))
-        })
+        .map(|style| style.ok_or(TsrxParseError::Unsupported("projected style owner is missing")))
         .collect()
 }
 
@@ -1652,9 +1456,7 @@ fn style_opening_postorder(overlay: OverlayView<'_>) -> Result<Vec<usize>, TsrxP
             .last()
             .is_some_and(|owner| style.element.end > overlay.style_blocks[*owner].content.start)
         {
-            return Err(TsrxParseError::Unsupported(
-                "style opening preorder has crossing spans",
-            ));
+            return Err(TsrxParseError::Unsupported("style opening preorder has crossing spans"));
         }
         stack.push(index);
     }
@@ -1677,11 +1479,7 @@ fn reconstruct_style_element(
 ) -> Result<(), TsrxParseError> {
     let opening_span = ByteSpan::new(
         style.element.start,
-        if style.self_closing {
-            style.element.end
-        } else {
-            style.content.start
-        },
+        if style.self_closing { style.element.end } else { style.content.start },
     );
     require_mapped_object_span(tape, projected.element, style.element, segments)?;
     require_mapped_object_span(tape, projected.opening, opening_span, segments)?;
@@ -1731,11 +1529,8 @@ fn reconstruct_style_element(
         )?;
         (Some((closing, closing_name, closing_span)), Some(css))
     };
-    let children = if let Some(css) = css {
-        build_style_children(tape, css, starts)?
-    } else {
-        children
-    };
+    let children =
+        if let Some(css) = css { build_style_children(tape, css, starts)? } else { children };
 
     rebuild_style_opening(
         tape,
@@ -1787,9 +1582,7 @@ fn consume_paired_style_scaffold<'a>(
 ) -> Result<(RecordIndex, RecordIndex, ByteSpan, &'a str), TsrxParseError> {
     let closing = closing_value
         .as_object()
-        .ok_or(TsrxParseError::Unsupported(
-            "paired style has no projected closing element",
-        ))?;
+        .ok_or(TsrxParseError::Unsupported("paired style has no projected closing element"))?;
     require_type(tape, closing, r#""JSXClosingElement""#)?;
     let closing_span = ByteSpan::new(style.content.end, style.element.end);
     require_mapped_object_span(tape, closing, closing_span, segments)?;
@@ -1812,52 +1605,34 @@ fn consume_paired_style_scaffold<'a>(
         segments,
     )?;
 
-    let helper =
-        exact_one_value(tape, children)?
-            .as_object()
-            .ok_or(TsrxParseError::Unsupported(
-                "style payload scaffold is not an object",
-            ))?;
+    let helper = exact_one_value(tape, children)?
+        .as_object()
+        .ok_or(TsrxParseError::Unsupported("style payload scaffold is not an object"))?;
     require_type(tape, helper, r#""JSXExpressionContainer""#)?;
-    let scaffold_start = project_authored_end(segments, style.content.start).ok_or(
-        TsrxParseError::Unsupported("style scaffold start is unmapped"),
-    )?;
-    let scaffold_end = project_authored_start(segments, style.content.end).ok_or(
-        TsrxParseError::Unsupported("style scaffold end is unmapped"),
-    )?;
+    let scaffold_start = project_authored_end(segments, style.content.start)
+        .ok_or(TsrxParseError::Unsupported("style scaffold start is unmapped"))?;
+    let scaffold_end = project_authored_start(segments, style.content.end)
+        .ok_or(TsrxParseError::Unsupported("style scaffold end is unmapped"))?;
     if scalar_u32(tape, helper, "start")? != scaffold_start
         || scalar_u32(tape, helper, "end")? != scaffold_end
     {
-        return Err(TsrxParseError::Unsupported(
-            "style payload scaffold span is displaced",
-        ));
+        return Err(TsrxParseError::Unsupported("style payload scaffold span is displaced"));
     }
     let sentinel = object_field(tape, helper, "expression")?;
     require_type(tape, sentinel, r#""Literal""#)?;
     if tape.scalar(field_value(tape, sentinel, "value")?) != Some("null") {
-        return Err(TsrxParseError::Unsupported(
-            "style payload sentinel is not null",
-        ));
+        return Err(TsrxParseError::Unsupported("style payload sentinel is not null"));
     }
     if tape.pop_list_value(children)? != ValueRef::object(helper) {
-        return Err(TsrxParseError::Unsupported(
-            "style payload scaffold is not the sole child",
-        ));
+        return Err(TsrxParseError::Unsupported("style payload scaffold is not the sole child"));
     }
-    Ok((
-        closing,
-        closing_name,
-        closing_span,
-        slice_authored(authored, style.content)?,
-    ))
+    Ok((closing, closing_name, closing_span, slice_authored(authored, style.content)?))
 }
 
 fn require_static_style_name(tape: &FlatTape, name: RecordIndex) -> Result<(), TsrxParseError> {
     require_type(tape, name, r#""JSXIdentifier""#)?;
     if scalar_field(tape, name, "name")? != r#""style""# {
-        return Err(TsrxParseError::Unsupported(
-            "projected style name is not lowercase style",
-        ));
+        return Err(TsrxParseError::Unsupported("projected style name is not lowercase style"));
     }
     Ok(())
 }
@@ -1883,9 +1658,9 @@ fn slice_authored(authored: &str, span: ByteSpan) -> Result<&str, TsrxParseError
         .map_err(|_| TsrxParseError::Unsupported("style span exceeds host usize"))?;
     let end = usize::try_from(span.end)
         .map_err(|_| TsrxParseError::Unsupported("style span exceeds host usize"))?;
-    authored.get(start..end).ok_or(TsrxParseError::Unsupported(
-        "style span is not a source boundary",
-    ))
+    authored
+        .get(start..end)
+        .ok_or(TsrxParseError::Unsupported("style span is not a source boundary"))
 }
 
 fn rebuild_style_opening(
@@ -1961,10 +1736,8 @@ struct CssListBuilder {
 
 impl CssListBuilder {
     fn push(&mut self, tape: &mut FlatTape, value: ValueRef) -> Result<(), TsrxParseError> {
-        let entry = tape.push_list_value_record(ListValueRecord {
-            value,
-            next: RecordIndex::NONE,
-        })?;
+        let entry =
+            tape.push_list_value_record(ListValueRecord { value, next: RecordIndex::NONE })?;
         if self.first.is_none() {
             self.first = entry;
         } else {
@@ -1979,11 +1752,8 @@ impl CssListBuilder {
     }
 
     fn finish(self, tape: &mut FlatTape) -> Result<RecordIndex, TsrxParseError> {
-        tape.push_list_record(ListRecord {
-            first_value: self.first,
-            length: self.length,
-        })
-        .map_err(Into::into)
+        tape.push_list_record(ListRecord { first_value: self.first, length: self.length })
+            .map_err(Into::into)
     }
 }
 
@@ -1998,8 +1768,7 @@ impl CssTapeBuilder<'_, '_, '_> {
     fn stylesheet(&mut self) -> Result<RecordIndex, TsrxParseError> {
         let children = self.rule_children(0, self.source.len())?;
         let sheet = self.node(r#""StyleSheet""#, 0, self.source.len())?;
-        self.tape
-            .append_field(sheet, "children", ValueRef::list(children))?;
+        self.tape.append_field(sheet, "children", ValueRef::list(children))?;
         let source = self.tape.push_json_string_scalar(self.source)?;
         self.tape.append_field(sheet, "source", source)?;
         Ok(sheet)
@@ -2094,11 +1863,7 @@ impl CssTapeBuilder<'_, '_, '_> {
             return Ok(None);
         };
         if kind != b'{' {
-            *cursor = if kind == b';' {
-                delimiter + 1
-            } else {
-                delimiter
-            };
+            *cursor = if kind == b';' { delimiter + 1 } else { delimiter };
             return Ok(None);
         }
         let (selector_start, selector_end) = trim_css_range(bytes, start, delimiter);
@@ -2113,10 +1878,8 @@ impl CssTapeBuilder<'_, '_, '_> {
         let empty = CssListBuilder::default().finish(self.tape)?;
         let block = self.block(delimiter, node_end, empty)?;
         let rule = self.node(r#""Rule""#, selector_start, node_end)?;
-        self.tape
-            .append_field(rule, "prelude", ValueRef::object(prelude))?;
-        self.tape
-            .append_field(rule, "block", ValueRef::object(block))?;
+        self.tape.append_field(rule, "prelude", ValueRef::object(prelude))?;
+        self.tape.append_field(rule, "block", ValueRef::object(block))?;
         Ok(Some(rule))
     }
 
@@ -2164,8 +1927,7 @@ impl CssTapeBuilder<'_, '_, '_> {
         }
         let selector_list = self.node(r#""SelectorList""#, start, end)?;
         let selectors = selectors.finish(self.tape)?;
-        self.tape
-            .append_field(selector_list, "children", ValueRef::list(selectors))?;
+        self.tape.append_field(selector_list, "children", ValueRef::list(selectors))?;
         Ok(selector_list)
     }
 
@@ -2183,8 +1945,7 @@ impl CssTapeBuilder<'_, '_, '_> {
         }
         let selector = self.node(r#""ComplexSelector""#, start, end)?;
         let children = CssListBuilder::default().finish(self.tape)?;
-        self.tape
-            .append_field(selector, "children", ValueRef::list(children))?;
+        self.tape.append_field(selector, "children", ValueRef::list(children))?;
         selectors.push(self.tape, ValueRef::object(selector))
     }
 
@@ -2195,8 +1956,7 @@ impl CssTapeBuilder<'_, '_, '_> {
         children: RecordIndex,
     ) -> Result<RecordIndex, TsrxParseError> {
         let block = self.node(r#""Block""#, start, end)?;
-        self.tape
-            .append_field(block, "children", ValueRef::list(children))?;
+        self.tape.append_field(block, "children", ValueRef::list(children))?;
         Ok(block)
     }
 
@@ -2222,13 +1982,9 @@ fn build_style_children(
     css: &str,
     starts: &mut Vec<AuthoredStart>,
 ) -> Result<RecordIndex, TsrxParseError> {
-    let stylesheet = CssTapeBuilder {
-        tape,
-        source: css,
-        coordinates: CssCoordinates::new(css),
-        starts,
-    }
-    .stylesheet()?;
+    let stylesheet =
+        CssTapeBuilder { tape, source: css, coordinates: CssCoordinates::new(css), starts }
+            .stylesheet()?;
     let mut children = CssListBuilder::default();
     children.push(tape, ValueRef::object(stylesheet))?;
     children.finish(tape)
@@ -2254,9 +2010,7 @@ impl CssCoordinates {
     }
 
     fn utf16_offset(&self, utf8_offset: usize) -> Result<u32, TsrxParseError> {
-        let completed = self
-            .adjustments
-            .partition_point(|(end, _)| *end <= utf8_offset);
+        let completed = self.adjustments.partition_point(|(end, _)| *end <= utf8_offset);
         let reduction = completed
             .checked_sub(1)
             .and_then(|index| self.adjustments.get(index))
@@ -2399,9 +2153,8 @@ fn reconstruct_dynamic_tags(
     let openings = collect_dynamic_openings(tape, overlay.dynamic_tags.len(), prefix)?;
     let mut semicolons = Vec::new();
     for index in (0..overlay.dynamic_tags.len()).rev() {
-        let opening = openings[index].ok_or(TsrxParseError::Unsupported(
-            "projected dynamic opening is missing",
-        ))?;
+        let opening = openings[index]
+            .ok_or(TsrxParseError::Unsupported("projected dynamic opening is missing"))?;
         reconstruct_dynamic_tag(
             tape,
             authored,
@@ -2428,9 +2181,7 @@ fn collect_dynamic_token_spans(
         .iter()
         .map(|tag| {
             if tag.opening.is_empty() || tag.self_closing != tag.closing.is_empty() {
-                return Err(TsrxParseError::Unsupported(
-                    "incomplete dynamic projection span",
-                ));
+                return Err(TsrxParseError::Unsupported("incomplete dynamic projection span"));
             }
             Ok(DynamicTokenSpans {
                 opening: Some(tag.opening),
@@ -2469,13 +2220,11 @@ fn collect_dynamic_openings(
         else {
             continue;
         };
-        let slot = openings.get_mut(index).ok_or(TsrxParseError::Unsupported(
-            "unknown dynamic opening ordinal",
-        ))?;
+        let slot = openings
+            .get_mut(index)
+            .ok_or(TsrxParseError::Unsupported("unknown dynamic opening ordinal"))?;
         if slot.replace(opening).is_some() {
-            return Err(TsrxParseError::Unsupported(
-                "duplicate dynamic opening ordinal",
-            ));
+            return Err(TsrxParseError::Unsupported("duplicate dynamic opening ordinal"));
         }
     }
     Ok(openings)
@@ -2496,26 +2245,19 @@ fn reconstruct_dynamic_tag(
     starts: &mut Vec<AuthoredStart>,
     semicolons: &mut Vec<ListValueInsertion>,
 ) -> Result<(), TsrxParseError> {
-    let opening_span = spans.opening.ok_or(TsrxParseError::Unsupported(
-        "dynamic tag has no opening token",
-    ))?;
+    let opening_span =
+        spans.opening.ok_or(TsrxParseError::Unsupported("dynamic tag has no opening token"))?;
     let closing_span = spans.closing;
     if tag.self_closing != closing_span.is_none() {
-        return Err(TsrxParseError::Unsupported(
-            "dynamic closing topology disagrees with overlay",
-        ));
+        return Err(TsrxParseError::Unsupported("dynamic closing topology disagrees with overlay"));
     }
     let element = parents
         .parent_container(ValueRef::object(opening))
         .and_then(ValueRef::as_object)
-        .ok_or(TsrxParseError::Unsupported(
-            "dynamic opening has no JSX element parent",
-        ))?;
+        .ok_or(TsrxParseError::Unsupported("dynamic opening has no JSX element parent"))?;
     require_type(tape, element, r#""JSXElement""#)?;
     if field_value(tape, element, "openingElement")? != ValueRef::object(opening) {
-        return Err(TsrxParseError::Unsupported(
-            "dynamic opening is not owned by its JSX element",
-        ));
+        return Err(TsrxParseError::Unsupported("dynamic opening is not owned by its JSX element"));
     }
     append_empty_metadata(tape, element)?;
     let metadata = object_field(tape, element, "metadata")?;
@@ -2530,9 +2272,8 @@ fn reconstruct_dynamic_tag(
             "projected dynamic self-closing flag disagrees with overlay",
         ));
     }
-    let opening_end = map_endpoint(segments, scalar_u32(tape, opening, "end")?, false).ok_or(
-        TsrxParseError::Unsupported("dynamic opening end is outside authored source"),
-    )?;
+    let opening_end = map_endpoint(segments, scalar_u32(tape, opening, "end")?, false)
+        .ok_or(TsrxParseError::Unsupported("dynamic opening end is outside authored source"))?;
     if opening_end <= opening_span.end {
         return Err(TsrxParseError::Unsupported(
             "dynamic opening element does not include its terminator",
@@ -2548,9 +2289,7 @@ fn reconstruct_dynamic_tag(
     let closing = if let Some(closing_span) = closing_span {
         let closing = closing_value
             .as_object()
-            .ok_or(TsrxParseError::Unsupported(
-                "paired dynamic element has no closing element",
-            ))?;
+            .ok_or(TsrxParseError::Unsupported("paired dynamic element has no closing element"))?;
         require_type(tape, closing, r#""JSXClosingElement""#)?;
         let projected_closing_name = object_field(tape, closing, "name")?;
         require_dynamic_identifier(tape, projected_closing_name, prefix, 'D', index, false)?;
@@ -2597,9 +2336,7 @@ fn reconstruct_dynamic_tag(
     let removed_first = tape.remove_list_value(attributes, first_attribute)?;
     let removed_end = tape.remove_list_value(attributes, end_attribute)?;
     if removed_first.kind() != ValueKind::Object || removed_end.kind() != ValueKind::Object {
-        return Err(TsrxParseError::Unsupported(
-            "dynamic attributes are not object entries",
-        ));
+        return Err(TsrxParseError::Unsupported("dynamic attributes are not object entries"));
     }
     rebuild_dynamic_name(
         tape,
@@ -2653,27 +2390,19 @@ fn dynamic_opening_expression(
     let first_entry = tape
         .list_first_value(attributes)
         .filter(|entry| !entry.is_none())
-        .ok_or(TsrxParseError::Unsupported(
-            "dynamic opening has no expression attribute",
-        ))?;
+        .ok_or(TsrxParseError::Unsupported("dynamic opening has no expression attribute"))?;
     let end_entry = tape
         .list_value_next(first_entry)
         .filter(|entry| !entry.is_none())
-        .ok_or(TsrxParseError::Unsupported(
-            "dynamic opening has no end sentinel attribute",
-        ))?;
+        .ok_or(TsrxParseError::Unsupported("dynamic opening has no end sentinel attribute"))?;
     let expression_attribute = tape
         .list_value(first_entry)
         .and_then(ValueRef::as_object)
-        .ok_or(TsrxParseError::Unsupported(
-            "dynamic expression attribute is not an object",
-        ))?;
+        .ok_or(TsrxParseError::Unsupported("dynamic expression attribute is not an object"))?;
     let end_attribute = tape
         .list_value(end_entry)
         .and_then(ValueRef::as_object)
-        .ok_or(TsrxParseError::Unsupported(
-            "dynamic end attribute is not an object",
-        ))?;
+        .ok_or(TsrxParseError::Unsupported("dynamic end attribute is not an object"))?;
     require_type(tape, expression_attribute, r#""JSXAttribute""#)?;
     require_type(tape, end_attribute, r#""JSXAttribute""#)?;
     let expression_name = object_field(tape, expression_attribute, "name")?;
@@ -2696,9 +2425,7 @@ fn dynamic_opening_expression(
     let sentinel = object_field(tape, end_container, "expression")?;
     require_type(tape, sentinel, r#""Literal""#)?;
     if tape.scalar(field_value(tape, sentinel, "value")?) != Some("null") {
-        return Err(TsrxParseError::Unsupported(
-            "dynamic end sentinel is not null",
-        ));
+        return Err(TsrxParseError::Unsupported("dynamic end sentinel is not null"));
     }
     Ok((container, expression, first_entry, end_entry))
 }
@@ -2715,9 +2442,7 @@ fn dynamic_closing_expression(
         .values(children)
         .last()
         .and_then(ValueRef::as_object)
-        .ok_or(TsrxParseError::Unsupported(
-            "dynamic closing helper child is missing",
-        ))?;
+        .ok_or(TsrxParseError::Unsupported("dynamic closing helper child is missing"))?;
     require_type(tape, helper, r#""JSXExpressionContainer""#)?;
     let call = object_field(tape, helper, "expression")?;
     require_type(tape, call, r#""CallExpression""#)?;
@@ -2726,15 +2451,11 @@ fn dynamic_closing_expression(
     if tape.field_index(call, "optional").is_some_and(|field| {
         tape.field_value(field).and_then(|value| tape.scalar(value)) != Some("false")
     }) {
-        return Err(TsrxParseError::Unsupported(
-            "dynamic closing helper call is optional",
-        ));
+        return Err(TsrxParseError::Unsupported("dynamic closing helper call is optional"));
     }
-    let grouped = exact_one_value(tape, list_field(tape, call, "arguments")?)?
-        .as_object()
-        .ok_or(TsrxParseError::Unsupported(
-            "dynamic closing helper argument is not an expression",
-        ))?;
+    let grouped = exact_one_value(tape, list_field(tape, call, "arguments")?)?.as_object().ok_or(
+        TsrxParseError::Unsupported("dynamic closing helper argument is not an expression"),
+    )?;
     let expression = unwrap_parenthesized_expression(tape, grouped)?;
     require_expression_within(tape, expression, authored, segments)?;
     Ok((helper, expression))
@@ -2747,9 +2468,7 @@ fn unwrap_parenthesized_expression(
     let mut remaining = tape.object_count();
     while has_type(tape, expression, r#""ParenthesizedExpression""#) {
         if remaining == 0 {
-            return Err(TsrxParseError::Unsupported(
-                "cyclic parenthesized dynamic expression",
-            ));
+            return Err(TsrxParseError::Unsupported("cyclic parenthesized dynamic expression"));
         }
         expression = object_field(tape, expression, "expression")?;
         remaining -= 1;
@@ -2766,15 +2485,12 @@ fn require_expression_within(
     let start = map_endpoint(segments, scalar_u32(tape, expression, "start")?, true).ok_or(
         TsrxParseError::Unsupported("dynamic expression start is outside authored source"),
     )?;
-    let end = map_endpoint(segments, scalar_u32(tape, expression, "end")?, false).ok_or(
-        TsrxParseError::Unsupported("dynamic expression end is outside authored source"),
-    )?;
+    let end = map_endpoint(segments, scalar_u32(tape, expression, "end")?, false)
+        .ok_or(TsrxParseError::Unsupported("dynamic expression end is outside authored source"))?;
     if authored.start <= start && start < end && end <= authored.end {
         Ok(())
     } else {
-        Err(TsrxParseError::Unsupported(
-            "dynamic expression lies outside authored name",
-        ))
+        Err(TsrxParseError::Unsupported("dynamic expression lies outside authored name"))
     }
 }
 
@@ -2793,20 +2509,14 @@ fn require_dynamic_identifier(
     {
         Ok(())
     } else {
-        Err(TsrxParseError::Unsupported(
-            "dynamic scaffold identifier does not match owner",
-        ))
+        Err(TsrxParseError::Unsupported("dynamic scaffold identifier does not match owner"))
     }
 }
 
 fn dynamic_scaffold_index(encoded: &str, prefix: &str, kind: char, suffix: bool) -> Option<usize> {
     let value = encoded.strip_prefix('"')?.strip_suffix('"')?;
     let digits = value.strip_prefix(prefix)?.strip_prefix(kind)?;
-    let digits = if suffix {
-        digits.strip_suffix('_')?
-    } else {
-        digits
-    };
+    let digits = if suffix { digits.strip_suffix('_')? } else { digits };
     (!digits.is_empty() && digits.bytes().all(|byte| byte.is_ascii_digit()))
         .then(|| digits.parse().ok())
         .flatten()
@@ -2814,21 +2524,16 @@ fn dynamic_scaffold_index(encoded: &str, prefix: &str, kind: char, suffix: bool)
 
 fn require_empty_metadata(tape: &FlatTape, metadata: RecordIndex) -> Result<(), TsrxParseError> {
     let mut fields = tape.fields(metadata);
-    let path = fields
-        .next()
-        .ok_or(TsrxParseError::Unsupported("dynamic metadata has no path"))?;
+    let path = fields.next().ok_or(TsrxParseError::Unsupported("dynamic metadata has no path"))?;
     if tape.key(path) != "path" || fields.next().is_some() {
-        return Err(TsrxParseError::Unsupported(
-            "dynamic metadata is not canonical",
-        ));
+        return Err(TsrxParseError::Unsupported("dynamic metadata is not canonical"));
     }
-    let path = path.value.as_list().ok_or(TsrxParseError::Unsupported(
-        "dynamic metadata path is not a list",
-    ))?;
+    let path = path
+        .value
+        .as_list()
+        .ok_or(TsrxParseError::Unsupported("dynamic metadata path is not a list"))?;
     if tape.values(path).next().is_some() {
-        return Err(TsrxParseError::Unsupported(
-            "dynamic metadata path is not empty",
-        ));
+        return Err(TsrxParseError::Unsupported("dynamic metadata path is not empty"));
     }
     Ok(())
 }
@@ -2849,11 +2554,7 @@ fn append_node_head(
 }
 
 fn record_authored_span(starts: &mut Vec<AuthoredStart>, object: RecordIndex, span: ByteSpan) {
-    starts.push(AuthoredStart {
-        object,
-        start: span.start,
-        end: Some(span.end),
-    });
+    starts.push(AuthoredStart { object, start: span.start, end: Some(span.end) });
 }
 
 fn rebuild_dynamic_name(
@@ -2979,11 +2680,11 @@ fn normalize_custom_jsx_statement(
         ));
     }
     if parenthesized {
-        let expression_slot = parents
-            .parent_slot(ValueRef::object(expression_root))
-            .ok_or(TsrxParseError::Unsupported(
+        let expression_slot = parents.parent_slot(ValueRef::object(expression_root)).ok_or(
+            TsrxParseError::Unsupported(
                 "parenthesized custom JSX statement has no expression slot",
-            ))?;
+            ),
+        )?;
         ParentIndex::replace(tape, expression_slot, ValueRef::object(element))?;
         return Ok(());
     }
@@ -2995,9 +2696,7 @@ fn normalize_custom_jsx_statement(
         u32::try_from(semicolon_start)
             .ok()
             .and_then(|start| start.checked_add(1))
-            .ok_or(TsrxParseError::Unsupported(
-                "custom JSX statement span overflow",
-            ))?
+            .ok_or(TsrxParseError::Unsupported("custom JSX statement span overflow"))?
     } else {
         element_span.end
     };
@@ -3008,12 +2707,9 @@ fn normalize_custom_jsx_statement(
             "custom JSX statement has unsupported trailing syntax",
         ));
     }
-    let statement_slot =
-        parents
-            .parent_slot(ValueRef::object(statement))
-            .ok_or(TsrxParseError::Unsupported(
-                "custom JSX statement has no parent slot",
-            ))?;
+    let statement_slot = parents
+        .parent_slot(ValueRef::object(statement))
+        .ok_or(TsrxParseError::Unsupported("custom JSX statement has no parent slot"))?;
     ParentIndex::replace(tape, statement_slot, ValueRef::object(element))?;
     let (list, entry) = custom_jsx_statement_list_anchor(tape, parents, statement, statement_slot)?;
     if has_semicolon {
@@ -3022,11 +2718,7 @@ fn normalize_custom_jsx_statement(
         let span = ByteSpan::new(start, authored_end);
         let jsx_text = separated_semicolon_is_jsx_text && start != element_span.end;
         let value = build_custom_jsx_semicolon(tape, span, jsx_text, starts)?;
-        semicolons.push(ListValueInsertion {
-            list,
-            after: entry,
-            value,
-        });
+        semicolons.push(ListValueInsertion { list, after: entry, value });
     }
     Ok(())
 }
@@ -3042,10 +2734,7 @@ fn skip_custom_jsx_statement_trivia(
         }
         if bytes.get(index..index + 2) == Some(b"//") {
             index += 2;
-            while bytes
-                .get(index)
-                .is_some_and(|byte| !matches!(byte, b'\n' | b'\r'))
-            {
+            while bytes.get(index).is_some_and(|byte| !matches!(byte, b'\n' | b'\r')) {
                 index += 1;
             }
         } else if bytes.get(index..index + 2) == Some(b"/*") {
@@ -3196,9 +2885,7 @@ fn order_switch_case_fields(tape: &mut FlatTape, case: RecordIndex) -> Result<()
     order_span_fields_before(tape, case, "test")?;
     let consequent = tape
         .field_index(case, "consequent")
-        .ok_or(TsrxParseError::Unsupported(
-            "switch case has no consequent field",
-        ))?;
+        .ok_or(TsrxParseError::Unsupported("switch case has no consequent field"))?;
     let test = tape
         .field_index(case, "test")
         .ok_or(TsrxParseError::Unsupported("switch case has no test field"))?;
@@ -3231,11 +2918,8 @@ fn collect_code_block_plans(
     parents: &ParentIndex,
     prefix: &str,
 ) -> Result<CodeBlockPlans, TsrxParseError> {
-    let count = overlay
-        .tokens
-        .iter()
-        .filter(|token| token.kind == StructuralKind::FunctionBody)
-        .count();
+    let count =
+        overlay.tokens.iter().filter(|token| token.kind == StructuralKind::FunctionBody).count();
     let mut plans = Vec::with_capacity(count);
     let mut seen = vec![false; tape.object_count()];
     let mut direct_list_policies = vec![DirectListPolicy::None; tape.object_count()];
@@ -3247,9 +2931,8 @@ fn collect_code_block_plans(
     {
         let token_index = u32::try_from(token_index)
             .map_err(|_| TsrxParseError::Unsupported("code-block token index overflow"))?;
-        let projected_start = project_authored_start(segments, token.span.end).ok_or(
-            TsrxParseError::Unsupported("code block is outside affine source"),
-        )?;
+        let projected_start = project_authored_start(segments, token.span.end)
+            .ok_or(TsrxParseError::Unsupported("code block is outside affine source"))?;
         let block = find_optional_start(blocks, projected_start, "code block")?;
         let container =
             find_optional_start(jsx_containers, projected_start, "JSX-child code block")?;
@@ -3257,14 +2940,10 @@ fn collect_code_block_plans(
             (Some(object), None) => (object, ProjectedCodeBlockKind::Block),
             (None, Some(object)) => (object, ProjectedCodeBlockKind::JsxContainer),
             (Some(_), Some(_)) => {
-                return Err(TsrxParseError::Unsupported(
-                    "ambiguous projected code block",
-                ));
+                return Err(TsrxParseError::Unsupported("ambiguous projected code block"));
             }
             (None, None) => {
-                return Err(TsrxParseError::Unsupported(
-                    "code block has no projected owner",
-                ));
+                return Err(TsrxParseError::Unsupported("code block has no projected owner"));
             }
         };
         let body_owner = if kind == ProjectedCodeBlockKind::JsxContainer {
@@ -3274,19 +2953,15 @@ fn collect_code_block_plans(
             object
         };
         let index = index_of(object)?;
-        let duplicate = seen.get_mut(index).ok_or(TsrxParseError::Unsupported(
-            "code block owner is outside object table",
-        ))?;
+        let duplicate = seen
+            .get_mut(index)
+            .ok_or(TsrxParseError::Unsupported("code block owner is outside object table"))?;
         if std::mem::replace(duplicate, true) {
-            return Err(TsrxParseError::Unsupported(
-                "duplicate projected code block owner",
-            ));
+            return Err(TsrxParseError::Unsupported("duplicate projected code block owner"));
         }
         let body_owner_index = index_of(body_owner)?;
         if direct_list_policies[body_owner_index] != DirectListPolicy::None {
-            return Err(TsrxParseError::Unsupported(
-                "duplicate projected code-block body owner",
-            ));
+            return Err(TsrxParseError::Unsupported("duplicate projected code-block body owner"));
         }
         direct_list_policies[body_owner_index] = DirectListPolicy::CodeBlockBody;
         plans.push(ProjectedCodeBlock {
@@ -3296,10 +2971,7 @@ fn collect_code_block_plans(
             authored_start: token.span.start,
         });
     }
-    Ok(CodeBlockPlans {
-        blocks: plans,
-        direct_list_policies,
-    })
+    Ok(CodeBlockPlans { blocks: plans, direct_list_policies })
 }
 
 fn mark_direct_custom_clause_blocks(
@@ -3308,16 +2980,15 @@ fn mark_direct_custom_clause_blocks(
     segments: &[ProjectionSegment],
     blocks: &[(u32, RecordIndex)],
 ) -> Result<(), TsrxParseError> {
-    for node in overlay
-        .nodes
-        .iter()
-        .filter(|node| matches!(node.kind, ControlKind::If | ControlKind::Try))
+    for node in
+        overlay.nodes.iter().filter(|node| matches!(node.kind, ControlKind::If | ControlKind::Try))
     {
         let mut clause = node.first_clause;
         while clause != tsrx_syntax::NONE_INDEX {
-            let current = overlay.clauses.get(index_of_overlay(clause)?).ok_or(
-                TsrxParseError::Unsupported("custom clause is outside overlay table"),
-            )?;
+            let current = overlay
+                .clauses
+                .get(index_of_overlay(clause)?)
+                .ok_or(TsrxParseError::Unsupported("custom clause is outside overlay table"))?;
             let projected_start = project_authored_start(segments, current.body.start).ok_or(
                 TsrxParseError::Unsupported("custom clause body is outside affine source"),
             )?;
@@ -3350,9 +3021,7 @@ fn find_wrapper_call(
     for _ in 0..max_steps {
         value = parents
             .parent_container(value)
-            .ok_or(TsrxParseError::Unsupported(
-                "control wrapper chain ended early",
-            ))?;
+            .ok_or(TsrxParseError::Unsupported("control wrapper chain ended early"))?;
         let Some(object) = value.as_object() else {
             continue;
         };
@@ -3361,9 +3030,7 @@ fn find_wrapper_call(
             return Ok(object);
         }
     }
-    Err(TsrxParseError::Unsupported(
-        "control wrapper chain is cyclic or missing",
-    ))
+    Err(TsrxParseError::Unsupported("control wrapper chain is cyclic or missing"))
 }
 
 fn validate_wrapper_call(
@@ -3377,20 +3044,16 @@ fn validate_wrapper_call(
     let callee = object_field(tape, call, "callee")?;
     require_type(tape, callee, r#""Identifier""#)?;
     if !scaffold_name_matches(scalar_field(tape, callee, "name")?, prefix, 'W', node_index) {
-        return Err(TsrxParseError::Unsupported(
-            "unknown control wrapper callee",
-        ));
+        return Err(TsrxParseError::Unsupported("unknown control wrapper callee"));
     }
     let (manifest, end_marker) = exact_two_values(tape, list_field(tape, call, "arguments")?)?;
-    let object = manifest.as_object().ok_or(TsrxParseError::Unsupported(
-        "wrapper manifest is not an object",
-    ))?;
+    let object = manifest
+        .as_object()
+        .ok_or(TsrxParseError::Unsupported("wrapper manifest is not an object"))?;
     require_type(tape, object, r#""ObjectExpression""#)?;
     let property = exact_one_value(tape, list_field(tape, object, "properties")?)?
         .as_object()
-        .ok_or(TsrxParseError::Unsupported(
-            "wrapper manifest property missing",
-        ))?;
+        .ok_or(TsrxParseError::Unsupported("wrapper manifest property missing"))?;
     require_type(tape, property, r#""Property""#)?;
     let key = object_field(tape, property, "key")?;
     require_type(tape, key, r#""Identifier""#)?;
@@ -3402,9 +3065,7 @@ fn validate_wrapper_call(
     if scalar_field(tape, function, "generator")? != "true"
         || scalar_field(tape, function, "async")? != "true"
     {
-        return Err(TsrxParseError::Unsupported(
-            "control wrapper is not an async generator",
-        ));
+        return Err(TsrxParseError::Unsupported("control wrapper is not an async generator"));
     }
     let function_body = object_field(tape, function, "body")?;
     let body_list = list_field(tape, function_body, "body")?;
@@ -3414,13 +3075,10 @@ fn validate_wrapper_call(
         || trailing.is_none() && body.next().is_some()
         || body.next().is_some()
     {
-        return Err(TsrxParseError::Unsupported(
-            "control wrapper has unexpected statements",
-        ));
+        return Err(TsrxParseError::Unsupported("control wrapper has unexpected statements"));
     }
-    let end = end_marker
-        .as_object()
-        .ok_or(TsrxParseError::Unsupported("wrapper end marker missing"))?;
+    let end =
+        end_marker.as_object().ok_or(TsrxParseError::Unsupported("wrapper end marker missing"))?;
     require_type(tape, end, r#""Identifier""#)?;
     if !scaffold_name_matches(scalar_field(tape, end, "name")?, prefix, 'E', node_index) {
         return Err(TsrxParseError::Unsupported("unknown wrapper end marker"));
@@ -3429,22 +3087,14 @@ fn validate_wrapper_call(
 }
 
 fn scaffold_name_matches(encoded: &str, prefix: &str, marker: char, expected_index: usize) -> bool {
-    let Some(name) = encoded
-        .strip_prefix('"')
-        .and_then(|value| value.strip_suffix('"'))
+    let Some(name) = encoded.strip_prefix('"').and_then(|value| value.strip_suffix('"')) else {
+        return false;
+    };
+    let Some(suffix) = name.strip_prefix(prefix).and_then(|value| value.strip_prefix(marker))
     else {
         return false;
     };
-    let Some(suffix) = name
-        .strip_prefix(prefix)
-        .and_then(|value| value.strip_prefix(marker))
-    else {
-        return false;
-    };
-    suffix
-        .strip_suffix('_')
-        .and_then(|value| value.parse::<usize>().ok())
-        == Some(expected_index)
+    suffix.strip_suffix('_').and_then(|value| value.parse::<usize>().ok()) == Some(expected_index)
 }
 
 fn reconstruct_code_blocks(
@@ -3491,9 +3141,8 @@ fn reconstruct_block_code_block(
     require_type(tape, block, r#""BlockStatement""#)?;
     let placement = block_code_block_placement(tape, parents, block, direct_list_policies)?;
     let projected_end = scalar_u32(tape, block, "end")?;
-    let authored_end = map_endpoint(segments, projected_end, false).ok_or(
-        TsrxParseError::Unsupported("code block end is outside affine source"),
-    )?;
+    let authored_end = map_endpoint(segments, projected_end, false)
+        .ok_or(TsrxParseError::Unsupported("code block end is outside affine source"))?;
     let body = list_field(tape, block, "body")?;
     let semicolon_end = prepare_code_block_placement(
         tape,
@@ -3509,11 +3158,7 @@ fn reconstruct_block_code_block(
     order_span_fields_before(tape, block, "body")?;
     tape.append_field(block, "render", render)?;
     append_empty_metadata(tape, block)?;
-    starts.push(AuthoredStart {
-        object: block,
-        start: code_block.authored_start,
-        end: None,
-    });
+    starts.push(AuthoredStart { object: block, start: code_block.authored_start, end: None });
     if let CodeBlockPlacement::Wrap(slot) = placement {
         let statement = create_expression_statement(tape, block)?;
         ParentIndex::replace(tape, slot, ValueRef::object(statement))?;
@@ -3537,9 +3182,8 @@ fn reconstruct_jsx_child_code_block(
     let body = list_field(tape, code_block.body_owner, "body")?;
     let render = take_code_block_render(tape, body)?;
     let projected_end = scalar_u32(tape, container, "end")?;
-    let authored_end = map_endpoint(segments, projected_end, false).ok_or(
-        TsrxParseError::Unsupported("JSX-child code block end is outside affine source"),
-    )?;
+    let authored_end = map_endpoint(segments, projected_end, false)
+        .ok_or(TsrxParseError::Unsupported("JSX-child code block end is outside affine source"))?;
     let span = ByteSpan::new(code_block.authored_start, authored_end);
     tape.clear_fields(container)?;
     append_node_head(tape, container, r#""JSXCodeBlock""#, span)?;
@@ -3561,10 +3205,7 @@ fn validate_jsx_code_block_wrapper(
     require_type(tape, function, r#""FunctionExpression""#)?;
     if scalar_field(tape, function, "generator")? != "true"
         || scalar_field(tape, function, "async")? != "true"
-        || tape
-            .values(list_field(tape, function, "params")?)
-            .next()
-            .is_some()
+        || tape.values(list_field(tape, function, "params")?).next().is_some()
     {
         return Err(TsrxParseError::Unsupported(
             "JSX code-block wrapper is not a parameterless async generator",
@@ -3575,9 +3216,7 @@ fn validate_jsx_code_block_wrapper(
     let token = usize::try_from(token)
         .map_err(|_| TsrxParseError::Unsupported("JSX code-block token index overflow"))?;
     if !scaffold_name_matches(scalar_field(tape, id, "name")?, prefix, 'J', token) {
-        return Err(TsrxParseError::Unsupported(
-            "unknown JSX code-block wrapper identity",
-        ));
+        return Err(TsrxParseError::Unsupported("unknown JSX code-block wrapper identity"));
     }
     let body = object_field(tape, function, "body")?;
     require_type(tape, body, r#""BlockStatement""#)?;
@@ -3620,33 +3259,22 @@ fn block_code_block_placement(
 ) -> Result<CodeBlockPlacement, TsrxParseError> {
     let slot = parents
         .parent_slot(ValueRef::object(block))
-        .ok_or(TsrxParseError::Unsupported(
-            "projected code block has no parent",
-        ))?;
+        .ok_or(TsrxParseError::Unsupported("projected code block has no parent"))?;
     let ParentSlot::Field(_) = slot else {
         let list = parents
             .parent_container(ValueRef::object(block))
             .and_then(ValueRef::as_list)
-            .ok_or(TsrxParseError::Unsupported(
-                "projected code block has no parent list",
-            ))?;
+            .ok_or(TsrxParseError::Unsupported("projected code block has no parent list"))?;
         let owner = parents
             .parent_container(ValueRef::list(list))
             .and_then(ValueRef::as_object)
-            .ok_or(TsrxParseError::Unsupported(
-                "projected code block list has no owner",
-            ))?;
-        let policy = direct_list_policies
-            .get(index_of(owner)?)
-            .copied()
-            .unwrap_or(DirectListPolicy::None);
+            .ok_or(TsrxParseError::Unsupported("projected code block list has no owner"))?;
+        let policy =
+            direct_list_policies.get(index_of(owner)?).copied().unwrap_or(DirectListPolicy::None);
         if policy != DirectListPolicy::None {
             return Ok(CodeBlockPlacement::DirectList { slot, policy });
         }
-        if matches!(
-            object_type(tape, owner),
-            Some(r#""BlockStatement""# | r#""SwitchCase""#)
-        ) {
+        if matches!(object_type(tape, owner), Some(r#""BlockStatement""# | r#""SwitchCase""#)) {
             return Ok(CodeBlockPlacement::Wrap(slot));
         }
         return Err(TsrxParseError::AuthoredGrammar(
@@ -3656,13 +3284,10 @@ fn block_code_block_placement(
     let parent = parents
         .parent_container(ValueRef::object(block))
         .and_then(ValueRef::as_object)
-        .ok_or(TsrxParseError::Unsupported(
-            "projected code block has no object parent",
-        ))?;
-    let body_owns_block = tape
-        .field_index(parent, "body")
-        .and_then(|field| tape.field_value(field))
-        == Some(ValueRef::object(block));
+        .ok_or(TsrxParseError::Unsupported("projected code block has no object parent"))?;
+    let body_owns_block =
+        tape.field_index(parent, "body").and_then(|field| tape.field_value(field))
+            == Some(ValueRef::object(block));
     if body_owns_block
         && matches!(
             object_type(tape, parent),
@@ -3686,29 +3311,19 @@ fn validate_jsx_child_container(
     container: RecordIndex,
 ) -> Result<(), TsrxParseError> {
     let Some(ParentSlot::ListValue(_)) = parents.parent_slot(ValueRef::object(container)) else {
-        return Err(TsrxParseError::Unsupported(
-            "code block JSX container is not a child",
-        ));
+        return Err(TsrxParseError::Unsupported("code block JSX container is not a child"));
     };
     let list = parents
         .parent_container(ValueRef::object(container))
         .and_then(ValueRef::as_list)
-        .ok_or(TsrxParseError::Unsupported(
-            "code block JSX container has no child list",
-        ))?;
+        .ok_or(TsrxParseError::Unsupported("code block JSX container has no child list"))?;
     let owner = parents
         .parent_container(ValueRef::list(list))
         .and_then(ValueRef::as_object)
-        .ok_or(TsrxParseError::Unsupported(
-            "code block JSX child list has no owner",
-        ))?;
-    if !matches!(
-        object_type(tape, owner),
-        Some(r#""JSXElement""# | r#""JSXFragment""#)
-    ) || tape
-        .field_index(owner, "children")
-        .and_then(|field| tape.field_value(field))
-        != Some(ValueRef::list(list))
+        .ok_or(TsrxParseError::Unsupported("code block JSX child list has no owner"))?;
+    if !matches!(object_type(tape, owner), Some(r#""JSXElement""# | r#""JSXFragment""#))
+        || tape.field_index(owner, "children").and_then(|field| tape.field_value(field))
+            != Some(ValueRef::list(list))
     {
         return Err(TsrxParseError::Unsupported(
             "code block JSX container is outside authored children",
@@ -3729,10 +3344,9 @@ fn prepare_code_block_placement(
 ) -> Result<Option<u32>, TsrxParseError> {
     let (slot, policy) = match placement {
         CodeBlockPlacement::DirectField
-        | CodeBlockPlacement::DirectList {
-            policy: DirectListPolicy::CodeBlockBody,
-            ..
-        } => return Ok(None),
+        | CodeBlockPlacement::DirectList { policy: DirectListPolicy::CodeBlockBody, .. } => {
+            return Ok(None);
+        }
         CodeBlockPlacement::DirectList { slot, policy } => (slot, Some(policy)),
         CodeBlockPlacement::Wrap(slot) => (slot, None),
     };
@@ -3744,9 +3358,7 @@ fn prepare_code_block_placement(
     };
     let mut after = tape
         .list_value_next(block_entry)
-        .ok_or(TsrxParseError::Unsupported(
-            "code-block list entry is invalid",
-        ))?;
+        .ok_or(TsrxParseError::Unsupported("code-block list entry is invalid"))?;
     if let Some(span) = semicolon {
         let (removal, next) = validate_semicolon_entry(tape, segments, parents, block_entry, span)?;
         removals.push(removal);
@@ -3757,9 +3369,7 @@ fn prepare_code_block_placement(
             "direct code-block render precedes another clause statement",
         ));
     }
-    Ok((policy.is_none())
-        .then(|| semicolon.map(|span| span.end))
-        .flatten())
+    Ok((policy.is_none()).then(|| semicolon.map(|span| span.end)).flatten())
 }
 
 fn validate_semicolon_entry(
@@ -3772,27 +3382,18 @@ fn validate_semicolon_entry(
     let block = tape
         .list_value(block_entry)
         .and_then(ValueRef::as_object)
-        .ok_or(TsrxParseError::Unsupported(
-            "code-block list entry is not an object",
-        ))?;
+        .ok_or(TsrxParseError::Unsupported("code-block list entry is not an object"))?;
     let list = parents
         .parent_container(ValueRef::object(block))
         .and_then(ValueRef::as_list)
-        .ok_or(TsrxParseError::Unsupported(
-            "code-block has no parent statement list",
-        ))?;
-    let entry = tape
-        .list_value_next(block_entry)
-        .filter(|entry| !entry.is_none())
-        .ok_or(TsrxParseError::Unsupported(
-            "authored code-block semicolon has no projected statement",
-        ))?;
-    let statement =
-        tape.list_value(entry)
-            .and_then(ValueRef::as_object)
-            .ok_or(TsrxParseError::Unsupported(
-                "authored code-block semicolon is not a statement",
-            ))?;
+        .ok_or(TsrxParseError::Unsupported("code-block has no parent statement list"))?;
+    let entry = tape.list_value_next(block_entry).filter(|entry| !entry.is_none()).ok_or(
+        TsrxParseError::Unsupported("authored code-block semicolon has no projected statement"),
+    )?;
+    let statement = tape
+        .list_value(entry)
+        .and_then(ValueRef::as_object)
+        .ok_or(TsrxParseError::Unsupported("authored code-block semicolon is not a statement"))?;
     require_type(tape, statement, r#""EmptyStatement""#)?;
     let projected_start = scalar_u32(tape, statement, "start")?;
     let projected_end = scalar_u32(tape, statement, "end")?;
@@ -3805,9 +3406,7 @@ fn validate_semicolon_entry(
     }
     let next = tape
         .list_value_next(entry)
-        .ok_or(TsrxParseError::Unsupported(
-            "semicolon list entry is invalid",
-        ))?;
+        .ok_or(TsrxParseError::Unsupported("semicolon list entry is invalid"))?;
     Ok((ListEntryRemoval { list, entry }, next))
 }
 
@@ -3842,9 +3441,8 @@ fn code_block_statement_boundary(
                     ));
                 };
                 let end = index + 2 + relative_end + 2;
-                line_break |= authored[index..end]
-                    .bytes()
-                    .any(|byte| matches!(byte, b'\r' | b'\n'));
+                line_break |=
+                    authored[index..end].bytes().any(|byte| matches!(byte, b'\r' | b'\n'));
                 index = end;
             }
             _ => break,
@@ -3882,9 +3480,7 @@ fn normalize_template_layout_text(
             continue;
         };
         for (entry, value) in tape.values_indexed(children) {
-            let Some(text) = value
-                .as_object()
-                .filter(|text| has_type(tape, *text, r#""JSXText""#))
+            let Some(text) = value.as_object().filter(|text| has_type(tape, *text, r#""JSXText""#))
             else {
                 continue;
             };
@@ -3893,14 +3489,9 @@ fn normalize_template_layout_text(
                 .ok_or(TsrxParseError::Unsupported("JSXText has no value field"))?;
             let raw = scalar_field(tape, text, "raw")?;
             let normalized = strip_template_block_comments_json(raw)?;
-            let value = normalized
-                .as_deref()
-                .unwrap_or(scalar_field(tape, text, "value")?);
+            let value = normalized.as_deref().unwrap_or(scalar_field(tape, text, "value")?);
             if value == r#""""# || is_layout_only_text_json(value) {
-                removals.push(ListEntryRemoval {
-                    list: children,
-                    entry,
-                });
+                removals.push(ListEntryRemoval { list: children, entry });
             } else if let Some(value) = normalized {
                 value_updates.push((value_field, value));
             }
@@ -3920,9 +3511,7 @@ fn strip_template_block_comments_json(encoded: &str) -> Result<Option<String>, T
     let inner = encoded
         .strip_prefix('"')
         .and_then(|value| value.strip_suffix('"'))
-        .ok_or(TsrxParseError::Unsupported(
-            "JSXText raw field is not a JSON string",
-        ))?;
+        .ok_or(TsrxParseError::Unsupported("JSXText raw field is not a JSON string"))?;
     let Some(first) = inner.find("/*") else {
         return Ok(None);
     };
@@ -3953,10 +3542,7 @@ fn strip_template_block_comments_json(encoded: &str) -> Result<Option<String>, T
 /// template line comments when the span contains CR/LF layout; a plain inline space remains a
 /// real child.
 fn is_layout_only_text_json(encoded: &str) -> bool {
-    let Some(inner) = encoded
-        .strip_prefix('"')
-        .and_then(|value| value.strip_suffix('"'))
-    else {
+    let Some(inner) = encoded.strip_prefix('"').and_then(|value| value.strip_suffix('"')) else {
         return false;
     };
     let mut chars = inner.chars();
@@ -4113,9 +3699,8 @@ impl ProjectedObjectIndex {
             self.module_objects.push(object);
         }
         if let Some(target) = target {
-            let start = start.ok_or(TsrxParseError::Unsupported(
-                "required ESTree field is not scalar",
-            ))?;
+            let start =
+                start.ok_or(TsrxParseError::Unsupported("required ESTree field is not scalar"))?;
             target.push((start, object));
         }
         Ok(())
@@ -4169,16 +3754,12 @@ fn collect_try_helpers(
             .get_mut(node_index)
             .ok_or(TsrxParseError::Unsupported("unknown projected try helper"))?;
         if slot.replace(call).is_some() || node.span.is_empty() {
-            return Err(TsrxParseError::Unsupported(
-                "duplicate or malformed projected try helper",
-            ));
+            return Err(TsrxParseError::Unsupported("duplicate or malformed projected try helper"));
         }
     }
     for (index, node) in overlay.nodes.iter().enumerate() {
         if (node.kind == ControlKind::Try) != helpers[index].is_some() {
-            return Err(TsrxParseError::Unsupported(
-                "projected try helper set is incomplete",
-            ));
+            return Err(TsrxParseError::Unsupported("projected try helper set is incomplete"));
         }
     }
     Ok(helpers)
@@ -4235,9 +3816,7 @@ fn place_control(
             }
             let slot = parents
                 .parent_slot(value)
-                .ok_or(TsrxParseError::Unsupported(
-                    "statement control has no parent slot",
-                ))?;
+                .ok_or(TsrxParseError::Unsupported("statement control has no parent slot"))?;
             if !matches!(slot, ParentSlot::ListValue(_)) {
                 return Err(TsrxParseError::Unsupported(
                     "statement control is not in a statement list",
@@ -4245,26 +3824,20 @@ fn place_control(
             }
             let statement = create_expression_statement(tape, control)?;
             ParentIndex::replace(tape, slot, ValueRef::object(statement))?;
-            starts.push(AuthoredStart {
-                object: statement,
-                start: authored.start,
-                end: None,
-            });
+            starts.push(AuthoredStart { object: statement, start: authored.start, end: None });
         }
         ControlContext::Expression => {
-            let wrapper = wrapper.ok_or(TsrxParseError::Unsupported(
-                "expression control has no wrapper",
-            ))?;
-            let slot = parents.parent_slot(ValueRef::object(wrapper)).ok_or(
-                TsrxParseError::Unsupported("expression wrapper has no parent"),
-            )?;
+            let wrapper =
+                wrapper.ok_or(TsrxParseError::Unsupported("expression control has no wrapper"))?;
+            let slot = parents
+                .parent_slot(ValueRef::object(wrapper))
+                .ok_or(TsrxParseError::Unsupported("expression wrapper has no parent"))?;
             record_labeled_control_statement(tape, parents, wrapper, authored, starts)?;
             ParentIndex::replace(tape, slot, value)?;
         }
         ControlContext::JsxChild => {
-            let wrapper = wrapper.ok_or(TsrxParseError::Unsupported(
-                "JSX-child control has no wrapper",
-            ))?;
+            let wrapper =
+                wrapper.ok_or(TsrxParseError::Unsupported("JSX-child control has no wrapper"))?;
             let container = parents
                 .parent_container(ValueRef::object(wrapper))
                 .and_then(ValueRef::as_object)
@@ -4277,13 +3850,11 @@ fn place_control(
                     "wrapper is not the JSX container expression",
                 ));
             }
-            let slot = parents.parent_slot(ValueRef::object(container)).ok_or(
-                TsrxParseError::Unsupported("JSX expression container has no child slot"),
-            )?;
+            let slot = parents
+                .parent_slot(ValueRef::object(container))
+                .ok_or(TsrxParseError::Unsupported("JSX expression container has no child slot"))?;
             if !matches!(slot, ParentSlot::ListValue(_)) {
-                return Err(TsrxParseError::Unsupported(
-                    "JSX expression container is not a child",
-                ));
+                return Err(TsrxParseError::Unsupported("JSX expression container is not a child"));
             }
             ParentIndex::replace(tape, slot, value)?;
         }
@@ -4318,20 +3889,13 @@ fn place_try_control(
     }
     if wrapper.is_some() || field_value(tape, statement, "expression")? != ValueRef::object(control)
     {
-        return Err(TsrxParseError::Unsupported(
-            "statement try has unexpected wrapper topology",
-        ));
+        return Err(TsrxParseError::Unsupported("statement try has unexpected wrapper topology"));
     }
-    let statement_slot =
-        parents
-            .parent_slot(ValueRef::object(statement))
-            .ok_or(TsrxParseError::Unsupported(
-                "statement try has no parent slot",
-            ))?;
+    let statement_slot = parents
+        .parent_slot(ValueRef::object(statement))
+        .ok_or(TsrxParseError::Unsupported("statement try has no parent slot"))?;
     if !matches!(statement_slot, ParentSlot::ListValue(_)) {
-        return Err(TsrxParseError::Unsupported(
-            "statement try is not in a statement list",
-        ));
+        return Err(TsrxParseError::Unsupported("statement try is not in a statement list"));
     }
 
     let control_start = field_value(tape, control, "start")?;
@@ -4346,20 +3910,14 @@ fn place_try_control(
     let projected_end = tape
         .field_value(end_field)
         .and_then(|value| tape.scalar_u32(value))
-        .ok_or(TsrxParseError::Unsupported(
-            "try statement end is not an integer",
-        ))?;
+        .ok_or(TsrxParseError::Unsupported("try statement end is not an integer"))?;
     match map_endpoint(segments, projected_end, false) {
         Some(mapped) if mapped == authored_end => {}
         Some(mapped) if authored_semicolon_tail(authored, authored_end, mapped) => {}
         Some(_) => return Err(TsrxParseError::Unsupported("invalid try statement tail")),
         None => tape.set_field_value(end_field, control_end)?,
     }
-    starts.push(AuthoredStart {
-        object: statement,
-        start: authored_start,
-        end: None,
-    });
+    starts.push(AuthoredStart { object: statement, start: authored_start, end: None });
     Ok(())
 }
 
@@ -4390,9 +3948,7 @@ fn record_labeled_control_statement(
         return Ok(());
     };
     if field_value(tape, label, "body")? != ValueRef::object(statement) {
-        return Err(TsrxParseError::Unsupported(
-            "labeled control wrapper is not the label body",
-        ));
+        return Err(TsrxParseError::Unsupported("labeled control wrapper is not the label body"));
     }
     starts.push(AuthoredStart {
         object: statement,
@@ -4426,9 +3982,8 @@ fn create_expression_statement(
     tape.append_field(statement, "type", kind)?;
     tape.append_field(statement, "start", start)?;
     tape.append_field(statement, "end", end)?;
-    if let Some(range) = tape
-        .field_index(expression, "range")
-        .and_then(|field| tape.field_value(field))
+    if let Some(range) =
+        tape.field_index(expression, "range").and_then(|field| tape.field_value(field))
     {
         tape.append_field(statement, "range", range)?;
     }
@@ -4463,16 +4018,11 @@ pub(super) fn finalize_reachable_spans(
 ) -> Result<(), TsrxParseError> {
     let mut overrides = vec![None; tape.object_count()];
     for &position in authored_positions {
-        let slot =
-            overrides
-                .get_mut(index_of(position.object)?)
-                .ok_or(TsrxParseError::Unsupported(
-                    "authored span override outside object table",
-                ))?;
+        let slot = overrides
+            .get_mut(index_of(position.object)?)
+            .ok_or(TsrxParseError::Unsupported("authored span override outside object table"))?;
         if slot.replace(position).is_some() {
-            return Err(TsrxParseError::Unsupported(
-                "duplicate authored span override",
-            ));
+            return Err(TsrxParseError::Unsupported("duplicate authored span override"));
         }
     }
     for (index, mut span_fields) in finalization_index.reachable_span_fields() {
@@ -4512,9 +4062,7 @@ fn finalize_object_span(
         sync_range_values(
             tape,
             range_field,
-            start.ok_or(TsrxParseError::Unsupported(
-                "ESTree range has no start field",
-            ))?,
+            start.ok_or(TsrxParseError::Unsupported("ESTree range has no start field"))?,
             end.ok_or(TsrxParseError::Unsupported("ESTree range has no end field"))?,
         )?;
     }
@@ -4545,9 +4093,8 @@ fn finalize_span_endpoint(
             .field_value(field)
             .and_then(|value| tape.scalar_u32(value))
             .ok_or(TsrxParseError::Unsupported("non-numeric ESTree span"))?;
-        map_reachable_endpoint(segments, projected, is_start).ok_or(TsrxParseError::Unsupported(
-            "reachable synthetic ESTree span",
-        ))?
+        map_reachable_endpoint(segments, projected, is_start)
+            .ok_or(TsrxParseError::Unsupported("reachable synthetic ESTree span"))?
     };
     let value = tape.push_u32_scalar(authored)?;
     tape.set_field_value(field, value)?;
@@ -4588,9 +4135,7 @@ fn sync_range_values(
             .map(|(entry, _)| entry)
             .ok_or(TsrxParseError::Unsupported("ESTree range has no end"))?;
         if entries.next().is_some() {
-            return Err(TsrxParseError::Unsupported(
-                "ESTree range has more than two entries",
-            ));
+            return Err(TsrxParseError::Unsupported("ESTree range has more than two entries"));
         }
         (start_entry, end_entry)
     };
@@ -4619,9 +4164,8 @@ fn replace_type(
     object: RecordIndex,
     kind: &str,
 ) -> Result<(), TsrxParseError> {
-    let field = tape
-        .field_index(object, "type")
-        .ok_or(TsrxParseError::Unsupported("node has no type"))?;
+    let field =
+        tape.field_index(object, "type").ok_or(TsrxParseError::Unsupported("node has no type"))?;
     let kind = tape.push_scalar(kind)?;
     tape.set_field_value(field, kind)?;
     Ok(())
@@ -4629,13 +4173,11 @@ fn replace_type(
 
 fn exact_one_value(tape: &FlatTape, list: RecordIndex) -> Result<ValueRef, TsrxParseError> {
     let mut values = tape.values(list);
-    let value = values.next().ok_or(TsrxParseError::Unsupported(
-        "scaffold list has an unexpected length",
-    ))?;
+    let value = values
+        .next()
+        .ok_or(TsrxParseError::Unsupported("scaffold list has an unexpected length"))?;
     if values.next().is_some() {
-        return Err(TsrxParseError::Unsupported(
-            "scaffold list has an unexpected length",
-        ));
+        return Err(TsrxParseError::Unsupported("scaffold list has an unexpected length"));
     }
     Ok(value)
 }
@@ -4645,16 +4187,14 @@ fn exact_two_values(
     list: RecordIndex,
 ) -> Result<(ValueRef, ValueRef), TsrxParseError> {
     let mut values = tape.values(list);
-    let first = values.next().ok_or(TsrxParseError::Unsupported(
-        "scaffold list has an unexpected length",
-    ))?;
-    let second = values.next().ok_or(TsrxParseError::Unsupported(
-        "scaffold list has an unexpected length",
-    ))?;
+    let first = values
+        .next()
+        .ok_or(TsrxParseError::Unsupported("scaffold list has an unexpected length"))?;
+    let second = values
+        .next()
+        .ok_or(TsrxParseError::Unsupported("scaffold list has an unexpected length"))?;
     if values.next().is_some() {
-        return Err(TsrxParseError::Unsupported(
-            "scaffold list has an unexpected length",
-        ));
+        return Err(TsrxParseError::Unsupported("scaffold list has an unexpected length"));
     }
     Ok((first, second))
 }
@@ -4675,16 +4215,12 @@ fn scalar_field<'a>(
     name: &str,
 ) -> Result<&'a str, TsrxParseError> {
     tape.scalar(field_value(tape, object, name)?)
-        .ok_or(TsrxParseError::Unsupported(
-            "required ESTree field is not scalar",
-        ))
+        .ok_or(TsrxParseError::Unsupported("required ESTree field is not scalar"))
 }
 
 fn scalar_u32(tape: &FlatTape, object: RecordIndex, name: &str) -> Result<u32, TsrxParseError> {
     tape.scalar_u32(field_value(tape, object, name)?)
-        .ok_or(TsrxParseError::Unsupported(
-            "required ESTree field is not u32",
-        ))
+        .ok_or(TsrxParseError::Unsupported("required ESTree field is not u32"))
 }
 
 fn object_field(
@@ -4694,9 +4230,7 @@ fn object_field(
 ) -> Result<RecordIndex, TsrxParseError> {
     field_value(tape, object, name)?
         .as_object()
-        .ok_or(TsrxParseError::Unsupported(
-            "required ESTree field is not an object",
-        ))
+        .ok_or(TsrxParseError::Unsupported("required ESTree field is not an object"))
 }
 
 fn list_field(
@@ -4706,9 +4240,7 @@ fn list_field(
 ) -> Result<RecordIndex, TsrxParseError> {
     field_value(tape, object, name)?
         .as_list()
-        .ok_or(TsrxParseError::Unsupported(
-            "required ESTree field is not a list",
-        ))
+        .ok_or(TsrxParseError::Unsupported("required ESTree field is not a list"))
 }
 
 fn object_type(tape: &FlatTape, object: RecordIndex) -> Option<&str> {
@@ -4734,8 +4266,6 @@ fn require_type(
 }
 
 fn index_of(index: RecordIndex) -> Result<usize, TsrxParseError> {
-    let raw = index
-        .get()
-        .ok_or(TsrxParseError::Unsupported("missing tape index"))?;
+    let raw = index.get().ok_or(TsrxParseError::Unsupported("missing tape index"))?;
     usize::try_from(raw).map_err(|_| TsrxParseError::Unsupported("tape index exceeds host usize"))
 }

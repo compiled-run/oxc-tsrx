@@ -38,12 +38,9 @@ pub(crate) fn source_fingerprint(bytes: &[u8]) -> u128 {
         let mut word = [0_u8; 8];
         word[..chunk.len()].copy_from_slice(chunk);
         let value = u64::from_le_bytes(word);
-        first = (first ^ value)
-            .wrapping_mul(0x9e37_79b1_85eb_ca87)
-            .rotate_left(27);
-        second = (second ^ value.rotate_left(31))
-            .wrapping_mul(0xc2b2_ae3d_27d4_eb4f)
-            .rotate_left(33);
+        first = (first ^ value).wrapping_mul(0x9e37_79b1_85eb_ca87).rotate_left(27);
+        second =
+            (second ^ value.rotate_left(31)).wrapping_mul(0xc2b2_ae3d_27d4_eb4f).rotate_left(33);
     }
     u128::from(first) << 64 | u128::from(second)
 }
@@ -259,10 +256,7 @@ impl<'a> Scanner<'a> {
                 }
                 b')' | b']' | b'}' => {
                     let mut closed_block = false;
-                    if delimiters
-                        .last()
-                        .is_some_and(|delimiter| delimiter.0 == byte)
-                    {
+                    if delimiters.last().is_some_and(|delimiter| delimiter.0 == byte) {
                         closed_block = delimiters.pop().is_some_and(|delimiter| delimiter.1);
                         index += 1;
                         if delimiters.is_empty() && closing.is_some() {
@@ -336,11 +330,7 @@ impl<'a> Scanner<'a> {
                     closed_control_paren = false;
                 }
                 b'.' => {
-                    index += if self.bytes.get(index..index + 3) == Some(b"...") {
-                        3
-                    } else {
-                        1
-                    };
+                    index += if self.bytes.get(index..index + 3) == Some(b"...") { 3 } else { 1 };
                     can_start_expression = false;
                     can_start_jsx = false;
                     pending_control_paren = false;

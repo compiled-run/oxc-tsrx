@@ -192,13 +192,7 @@ pub(super) fn lift_scaffolds(
         let slot = try_slot(projection, token.owner)?;
         let manifest = projection.tries[slot];
         let positions = indexed.tries[slot];
-        try_edits.push(try_clause_edit(
-            formatted,
-            token_index,
-            token.kind,
-            manifest,
-            positions,
-        )?);
+        try_edits.push(try_clause_edit(formatted, token_index, token.kind, manifest, positions)?);
     }
     let edits = merge_edits(header_edits, try_edits);
     render_scaffolds(formatted, &wrappers, &edits)
@@ -355,17 +349,11 @@ fn index_scaffolds(
             || positions.end_marker.is_missing()
             || positions.end_sentinel.is_missing()
         {
-            return Err(ProjectionError::ScaffoldMismatch {
-                index: manifest.node as usize,
-            });
+            return Err(ProjectionError::ScaffoldMismatch { index: manifest.node as usize });
         }
     }
     for (manifest, positions) in projection.headers.iter().copied().zip(&headers) {
-        let index_positions = [
-            positions.index_helper,
-            positions.index_start,
-            positions.index_end,
-        ];
+        let index_positions = [positions.index_helper, positions.index_start, positions.index_end];
         let key_positions = [positions.key_helper, positions.key_start, positions.key_end];
         let index_positions_valid = if manifest.has_index {
             index_positions.iter().all(|span| !span.is_missing())
@@ -384,9 +372,7 @@ fn index_scaffolds(
             || !index_positions_valid
             || !key_positions_valid
         {
-            return Err(ProjectionError::ScaffoldMismatch {
-                index: manifest.ordinal as usize,
-            });
+            return Err(ProjectionError::ScaffoldMismatch { index: manifest.ordinal as usize });
         }
     }
     for (manifest, positions) in projection.tries.iter().copied().zip(&tries) {
@@ -407,39 +393,26 @@ fn index_scaffolds(
             || !pending_valid
             || !catch_valid
         {
-            return Err(ProjectionError::ScaffoldMismatch {
-                index: manifest.node as usize,
-            });
+            return Err(ProjectionError::ScaffoldMismatch { index: manifest.node as usize });
         }
     }
-    Ok(IndexedScaffolds {
-        wrappers,
-        headers,
-        tries,
-    })
+    Ok(IndexedScaffolds { wrappers, headers, tries })
 }
 
 fn wrapper_slot(projection: &FormatProjection, node: u32) -> Result<usize, ProjectionError> {
     projection
         .wrappers
         .binary_search_by_key(&node, |wrapper| wrapper.node)
-        .map_err(|_| ProjectionError::ScaffoldMismatch {
-            index: node as usize,
-        })
+        .map_err(|_| ProjectionError::ScaffoldMismatch { index: node as usize })
 }
 
 fn try_slot(projection: &FormatProjection, node: u32) -> Result<usize, ProjectionError> {
-    let slot =
-        *projection
-            .try_slots
-            .get(node as usize)
-            .ok_or(ProjectionError::ScaffoldMismatch {
-                index: node as usize,
-            })?;
+    let slot = *projection
+        .try_slots
+        .get(node as usize)
+        .ok_or(ProjectionError::ScaffoldMismatch { index: node as usize })?;
     if slot == NONE {
-        return Err(ProjectionError::ScaffoldMismatch {
-            index: node as usize,
-        });
+        return Err(ProjectionError::ScaffoldMismatch { index: node as usize });
     }
     Ok(slot as usize)
 }
@@ -450,9 +423,7 @@ fn header_positions_mut(
 ) -> Result<&mut IndexedHeader, ProjectionError> {
     headers
         .get_mut(ordinal as usize)
-        .ok_or(ProjectionError::ScaffoldMismatch {
-            index: ordinal as usize,
-        })
+        .ok_or(ProjectionError::ScaffoldMismatch { index: ordinal as usize })
 }
 
 fn set_scaffold_span(
@@ -473,13 +444,8 @@ fn parse_identifier_occurrence(
     digits_start: usize,
 ) -> Option<(u32, ScaffoldSpan)> {
     let (ordinal, digits_end) = parse_decimal(bytes, digits_start)?;
-    (bytes.get(digits_end) == Some(&b'_')).then_some((
-        ordinal,
-        ScaffoldSpan {
-            start: prefix_start,
-            end: digits_end + 1,
-        },
-    ))
+    (bytes.get(digits_end) == Some(&b'_'))
+        .then_some((ordinal, ScaffoldSpan { start: prefix_start, end: digits_end + 1 }))
 }
 
 fn parse_token_marker_occurrence(
@@ -494,13 +460,7 @@ fn parse_token_marker_occurrence(
     {
         return None;
     }
-    Some((
-        ordinal,
-        ScaffoldSpan {
-            start: prefix_start - 2,
-            end: digits_end + 2,
-        },
-    ))
+    Some((ordinal, ScaffoldSpan { start: prefix_start - 2, end: digits_end + 2 }))
 }
 
 fn parse_marker_occurrence(
@@ -517,14 +477,7 @@ fn parse_marker_occurrence(
     {
         return None;
     }
-    Some((
-        ordinal,
-        side,
-        ScaffoldSpan {
-            start: prefix_start - 2,
-            end: digits_end + 5,
-        },
-    ))
+    Some((ordinal, side, ScaffoldSpan { start: prefix_start - 2, end: digits_end + 5 }))
 }
 
 fn append_header_edits(
@@ -678,12 +631,9 @@ fn try_clause_edit(
     positions: IndexedTry,
 ) -> Result<ScaffoldEdit, ProjectionError> {
     let (marker, method, replacement, has_header) = match kind {
-        StructuralKind::Pending => (
-            positions.pending_marker,
-            positions.pending_method,
-            EditReplacement::Pending,
-            false,
-        ),
+        StructuralKind::Pending => {
+            (positions.pending_marker, positions.pending_method, EditReplacement::Pending, false)
+        }
         StructuralKind::Catch => (
             positions.catch_marker,
             positions.catch_method,
@@ -715,12 +665,7 @@ fn try_clause_edit(
         }
         body_start
     };
-    Ok(ScaffoldEdit {
-        index: token_index,
-        start: previous_body_close + 1,
-        end,
-        replacement,
-    })
+    Ok(ScaffoldEdit { index: token_index, start: previous_body_close + 1, end, replacement })
 }
 
 fn merge_wrappers(left: Vec<WrapperEdit>, right: Vec<WrapperEdit>) -> Vec<WrapperEdit> {
@@ -872,9 +817,7 @@ fn render_scaffolds(
         let next_wrapper_start = next_wrapper.map_or(usize::MAX, |wrapper| wrapper.replace_start);
         let next_edit_start = next_edit.map_or(usize::MAX, |edit| edit.start);
         let next_start = next_wrapper_start.min(next_edit_start);
-        let next_end = active
-            .last()
-            .map_or(usize::MAX, |&index| wrappers[index].content_end);
+        let next_end = active.last().map_or(usize::MAX, |&index| wrappers[index].content_end);
 
         if !active.is_empty() && next_end <= next_start {
             if source_cursor > next_end {
@@ -901,9 +844,7 @@ fn render_scaffolds(
         if next_edit_start <= next_wrapper_start {
             let edit = *next_edit.ok_or(ProjectionError::StructuralMismatch)?;
             if edit.start > edit.end
-                || active
-                    .last()
-                    .is_some_and(|&index| edit.end > wrappers[index].content_end)
+                || active.last().is_some_and(|&index| edit.end > wrappers[index].content_end)
             {
                 return Err(ProjectionError::ScaffoldMismatch { index: edit.index });
             }
@@ -920,16 +861,13 @@ fn render_scaffolds(
                     .last()
                     .is_some_and(|&index| wrapper.replace_end > wrappers[index].content_end)
             {
-                return Err(ProjectionError::ScaffoldMismatch {
-                    index: wrapper.index,
-                });
+                return Err(ProjectionError::ScaffoldMismatch { index: wrapper.index });
             }
             writer.write(&source[source_cursor..wrapper.replace_start], active_dedent);
             writer.write(wrapper.replacement.text(), active_dedent);
             source_cursor = wrapper.content_start;
-            active_dedent = active_dedent
-                .checked_add(wrapper.dedent)
-                .ok_or(ProjectionError::SourceTooLarge)?;
+            active_dedent =
+                active_dedent.checked_add(wrapper.dedent).ok_or(ProjectionError::SourceTooLarge)?;
             active.push(wrapper_cursor);
             wrapper_cursor += 1;
         }

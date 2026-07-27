@@ -15,11 +15,7 @@ pub(super) struct SourceFixup {
 
 impl SourceFixup {
     pub(super) const fn placeholder(self) -> char {
-        if self.context.is_some() {
-            '\u{e000}'
-        } else {
-            '\u{ffff}'
-        }
+        if self.context.is_some() { '\u{e000}' } else { '\u{ffff}' }
     }
 }
 
@@ -146,9 +142,7 @@ impl<'a> PreparedSource<'a> {
     }
 
     pub(super) fn has_context(&self, context: OpaqueSurrogateContext) -> bool {
-        self.fixups()
-            .iter()
-            .any(|fixup| fixup.context == Some(context))
+        self.fixups().iter().any(|fixup| fixup.context == Some(context))
     }
 
     pub(super) fn has_program_value_fixups(&self) -> bool {
@@ -167,8 +161,7 @@ impl<'a> PreparedSource<'a> {
     }
 
     pub(super) fn rejected_fixup(&self) -> Option<SourceFixup> {
-        self.rejected_fixup
-            .and_then(|index| self.fixups().get(index).copied())
+        self.rejected_fixup.and_then(|index| self.fixups().get(index).copied())
     }
 
     pub(super) fn map_endpoint(&self, byte_offset: u32) -> Option<u32> {
@@ -185,18 +178,14 @@ impl<'a> PreparedSource<'a> {
         {
             return Some(record.utf16_start);
         }
-        let Some(previous) = following
-            .checked_sub(1)
-            .and_then(|index| boundaries.get(index))
+        let Some(previous) = following.checked_sub(1).and_then(|index| boundaries.get(index))
         else {
             return Some(byte_offset);
         };
         if byte_offset < previous.byte_end {
             return None;
         }
-        previous
-            .utf16_end
-            .checked_add(byte_offset.checked_sub(previous.byte_end)?)
+        previous.utf16_end.checked_add(byte_offset.checked_sub(previous.byte_end)?)
     }
 
     pub(super) fn original_span(&self, start: u32, end: u32) -> Option<&'a [u16]> {
@@ -215,9 +204,7 @@ impl<'a> PreparedSource<'a> {
         end: u32,
         context: OpaqueSurrogateContext,
     ) -> bool {
-        self.fixups_in(start, end)
-            .iter()
-            .any(|fixup| fixup.context == Some(context))
+        self.fixups_in(start, end).iter().any(|fixup| fixup.context == Some(context))
     }
 
     pub(super) fn fixups_in(&self, start: u32, end: u32) -> &[SourceFixup] {
@@ -229,10 +216,7 @@ impl<'a> PreparedSource<'a> {
 
     pub(super) fn is_authored_collision_scalar(&self, start: u32, end: u32) -> bool {
         if end.checked_sub(start) != Some(3)
-            || self
-                .fixups()
-                .binary_search_by_key(&start, |fixup| fixup.byte_start)
-                .is_ok()
+            || self.fixups().binary_search_by_key(&start, |fixup| fixup.byte_start).is_ok()
         {
             return false;
         }
@@ -249,23 +233,22 @@ impl<'a> PreparedSource<'a> {
 
     #[cfg(any(test, feature = "stage4-observer"))]
     pub(super) fn work(&self) -> BridgeWork {
-        let opaque_fixup_records = self
-            .fixups()
-            .iter()
-            .filter(|fixup| fixup.context.is_some())
-            .count();
+        let opaque_fixup_records =
+            self.fixups().iter().filter(|fixup| fixup.context.is_some()).count();
         let rejection_fixup_records = self.fixups().len() - opaque_fixup_records;
         BridgeWork {
             input_units: self.original.len(),
             utf8_bytes: self.utf8.len(),
             boundary_records: self.boundaries.as_ref().map_or(0, Vec::len),
-            boundary_bytes: self.boundaries.as_ref().map_or(0, |records| {
-                records.len().saturating_mul(size_of::<BoundaryRecord>())
-            }),
+            boundary_bytes: self
+                .boundaries
+                .as_ref()
+                .map_or(0, |records| records.len().saturating_mul(size_of::<BoundaryRecord>())),
             fixup_records: self.fixups.as_ref().map_or(0, Vec::len),
-            fixup_bytes: self.fixups.as_ref().map_or(0, |records| {
-                records.len().saturating_mul(size_of::<SourceFixup>())
-            }),
+            fixup_bytes: self
+                .fixups
+                .as_ref()
+                .map_or(0, |records| records.len().saturating_mul(size_of::<SourceFixup>())),
             opaque_fixup_records,
             rejection_fixup_records,
             sanitized_bytes: self.fixups.as_ref().map_or(0, |fixups| fixups.len() * 3),
@@ -280,10 +263,7 @@ fn classify_and_sanitize_fixups(
     if fixups.is_empty() {
         return Ok(None);
     }
-    let offsets = fixups
-        .iter()
-        .map(|fixup| fixup.byte_start)
-        .collect::<Vec<_>>();
+    let offsets = fixups.iter().map(|fixup| fixup.byte_start).collect::<Vec<_>>();
     let classification = classify_wtf8_surrogates_detailed(bytes, &offsets);
     if classification.contexts.len() != fixups.len() {
         return Err(TsrxParseError::Unsupported(
@@ -298,9 +278,9 @@ fn classify_and_sanitize_fixups(
         }
         let start = usize::try_from(fixup.byte_start)
             .map_err(|_| TsrxParseError::Unsupported("surrogate byte offset overflow"))?;
-        let end = start.checked_add(3).ok_or(TsrxParseError::Unsupported(
-            "surrogate byte offset overflow",
-        ))?;
+        let end = start
+            .checked_add(3)
+            .ok_or(TsrxParseError::Unsupported("surrogate byte offset overflow"))?;
         let replacement = if context.is_some() {
             &OPAQUE_SURROGATE_PLACEHOLDER_UTF8
         } else {
@@ -308,9 +288,7 @@ fn classify_and_sanitize_fixups(
         };
         bytes
             .get_mut(start..end)
-            .ok_or(TsrxParseError::Unsupported(
-                "surrogate fixup is outside prepared source",
-            ))?
+            .ok_or(TsrxParseError::Unsupported("surrogate fixup is outside prepared source"))?
             .copy_from_slice(replacement);
     }
     Ok(rejected_fixup)
@@ -396,9 +374,7 @@ mod tests {
 
     #[test]
     fn ascii_source_uses_no_boundary_fixup_or_rejection_storage() {
-        let original = "function View() @{ <main/> }"
-            .encode_utf16()
-            .collect::<Vec<_>>();
+        let original = "function View() @{ <main/> }".encode_utf16().collect::<Vec<_>>();
         let prepared = PreparedSource::new(&original).expect("prepared ASCII source");
 
         assert!(prepared.is_identity());
@@ -509,9 +485,8 @@ mod tests {
             }
             source.extend("\";".encode_utf16());
             let median = release_bridge_median(&source);
-            let work = PreparedSource::new(&source)
-                .expect("well-formed release work accounting")
-                .work();
+            let work =
+                PreparedSource::new(&source).expect("well-formed release work accounting").work();
             assert_eq!(work.boundary_records, size * 2);
             assert_eq!(work.fixup_records, 0);
             assert_eq!(work.opaque_fixup_records, 0);
@@ -533,9 +508,8 @@ mod tests {
             }
             source.extend("\";".encode_utf16());
             let median = release_bridge_median(&source);
-            let work = PreparedSource::new(&source)
-                .expect("surrogate release work accounting")
-                .work();
+            let work =
+                PreparedSource::new(&source).expect("surrogate release work accounting").work();
             assert_eq!(work.boundary_records, size);
             assert_eq!(work.fixup_records, size);
             assert_eq!(work.opaque_fixup_records, size);

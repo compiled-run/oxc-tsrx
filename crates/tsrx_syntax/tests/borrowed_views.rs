@@ -51,24 +51,12 @@ fn overlay_view_borrows_flat_root_child_and_clause_chains() {
     assert_eq!(view.nodes.as_ptr(), repeated.nodes.as_ptr());
     assert_eq!(view.clauses.as_ptr(), repeated.clauses.as_ptr());
     assert_eq!(view.embedded.as_ptr(), repeated.embedded.as_ptr());
-    assert_eq!(
-        view.parser_dynamic.as_ptr(),
-        repeated.parser_dynamic.as_ptr()
-    );
-    assert_eq!(
-        view.parser_code_blocks.as_ptr(),
-        repeated.parser_code_blocks.as_ptr()
-    );
+    assert_eq!(view.parser_dynamic.as_ptr(), repeated.parser_dynamic.as_ptr());
+    assert_eq!(view.parser_code_blocks.as_ptr(), repeated.parser_code_blocks.as_ptr());
     assert_eq!(view.dynamic_tags.as_ptr(), repeated.dynamic_tags.as_ptr());
-    assert_eq!(
-        view.dynamic_comments.as_ptr(),
-        repeated.dynamic_comments.as_ptr()
-    );
+    assert_eq!(view.dynamic_comments.as_ptr(), repeated.dynamic_comments.as_ptr());
     assert_eq!(view.style_blocks.as_ptr(), repeated.style_blocks.as_ptr());
-    assert_eq!(
-        view.source_len,
-        u32::try_from(source.len()).expect("fixture fits OXC spans")
-    );
+    assert_eq!(view.source_len, u32::try_from(source.len()).expect("fixture fits OXC spans"));
     assert_ne!(view.first_root, NONE_INDEX);
 
     let first_root = &view.nodes[view.first_root as usize];
@@ -99,30 +87,16 @@ fn overlay_view_exposes_dynamic_style_and_embedded_records_without_copying() {
     let repeated = overlay.view();
 
     assert!(!view.parser_dynamic.is_empty());
-    assert_eq!(
-        view.parser_dynamic.as_ptr(),
-        repeated.parser_dynamic.as_ptr()
-    );
+    assert_eq!(view.parser_dynamic.as_ptr(), repeated.parser_dynamic.as_ptr());
     assert_eq!(view.dynamic_tags.len(), 1);
     assert!(!view.dynamic_tags[0].self_closing);
     assert_eq!(view.style_blocks.len(), 1);
     let style_start = u32::try_from(source.find("<style>").unwrap()).unwrap();
     let style_end = u32::try_from(source.find("</style>").unwrap() + "</style>".len()).unwrap();
-    assert_eq!(
-        view.style_blocks[0].element,
-        ByteSpan::new(style_start, style_end)
-    );
+    assert_eq!(view.style_blocks[0].element, ByteSpan::new(style_start, style_end));
     assert!(!view.style_blocks[0].self_closing);
-    assert!(
-        view.embedded
-            .iter()
-            .any(|record| record.kind == EmbeddedKind::DynamicOpen)
-    );
-    assert!(
-        view.embedded
-            .iter()
-            .any(|record| record.kind == EmbeddedKind::StyleContent)
-    );
+    assert!(view.embedded.iter().any(|record| record.kind == EmbeddedKind::DynamicOpen));
+    assert!(view.embedded.iter().any(|record| record.kind == EmbeddedKind::StyleContent));
 }
 
 #[test]
@@ -135,10 +109,7 @@ fn parser_view_records_sparse_jsx_child_code_block_boundaries_without_rescanning
     let view = overlay.view();
     assert_eq!(view.parser_code_blocks.len(), 1);
     let block = view.parser_code_blocks[0];
-    assert_eq!(
-        view.tokens[block.token as usize].kind,
-        tsrx_syntax::StructuralKind::FunctionBody
-    );
+    assert_eq!(view.tokens[block.token as usize].kind, tsrx_syntax::StructuralKind::FunctionBody);
     assert_eq!(
         &source[block.body.start as usize..block.body.end as usize],
         "{ const x=1; <A>{x}</A> }"

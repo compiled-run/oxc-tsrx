@@ -16,12 +16,9 @@ pub(super) fn structural_fingerprint(overlay: &Overlay) -> u128 {
     let mut first = 0x517c_c1b7_2722_0a95_u64;
     let mut second = 0x6eed_0e9d_a4d9_4a4f_u64;
     let mut mix = |value: u64| {
-        first = (first ^ value)
-            .wrapping_mul(0x9e37_79b1_85eb_ca87)
-            .rotate_left(23);
-        second = (second ^ value.rotate_left(29))
-            .wrapping_mul(0xc2b2_ae3d_27d4_eb4f)
-            .rotate_left(31);
+        first = (first ^ value).wrapping_mul(0x9e37_79b1_85eb_ca87).rotate_left(23);
+        second =
+            (second ^ value.rotate_left(29)).wrapping_mul(0xc2b2_ae3d_27d4_eb4f).rotate_left(31);
     };
     mix(overlay.tokens.len() as u64);
     for token in &overlay.tokens {

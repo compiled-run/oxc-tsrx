@@ -109,18 +109,12 @@ fn record_stage4_work(source_units: usize, work: Stage4WorkCounters) {
         &TSRX_PROJECTION_BYTES,
         u64::try_from(work.projection_bytes).unwrap_or(u64::MAX),
     );
-    saturating_counter_add(
-        &TSRX_MAP_BYTES,
-        u64::try_from(work.map_bytes).unwrap_or(u64::MAX),
-    );
+    saturating_counter_add(&TSRX_MAP_BYTES, u64::try_from(work.map_bytes).unwrap_or(u64::MAX));
     saturating_counter_add(
         &TSRX_SURROGATE_BYTES,
         u64::try_from(work.surrogate_bytes).unwrap_or(u64::MAX),
     );
-    saturating_counter_add(
-        &TSRX_TAPE_BYTES,
-        u64::try_from(work.tape_bytes).unwrap_or(u64::MAX),
-    );
+    saturating_counter_add(&TSRX_TAPE_BYTES, u64::try_from(work.tape_bytes).unwrap_or(u64::MAX));
 }
 
 #[cfg(feature = "stage4-observer")]
@@ -189,10 +183,7 @@ pub struct Stage4ObserverIdentity {
 
 #[cfg(feature = "stage4-observer")]
 fn observer_source(path: &str, sha256: &str) -> Stage4ObserverSourceFile {
-    Stage4ObserverSourceFile {
-        path: path.to_string(),
-        sha256: sha256.to_string(),
-    }
+    Stage4ObserverSourceFile { path: path.to_string(), sha256: sha256.to_string() }
 }
 
 /// Options read by the native boundary after the ESM wrapper has consumed `lang` exactly once.
@@ -216,24 +207,12 @@ enum Route {
 impl Route {
     fn from_code(code: u8) -> napi::Result<Self> {
         let route = match code {
-            ROUTE_INFER_ORDINARY => Self::Ordinary {
-                explicit_lang: None,
-            },
-            ROUTE_JAVASCRIPT => Self::Ordinary {
-                explicit_lang: Some("js"),
-            },
-            ROUTE_JAVASCRIPT_REACT => Self::Ordinary {
-                explicit_lang: Some("jsx"),
-            },
-            ROUTE_TYPESCRIPT => Self::Ordinary {
-                explicit_lang: Some("ts"),
-            },
-            ROUTE_TYPESCRIPT_REACT => Self::Ordinary {
-                explicit_lang: Some("tsx"),
-            },
-            ROUTE_TYPESCRIPT_DEFINITION => Self::Ordinary {
-                explicit_lang: Some("dts"),
-            },
+            ROUTE_INFER_ORDINARY => Self::Ordinary { explicit_lang: None },
+            ROUTE_JAVASCRIPT => Self::Ordinary { explicit_lang: Some("js") },
+            ROUTE_JAVASCRIPT_REACT => Self::Ordinary { explicit_lang: Some("jsx") },
+            ROUTE_TYPESCRIPT => Self::Ordinary { explicit_lang: Some("ts") },
+            ROUTE_TYPESCRIPT_REACT => Self::Ordinary { explicit_lang: Some("tsx") },
+            ROUTE_TYPESCRIPT_DEFINITION => Self::Ordinary { explicit_lang: Some("dts") },
             ROUTE_TSRX | ROUTE_TSRX_CORE_COMPAT => Self::Tsrx,
             _ => return Err(invalid("wrapper supplied an unknown source-family route")),
         };
@@ -242,10 +221,7 @@ impl Route {
 }
 
 enum OwnedSource {
-    Ordinary {
-        source: String,
-        explicit_lang: Option<&'static str>,
-    },
+    Ordinary { source: String, explicit_lang: Option<&'static str> },
     TsrxUtf8(String),
     TsrxUtf16(Utf16String),
 }
@@ -328,10 +304,7 @@ fn owned_source(
             if tsrx_source.is_some() {
                 return Err(invalid("ordinary route received a TSRX UTF-16 source lane"));
             }
-            Ok(OwnedSource::Ordinary {
-                source: ordinary_source,
-                explicit_lang,
-            })
+            Ok(OwnedSource::Ordinary { source: ordinary_source, explicit_lang })
         }
         Route::Tsrx => {
             validate_tsrx_options(options)?;
@@ -352,11 +325,8 @@ fn parse_owned(
     eager_compat: bool,
 ) -> napi::Result<ParsedPayload> {
     match source {
-        OwnedSource::Ordinary {
-            source,
-            explicit_lang,
-        } => Ok(ParsedPayload::Ordinary(parse_ordinary(
-            OrdinaryParseRequest {
+        OwnedSource::Ordinary { source, explicit_lang } => {
+            Ok(ParsedPayload::Ordinary(parse_ordinary(OrdinaryParseRequest {
                 filename,
                 source: &source,
                 lang: explicit_lang,
@@ -365,8 +335,8 @@ fn parse_owned(
                 ranges: options.range.unwrap_or(false),
                 preserve_parens: options.preserve_parens,
                 show_semantic_errors: options.show_semantic_errors.unwrap_or(false),
-            },
-        ))),
+            })))
+        }
         OwnedSource::TsrxUtf8(source) => {
             let request = TsrxParseRequest { source: &source };
             let parse_options = TsrxParseOptions {
@@ -380,11 +350,7 @@ fn parse_owned(
                 // field policy; callers can request OXC's TypeScript field policy explicitly.
                 include_ts_fields: !eager_compat && options.ast_type.as_deref() == Some("ts"),
                 ranges: options.range.unwrap_or(false),
-                preserve_parens: if eager_compat {
-                    Some(false)
-                } else {
-                    options.preserve_parens
-                },
+                preserve_parens: if eager_compat { Some(false) } else { options.preserve_parens },
                 show_semantic_errors: !eager_compat
                     && options.show_semantic_errors.unwrap_or(false),
             };
@@ -419,11 +385,7 @@ fn parse_owned(
                 },
                 include_ts_fields: !eager_compat && options.ast_type.as_deref() == Some("ts"),
                 ranges: options.range.unwrap_or(false),
-                preserve_parens: if eager_compat {
-                    Some(false)
-                } else {
-                    options.preserve_parens
-                },
+                preserve_parens: if eager_compat { Some(false) } else { options.preserve_parens },
                 show_semantic_errors: !eager_compat
                     && options.show_semantic_errors.unwrap_or(false),
             };
@@ -474,54 +436,46 @@ fn lazy_result(env: &Env, payload: ParsedPayload) -> napi::Result<Object<'static
     let errors = RefCell::new(LaneState::Pending(errors));
     let mut object = Object::new(env)?;
     object.define_properties(&[
-        napi::Property::new()
-            .with_utf8_name("program")?
-            .with_getter_closure(move |env, _| {
-                let lane = take_lane(&program, "program")?;
-                match lane.materialize(&env) {
-                    Ok(value) => Ok(value.raw()),
-                    Err(error) => {
-                        retain_lane_failure(&program, &error);
-                        Err(error)
-                    }
+        napi::Property::new().with_utf8_name("program")?.with_getter_closure(move |env, _| {
+            let lane = take_lane(&program, "program")?;
+            match lane.materialize(&env) {
+                Ok(value) => Ok(value.raw()),
+                Err(error) => {
+                    retain_lane_failure(&program, &error);
+                    Err(error)
                 }
-            }),
-        napi::Property::new()
-            .with_utf8_name("module")?
-            .with_getter_closure(move |env, _| {
-                let lane = take_lane(&module, "module")?;
-                match lane.materialize(&env) {
-                    Ok(value) => Ok(value.raw()),
-                    Err(error) => {
-                        retain_lane_failure(&module, &error);
-                        Err(error)
-                    }
+            }
+        }),
+        napi::Property::new().with_utf8_name("module")?.with_getter_closure(move |env, _| {
+            let lane = take_lane(&module, "module")?;
+            match lane.materialize(&env) {
+                Ok(value) => Ok(value.raw()),
+                Err(error) => {
+                    retain_lane_failure(&module, &error);
+                    Err(error)
                 }
-            }),
-        napi::Property::new()
-            .with_utf8_name("comments")?
-            .with_getter_closure(move |env, _| {
-                let lane = take_lane(&comments, "comment")?;
-                match lane.materialize(&env) {
-                    Ok(value) => Ok(value.raw()),
-                    Err(error) => {
-                        retain_lane_failure(&comments, &error);
-                        Err(error)
-                    }
+            }
+        }),
+        napi::Property::new().with_utf8_name("comments")?.with_getter_closure(move |env, _| {
+            let lane = take_lane(&comments, "comment")?;
+            match lane.materialize(&env) {
+                Ok(value) => Ok(value.raw()),
+                Err(error) => {
+                    retain_lane_failure(&comments, &error);
+                    Err(error)
                 }
-            }),
-        napi::Property::new()
-            .with_utf8_name("errors")?
-            .with_getter_closure(move |env, _| {
-                let lane = take_lane(&errors, "diagnostic")?;
-                match lane.materialize(&env) {
-                    Ok(value) => Ok(value.raw()),
-                    Err(error) => {
-                        retain_lane_failure(&errors, &error);
-                        Err(error)
-                    }
+            }
+        }),
+        napi::Property::new().with_utf8_name("errors")?.with_getter_closure(move |env, _| {
+            let lane = take_lane(&errors, "diagnostic")?;
+            match lane.materialize(&env) {
+                Ok(value) => Ok(value.raw()),
+                Err(error) => {
+                    retain_lane_failure(&errors, &error);
+                    Err(error)
                 }
-            }),
+            }
+        }),
     ])?;
     Ok(object)
 }
@@ -535,9 +489,7 @@ fn eager_compat_result(
     payload: ParsedPayload,
 ) -> napi::Result<Either<NativeProgramTransfer, Object<'static>>> {
     let ParsedPayload::Tsrx(result) = payload else {
-        return Err(invalid(
-            "TSRX compatibility route received an ordinary result",
-        ));
+        return Err(invalid("TSRX compatibility route received an ordinary result"));
     };
     let result = *result;
     if result.errors.is_empty()
@@ -751,11 +703,7 @@ pub fn parse(
     }
     let options = options.unwrap_or_default();
     let source = owned_source(ordinary_source, tsrx_source, route_code, &options)?;
-    Ok(AsyncTask::new(ParseTask {
-        filename,
-        source: Some(source),
-        options,
-    }))
+    Ok(AsyncTask::new(ParseTask { filename, source: Some(source), options }))
 }
 
 #[cfg(test)]
@@ -800,20 +748,13 @@ mod tests {
     fn route_codes_preserve_explicit_versus_inferred_language() {
         assert_eq!(
             Route::from_code(ROUTE_INFER_ORDINARY).expect("inferred route"),
-            Route::Ordinary {
-                explicit_lang: None
-            }
+            Route::Ordinary { explicit_lang: None }
         );
         assert_eq!(
             Route::from_code(ROUTE_TYPESCRIPT_REACT).expect("explicit route"),
-            Route::Ordinary {
-                explicit_lang: Some("tsx")
-            }
+            Route::Ordinary { explicit_lang: Some("tsx") }
         );
-        assert_eq!(
-            Route::from_code(ROUTE_TSRX).expect("TSRX route"),
-            Route::Tsrx
-        );
+        assert_eq!(Route::from_code(ROUTE_TSRX).expect("TSRX route"), Route::Tsrx);
         assert_eq!(
             Route::from_code(ROUTE_TSRX_CORE_COMPAT).expect("TSRX compat route"),
             Route::Tsrx
@@ -823,19 +764,15 @@ mod tests {
     #[test]
     fn native_identity_is_frozen() {
         assert_eq!(NODE_API, 8);
-        assert_eq!(
-            oxc_adapter::OXC_REVISION,
-            "8e0ed2ebb96137fb1611cdbd5742d5cb46037d40"
-        );
+        assert_eq!(oxc_adapter::OXC_REVISION, "8e0ed2ebb96137fb1611cdbd5742d5cb46037d40");
     }
 
     #[cfg(feature = "stage4-observer")]
     #[test]
     fn stage4_observer_has_real_positive_controls_for_every_canonical_work_lane() {
         reset_observer_counters();
-        let mut source = "function Positive() @{ @if(ok){<main data-value=\""
-            .encode_utf16()
-            .collect::<Vec<_>>();
+        let mut source =
+            "function Positive() @{ @if(ok){<main data-value=\"".encode_utf16().collect::<Vec<_>>();
         source.push(0xd800);
         source.extend("\"/>}@else{<aside/>} }".encode_utf16());
         let (result, work) = parse_tsrx_utf16_with_options_observed(

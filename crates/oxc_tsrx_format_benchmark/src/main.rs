@@ -264,10 +264,7 @@ struct Report {
 
 fn main() -> ExitCode {
     let arguments = env::args().skip(1).collect::<Vec<_>>();
-    if arguments
-        .first()
-        .is_some_and(|value| value == "--memory-child")
-    {
+    if arguments.first().is_some_and(|value| value == "--memory-child") {
         let result = run_memory_child(&arguments);
         return match result {
             Ok(()) => ExitCode::SUCCESS,
@@ -292,10 +289,7 @@ fn run(arguments: impl Iterator<Item = String>) -> Result<(), String> {
     }
     let args = parse_args(arguments)?;
     let budget_source = fs::read_to_string(&args.budget_path).map_err(|error| {
-        format!(
-            "unable to read budgets {}: {error}",
-            args.budget_path.display()
-        )
+        format!("unable to read budgets {}: {error}", args.budget_path.display())
     })?;
     let budgets: Budgets = serde_json::from_str(&budget_source)
         .map_err(|error| format!("invalid formatter benchmark budgets: {error}"))?;
@@ -354,11 +348,9 @@ fn run(arguments: impl Iterator<Item = String>) -> Result<(), String> {
     }
 
     let expected = &control_before[0].1;
-    let direct_output_parity = control_before
-        .iter()
-        .chain(&control_after)
-        .all(|sample| sample.1 == *expected)
-        && standard.iter().all(|sample| sample.1 == *expected);
+    let direct_output_parity =
+        control_before.iter().chain(&control_after).all(|sample| sample.1 == *expected)
+            && standard.iter().all(|sample| sample.1 == *expected);
     let direct_bypass = standard.iter().all(|sample| {
         let metadata = &sample.2;
         metadata.mode == FormatMode::Direct
@@ -389,41 +381,24 @@ fn run(arguments: impl Iterator<Item = String>) -> Result<(), String> {
     let processes = process_result?;
     cleanup_result?;
 
-    let control_ns = control_before
-        .iter()
-        .chain(&control_after)
-        .map(|sample| sample.0)
-        .collect::<Vec<_>>();
+    let control_ns =
+        control_before.iter().chain(&control_after).map(|sample| sample.0).collect::<Vec<_>>();
     let standard_ns = standard.iter().map(|sample| sample.0).collect::<Vec<_>>();
     let projected_ns = projected.iter().map(|sample| sample.0).collect::<Vec<_>>();
-    let projected_scan_ns = projected
-        .iter()
-        .map(|sample| sample.2.timings.scan_ns)
-        .collect::<Vec<_>>();
-    let projected_projection_ns = projected
-        .iter()
-        .map(|sample| sample.2.timings.projection_ns)
-        .collect::<Vec<_>>();
-    let projected_parse_ns = projected
-        .iter()
-        .map(|sample| sample.2.timings.parse_ns)
-        .collect::<Vec<_>>();
-    let projected_format_ns = projected
-        .iter()
-        .map(|sample| sample.2.timings.format_ns)
-        .collect::<Vec<_>>();
-    let projected_lift_ns = projected
-        .iter()
-        .map(|sample| sample.2.timings.lift_ns)
-        .collect::<Vec<_>>();
-    let generalized_control_ns = generalized_control_samples
-        .iter()
-        .map(|sample| sample.0)
-        .collect::<Vec<_>>();
-    let generalized_control_half_ns = generalized_control_half_samples
-        .iter()
-        .map(|sample| sample.0)
-        .collect::<Vec<_>>();
+    let projected_scan_ns =
+        projected.iter().map(|sample| sample.2.timings.scan_ns).collect::<Vec<_>>();
+    let projected_projection_ns =
+        projected.iter().map(|sample| sample.2.timings.projection_ns).collect::<Vec<_>>();
+    let projected_parse_ns =
+        projected.iter().map(|sample| sample.2.timings.parse_ns).collect::<Vec<_>>();
+    let projected_format_ns =
+        projected.iter().map(|sample| sample.2.timings.format_ns).collect::<Vec<_>>();
+    let projected_lift_ns =
+        projected.iter().map(|sample| sample.2.timings.lift_ns).collect::<Vec<_>>();
+    let generalized_control_ns =
+        generalized_control_samples.iter().map(|sample| sample.0).collect::<Vec<_>>();
+    let generalized_control_half_ns =
+        generalized_control_half_samples.iter().map(|sample| sample.0).collect::<Vec<_>>();
     let control_distribution = distribution(&control_ns, tsx.len());
     let standard_distribution = distribution(&standard_ns, tsx.len());
     let projected_distribution = distribution(&projected_ns, tsrx.len());
@@ -450,10 +425,7 @@ fn run(arguments: impl Iterator<Item = String>) -> Result<(), String> {
         ratio(standard_distribution.p50_ns, control_distribution.p50_ns);
     let direct_p95_latency_ratio = ratio(standard_distribution.p95_ns, control_distribution.p95_ns);
     let historical_incumbent_derived_floor_mib_per_second = HISTORICAL_INCUMBENT_MIB_S * 10.0;
-    let stdin_ratio = ratio(
-        candidate_stdin_distribution.p95_ns,
-        stock_stdin_distribution.p95_ns,
-    );
+    let stdin_ratio = ratio(candidate_stdin_distribution.p95_ns, stock_stdin_distribution.p95_ns);
     let tsrx_rss = median_u64(&processes.tsrx_rss_bytes);
     let tsx_rss = median_u64(&processes.tsx_rss_bytes);
     let rss_ratio = ratio(tsrx_rss, tsx_rss);
@@ -473,11 +445,7 @@ fn run(arguments: impl Iterator<Item = String>) -> Result<(), String> {
         direct_p95_latency_ratio,
         budgets.p04.direct_p95_latency_ratio_max,
     );
-    assert_bool(
-        &mut assertions,
-        "p04_direct_output_parity",
-        direct_output_parity,
-    );
+    assert_bool(&mut assertions, "p04_direct_output_parity", direct_output_parity);
     assert_bool(&mut assertions, "p04_direct_bypass", direct_bypass);
     assert_min(
         &mut assertions,
@@ -566,11 +534,7 @@ fn run(arguments: impl Iterator<Item = String>) -> Result<(), String> {
         "p04_config_one_parse_per_file",
         config_session.files == 2 && config_session.parse_count == config_session.files,
     );
-    assert_bool(
-        &mut assertions,
-        "p04_config_options_applied",
-        config_session.options_applied,
-    );
+    assert_bool(&mut assertions, "p04_config_options_applied", config_session.options_applied);
     assert_max(
         &mut assertions,
         "p05_stdin_p95_ms",
@@ -585,11 +549,7 @@ fn run(arguments: impl Iterator<Item = String>) -> Result<(), String> {
         stdin_ratio,
         budgets.p05.upstream_latency_ratio_max,
     );
-    assert_bool(
-        &mut assertions,
-        "p05_complete_output",
-        processes.complete_output,
-    );
+    assert_bool(&mut assertions, "p05_complete_output", processes.complete_output);
     assert_max(
         &mut assertions,
         "p07_rss_ratio",
@@ -707,9 +667,7 @@ fn run(arguments: impl Iterator<Item = String>) -> Result<(), String> {
     };
 
     let output_path = args.output_path.unwrap_or_else(|| {
-        PathBuf::from(format!(
-            "benchmarks/native-format/results-{generated_at_unix_ms}.json"
-        ))
+        PathBuf::from(format!("benchmarks/native-format/results-{generated_at_unix_ms}.json"))
     });
     let json = serde_json::to_string_pretty(&report)
         .map_err(|error| format!("unable to serialize report: {error}"))?;
@@ -764,10 +722,7 @@ fn measure_config_session(root: &Path) -> Result<ConfigSessionSummary, String> {
         config_loads: session.config_loads(),
         config_load_ns: session.config_load_ns(),
         files: 2,
-        parse_count: tsrx
-            .metadata
-            .parse_count
-            .saturating_add(tsx.metadata.parse_count),
+        parse_count: tsrx.metadata.parse_count.saturating_add(tsx.metadata.parse_count),
         options_applied,
     })
 }
@@ -794,10 +749,7 @@ fn run_process_measurements(
         .map_err(|error| format!("unable to create {}: {error}", batch_directory.display()))?;
     let per_file_target = 256 * 1024;
     let per_file = build_corpus(per_file_target);
-    let file_count = budgets
-        .batch_corpus_target_bytes
-        .div_ceil(per_file.len())
-        .max(2);
+    let file_count = budgets.batch_corpus_target_bytes.div_ceil(per_file.len()).max(2);
     let mut paths = Vec::with_capacity(file_count);
     for index in 0..file_count {
         let path = batch_directory.join(format!("batch-{index:04}.tsrx"));
@@ -930,10 +882,7 @@ fn measure_memory_child(binary: &Path, source: &Path) -> Result<u64, String> {
         .output()
         .map_err(|error| format!("unable to run memory child: {error}"))?;
     if !output.status.success() {
-        return Err(format!(
-            "memory child failed: {}",
-            String::from_utf8_lossy(&output.stderr)
-        ));
+        return Err(format!("memory child failed: {}", String::from_utf8_lossy(&output.stderr)));
     }
     String::from_utf8(output.stdout)
         .map_err(|error| error.to_string())?
@@ -1020,14 +969,9 @@ fn parse_args(mut arguments: impl Iterator<Item = String>) -> Result<Args, Strin
         if output_path.is_some() {
             return Err("--output may be specified only once".to_string());
         }
-        output_path = Some(PathBuf::from(
-            arguments.next().ok_or("--output requires a path")?,
-        ));
+        output_path = Some(PathBuf::from(arguments.next().ok_or("--output requires a path")?));
     }
-    Ok(Args {
-        budget_path,
-        output_path,
-    })
+    Ok(Args { budget_path, output_path })
 }
 
 fn validate_budgets(budgets: &Budgets) -> Result<(), String> {

@@ -13,38 +13,22 @@ use tsrx_format::FormatSession;
 use tsrx_lint::{ConfigRuleFilter, LintSession};
 
 pub fn run_cli(arguments: &[String]) -> ExitCode {
-    if arguments
-        .iter()
-        .any(|argument| matches!(argument.as_str(), "-V" | "--version"))
-    {
-        println!(
-            "oxc-tsrx-lsp {} (OXC {})",
-            env!("CARGO_PKG_VERSION"),
-            oxc_adapter::OXC_REVISION
-        );
+    if arguments.iter().any(|argument| matches!(argument.as_str(), "-V" | "--version")) {
+        println!("oxc-tsrx-lsp {} (OXC {})", env!("CARGO_PKG_VERSION"), oxc_adapter::OXC_REVISION);
         return ExitCode::SUCCESS;
     }
-    if arguments
-        .iter()
-        .any(|argument| matches!(argument.as_str(), "-h" | "--help"))
-    {
+    if arguments.iter().any(|argument| matches!(argument.as_str(), "-h" | "--help")) {
         println!(
             "OXC for TSRX language server\n\nUsage: oxc-tsrx-lsp\n       oxc-tsrx-lsp --version"
         );
         return ExitCode::SUCCESS;
     }
-    if let Some(argument) = arguments
-        .iter()
-        .find(|argument| argument.as_str() != "--stdio")
-    {
+    if let Some(argument) = arguments.iter().find(|argument| argument.as_str() != "--stdio") {
         eprintln!("oxc-tsrx-lsp: unsupported option: {argument}");
         return ExitCode::from(2);
     }
-    match run_editor_server(
-        "OXC for TSRX",
-        env!("CARGO_PKG_VERSION"),
-        Arc::new(TsrxEditorFactory),
-    ) {
+    match run_editor_server("OXC for TSRX", env!("CARGO_PKG_VERSION"), Arc::new(TsrxEditorFactory))
+    {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             eprintln!("oxc-tsrx-lsp: {error}");
@@ -88,11 +72,7 @@ impl EditorToolFactory for TsrxEditorFactory {
             type_check,
         )?;
         let format = FormatSession::new(&root, format_config.as_deref())?;
-        Ok(Box::new(TsrxEditorTool {
-            lint,
-            actions,
-            format,
-        }))
+        Ok(Box::new(TsrxEditorTool { lint, actions, format }))
     }
 
     fn watcher_patterns(&self, _workspace: &EditorWorkspace, options: &Value) -> Vec<String> {
@@ -118,19 +98,11 @@ fn option_bool(options: &Value, key: &str) -> bool {
 }
 
 fn option_path(root: &std::path::Path, options: &Value, key: &str) -> Option<PathBuf> {
-    let section = if key == "lintConfigPath" {
-        "lint"
-    } else {
-        "format"
-    };
+    let section = if key == "lintConfigPath" { "lint" } else { "format" };
     let path =
         option_string(options, key, section, "configPath").filter(|path| !path.is_empty())?;
     let path = PathBuf::from(path);
-    Some(if path.is_absolute() {
-        path
-    } else {
-        root.join(path)
-    })
+    Some(if path.is_absolute() { path } else { root.join(path) })
 }
 
 fn option_string<'a>(
@@ -140,10 +112,7 @@ fn option_string<'a>(
     nested: &str,
 ) -> Option<&'a str> {
     options.get(flat).and_then(Value::as_str).or_else(|| {
-        options
-            .get(section)
-            .and_then(|value| value.get(nested))
-            .and_then(Value::as_str)
+        options.get(section).and_then(|value| value.get(nested)).and_then(Value::as_str)
     })
 }
 
@@ -170,9 +139,8 @@ struct TsrxEditorTool {
 
 impl TsrxEditorTool {
     fn source<'a>(document: &'a EditorDocument<'_>) -> Result<(PathBuf, &'a str), String> {
-        let path = document
-            .path
-            .ok_or_else(|| format!("editor URI is not a file: {}", document.uri))?;
+        let path =
+            document.path.ok_or_else(|| format!("editor URI is not a file: {}", document.uri))?;
         if path.extension().is_none_or(|extension| extension != "tsrx") {
             return Err(format!("editor document is not TSRX: {}", path.display()));
         }
@@ -240,10 +208,7 @@ impl EditorTool for TsrxEditorTool {
         request: &EditorCodeActionRequest<'_>,
     ) -> Result<Vec<EditorCodeAction>, String> {
         if !request.only.is_empty()
-            && !request
-                .only
-                .iter()
-                .any(|kind| kind == "quickfix" || "quickfix".starts_with(kind))
+            && !request.only.iter().any(|kind| kind == "quickfix" || "quickfix".starts_with(kind))
         {
             return Ok(Vec::new());
         }
@@ -282,10 +247,8 @@ fn parse_error_diagnostic(source: &str, message: String) -> EditorDiagnostic {
     let offset = error_byte_offset(&message)
         .filter(|offset| *offset <= source.len() && source.is_char_boundary(*offset))
         .unwrap_or(0);
-    let end = source[offset..]
-        .chars()
-        .next()
-        .map_or(offset, |character| offset + character.len_utf8());
+    let end =
+        source[offset..].chars().next().map_or(offset, |character| offset + character.len_utf8());
     EditorDiagnostic {
         range: EditorRange::new(
             u32::try_from(offset).unwrap_or(0),
@@ -303,10 +266,7 @@ fn parse_error_diagnostic(source: &str, message: String) -> EditorDiagnostic {
 fn error_byte_offset(message: &str) -> Option<usize> {
     let marker = "byte ";
     let start = message.rfind(marker)? + marker.len();
-    let digits = message[start..]
-        .chars()
-        .take_while(char::is_ascii_digit)
-        .collect::<String>();
+    let digits = message[start..].chars().take_while(char::is_ascii_digit).collect::<String>();
     (!digits.is_empty()).then(|| digits.parse().ok()).flatten()
 }
 

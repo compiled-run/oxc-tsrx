@@ -185,12 +185,7 @@ impl FormatSession {
             };
             (base, overrides, raw.ignore_patterns, root)
         } else {
-            (
-                FileFormatOptions::default(),
-                Vec::new(),
-                Vec::new(),
-                cwd.clone(),
-            )
+            (FileFormatOptions::default(), Vec::new(), Vec::new(), cwd.clone())
         };
         let ignore = build_ignore(&config_root, &ignore_patterns)?;
         Ok(Self {
@@ -242,18 +237,12 @@ impl FormatSession {
     }
 
     fn absolute_path(&self, path: &Path) -> PathBuf {
-        if path.is_absolute() {
-            path.to_path_buf()
-        } else {
-            self.cwd.join(path)
-        }
+        if path.is_absolute() { path.to_path_buf() } else { self.cwd.join(path) }
     }
 
     fn options_for(&self, path: &Path) -> FileFormatOptions {
         let absolute = self.absolute_path(path);
-        let relative = absolute
-            .strip_prefix(&self.config_root)
-            .unwrap_or(&absolute);
+        let relative = absolute.strip_prefix(&self.config_root).unwrap_or(&absolute);
         let candidate = relative.to_string_lossy();
         let mut options = self.base.clone();
         for r#override in &self.overrides {
@@ -268,22 +257,12 @@ impl FormatSession {
 }
 
 fn resolve_existing_config_base(cwd: &Path, base: &Path) -> Result<PathBuf, String> {
-    let base = if base.is_absolute() {
-        base.to_path_buf()
-    } else {
-        cwd.join(base)
-    };
+    let base = if base.is_absolute() { base.to_path_buf() } else { cwd.join(base) };
     let base = base.canonicalize().map_err(|error| {
-        format!(
-            "unable to resolve Oxfmt config base {}: {error}",
-            base.display()
-        )
+        format!("unable to resolve Oxfmt config base {}: {error}", base.display())
     })?;
     if !base.is_dir() {
-        return Err(format!(
-            "Oxfmt config base is not a directory: {}",
-            base.display()
-        ));
+        return Err(format!("Oxfmt config base is not a directory: {}", base.display()));
     }
     Ok(base)
 }
@@ -324,9 +303,7 @@ impl FileFormatOptions {
 impl FormatOverride {
     fn new(raw: RawFormatOverride, index: usize) -> Result<Self, String> {
         if raw.files.is_empty() {
-            return Err(format!(
-                "Oxfmt override {index} requires at least one files pattern"
-            ));
+            return Err(format!("Oxfmt override {index} requires at least one files pattern"));
         }
         Ok(Self {
             files: build_globs(&raw.files, &format!("Oxfmt override {index} files"))?,
@@ -371,13 +348,8 @@ impl RawFormatOptions {
             vue_indent_script_and_style,
             unknown,
         } = self;
-        let _language_irrelevant = (
-            schema,
-            prose_wrap,
-            sort_package_json,
-            svelte,
-            vue_indent_script_and_style,
-        );
+        let _language_irrelevant =
+            (schema, prose_wrap, sort_package_json, svelte, vue_indent_script_and_style);
         if let Some((name, _)) = unknown.into_iter().next() {
             return Err(format!(
                 "unsupported Oxfmt option `{name}` in {context}; OXC for TSRX never silently ignores unknown TSRX-affecting options"
@@ -437,9 +409,7 @@ fn build_globs(patterns: &[String], context: &str) -> Result<GlobSet, String> {
                 .map_err(|error| format!("invalid {context} pattern `{pattern}`: {error}"))?,
         );
     }
-    builder
-        .build()
-        .map_err(|error| format!("unable to build {context}: {error}"))
+    builder.build().map_err(|error| format!("unable to build {context}: {error}"))
 }
 
 fn build_ignore(root: &Path, patterns: &[String]) -> Result<Option<Gitignore>, String> {
@@ -460,11 +430,7 @@ fn build_ignore(root: &Path, patterns: &[String]) -> Result<Option<Gitignore>, S
 
 fn resolve_oxfmt_config(cwd: &Path, explicit: Option<&Path>) -> Result<Option<PathBuf>, String> {
     if let Some(path) = explicit {
-        let path = if path.is_absolute() {
-            path.to_path_buf()
-        } else {
-            cwd.join(path)
-        };
+        let path = if path.is_absolute() { path.to_path_buf() } else { cwd.join(path) };
         if is_js_config(&path) {
             return Err(
                 "JavaScript/TypeScript Oxfmt config modules require the future thin npm host; use JSON or JSONC for the native CLI"
@@ -585,9 +551,7 @@ fn format_text_with_options(
     source: &str,
     options: Option<&FileFormatOptions>,
 ) -> Result<FormatOutput, String> {
-    let is_tsrx = path
-        .extension()
-        .is_some_and(|extension| extension == "tsrx");
+    let is_tsrx = path.extension().is_some_and(|extension| extension == "tsrx");
     if !is_tsrx {
         return format_direct(path, source, options);
     }
@@ -604,13 +568,9 @@ fn format_text_with_options(
     let engine = oxc_adapter::format(&FormatRequest {
         parse_source: projection.source(),
         source_kind: SourceKind::TypeScriptReact,
-        dynamic_tags: projection
-            .dynamic_contract()
-            .map(|(prefix, count, original_offsets)| DynamicTagContract {
-                prefix,
-                count,
-                original_offsets,
-            }),
+        dynamic_tags: projection.dynamic_contract().map(|(prefix, count, original_offsets)| {
+            DynamicTagContract { prefix, count, original_offsets }
+        }),
         options: options.map(|options| &options.engine),
     })?;
     timings.parse_ns = engine.timings.parse_ns;
@@ -713,14 +673,8 @@ mod tests {
         const { assert!(!EMBEDDED_CSS_USES_SUBPROCESS) };
         assert!(output.code.contains(payload));
         assert_eq!(output.metadata.style_count, 1);
-        assert_eq!(
-            output.metadata.embedded_parse_count,
-            EMBEDDED_CSS_PARSE_COUNT
-        );
-        assert_eq!(
-            output.metadata.timings.embedded_format_ns,
-            EMBEDDED_CSS_FORMAT_NS
-        );
+        assert_eq!(output.metadata.embedded_parse_count, EMBEDDED_CSS_PARSE_COUNT);
+        assert_eq!(output.metadata.timings.embedded_format_ns, EMBEDDED_CSS_FORMAT_NS);
     }
 
     #[test]
@@ -732,11 +686,7 @@ mod tests {
         assert_eq!(first.metadata.embedded_parse_count, 0);
         assert_eq!(first.metadata.marker_count, 3);
         assert!(first.metadata.projection_bytes > source.len());
-        assert!(
-            first
-                .code
-                .contains("function View({ ready }: { ready: boolean }) @{")
-        );
+        assert!(first.code.contains("function View({ ready }: { ready: boolean }) @{"));
         assert!(first.code.contains("@if (ready) {"));
         assert!(first.code.contains("} @else {"));
 
@@ -783,11 +733,7 @@ mod tests {
         assert_eq!(first.metadata.style_count, 0);
         assert!(first.code.contains("@switch (value)"));
         assert!(first.code.contains("} @pending {"));
-        assert!(
-            first
-                .code
-                .contains("} @catch (error: Error, reset: () => void) {")
-        );
+        assert!(first.code.contains("} @catch (error: Error, reset: () => void) {"));
         let second = format_text(Path::new("View.tsrx"), &first.code).unwrap();
         assert_eq!(second.metadata.parse_count, 1);
         assert_eq!(second.code, first.code);

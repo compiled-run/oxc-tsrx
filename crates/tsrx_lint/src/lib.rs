@@ -75,15 +75,7 @@ impl LintSession {
         fix: bool,
         type_check: bool,
     ) -> Result<Self, String> {
-        Self::new_with_capabilities(
-            cwd,
-            config_path,
-            config_base,
-            filters,
-            fix,
-            true,
-            type_check,
-        )
+        Self::new_with_capabilities(cwd, config_path, config_base, filters, fix, true, type_check)
     }
 
     /// Build a session from an in-memory JSON Oxlint configuration without
@@ -111,13 +103,8 @@ impl LintSession {
         type_aware: bool,
         type_check: bool,
     ) -> Result<Self, String> {
-        let options = LintEngineOptions {
-            cwd,
-            config_path,
-            config_base,
-            filters,
-            collect_fixes: fix,
-        };
+        let options =
+            LintEngineOptions { cwd, config_path, config_base, filters, collect_fixes: fix };
         let engine = if type_aware {
             LintEngine::new_type_aware(&options, type_check)?
         } else {
@@ -242,16 +229,8 @@ impl LintSession {
                 file.syntax,
                 diagnostics,
                 true,
-                if index == 0 {
-                    type_result.elapsed_ns
-                } else {
-                    0
-                },
-                if index == 0 {
-                    type_result.process_count
-                } else {
-                    0
-                },
+                if index == 0 { type_result.elapsed_ns } else { 0 },
+                if index == 0 { type_result.process_count } else { 0 },
             )?);
         }
         Ok(ordered.into_iter().flatten().collect())
@@ -294,16 +273,8 @@ impl LintSession {
             translate_diagnostics(syntax.diagnostics, prepared.projection.as_ref());
         let mut type_translated =
             translate_type_diagnostics(type_diagnostics, prepared.type_projection.as_ref());
-        translated
-            .diagnostics
-            .append(&mut type_translated.diagnostics);
-        Ok(collect_editor_fixes(
-            self,
-            path,
-            source,
-            &prepared,
-            &translated.diagnostics,
-        ))
+        translated.diagnostics.append(&mut type_translated.diagnostics);
+        Ok(collect_editor_fixes(self, path, source, &prepared, &translated.diagnostics))
     }
 
     /// Combine file results without recompiling configuration or hiding per-file work.
@@ -455,15 +426,11 @@ impl From<String> for PrepareError {
 
 impl PreparedSource {
     fn parse_source<'a>(&'a self, original: &'a str) -> &'a str {
-        self.projection
-            .as_ref()
-            .map_or(original, MappedProjection::source)
+        self.projection.as_ref().map_or(original, MappedProjection::source)
     }
 
     fn projection_bytes(&self) -> usize {
-        self.projection
-            .as_ref()
-            .map_or(0, |projection| projection.source().len())
+        self.projection.as_ref().map_or(0, |projection| projection.source().len())
     }
 }
 
@@ -515,40 +482,23 @@ fn legacy_session(path: &Path, options: &Options) -> Result<LintSession, String>
     let filters = options
         .rules
         .iter()
-        .map(|name| RuleFilter {
-            severity: RuleSeverity::Deny,
-            name: name.clone(),
-        })
+        .map(|name| RuleFilter { severity: RuleSeverity::Deny, name: name.clone() })
         .collect::<Vec<_>>();
-    LintSession::new(
-        path.parent().unwrap_or_else(|| Path::new(".")),
-        None,
-        &filters,
-        options.fix,
-    )
+    LintSession::new(path.parent().unwrap_or_else(|| Path::new(".")), None, &filters, options.fix)
 }
 
 fn aggregate_outputs(session: &LintSession, outputs: Vec<Output>) -> Output {
-    let mode = if outputs.len() == 1 {
-        outputs[0].metadata.mode
-    } else {
-        "batch"
-    };
+    let mode = if outputs.len() == 1 { outputs[0].metadata.mode } else { "batch" };
     let mut diagnostics = Vec::new();
     let mut number_of_files = 0_u32;
     let mut parse_count = 0_u32;
     let mut reparse_count = 0_u32;
     let mut file_counts = FileCounts::default();
-    let mut timings = TimingOutput {
-        config_ns: session.engine.config_load_ns(),
-        ..TimingOutput::default()
-    };
+    let mut timings =
+        TimingOutput { config_ns: session.engine.config_load_ns(), ..TimingOutput::default() };
     let mut projection_bytes = 0_usize;
     let mut diagnostics_suppressed = 0_u32;
-    let mut fix_counts = FixOutput {
-        applied: 0,
-        rejected: 0,
-    };
+    let mut fix_counts = FixOutput { applied: 0, rejected: 0 };
     let mut type_aware_files = 0_u32;
     let mut type_aware_processes = 0_u32;
     for output in outputs {
@@ -556,36 +506,21 @@ fn aggregate_outputs(session: &LintSession, outputs: Vec<Output>) -> Output {
         parse_count = parse_count.saturating_add(output.metadata.parse_count);
         reparse_count = reparse_count.saturating_add(output.metadata.reparse_count);
         file_counts.tsrx = file_counts.tsrx.saturating_add(output.metadata.files.tsrx);
-        file_counts.standard = file_counts
-            .standard
-            .saturating_add(output.metadata.files.standard);
-        timings.scan_ns = timings
-            .scan_ns
-            .saturating_add(output.metadata.timings.scan_ns);
-        timings.projection_ns = timings
-            .projection_ns
-            .saturating_add(output.metadata.timings.projection_ns);
-        timings.parse_ns = timings
-            .parse_ns
-            .saturating_add(output.metadata.timings.parse_ns);
-        timings.semantic_ns = timings
-            .semantic_ns
-            .saturating_add(output.metadata.timings.semantic_ns);
-        timings.lint_ns = timings
-            .lint_ns
-            .saturating_add(output.metadata.timings.lint_ns);
-        timings.type_aware_ns = timings
-            .type_aware_ns
-            .saturating_add(output.metadata.timings.type_aware_ns);
+        file_counts.standard = file_counts.standard.saturating_add(output.metadata.files.standard);
+        timings.scan_ns = timings.scan_ns.saturating_add(output.metadata.timings.scan_ns);
+        timings.projection_ns =
+            timings.projection_ns.saturating_add(output.metadata.timings.projection_ns);
+        timings.parse_ns = timings.parse_ns.saturating_add(output.metadata.timings.parse_ns);
+        timings.semantic_ns =
+            timings.semantic_ns.saturating_add(output.metadata.timings.semantic_ns);
+        timings.lint_ns = timings.lint_ns.saturating_add(output.metadata.timings.lint_ns);
+        timings.type_aware_ns =
+            timings.type_aware_ns.saturating_add(output.metadata.timings.type_aware_ns);
         projection_bytes = projection_bytes.saturating_add(output.metadata.projection_bytes);
         diagnostics_suppressed =
             diagnostics_suppressed.saturating_add(output.metadata.diagnostics_suppressed);
-        fix_counts.applied = fix_counts
-            .applied
-            .saturating_add(output.metadata.fixes.applied);
-        fix_counts.rejected = fix_counts
-            .rejected
-            .saturating_add(output.metadata.fixes.rejected);
+        fix_counts.applied = fix_counts.applied.saturating_add(output.metadata.fixes.applied);
+        fix_counts.rejected = fix_counts.rejected.saturating_add(output.metadata.fixes.rejected);
         type_aware_files = type_aware_files.saturating_add(output.metadata.type_aware_files);
         type_aware_processes =
             type_aware_processes.saturating_add(output.metadata.type_aware_processes);
@@ -653,10 +588,7 @@ fn projection_failure_output(
 ) -> Output {
     let labels = error
         .byte_offset()
-        .map(|offset| LabelOutput {
-            span: SpanOutput { offset, length: 0 },
-            message: None,
-        })
+        .map(|offset| LabelOutput { span: SpanOutput { offset, length: 0 }, message: None })
         .into_iter()
         .collect();
     Output {
@@ -679,10 +611,7 @@ fn projection_failure_output(
             config_path: None,
             parse_count: 0,
             reparse_count: 0,
-            files: FileCounts {
-                tsrx: 1,
-                standard: 0,
-            },
+            files: FileCounts { tsrx: 1, standard: 0 },
             timings: TimingOutput::default(),
             projection_bytes: 0,
             diagnostics_suppressed: 0,
@@ -727,15 +656,8 @@ fn run_type_lint(
     if !session.engine.type_aware_enabled() {
         return Ok((Vec::new(), 0, 0));
     }
-    let virtual_path = if prepared.is_tsrx {
-        virtual_type_path(path)
-    } else {
-        path.to_path_buf()
-    };
-    let projected_source = prepared
-        .type_projection
-        .as_ref()
-        .map_or(source, TypeProjection::source);
+    let virtual_path = if prepared.is_tsrx { virtual_type_path(path) } else { path.to_path_buf() };
+    let projected_source = prepared.type_projection.as_ref().map_or(source, TypeProjection::source);
     let batch = session.engine.lint_type_batch(
         &[TypeBatchFile {
             authored_path: path,
@@ -749,10 +671,7 @@ fn run_type_lint(
         .diagnostics
         .into_iter()
         .filter(|diagnostic| {
-            diagnostic
-                .virtual_path
-                .as_ref()
-                .is_none_or(|candidate| candidate == &virtual_path)
+            diagnostic.virtual_path.as_ref().is_none_or(|candidate| candidate == &virtual_path)
         })
         .map(|diagnostic| diagnostic.diagnostic)
         .collect();
@@ -774,13 +693,9 @@ fn run_syntax_lint(
         rules: &[],
         collect_fixes: session.fix,
         dynamic_tags: prepared.projection.as_ref().and_then(|projection| {
-            projection
-                .dynamic_contract()
-                .map(|(prefix, count, original_offsets)| DynamicTagContract {
-                    prefix,
-                    count,
-                    original_offsets,
-                })
+            projection.dynamic_contract().map(|(prefix, count, original_offsets)| {
+                DynamicTagContract { prefix, count, original_offsets }
+            })
         }),
     })?;
     Ok((prepared, syntax))
@@ -805,15 +720,10 @@ fn finish_lint(
     let mut translated = translate_diagnostics(syntax.diagnostics, prepared.projection.as_ref());
     let mut type_translated =
         translate_type_diagnostics(type_diagnostics, prepared.type_projection.as_ref());
-    translated
-        .diagnostics
-        .append(&mut type_translated.diagnostics);
-    translated.suppressed = translated
-        .suppressed
-        .saturating_add(type_translated.suppressed);
-    translated.rejected_fixes = translated
-        .rejected_fixes
-        .saturating_add(type_translated.rejected_fixes);
+    translated.diagnostics.append(&mut type_translated.diagnostics);
+    translated.suppressed = translated.suppressed.saturating_add(type_translated.suppressed);
+    translated.rejected_fixes =
+        translated.rejected_fixes.saturating_add(type_translated.rejected_fixes);
     let fixes = if session.fix && allow_writes {
         apply_safe_fixes(
             session,
@@ -824,10 +734,7 @@ fn finish_lint(
             translated.rejected_fixes,
         )?
     } else {
-        AppliedFixes {
-            rejected: translated.rejected_fixes,
-            ..AppliedFixes::default()
-        }
+        AppliedFixes { rejected: translated.rejected_fixes, ..AppliedFixes::default() }
     };
     let diagnostics = map_diagnostics(path, translated.diagnostics, &fixes.rules);
 
@@ -840,11 +747,7 @@ fn finish_lint(
             native: true,
             engine: "oxc_linter",
             oxc_revision: OXC_REVISION,
-            mode: if prepared.is_tsrx {
-                "mapped_projection"
-            } else {
-                "direct"
-            },
+            mode: if prepared.is_tsrx { "mapped_projection" } else { "direct" },
             config_loads: 0,
             config_path: None,
             parse_count: syntax.parse_count,
@@ -856,10 +759,7 @@ fn finish_lint(
             timings: prepared.timings,
             projection_bytes,
             diagnostics_suppressed: translated.suppressed,
-            fixes: FixOutput {
-                applied: fixes.applied,
-                rejected: fixes.rejected,
-            },
+            fixes: FixOutput { applied: fixes.applied, rejected: fixes.rejected },
             type_aware: session.engine.type_aware_enabled(),
             type_check: session.engine.type_check_enabled(),
             type_aware_files: u32::from(session.engine.type_aware_enabled()),
@@ -873,9 +773,7 @@ fn prepare_source(
     source: &str,
     type_aware: bool,
 ) -> Result<PreparedSource, PrepareError> {
-    let is_tsrx = path
-        .extension()
-        .is_some_and(|extension| extension == "tsrx");
+    let is_tsrx = path.extension().is_some_and(|extension| extension == "tsrx");
     let mut timings = TimingOutput::default();
     if !is_tsrx {
         return Ok(PreparedSource {
@@ -891,9 +789,7 @@ fn prepare_source(
     timings.scan_ns = elapsed_ns(started);
     let started = Instant::now();
     let projection = project_for_lint(source, &overlay)?;
-    let type_projection = type_aware
-        .then(|| project_for_types(source, &overlay))
-        .transpose()?;
+    let type_projection = type_aware.then(|| project_for_types(source, &overlay)).transpose()?;
     timings.projection_ns = elapsed_ns(started);
     Ok(PreparedSource {
         projection: Some(projection),
@@ -918,10 +814,7 @@ fn apply_safe_fixes(
     diagnostics: &[EngineDiagnostic],
     rejected_fixes: u32,
 ) -> Result<AppliedFixes, String> {
-    let mut result = AppliedFixes {
-        rejected: rejected_fixes,
-        ..AppliedFixes::default()
-    };
+    let mut result = AppliedFixes { rejected: rejected_fixes, ..AppliedFixes::default() };
     let mut edits = Vec::new();
     for diagnostic in diagnostics {
         for fix in &diagnostic.fixes {
@@ -947,13 +840,7 @@ fn apply_safe_fixes(
         result.rules.extend(rule);
     }
     if result.applied > 0 {
-        validate_fixed(
-            session,
-            path,
-            &fixed,
-            prepared.is_tsrx,
-            prepared.source_kind,
-        )?;
+        validate_fixed(session, path, &fixed, prepared.is_tsrx, prepared.source_kind)?;
         result.reparse_count = 1;
         fs::write(path, fixed)
             .map_err(|error| format!("Unable to write {}: {error}", path.display()))?;
@@ -971,10 +858,7 @@ fn collect_editor_fixes(
     let mut fixes = Vec::new();
     let mut seen = HashSet::new();
     for diagnostic in diagnostics {
-        let rule = diagnostic
-            .rule
-            .clone()
-            .unwrap_or_else(|| diagnostic_code(diagnostic));
+        let rule = diagnostic.rule.clone().unwrap_or_else(|| diagnostic_code(diagnostic));
         for fix in &diagnostic.fixes {
             let end = fix.offset.saturating_add(fix.length);
             if !fix.safe || end as usize > source.len() {
@@ -986,14 +870,8 @@ fn collect_editor_fixes(
             }
             let mut candidate = source.to_string();
             candidate.replace_range(fix.offset as usize..end as usize, &fix.replacement);
-            if validate_fixed(
-                session,
-                path,
-                &candidate,
-                prepared.is_tsrx,
-                prepared.source_kind,
-            )
-            .is_err()
+            if validate_fixed(session, path, &candidate, prepared.is_tsrx, prepared.source_kind)
+                .is_err()
             {
                 continue;
             }
@@ -1014,10 +892,7 @@ fn translate_diagnostics(
     projection: Option<&MappedProjection>,
 ) -> TranslatedDiagnostics {
     let Some(projection) = projection else {
-        return TranslatedDiagnostics {
-            diagnostics,
-            ..TranslatedDiagnostics::default()
-        };
+        return TranslatedDiagnostics { diagnostics, ..TranslatedDiagnostics::default() };
     };
     let mut translated = TranslatedDiagnostics::default();
     for mut diagnostic in diagnostics {
@@ -1081,10 +956,7 @@ fn translate_type_diagnostics(
     projection: Option<&TypeProjection>,
 ) -> TranslatedDiagnostics {
     let Some(projection) = projection else {
-        return TranslatedDiagnostics {
-            diagnostics,
-            ..TranslatedDiagnostics::default()
-        };
+        return TranslatedDiagnostics { diagnostics, ..TranslatedDiagnostics::default() };
     };
     let mut translated = TranslatedDiagnostics::default();
     for mut diagnostic in diagnostics {
@@ -1149,10 +1021,7 @@ fn map_diagnostics(
         })
         .map(|diagnostic| DiagnosticOutput {
             filename: filename.clone(),
-            rule: diagnostic
-                .rule
-                .clone()
-                .unwrap_or_else(|| "parse-error".to_string()),
+            rule: diagnostic.rule.clone().unwrap_or_else(|| "parse-error".to_string()),
             code: diagnostic_code(&diagnostic),
             severity: diagnostic.severity,
             message: diagnostic.message,
@@ -1160,10 +1029,7 @@ fn map_diagnostics(
                 .labels
                 .into_iter()
                 .map(|label| LabelOutput {
-                    span: SpanOutput {
-                        offset: label.offset,
-                        length: label.length,
-                    },
+                    span: SpanOutput { offset: label.offset, length: label.length },
                     message: label.message,
                 })
                 .collect(),
@@ -1203,13 +1069,9 @@ fn validate_fixed(
         rules: &[],
         collect_fixes: session.fix,
         dynamic_tags: projection.as_ref().and_then(|projection| {
-            projection
-                .dynamic_contract()
-                .map(|(prefix, count, original_offsets)| DynamicTagContract {
-                    prefix,
-                    count,
-                    original_offsets,
-                })
+            projection.dynamic_contract().map(|(prefix, count, original_offsets)| {
+                DynamicTagContract { prefix, count, original_offsets }
+            })
         }),
     })?;
     Ok(())
@@ -1260,10 +1122,7 @@ mod tests {
         let session = LintSession::new(
             Path::new("."),
             None,
-            &[RuleFilter {
-                severity: RuleSeverity::Deny,
-                name: "no-var".to_string(),
-            }],
+            &[RuleFilter { severity: RuleSeverity::Deny, name: "no-var".to_string() }],
             true,
         )
         .unwrap();
@@ -1293,12 +1152,7 @@ mod tests {
         )
         .unwrap();
         let output = session.lint_text(path, source).unwrap();
-        assert!(
-            output
-                .diagnostics
-                .iter()
-                .any(|diagnostic| diagnostic.rule == "no-console")
-        );
+        assert!(output.diagnostics.iter().any(|diagnostic| diagnostic.rule == "no-console"));
         assert!(!path.exists());
     }
 
@@ -1318,10 +1172,7 @@ mod tests {
             &directory,
             None,
             // A warning, so the one error in the aggregate below can only be the syntax error.
-            &[RuleFilter {
-                severity: RuleSeverity::Warn,
-                name: "no-var".to_string(),
-            }],
+            &[RuleFilter { severity: RuleSeverity::Warn, name: "no-var".to_string() }],
             false,
         )
         .unwrap();
@@ -1372,10 +1223,7 @@ mod tests {
     fn lint_text_still_fails_a_projection_error_for_the_editor() {
         let session = LintSession::new(Path::new("."), None, &[], false).unwrap();
         let error = session
-            .lint_text(
-                Path::new("Broken.tsrx"),
-                "export function Broken() @{\n  <main>\n}\n",
-            )
+            .lint_text(Path::new("Broken.tsrx"), "export function Broken() @{\n  <main>\n}\n")
             .expect_err("the LSP boundary must keep receiving projection failures as errors");
         assert!(error.contains("unterminated"), "{error}");
     }

@@ -41,10 +41,7 @@ fn append_association<T>(
     range: &mut AssociationRange,
     value: T,
 ) -> Result<(), TapeBuildError> {
-    let length = range
-        .length
-        .checked_add(1)
-        .ok_or(TapeBuildError::CapacityOverflow)?;
+    let length = range.length.checked_add(1).ok_or(TapeBuildError::CapacityOverflow)?;
     let index = links.len();
     links.push(AssociationLink { value, next: None });
     if let Some(tail) = range.tail {
@@ -75,10 +72,7 @@ where
     statement_indices.reserve(program.body.len());
     let mut statements = Vec::with_capacity(program.body.len());
     for (index, statement) in program.body.iter().enumerate() {
-        if statement_indices
-            .insert(span_key(statement.span()), index)
-            .is_some()
-        {
+        if statement_indices.insert(span_key(statement.span()), index).is_some() {
             return Err(ProjectedParseError::Invariant(
                 "Program statements have duplicate source spans".to_string(),
             ));
@@ -88,26 +82,17 @@ where
 
     let mut import_entries = Vec::with_capacity(record.import_entries.len());
     for entry in &record.import_entries {
-        let Some(index) = statement_indices
-            .get(&span_key(entry.statement_span))
-            .copied()
-        else {
+        let Some(index) = statement_indices.get(&span_key(entry.statement_span)).copied() else {
             return Err(ProjectedParseError::Invariant(
                 "import entry does not correspond to a Program statement".to_string(),
             ));
         };
-        append_association(
-            &mut import_entries,
-            &mut statements[index].import_entries,
-            entry,
-        )?;
+        append_association(&mut import_entries, &mut statements[index].import_entries, entry)?;
     }
     let mut import_requests = Vec::with_capacity(record.requested_modules.len());
     for (name, requests) in &record.requested_modules {
         for request in requests.iter().filter(|request| request.is_import) {
-            let Some(index) = statement_indices
-                .get(&span_key(request.statement_span))
-                .copied()
+            let Some(index) = statement_indices.get(&span_key(request.statement_span)).copied()
             else {
                 return Err(ProjectedParseError::Invariant(
                     "import request does not correspond to a Program statement".to_string(),
@@ -134,10 +119,7 @@ where
         .chain(record.indirect_export_entries.iter())
         .chain(record.star_export_entries.iter())
     {
-        let Some(index) = statement_indices
-            .get(&span_key(entry.statement_span))
-            .copied()
-        else {
+        let Some(index) = statement_indices.get(&span_key(entry.statement_span)).copied() else {
             return Err(ProjectedParseError::Invariant(
                 "export entry does not correspond to a Program statement".to_string(),
             ));
@@ -145,12 +127,7 @@ where
         append_association(&mut exports, &mut statements[index].exports, entry)?;
     }
 
-    Ok(ModuleAssociations {
-        statements,
-        import_entries,
-        import_requests,
-        exports,
-    })
+    Ok(ModuleAssociations { statements, import_entries, import_requests, exports })
 }
 
 pub(super) fn serialize_comments(
@@ -184,9 +161,7 @@ pub(super) fn append_diagnostics<'a>(
         let label_start = output.begin_labels()?;
         for label in &diagnostic.labels {
             let start = label.offset();
-            let end = start
-                .checked_add(label.len())
-                .ok_or(TapeBuildError::CapacityOverflow)?;
+            let end = start.checked_add(label.len()).ok_or(TapeBuildError::CapacityOverflow)?;
             output.push_labeled(TapeSpan::new(start, end), label.label(), label.primary())?;
         }
         let labels = output.finish_labels(label_start, label_count)?;
@@ -373,10 +348,7 @@ fn serialize_export_entry(
                     value
                 }
             };
-            Ok(OptionalValueSpanRecord::some(ValueSpanRecord::new(
-                value,
-                span(request.span),
-            )))
+            Ok(OptionalValueSpanRecord::some(ValueSpanRecord::new(value, span(request.span))))
         },
     )?;
     Ok(StaticExportEntryRecord::new(
@@ -499,10 +471,7 @@ mod tests {
         assert_eq!(table.optional_string(record.note), Some("note"));
         assert_eq!(table.optional_string(record.code_scope), Some("scope"));
         assert_eq!(table.optional_string(record.code_number), Some("number"));
-        assert_eq!(
-            table.optional_string(record.url),
-            Some("https://example.invalid")
-        );
+        assert_eq!(table.optional_string(record.url), Some("https://example.invalid"));
         let labels = table.labels(record.labels).expect("labels");
         assert_eq!(labels.len(), 1);
         assert_eq!(labels[0].span, tsrx_tape_schema::TapeSpan::new(2, 5));

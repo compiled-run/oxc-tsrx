@@ -4,8 +4,7 @@ use tsrx_tape_schema::{
 };
 
 fn object(tape: &mut FlatTape) -> RecordIndex {
-    tape.push_object_record(ObjectRecord::default())
-        .expect("object record")
+    tape.push_object_record(ObjectRecord::default()).expect("object record")
 }
 
 fn json_string(tape: &mut FlatTape, value: &str) -> ValueRef {
@@ -14,17 +13,10 @@ fn json_string(tape: &mut FlatTape, value: &str) -> ValueRef {
 
 fn one_field_tape(key: StringRange, value: ValueRef, tape: &mut FlatTape) {
     let field = tape
-        .push_field_record(FieldRecord {
-            key,
-            value,
-            next: RecordIndex::NONE,
-        })
+        .push_field_record(FieldRecord { key, value, next: RecordIndex::NONE })
         .expect("field record");
     let root = tape
-        .push_object_record(ObjectRecord {
-            first_field: field,
-            field_count: 1,
-        })
+        .push_object_record(ObjectRecord { first_field: field, field_count: 1 })
         .expect("root object");
     tape.set_root(ValueRef::object(root));
 }
@@ -33,15 +25,12 @@ fn special_value_tape() -> FlatTape {
     let mut tape = FlatTape::default();
     let literal = object(&mut tape);
     let literal_type = json_string(&mut tape, "Literal");
-    tape.append_field(literal, "type", literal_type)
-        .expect("literal type");
+    tape.append_field(literal, "type", literal_type).expect("literal type");
     let null = tape.push_scalar("null").expect("null scalar");
     let special = ValueRef::scalar(null.as_scalar().expect("scalar range"), true);
-    tape.append_field(literal, "value", special)
-        .expect("literal value");
+    tape.append_field(literal, "value", special).expect("literal value");
     let bigint = json_string(&mut tape, "9007199254740993");
-    tape.append_field(literal, "bigint", bigint)
-        .expect("bigint metadata");
+    tape.append_field(literal, "bigint", bigint).expect("bigint metadata");
 
     let body_value = tape
         .push_list_value_record(ListValueRecord {
@@ -50,17 +39,12 @@ fn special_value_tape() -> FlatTape {
         })
         .expect("body value");
     let body = tape
-        .push_list_record(ListRecord {
-            first_value: body_value,
-            length: 1,
-        })
+        .push_list_record(ListRecord { first_value: body_value, length: 1 })
         .expect("body list");
     let program = object(&mut tape);
     let program_type = json_string(&mut tape, "Program");
-    tape.append_field(program, "type", program_type)
-        .expect("program type");
-    tape.append_field(program, "body", ValueRef::list(body))
-        .expect("program body");
+    tape.append_field(program, "type", program_type).expect("program type");
+    tape.append_field(program, "body", ValueRef::list(body)).expect("program body");
     tape.set_root(ValueRef::object(program));
     tape
 }
@@ -73,21 +57,11 @@ fn packed_keys_transfer_and_fail_closed() {
     let expected = r#"{"version":1,"node":{"position":4294967295},"fixes":[]}"#;
     assert_eq!(tape.program_transfer().expect("packed transfer"), expected);
     tape.compact_reachable().expect("compact packed-key tape");
-    assert_eq!(
-        tape.program_transfer().expect("compacted transfer"),
-        expected
-    );
+    assert_eq!(tape.program_transfer().expect("compacted transfer"), expected);
 
     let mut malformed = FlatTape::default();
-    one_field_tape(
-        StringRange::new(7, u32::MAX),
-        ValueRef::inline_u32(1),
-        &mut malformed,
-    );
-    assert_eq!(
-        malformed.program_transfer(),
-        Err(TapeBuildError::InvalidRecordIndex),
-    );
+    one_field_tape(StringRange::new(7, u32::MAX), ValueRef::inline_u32(1), &mut malformed);
+    assert_eq!(malformed.program_transfer(), Err(TapeBuildError::InvalidRecordIndex),);
 }
 
 #[test]
@@ -100,10 +74,7 @@ fn owned_transfer_matches_borrowed_and_rejects_shared_containers() {
     let mut owned = FlatTape::default();
     let key = owned.push_key("position").expect("packed key");
     one_field_tape(key, ValueRef::inline_u32(42), &mut owned);
-    assert_eq!(
-        owned.program_transfer_owned().expect("owned transfer"),
-        expected
-    );
+    assert_eq!(owned.program_transfer_owned().expect("owned transfer"), expected);
 
     let mut shared = FlatTape::default();
     let child = object(&mut shared);
@@ -119,20 +90,11 @@ fn owned_transfer_matches_borrowed_and_rejects_shared_containers() {
             next: RecordIndex::NONE,
         })
         .expect("second entry");
-    shared
-        .set_list_value_next(first, second)
-        .expect("link entries");
-    let root = shared
-        .push_list_record(ListRecord {
-            first_value: first,
-            length: 2,
-        })
-        .expect("root list");
+    shared.set_list_value_next(first, second).expect("link entries");
+    let root =
+        shared.push_list_record(ListRecord { first_value: first, length: 2 }).expect("root list");
     shared.set_root(ValueRef::list(root));
-    assert_eq!(
-        shared.program_transfer_owned(),
-        Err(TapeBuildError::InvalidRecordIndex),
-    );
+    assert_eq!(shared.program_transfer_owned(), Err(TapeBuildError::InvalidRecordIndex),);
 }
 
 #[test]
@@ -202,10 +164,7 @@ fn compact_value_tags_preserve_scalar_indices_lengths_and_kinds() {
     assert_eq!(empty.as_inline_u32(), None);
 
     let longest_practical = ValueRef::scalar(StringRange::new(u32::MAX, u32::MAX - 5), false);
-    assert_eq!(
-        longest_practical.as_scalar(),
-        Some(StringRange::new(u32::MAX, u32::MAX - 5)),
-    );
+    assert_eq!(longest_practical.as_scalar(), Some(StringRange::new(u32::MAX, u32::MAX - 5)),);
 
     let fix = ValueRef::scalar(StringRange::new(u32::MAX, 4), true);
     assert_eq!(fix.kind(), ValueKind::Scalar);
@@ -240,16 +199,9 @@ fn transfer_is_versioned_and_records_oxc_special_value_paths() {
         r#"{"type":"Literal","value":null,"bigint":"9007199254740993"}"#,
         r#"]},"fixes":[["body",0]]}"#,
     );
+    assert_eq!(special_value_tape().program_transfer().expect("Program transfer"), expected,);
     assert_eq!(
-        special_value_tape()
-            .program_transfer()
-            .expect("Program transfer"),
-        expected,
-    );
-    assert_eq!(
-        special_value_tape()
-            .program_transfer_engine_owned()
-            .expect("engine Program transfer"),
+        special_value_tape().program_transfer_engine_owned().expect("engine Program transfer"),
         expected,
     );
 
@@ -303,9 +255,7 @@ fn transfer_is_versioned_and_records_oxc_special_value_paths() {
 #[test]
 fn binary_transfer_rejects_non_program_roots_and_shared_containers() {
     let mut scalar_root = FlatTape::default();
-    let scalar = scalar_root
-        .push_json_string_scalar("Program")
-        .expect("scalar root");
+    let scalar = scalar_root.push_json_string_scalar("Program").expect("scalar root");
     scalar_root.set_root(scalar);
     assert!(matches!(
         scalar_root.program_transfer_engine_binary_owned(),
@@ -315,12 +265,8 @@ fn binary_transfer_rejects_non_program_roots_and_shared_containers() {
     let mut shared = FlatTape::default();
     let child = object(&mut shared);
     let root = object(&mut shared);
-    shared
-        .append_field(root, "first", ValueRef::object(child))
-        .expect("first child");
-    shared
-        .append_field(root, "second", ValueRef::object(child))
-        .expect("shared child");
+    shared.append_field(root, "first", ValueRef::object(child)).expect("first child");
+    shared.append_field(root, "second", ValueRef::object(child)).expect("shared child");
     shared.set_root(ValueRef::object(root));
     assert!(matches!(
         shared.program_transfer_engine_binary_owned(),
@@ -334,22 +280,15 @@ fn engine_transfer_retains_key_escaping_and_graph_rejection() {
     let key = escaped.push_key("wide\"key\nvalue").expect("escaped key");
     one_field_tape(key, ValueRef::inline_u32(7), &mut escaped);
     assert_eq!(
-        escaped
-            .program_transfer_engine_owned()
-            .expect("escaped engine transfer"),
+        escaped.program_transfer_engine_owned().expect("escaped engine transfer"),
         r#"{"version":1,"node":{"wide\"key\nvalue":7},"fixes":[]}"#,
     );
 
     let mut cyclic = FlatTape::default();
     let cycle = object(&mut cyclic);
-    cyclic
-        .append_field(cycle, "self", ValueRef::object(cycle))
-        .expect("cycle field");
+    cyclic.append_field(cycle, "self", ValueRef::object(cycle)).expect("cycle field");
     cyclic.set_root(ValueRef::object(cycle));
-    assert_eq!(
-        cyclic.program_transfer_engine_owned(),
-        Err(TapeBuildError::InvalidRecordIndex),
-    );
+    assert_eq!(cyclic.program_transfer_engine_owned(), Err(TapeBuildError::InvalidRecordIndex),);
 }
 
 #[test]
@@ -374,8 +313,7 @@ fn transfer_walk_is_iterative_for_deep_programs() {
     let mut value = tape.push_scalar("null").expect("leaf");
     for _ in 0..12_000 {
         let parent = object(&mut tape);
-        tape.append_field(parent, "child", value)
-            .expect("nested child");
+        tape.append_field(parent, "child", value).expect("nested child");
         value = ValueRef::object(parent);
     }
     tape.set_root(value);
@@ -390,14 +328,9 @@ fn transfer_walk_is_iterative_for_deep_programs() {
 fn transfer_rejects_cycles_and_shared_containers() {
     let mut cyclic = FlatTape::default();
     let cycle = object(&mut cyclic);
-    cyclic
-        .append_field(cycle, "self", ValueRef::object(cycle))
-        .expect("cycle field");
+    cyclic.append_field(cycle, "self", ValueRef::object(cycle)).expect("cycle field");
     cyclic.set_root(ValueRef::object(cycle));
-    assert_eq!(
-        cyclic.program_transfer(),
-        Err(TapeBuildError::InvalidRecordIndex),
-    );
+    assert_eq!(cyclic.program_transfer(), Err(TapeBuildError::InvalidRecordIndex),);
 
     let mut shared = FlatTape::default();
     let child = object(&mut shared);
@@ -413,20 +346,11 @@ fn transfer_rejects_cycles_and_shared_containers() {
             next: RecordIndex::NONE,
         })
         .expect("second child");
-    shared
-        .set_list_value_next(first, second)
-        .expect("link shared children");
-    let list = shared
-        .push_list_record(ListRecord {
-            first_value: first,
-            length: 2,
-        })
-        .expect("shared list");
+    shared.set_list_value_next(first, second).expect("link shared children");
+    let list =
+        shared.push_list_record(ListRecord { first_value: first, length: 2 }).expect("shared list");
     shared.set_root(ValueRef::list(list));
-    assert_eq!(
-        shared.program_transfer(),
-        Err(TapeBuildError::InvalidRecordIndex),
-    );
+    assert_eq!(shared.program_transfer(), Err(TapeBuildError::InvalidRecordIndex),);
 }
 
 #[test]
@@ -436,36 +360,20 @@ fn batch_list_removal_preserves_identity_order_and_transfer() {
     let two = tape.push_scalar("2").expect("two");
     let three = tape.push_scalar("3").expect("three");
     let first = tape
-        .push_list_value_record(ListValueRecord {
-            value: one,
-            next: RecordIndex::NONE,
-        })
+        .push_list_value_record(ListValueRecord { value: one, next: RecordIndex::NONE })
         .expect("first entry");
     let second = tape
-        .push_list_value_record(ListValueRecord {
-            value: two,
-            next: RecordIndex::NONE,
-        })
+        .push_list_value_record(ListValueRecord { value: two, next: RecordIndex::NONE })
         .expect("second entry");
     let third = tape
-        .push_list_value_record(ListValueRecord {
-            value: three,
-            next: RecordIndex::NONE,
-        })
+        .push_list_value_record(ListValueRecord { value: three, next: RecordIndex::NONE })
         .expect("third entry");
     tape.set_list_value_next(first, second).expect("first link");
-    tape.set_list_value_next(second, third)
-        .expect("second link");
-    let list = tape
-        .push_list_record(ListRecord {
-            first_value: first,
-            length: 3,
-        })
-        .expect("list");
+    tape.set_list_value_next(second, third).expect("second link");
+    let list = tape.push_list_record(ListRecord { first_value: first, length: 3 }).expect("list");
     tape.set_root(ValueRef::list(list));
 
-    tape.remove_list_values(&[(list, second)])
-        .expect("batch removal");
+    tape.remove_list_values(&[(list, second)]).expect("batch removal");
 
     assert_eq!(tape.list_length(list), Some(2));
     assert_eq!(tape.values(list).collect::<Vec<_>>(), vec![one, three]);
@@ -480,48 +388,27 @@ fn batch_list_removal_fails_before_mutation_for_duplicates_and_shared_entries() 
     let mut duplicate = FlatTape::default();
     let value = duplicate.push_scalar("1").expect("value");
     let entry = duplicate
-        .push_list_value_record(ListValueRecord {
-            value,
-            next: RecordIndex::NONE,
-        })
+        .push_list_value_record(ListValueRecord { value, next: RecordIndex::NONE })
         .expect("entry");
-    let list = duplicate
-        .push_list_record(ListRecord {
-            first_value: entry,
-            length: 1,
-        })
-        .expect("list");
+    let list =
+        duplicate.push_list_record(ListRecord { first_value: entry, length: 1 }).expect("list");
     duplicate.set_root(ValueRef::list(list));
     let before = duplicate.program_transfer().expect("before transfer");
     assert_eq!(
         duplicate.remove_list_values(&[(list, entry), (list, entry)]),
         Err(TapeBuildError::InvalidRecordIndex),
     );
-    assert_eq!(
-        duplicate.program_transfer().expect("after transfer"),
-        before
-    );
+    assert_eq!(duplicate.program_transfer().expect("after transfer"), before);
 
     let mut shared = FlatTape::default();
     let value = shared.push_scalar("1").expect("value");
     let entry = shared
-        .push_list_value_record(ListValueRecord {
-            value,
-            next: RecordIndex::NONE,
-        })
+        .push_list_value_record(ListValueRecord { value, next: RecordIndex::NONE })
         .expect("entry");
-    let left = shared
-        .push_list_record(ListRecord {
-            first_value: entry,
-            length: 1,
-        })
-        .expect("left list");
-    let _right = shared
-        .push_list_record(ListRecord {
-            first_value: entry,
-            length: 1,
-        })
-        .expect("right list");
+    let left =
+        shared.push_list_record(ListRecord { first_value: entry, length: 1 }).expect("left list");
+    let _right =
+        shared.push_list_record(ListRecord { first_value: entry, length: 1 }).expect("right list");
     assert_eq!(
         shared.remove_list_values(&[(left, entry)]),
         Err(TapeBuildError::InvalidRecordIndex),

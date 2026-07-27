@@ -309,10 +309,7 @@ impl Tool for AdapterTool {
         new_options_json: Value,
     ) -> ToolRestartChanges {
         if old_options_json == &new_options_json {
-            return ToolRestartChanges {
-                tool: None,
-                watch_patterns: None,
-            };
+            return ToolRestartChanges { tool: None, watch_patterns: None };
         }
         rebuilt_tool(builder, root_uri, new_options_json)
     }
@@ -337,12 +334,8 @@ impl Tool for AdapterTool {
         range: &Range,
         context: &CodeActionContext,
     ) -> Vec<CodeActionOrCommand> {
-        let Some(cached) = self
-            .sources
-            .read()
-            .expect("editor source cache poisoned")
-            .get(uri.as_str())
-            .cloned()
+        let Some(cached) =
+            self.sources.read().expect("editor source cache poisoned").get(uri.as_str()).cloned()
         else {
             return Vec::new();
         };
@@ -372,10 +365,8 @@ impl Tool for AdapterTool {
             },
             diagnostics,
         };
-        let actions = self
-            .native()
-            .and_then(|native| native.code_actions(&request))
-            .unwrap_or_default();
+        let actions =
+            self.native().and_then(|native| native.code_actions(&request)).unwrap_or_default();
         let sources = self.sources.read().expect("editor source cache poisoned");
         actions
             .into_iter()
@@ -406,22 +397,15 @@ impl Tool for AdapterTool {
     }
 
     fn run_diagnostic_on_change(&self, document: &TextDocument<'_>) -> DiagnosticResult {
-        self.run_diagnostics(document, |tool, document| {
-            tool.diagnostics_on_change(document)
-        })
+        self.run_diagnostics(document, |tool, document| tool.diagnostics_on_change(document))
     }
 
     fn run_diagnostic_on_save(&self, document: &TextDocument<'_>) -> DiagnosticResult {
-        self.run_diagnostics(document, |tool, document| {
-            tool.diagnostics_on_save(document)
-        })
+        self.run_diagnostics(document, |tool, document| tool.diagnostics_on_save(document))
     }
 
     fn remove_uri_cache(&self, uri: &Uri) {
-        self.sources
-            .write()
-            .expect("editor source cache poisoned")
-            .remove(uri.as_str());
+        self.sources.write().expect("editor source cache poisoned").remove(uri.as_str());
         if let Ok(native) = self.native() {
             native.remove_document(uri.as_str());
         }
@@ -460,10 +444,7 @@ impl ToolBuilder for AdapterToolBuilder {
     fn build_boxed(&self, root_uri: &Uri, options: Value) -> Box<dyn Tool> {
         let workspace = Self::workspace(root_uri);
         let patterns = self.factory.watcher_patterns(&workspace, &options);
-        Box::new(AdapterTool::new(
-            self.factory.create(&workspace, &options),
-            patterns,
-        ))
+        Box::new(AdapterTool::new(self.factory.create(&workspace, &options), patterns))
     }
 
     fn shutdown(&self, root_uri: &Uri) {
@@ -499,10 +480,7 @@ pub fn run_editor_server(
 fn rebuilt_tool(builder: &dyn ToolBuilder, root_uri: &Uri, options: Value) -> ToolRestartChanges {
     let tool = builder.build_boxed(root_uri, options.clone());
     let watch_patterns = tool.get_watcher_patterns(options);
-    ToolRestartChanges {
-        tool: Some(tool),
-        watch_patterns: Some(watch_patterns),
-    }
+    ToolRestartChanges { tool: Some(tool), watch_patterns: Some(watch_patterns) }
 }
 
 fn diagnostic_to_lsp(
@@ -524,10 +502,7 @@ fn diagnostic_to_lsp(
                 return None;
             };
             Some(DiagnosticRelatedInformation {
-                location: Location {
-                    uri,
-                    range: related_range,
-                },
+                location: Location { uri, range: related_range },
                 message: related.message,
             })
         })
@@ -583,10 +558,7 @@ fn action_to_lsp(
             EditorActionKind::QuickFix => CodeActionKind::QUICKFIX,
         }),
         diagnostics: None,
-        edit: Some(WorkspaceEdit {
-            changes: Some(changes),
-            ..WorkspaceEdit::default()
-        }),
+        edit: Some(WorkspaceEdit { changes: Some(changes), ..WorkspaceEdit::default() }),
         command: None,
         is_preferred: Some(action.is_preferred),
         disabled: None,
@@ -595,10 +567,7 @@ fn action_to_lsp(
 }
 
 fn text_edit_to_lsp(edit: EditorTextEdit, source: &str) -> Option<TextEdit> {
-    Some(TextEdit {
-        range: editor_range_to_lsp(source, edit.range)?,
-        new_text: edit.new_text,
-    })
+    Some(TextEdit { range: editor_range_to_lsp(source, edit.range)?, new_text: edit.new_text })
 }
 
 fn invalid_edit_error() -> String {
@@ -613,10 +582,7 @@ fn editor_range_to_lsp(source: &str, range: EditorRange) -> Option<Range> {
     {
         return None;
     }
-    Some(Range::new(
-        offset_to_position(source, range.start),
-        offset_to_position(source, range.end),
-    ))
+    Some(Range::new(offset_to_position(source, range.start), offset_to_position(source, range.end)))
 }
 
 fn lsp_range_to_editor(source: &str, range: &Range) -> Option<EditorRange> {
@@ -633,11 +599,7 @@ fn position_to_offset(source: &str, position: tower_lsp_server::ls_types::Positi
     while line < position.line {
         match bytes.get(cursor).copied() {
             Some(b'\r') => {
-                cursor += if bytes.get(cursor + 1) == Some(&b'\n') {
-                    2
-                } else {
-                    1
-                };
+                cursor += if bytes.get(cursor + 1) == Some(&b'\n') { 2 } else { 1 };
                 line += 1;
             }
             Some(b'\n') => {

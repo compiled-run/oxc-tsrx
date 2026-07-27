@@ -125,9 +125,8 @@ impl Utf16WorkObserver for Stage4WorkCounters {
     }
 
     fn record_copy(&mut self, _lane: utf16_result::RepairCopyLane, utf16_units: usize) {
-        self.copied_bytes = self
-            .copied_bytes
-            .saturating_add(utf16_units.saturating_mul(size_of::<u16>()));
+        self.copied_bytes =
+            self.copied_bytes.saturating_add(utf16_units.saturating_mul(size_of::<u16>()));
     }
 }
 
@@ -138,22 +137,14 @@ fn logical_tape_bytes(tape: &FlatTape) -> usize {
             return usize::MAX;
         };
         tape.fields(RecordIndex::new(index))
-            .fold(total, |total, field| {
-                total.saturating_add(tape.key(field).len())
-            })
+            .fold(total, |total, field| total.saturating_add(tape.key(field).len()))
     });
     size_of::<u16>()
         .saturating_add(size_of::<ValueRef>())
-        .saturating_add(
-            tape.object_count()
-                .saturating_mul(size_of::<ObjectRecord>()),
-        )
+        .saturating_add(tape.object_count().saturating_mul(size_of::<ObjectRecord>()))
         .saturating_add(tape.field_count().saturating_mul(size_of::<FieldRecord>()))
         .saturating_add(tape.list_count().saturating_mul(size_of::<ListRecord>()))
-        .saturating_add(
-            tape.list_value_count()
-                .saturating_mul(size_of::<ListValueRecord>()),
-        )
+        .saturating_add(tape.list_value_count().saturating_mul(size_of::<ListValueRecord>()))
         .saturating_add(key_bytes)
         .saturating_add(tape.scalar_storage().len())
 }
@@ -180,9 +171,7 @@ impl TsrxParseResult {
     /// Panics when called on a failed or future recovered result without a Program.
     #[must_use]
     pub fn program(&self) -> &FlatTape {
-        self.program
-            .as_ref()
-            .expect("complete TSRX result must contain a Program")
+        self.program.as_ref().expect("complete TSRX result must contain a Program")
     }
 
     fn complete(
@@ -286,10 +275,7 @@ impl Error for TsrxParseError {}
 impl TsrxParseError {
     #[must_use]
     pub const fn is_resource_exhausted(&self) -> bool {
-        matches!(
-            self,
-            Self::ResourceExhausted(_) | Self::Tape(TapeBuildError::CapacityOverflow)
-        )
+        matches!(self, Self::ResourceExhausted(_) | Self::Tape(TapeBuildError::CapacityOverflow))
     }
 }
 
@@ -580,9 +566,7 @@ fn utf16_rejection_candidate(
             let end = fixup
                 .byte_start
                 .checked_add(3)
-                .ok_or(TsrxParseError::Unsupported(
-                    "active-surrogate byte interval overflow",
-                ))?;
+                .ok_or(TsrxParseError::Unsupported("active-surrogate byte interval overflow"))?;
             Ok::<Utf16Rejection, TsrxParseError>(Utf16Rejection {
                 span: TapeSpan::new(fixup.byte_start, end),
                 message: "unexpected unpaired UTF-16 surrogate in active syntax",
@@ -598,13 +582,13 @@ fn utf16_rejection_candidate(
     let private_module =
         forbidden_rejection_module_name_span(result.rejection_module_names.spans(), source);
     let module = match (public_module, private_module) {
-        (Some(public), Some(private)) => Some(
-            if (private.start, private.end) < (public.start, public.end) {
+        (Some(public), Some(private)) => {
+            Some(if (private.start, private.end) < (public.start, public.end) {
                 private
             } else {
                 public
-            },
-        ),
+            })
+        }
         (Some(span), None) | (None, Some(span)) => Some(span),
         (None, None) => None,
     }
@@ -613,13 +597,13 @@ fn utf16_rejection_candidate(
         message: "An export name cannot include a lone surrogate.",
     });
     Ok(match (active, module) {
-        (Some(active), Some(module)) => Some(
-            if (module.span.start, module.span.end) < (active.span.start, active.span.end) {
+        (Some(active), Some(module)) => {
+            Some(if (module.span.start, module.span.end) < (active.span.start, active.span.end) {
                 module
             } else {
                 active
-            },
-        ),
+            })
+        }
         (Some(active), None) => Some(active),
         (None, Some(module)) => Some(module),
         (None, None) => None,
@@ -642,10 +626,8 @@ fn earlier_grammar_diagnostic(
             TsrxParseError::Adapter("grammar diagnostic has an invalid label range".to_string())
         })?;
         let has_primary = labels.iter().any(|label| label.primary);
-        let causal = labels
-            .iter()
-            .filter(|label| !has_primary || label.primary)
-            .collect::<Vec<_>>();
+        let causal =
+            labels.iter().filter(|label| !has_primary || label.primary).collect::<Vec<_>>();
         if causal.is_empty() {
             continue;
         }
@@ -815,15 +797,9 @@ fn parse_direct<W: Utf16WorkObserver>(
             parsed.rejection_module_names,
         );
     }
-    let program = parsed
-        .program
-        .ok_or(TsrxParseError::Unsupported("missing direct Program"))?;
+    let program = parsed.program.ok_or(TsrxParseError::Unsupported("missing direct Program"))?;
     let module = if retain_module {
-        Some(
-            parsed
-                .module
-                .ok_or(TsrxParseError::Unsupported("missing direct module record"))?,
-        )
+        Some(parsed.module.ok_or(TsrxParseError::Unsupported("missing direct module record"))?)
     } else {
         None
     };
@@ -867,13 +843,9 @@ fn parse_projected<W: Utf16WorkObserver>(
         return Ok(result);
     }
 
-    let dynamic_contract = projected
-        .dynamic_contract()
-        .map(|(prefix, count, original_offsets)| DynamicTagContract {
-            prefix,
-            count,
-            original_offsets,
-        });
+    let dynamic_contract = projected.dynamic_contract().map(|(prefix, count, original_offsets)| {
+        DynamicTagContract { prefix, count, original_offsets }
+    });
 
     let request = ProjectedParseRequest {
         filename: options.filename,
@@ -948,9 +920,7 @@ fn parse_projected<W: Utf16WorkObserver>(
     let prefix = prefix.ok_or(TsrxParseError::Unsupported("missing marker namespace"))?;
     let tape = program.ok_or(TsrxParseError::Unsupported("missing projected Program"))?;
     let projected_module = if retain_module {
-        Some(module.ok_or(TsrxParseError::Unsupported(
-            "missing projected module record",
-        ))?)
+        Some(module.ok_or(TsrxParseError::Unsupported("missing projected module record"))?)
     } else {
         None
     };
@@ -1117,15 +1087,9 @@ fn projection_grammar_result(
         TsrxParseError::ResourceExhausted("ASCII source exceeds the 4 GiB span limit")
     })?;
     if offset > source_len {
-        return Err(TsrxParseError::Unsupported(
-            "scanner diagnostic is outside authored source",
-        ));
+        return Err(TsrxParseError::Unsupported("scanner diagnostic is outside authored source"));
     }
-    let end = if offset < source_len {
-        offset + 1
-    } else {
-        offset
-    };
+    let end = if offset < source_len { offset + 1 } else { offset };
     let metadata =
         parse_failed_tsrx_metadata(source, rejection_metadata(retain_rejection_module_names))
             .map_err(TsrxParseError::from)?;
@@ -1151,11 +1115,7 @@ fn require_one_oxc_parse(parse_count: u32) -> Result<(), TsrxParseError> {
 }
 
 const fn rejection_metadata(retain_module_names: bool) -> RejectionMetadata {
-    if retain_module_names {
-        RejectionMetadata::ModuleNames
-    } else {
-        RejectionMetadata::None
-    }
+    if retain_module_names { RejectionMetadata::ModuleNames } else { RejectionMetadata::None }
 }
 
 fn authored_grammar_result(
@@ -1243,11 +1203,7 @@ mod tests {
     fn grammar_table<const N: usize>(labels: [(TapeSpan, bool); N]) -> DiagnosticTable {
         let mut diagnostics = DiagnosticTable::new();
         let labels = diagnostics
-            .append_labels(
-                labels
-                    .into_iter()
-                    .map(|(span, primary)| (span, None, primary)),
-            )
+            .append_labels(labels.into_iter().map(|(span, primary)| (span, None, primary)))
             .expect("labels");
         diagnostics
             .push_diagnostic(
@@ -1315,10 +1271,7 @@ mod tests {
         original.extend([0xffff, 0xd800]);
         original.extend(";".encode_utf16());
         let prepared = PreparedSource::new(&original).expect("prepared collision source");
-        let candidate_start = prepared
-            .rejected_fixup()
-            .expect("active rejection")
-            .byte_start;
+        let candidate_start = prepared.rejected_fixup().expect("active rejection").byte_start;
 
         let exact = grammar_table([(TapeSpan::new(candidate_start - 3, candidate_start), false)]);
         assert!(
@@ -1379,17 +1332,12 @@ mod tests {
         assert_eq!(result.status, ParseCompleteness::Complete);
         assert!(!result.program().scalar_storage().contains('\u{e000}'));
         let debug = format!("{result:?}").to_ascii_lowercase();
-        assert!(
-            !debug.contains("e000"),
-            "private placeholder leaked: {debug}"
-        );
+        assert!(!debug.contains("e000"), "private placeholder leaked: {debug}");
     }
 
     #[test]
     fn measured_utf16_work_is_zero_beyond_the_owned_ascii_bridge() {
-        let source = "const value=\"plain ASCII\";"
-            .encode_utf16()
-            .collect::<Vec<_>>();
+        let source = "const value=\"plain ASCII\";".encode_utf16().collect::<Vec<_>>();
         let (result, work) = parse_tsrx_utf16_with_options_measured(
             &TsrxUtf16ParseRequest { source: &source },
             TsrxParseOptions::default(),
@@ -1507,10 +1455,7 @@ mod tests {
             .sum::<usize>();
         assert!(expected_codeframe_units > 0);
         assert_eq!(work.codeframe_units, expected_codeframe_units);
-        assert_eq!(
-            work.restored_units(),
-            10 + 6 + 2 + 4 + expected_codeframe_units
-        );
+        assert_eq!(work.restored_units(), 10 + 6 + 2 + 4 + expected_codeframe_units);
         assert_eq!(work.restored_bytes(), work.restored_units() * 2);
         assert_eq!(work.program_compactions, 1);
     }
@@ -1541,11 +1486,7 @@ mod tests {
             );
         }
         let first = units[0].saturating_mul(*counts.last().expect("last count"));
-        let last = units
-            .last()
-            .copied()
-            .expect("last units")
-            .saturating_mul(counts[0]);
+        let last = units.last().copied().expect("last units").saturating_mul(counts[0]);
         assert!(
             last <= first.saturating_mul(2),
             "{label} per-record copy work grew beyond 2x across the retained 8x range"

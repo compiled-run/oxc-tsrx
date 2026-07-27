@@ -54,9 +54,7 @@ fn owned_text_unknown<'env>(
 ) -> napi::Result<Unknown<'env>> {
     packed_text_unknown(
         env,
-        storage
-            .text(range)
-            .ok_or_else(|| invariant("packed string range is invalid"))?,
+        storage.text(range).ok_or_else(|| invariant("packed string range is invalid"))?,
     )
 }
 
@@ -79,10 +77,7 @@ pub(crate) struct OrdinaryJsSpan {
 
 impl From<OrdinarySpan> for OrdinaryJsSpan {
     fn from(value: OrdinarySpan) -> Self {
-        Self {
-            start: value.start,
-            end: value.end,
-        }
+        Self { start: value.start, end: value.end }
     }
 }
 
@@ -95,20 +90,11 @@ pub(crate) struct OrdinaryJsValueSpan {
 
 impl From<OrdinaryValueSpan> for OrdinaryJsValueSpan {
     fn from(value: OrdinaryValueSpan) -> Self {
-        Self {
-            value: value.value,
-            start: value.start,
-            end: value.end,
-        }
+        Self { value: value.value, start: value.start, end: value.end }
     }
 }
 
-#[napi(
-    object,
-    use_nullable = true,
-    object_from_js = false,
-    object_to_js = true
-)]
+#[napi(object, use_nullable = true, object_from_js = false, object_to_js = true)]
 pub(crate) struct OrdinaryJsName {
     pub kind: &'static str,
     pub name: Option<String>,
@@ -122,12 +108,7 @@ fn ordinary_js_name(
     start: Option<u32>,
     end: Option<u32>,
 ) -> OrdinaryJsName {
-    OrdinaryJsName {
-        kind: kind.as_str(),
-        name,
-        start,
-        end,
-    }
+    OrdinaryJsName { kind: kind.as_str(), name, start, end }
 }
 
 impl From<OrdinaryImportName> for OrdinaryJsName {
@@ -190,12 +171,7 @@ impl From<OrdinaryStaticImport> for OrdinaryJsStaticImport {
     }
 }
 
-#[napi(
-    object,
-    use_nullable = true,
-    object_from_js = false,
-    object_to_js = true
-)]
+#[napi(object, use_nullable = true, object_from_js = false, object_to_js = true)]
 pub(crate) struct OrdinaryJsStaticExportEntry {
     pub start: u32,
     pub end: u32,
@@ -246,11 +222,7 @@ pub(crate) struct OrdinaryJsDynamicImport {
 
 impl From<OrdinaryDynamicImport> for OrdinaryJsDynamicImport {
     fn from(value: OrdinaryDynamicImport) -> Self {
-        Self {
-            start: value.start,
-            end: value.end,
-            module_request: value.module_request.into(),
-        }
+        Self { start: value.start, end: value.end, module_request: value.module_request.into() }
     }
 }
 
@@ -293,10 +265,8 @@ pub(super) fn materialize_ordinary_comments(
         value.set_c_named_property(c"value", comment.value)?;
         value.set_c_named_property(c"start", comment.start)?;
         value.set_c_named_property(c"end", comment.end)?;
-        output.set(
-            u32::try_from(index).map_err(|_| invariant("comment index overflow"))?,
-            value,
-        )?;
+        output
+            .set(u32::try_from(index).map_err(|_| invariant("comment index overflow"))?, value)?;
     }
     output.into_unknown(env)
 }
@@ -312,9 +282,7 @@ pub(super) fn materialize_ordinary_diagnostics(
             let mut value = Object::new(env)?;
             value.set_c_named_property(
                 c"message",
-                label
-                    .message
-                    .map_or_else(|| null(env), |message| message.into_unknown(env))?,
+                label.message.map_or_else(|| null(env), |message| message.into_unknown(env))?,
             )?;
             value.set_c_named_property(c"start", label.start)?;
             value.set_c_named_property(c"end", label.end)?;
@@ -373,12 +341,10 @@ pub(super) fn program_transfer_engine_binary(
     tape: FlatTape,
 ) -> napi::Result<NativeProgramTransfer> {
     tape.program_transfer_engine_binary_owned()
-        .map(
-            |ProgramBinaryTransfer { metadata, words }| NativeProgramTransfer {
-                metadata,
-                words: words.into(),
-            },
-        )
+        .map(|ProgramBinaryTransfer { metadata, words }| NativeProgramTransfer {
+            metadata,
+            words: words.into(),
+        })
         .map_err(transfer_error)
 }
 
@@ -389,12 +355,8 @@ pub(super) fn materialize_program(env: &Env, tape: FlatTape) -> napi::Result<Unk
 fn list_slice<T>(values: &[T], range: ListRange) -> napi::Result<&[T]> {
     let start = usize::try_from(range.start).map_err(|_| invariant("list start overflow"))?;
     let length = usize::try_from(range.length).map_err(|_| invariant("list length overflow"))?;
-    let end = start
-        .checked_add(length)
-        .ok_or_else(|| invariant("list range overflow"))?;
-    values
-        .get(start..end)
-        .ok_or_else(|| invariant("packed list range is invalid"))
+    let end = start.checked_add(length).ok_or_else(|| invariant("list range overflow"))?;
+    values.get(start..end).ok_or_else(|| invariant("packed list range is invalid"))
 }
 
 fn value_span<'env>(
@@ -414,10 +376,9 @@ fn optional_value_span<'env>(
     storage: &OwnedPackedTextStorage,
     value: OptionalValueSpanRecord,
 ) -> napi::Result<Unknown<'env>> {
-    value.get().map_or_else(
-        || null(env),
-        |value| value_span(env, storage, value)?.into_unknown(env),
-    )
+    value
+        .get()
+        .map_or_else(|| null(env), |value| value_span(env, storage, value)?.into_unknown(env))
 }
 
 trait ModuleKind {
@@ -474,10 +435,10 @@ fn module_name<'env, K: ModuleKind + Copy>(
     output.set_c_named_property(c"kind", value.kind.name())?;
     output.set_c_named_property(
         c"name",
-        value.name.get().map_or_else(
-            || null(env),
-            |range| owned_text_unknown(env, storage, range),
-        )?,
+        value
+            .name
+            .get()
+            .map_or_else(|| null(env), |range| owned_text_unknown(env, storage, range))?,
     )?;
     let span = value.span.get();
     output.set_c_named_property(
@@ -645,10 +606,8 @@ pub(super) fn materialize_comments(
         comment.set_c_named_property(c"value", owned_text_unknown(env, &storage, record.value)?)?;
         comment.set_c_named_property(c"start", record.span.start)?;
         comment.set_c_named_property(c"end", record.span.end)?;
-        output.set(
-            u32::try_from(index).map_err(|_| invariant("comment index overflow"))?,
-            comment,
-        )?;
+        output
+            .set(u32::try_from(index).map_err(|_| invariant("comment index overflow"))?, comment)?;
     }
     output.into_unknown(env)
 }
@@ -658,10 +617,7 @@ fn optional_diagnostic_text<'env>(
     storage: &OwnedPackedTextStorage,
     value: OptionalStringRange,
 ) -> napi::Result<Unknown<'env>> {
-    value.get().map_or_else(
-        || null(env),
-        |range| owned_text_unknown(env, storage, range),
-    )
+    value.get().map_or_else(|| null(env), |range| owned_text_unknown(env, storage, range))
 }
 
 pub(super) fn materialize_diagnostics(
@@ -700,10 +656,8 @@ pub(super) fn materialize_diagnostics(
                 DiagnosticSeverity::Advice => "Advice",
             },
         )?;
-        diagnostic.set_c_named_property(
-            c"message",
-            owned_text_unknown(env, &storage, record.message)?,
-        )?;
+        diagnostic
+            .set_c_named_property(c"message", owned_text_unknown(env, &storage, record.message)?)?;
         diagnostic.set_c_named_property(c"labels", js_labels)?;
         diagnostic.set_c_named_property(
             c"helpMessage",

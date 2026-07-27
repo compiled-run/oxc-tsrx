@@ -16,10 +16,7 @@ fn assert_for_head(
     has_empty: bool,
 ) {
     require_type(tape, node, "JSXForExpression");
-    assert_eq!(
-        scalar_field(tape, node, "statementType"),
-        format!(r#""{statement_type}""#)
-    );
+    assert_eq!(scalar_field(tape, node, "statementType"), format!(r#""{statement_type}""#));
     assert_eq!(span(tape, node), expected_span);
     let body = object_field(tape, node, "body");
     require_type(tape, body, "BlockStatement");
@@ -119,10 +116,7 @@ fn preserves_classic_for_fields_and_absent_for_of_fields() {
     assert_for_head(tape, loop_node, (15, 44), "ForStatement", (36, 44), false);
     assert_eq!(span(tape, object_field(tape, loop_node, "init")), (20, 27));
     assert_eq!(span(tape, object_field(tape, loop_node, "test")), (28, 31));
-    assert_eq!(
-        span(tape, object_field(tape, loop_node, "update")),
-        (32, 35)
-    );
+    assert_eq!(span(tape, object_field(tape, loop_node, "update")), (32, 35));
     for absent in ["await", "left", "right", "index", "key"] {
         assert!(optional_field(tape, loop_node, absent).is_none());
     }
@@ -184,10 +178,8 @@ fn reconstructs_index_key_and_empty_annotations_from_authored_nodes() {
 
 #[test]
 fn composes_a_nested_if_inside_a_jsx_child_for() {
-    let source = concat!(
-        "function View() @{<main>@for(const x of xs)",
-        "{@if(x){<b/>}@else{<i/>}}</main>}"
-    );
+    let source =
+        concat!("function View() @{<main>@for(const x of xs)", "{@if(x){<b/>}@else{<i/>}}</main>}");
     let result = parse_tsrx(&TsrxParseRequest { source }).expect("nested @for and @if");
     let tape = result.program();
     let function = one_object(&program_body(tape));
@@ -254,10 +246,7 @@ fn preserves_projection_header_ordinals_for_nested_annotated_loops() {
     let render = object_field(tape, code_block, "render");
     let outer = one_object(&list_field(tape, render, "children"));
     require_type(tape, outer, "JSXForExpression");
-    assert_eq!(
-        scalar_field(tape, object_field(tape, outer, "index"), "name"),
-        r#""i""#
-    );
+    assert_eq!(scalar_field(tape, object_field(tape, outer, "index"), "name"), r#""i""#);
     assert!(optional_field(tape, outer, "key").is_none());
 
     let outer_body = object_field(tape, outer, "body");
@@ -266,9 +255,6 @@ fn preserves_projection_header_ordinals_for_nested_annotated_loops() {
     assert_eq!(tape.scalar(field(tape, inner, "index")), Some("null"));
     let key = object_field(tape, inner, "key");
     require_type(tape, key, "MemberExpression");
-    assert_eq!(
-        scalar_field(tape, object_field(tape, key, "property"), "name"),
-        r#""id""#
-    );
+    assert_eq!(scalar_field(tape, object_field(tape, key, "property"), "name"), r#""id""#);
     assert_no_scaffold(tape);
 }

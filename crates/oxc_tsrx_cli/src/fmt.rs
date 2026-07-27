@@ -111,9 +111,7 @@ impl FormatBatch {
     }
 
     fn changed_paths(&self) -> Vec<String> {
-        self.changed()
-            .map(|file| file.path.display().to_string())
-            .collect()
+        self.changed().map(|file| file.path.display().to_string()).collect()
     }
 }
 
@@ -136,22 +134,12 @@ pub fn run_cli(arguments: Vec<String>) -> ExitCode {
 
 fn run(arguments: impl Iterator<Item = String>) -> Result<u8, String> {
     let arguments = arguments.collect::<Vec<_>>();
-    if arguments
-        .iter()
-        .any(|argument| matches!(argument.as_str(), "-h" | "--help"))
-    {
+    if arguments.iter().any(|argument| matches!(argument.as_str(), "-h" | "--help")) {
         print!("{HELP}");
         return Ok(0);
     }
-    if arguments
-        .iter()
-        .any(|argument| matches!(argument.as_str(), "-V" | "--version"))
-    {
-        println!(
-            "oxc-tsrx-fmt {} (OXC {})",
-            env!("CARGO_PKG_VERSION"),
-            tsrx_format::OXC_REVISION
-        );
+    if arguments.iter().any(|argument| matches!(argument.as_str(), "-V" | "--version")) {
+        println!("oxc-tsrx-fmt {} (OXC {})", env!("CARGO_PKG_VERSION"), tsrx_format::OXC_REVISION);
         return Ok(0);
     }
     let args = parse_args(arguments.into_iter())?;
@@ -190,10 +178,7 @@ fn run(arguments: impl Iterator<Item = String>) -> Result<u8, String> {
         ),
         FileMode::ListDifferent => batch.changed_paths().join("\n"),
         FileMode::Write if failed => String::new(),
-        FileMode::Write => format!(
-            "{}\n",
-            finished_line(elapsed_ms, batch.considered(), threads)
-        ),
+        FileMode::Write => format!("{}\n", finished_line(elapsed_ms, batch.considered(), threads)),
     };
     io::stdout()
         .write_all(report.as_bytes())
@@ -246,11 +231,8 @@ fn check_report(
     if !changed.is_empty() {
         report.push_str("\n\n");
     }
-    let verdict = if changed.is_empty() {
-        ALL_CLEAR.to_string()
-    } else {
-        issues_verdict(changed.len())
-    };
+    let verdict =
+        if changed.is_empty() { ALL_CLEAR.to_string() } else { issues_verdict(changed.len()) };
     report.push_str(&verdict);
     report.push('\n');
     report.push_str(&finished_line(elapsed_ms, considered, threads));
@@ -370,9 +352,7 @@ fn set_threads(target: &mut Option<usize>, value: &str) -> Result<(), String> {
     if target.is_some() {
         return Err("--threads may be specified only once".to_string());
     }
-    let parsed = value
-        .parse::<usize>()
-        .map_err(|_| format!("invalid --threads value: {value}"))?;
+    let parsed = value.parse::<usize>().map_err(|_| format!("invalid --threads value: {value}"))?;
     if parsed == 0 {
         return Err("--threads must be at least 1".to_string());
     }
@@ -420,11 +400,7 @@ fn format_files(
                 let output = session
                     .format_text(&path, &source)
                     .map_err(|error| format!("{}: {error}", path.display()))?;
-                Ok(FormattedFile {
-                    path,
-                    output,
-                    duration_ms: started.elapsed().as_millis(),
-                })
+                Ok(FormattedFile { path, output, duration_ms: started.elapsed().as_millis() })
             })
             // A per-path `Result` collected into a `Vec` rather than into a `Result<Vec<_>>`:
             // the short-circuiting collect discarded every other file's work as soon as one
@@ -456,10 +432,7 @@ fn format_files(
 /// Stages every changed output next to its source, then swaps all originals through backups.
 /// Any recoverable staging or rename error restores the original bytes before returning.
 fn commit_all(files: &[FormattedFile]) -> Result<(), String> {
-    let changed = files
-        .iter()
-        .filter(|file| file.output.changed)
-        .collect::<Vec<_>>();
+    let changed = files.iter().filter(|file| file.output.changed).collect::<Vec<_>>();
     if changed.is_empty() {
         return Ok(());
     }
@@ -472,10 +445,7 @@ fn commit_all(files: &[FormattedFile]) -> Result<(), String> {
             .is_symlink()
         {
             cleanup_staged(&staged);
-            return Err(format!(
-                "refusing to replace symbolic link {}",
-                file.path.display()
-            ));
+            return Err(format!("refusing to replace symbolic link {}", file.path.display()));
         }
         match stage_file(file, index) {
             Ok(value) => staged.push(value),
@@ -490,10 +460,7 @@ fn commit_all(files: &[FormattedFile]) -> Result<(), String> {
         if let Err(error) = fs::rename(&item.path, &item.backup) {
             restore_backups(&staged[..backed_up]);
             cleanup_staged(&staged);
-            return Err(format!(
-                "unable to stage original {}: {error}",
-                item.path.display()
-            ));
+            return Err(format!("unable to stage original {}: {error}", item.path.display()));
         }
     }
 
@@ -504,10 +471,7 @@ fn commit_all(files: &[FormattedFile]) -> Result<(), String> {
             }
             restore_backups(&staged);
             cleanup_staged(&staged);
-            return Err(format!(
-                "unable to install formatted {}: {error}",
-                item.path.display()
-            ));
+            return Err(format!("unable to install formatted {}: {error}", item.path.display()));
         }
     }
 
@@ -524,15 +488,9 @@ fn commit_all(files: &[FormattedFile]) -> Result<(), String> {
 
 fn stage_file(file: &FormattedFile, index: usize) -> Result<StagedFile, String> {
     let parent = file.path.parent().unwrap_or_else(|| Path::new("."));
-    let name = file
-        .path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .ok_or_else(|| {
-            format!(
-                "source path has no UTF-8 file name: {}",
-                file.path.display()
-            )
+    let name =
+        file.path.file_name().and_then(|name| name.to_str()).ok_or_else(|| {
+            format!("source path has no UTF-8 file name: {}", file.path.display())
         })?;
     let identity = format!("{}-{index}", std::process::id());
     let temporary = parent.join(format!(".{name}.oxc-tsrx-{identity}.tmp"));
@@ -561,11 +519,7 @@ fn stage_file(file: &FormattedFile, index: usize) -> Result<StagedFile, String> 
         return Err(format!("unable to stage {}: {error}", file.path.display()));
     }
 
-    Ok(StagedFile {
-        path: file.path.clone(),
-        backup,
-        temporary,
-    })
+    Ok(StagedFile { path: file.path.clone(), backup, temporary })
 }
 
 fn restore_backups(items: &[StagedFile]) {
@@ -595,10 +549,8 @@ mod tests {
 
     fn scratch_directory(label: &str) -> PathBuf {
         let unique = COUNTER.fetch_add(1, Ordering::Relaxed);
-        let directory = env::temp_dir().join(format!(
-            "oxc-tsrx-fmt-{label}-{}-{unique}",
-            std::process::id()
-        ));
+        let directory =
+            env::temp_dir().join(format!("oxc-tsrx-fmt-{label}-{}-{unique}", std::process::id()));
         fs::create_dir_all(&directory).expect("scratch directory");
         directory
     }
@@ -631,10 +583,7 @@ mod tests {
         assert_eq!(report, "Checking formatting...\n\na.tsrx (0ms)");
         assert!(!report.contains("All matched files"));
         assert!(!report.contains("Finished in"));
-        assert_eq!(
-            check_report(&[], 1, 12, 4, true),
-            "Checking formatting...\n\n"
-        );
+        assert_eq!(check_report(&[], 1, 12, 4, true), "Checking formatting...\n\n");
     }
 
     #[test]
@@ -644,20 +593,13 @@ mod tests {
         let dirty = directory.join("Dirty.tsrx");
         let broken = directory.join("Broken.tsrx");
         fs::write(&clean, "export function Clean() @{\n  <p>a</p>;\n}\n").expect("clean");
-        fs::write(
-            &dirty,
-            "export function Dirty( ) @{\n     let x   = 1;\n}\n",
-        )
-        .expect("dirty");
+        fs::write(&dirty, "export function Dirty( ) @{\n     let x   = 1;\n}\n").expect("dirty");
         fs::write(&broken, "export function Broken() @{\n  <main>\n}\n").expect("broken");
 
         let session = FormatSession::new_with_config_base(&directory, None, None).expect("session");
-        let batch = format_files(
-            &session,
-            vec![clean.clone(), broken.clone(), dirty.clone()],
-            Some(1),
-        )
-        .expect("batch");
+        let batch =
+            format_files(&session, vec![clean.clone(), broken.clone(), dirty.clone()], Some(1))
+                .expect("batch");
 
         assert_eq!(batch.failures.len(), 1, "{:?}", batch.failures);
         assert!(
@@ -668,11 +610,7 @@ mod tests {
         assert_eq!(batch.considered(), 3);
         // Argument order survives, so the failed path still sits between its neighbours.
         assert_eq!(
-            batch
-                .formatted
-                .iter()
-                .map(|file| file.path.clone())
-                .collect::<Vec<_>>(),
+            batch.formatted.iter().map(|file| file.path.clone()).collect::<Vec<_>>(),
             vec![clean.clone(), dirty.clone()]
         );
         assert_eq!(batch.changed_paths(), vec![dirty.display().to_string()]);

@@ -83,9 +83,8 @@ impl Scanner<'_> {
                 index -= 1;
             }
             if index >= 2 && self.bytes.get(index - 2..index) == Some(b"*/") {
-                let Some(comment_start) = self.bytes[..index - 2]
-                    .windows(2)
-                    .rposition(|window| window == b"/*")
+                let Some(comment_start) =
+                    self.bytes[..index - 2].windows(2).rposition(|window| window == b"/*")
                 else {
                     break;
                 };
@@ -97,10 +96,8 @@ impl Scanner<'_> {
                 .rposition(|byte| matches!(byte, b'\n' | b'\r'))
                 .map_or(0, |position| position + 1);
             let line = &self.bytes[line_start..index];
-            let first = line
-                .iter()
-                .position(|byte| !byte.is_ascii_whitespace())
-                .unwrap_or(line.len());
+            let first =
+                line.iter().position(|byte| !byte.is_ascii_whitespace()).unwrap_or(line.len());
             if line.get(first..first + 2) == Some(b"//") {
                 index = line_start;
                 continue;
@@ -288,11 +285,7 @@ impl Scanner<'_> {
         loop {
             if let Some(width) = self.identifier_continue_width(index) {
                 index += width;
-            } else if self
-                .bytes
-                .get(index)
-                .is_some_and(|byte| matches!(byte, b'.' | b':' | b'-'))
-            {
+            } else if self.bytes.get(index).is_some_and(|byte| matches!(byte, b'.' | b':' | b'-')) {
                 index += 1;
             } else {
                 return index;
@@ -302,10 +295,7 @@ impl Scanner<'_> {
 
     pub(super) fn looks_like_jsx_start(&self, index: usize) -> bool {
         self.identifier_start_width(index + 1).is_some()
-            || self
-                .bytes
-                .get(index + 1)
-                .is_some_and(|byte| matches!(byte, b'>' | b'{'))
+            || self.bytes.get(index + 1).is_some_and(|byte| matches!(byte, b'>' | b'{'))
     }
 }
 
@@ -376,16 +366,11 @@ pub(super) fn find_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
     if needle.is_empty() {
         return Some(0);
     }
-    haystack
-        .windows(needle.len())
-        .position(|window| window == needle)
+    haystack.windows(needle.len()).position(|window| window == needle)
 }
 
 pub(super) fn previous_significant_byte(bytes: &[u8], before: usize) -> Option<u8> {
-    bytes[..before]
-        .iter()
-        .rfind(|byte| !byte.is_ascii_whitespace())
-        .copied()
+    bytes[..before].iter().rfind(|byte| !byte.is_ascii_whitespace()).copied()
 }
 
 pub(super) fn unsupported_at_construct(bytes: &[u8], index: usize) -> Option<&'static str> {
@@ -398,25 +383,16 @@ pub(super) fn unsupported_at_construct(bytes: &[u8], index: usize) -> Option<&'s
 }
 
 pub(super) fn jsx_text_looks_structural(bytes: &[u8], index: usize) -> bool {
-    [b"if".as_slice(), b"for", b"switch", b"try"]
-        .iter()
-        .any(|keyword| {
-            let end = index + 1 + keyword.len();
-            if bytes.get(index + 1..end) != Some(*keyword) || !keyword_boundary(&bytes[end..]) {
-                return false;
-            }
-            bytes[end..]
-                .iter()
-                .find(|byte| !byte.is_ascii_whitespace())
-                .copied()
-                == Some(b'(')
-                || (*keyword == b"try"
-                    && bytes[end..]
-                        .iter()
-                        .find(|byte| !byte.is_ascii_whitespace())
-                        .copied()
-                        == Some(b'{'))
-        })
+    [b"if".as_slice(), b"for", b"switch", b"try"].iter().any(|keyword| {
+        let end = index + 1 + keyword.len();
+        if bytes.get(index + 1..end) != Some(*keyword) || !keyword_boundary(&bytes[end..]) {
+            return false;
+        }
+        bytes[end..].iter().find(|byte| !byte.is_ascii_whitespace()).copied() == Some(b'(')
+            || (*keyword == b"try"
+                && bytes[end..].iter().find(|byte| !byte.is_ascii_whitespace()).copied()
+                    == Some(b'{'))
+    })
 }
 
 #[inline]
@@ -461,9 +437,7 @@ fn is_identifier_continue_slow(suffix: &[u8]) -> bool {
                     _ => return false,
                 };
                 has_digit = true;
-                let Some(next) = value
-                    .checked_mul(16)
-                    .and_then(|value| value.checked_add(digit))
+                let Some(next) = value.checked_mul(16).and_then(|value| value.checked_add(digit))
                 else {
                     return false;
                 };
@@ -552,9 +526,7 @@ mod tests {
         ] {
             assert!(keyword_boundary(suffix), "{suffix:?}");
         }
-        assert!(!keyword_boundary(
-            br"\u{000000000000000000000000000000000000000000000003c0}"
-        ));
+        assert!(!keyword_boundary(br"\u{000000000000000000000000000000000000000000000003c0}"));
     }
 
     #[test]

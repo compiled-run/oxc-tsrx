@@ -95,21 +95,16 @@ pub fn format(request: &FormatRequest<'_>) -> Result<EngineFormatResult, String>
     let started = Instant::now();
     let parsed = parse_for_format(&allocator, request.parse_source, source_type);
     if !parsed.diagnostics.is_empty() {
-        let errors = parsed
-            .diagnostics
-            .iter()
-            .map(ToString::to_string)
-            .collect::<Vec<_>>()
-            .join("; ");
+        let errors =
+            parsed.diagnostics.iter().map(ToString::to_string).collect::<Vec<_>>().join("; ");
         return Err(format!("OXC formatter parse failed: {errors}"));
     }
     validate_dynamic_tags(&parsed.program, request.dynamic_tags)?;
     let parse_ns = elapsed_ns(started);
 
     let started = Instant::now();
-    let options = request
-        .options
-        .map_or_else(|| Ok(JsFormatOptions::default()), js_format_options)?;
+    let options =
+        request.options.map_or_else(|| Ok(JsFormatOptions::default()), js_format_options)?;
     let code = format_program(&allocator, &parsed.program, options, None)
         .print()
         .map_err(|error| format!("OXC formatter print failed: {error}"))?
@@ -118,10 +113,7 @@ pub fn format(request: &FormatRequest<'_>) -> Result<EngineFormatResult, String>
 
     Ok(EngineFormatResult {
         code,
-        timings: FormatEngineTimings {
-            parse_ns,
-            format_ns,
-        },
+        timings: FormatEngineTimings { parse_ns, format_ns },
         parse_count: 1,
     })
 }
@@ -129,11 +121,7 @@ pub fn format(request: &FormatRequest<'_>) -> Result<EngineFormatResult, String>
 fn js_format_options(options: &FormatOptions) -> Result<JsFormatOptions, String> {
     let mut resolved = JsFormatOptions::default();
     if let Some(use_tabs) = options.use_tabs {
-        resolved.indent_style = if use_tabs {
-            IndentStyle::Tab
-        } else {
-            IndentStyle::Space
-        };
+        resolved.indent_style = if use_tabs { IndentStyle::Tab } else { IndentStyle::Space };
     }
     if let Some(width) = options.tab_width {
         resolved.indent_width = IndentWidth::try_from(width)
@@ -148,18 +136,10 @@ fn js_format_options(options: &FormatOptions) -> Result<JsFormatOptions, String>
             .map_err(|error| format!("invalid Oxfmt printWidth {width}: {error}"))?;
     }
     if let Some(single) = options.single_quote {
-        resolved.quote_style = if single {
-            QuoteStyle::Single
-        } else {
-            QuoteStyle::Double
-        };
+        resolved.quote_style = if single { QuoteStyle::Single } else { QuoteStyle::Double };
     }
     if let Some(single) = options.jsx_single_quote {
-        resolved.jsx_quote_style = if single {
-            QuoteStyle::Single
-        } else {
-            QuoteStyle::Double
-        };
+        resolved.jsx_quote_style = if single { QuoteStyle::Single } else { QuoteStyle::Double };
     }
     if let Some(value) = &options.quote_props {
         resolved.quote_properties = QuoteProperties::from_str(value)
@@ -170,11 +150,7 @@ fn js_format_options(options: &FormatOptions) -> Result<JsFormatOptions, String>
             .map_err(|error| format!("invalid Oxfmt trailingComma `{value}`: {error}"))?;
     }
     if let Some(semi) = options.semi {
-        resolved.semicolons = if semi {
-            Semicolons::Always
-        } else {
-            Semicolons::AsNeeded
-        };
+        resolved.semicolons = if semi { Semicolons::Always } else { Semicolons::AsNeeded };
     }
     if let Some(value) = &options.arrow_parens {
         resolved.arrow_parentheses = match value.as_str() {
@@ -201,11 +177,8 @@ fn js_format_options(options: &FormatOptions) -> Result<JsFormatOptions, String>
         };
     }
     if let Some(single_attribute) = options.single_attribute_per_line {
-        resolved.attribute_position = if single_attribute {
-            AttributePosition::Multiline
-        } else {
-            AttributePosition::Auto
-        };
+        resolved.attribute_position =
+            if single_attribute { AttributePosition::Multiline } else { AttributePosition::Auto };
     }
     if let Some(value) = &options.embedded_language_formatting {
         resolved.embedded_language_formatting = EmbeddedLanguageFormatting::from_str(value)
@@ -324,13 +297,8 @@ impl LintEngine {
             Some(source) => Oxlintrc::from_string(source).map_err(|error| error.to_string())?,
             None => Oxlintrc::default(),
         };
-        let options = LintEngineOptions {
-            cwd,
-            config_path: None,
-            config_base: None,
-            filters,
-            collect_fixes,
-        };
+        let options =
+            LintEngineOptions { cwd, config_path: None, config_base: None, filters, collect_fixes };
         Self::build(config, None, &options, false, false, started)
     }
 
@@ -342,14 +310,7 @@ impl LintEngine {
         let started = Instant::now();
         let (config, config_path) =
             load_oxlintrc(options.cwd, options.config_path, options.config_base)?;
-        Self::build(
-            config,
-            config_path,
-            options,
-            type_aware,
-            requested_type_check,
-            started,
-        )
+        Self::build(config, config_path, options, type_aware, requested_type_check, started)
     }
 
     fn build(
@@ -397,11 +358,7 @@ impl LintEngine {
         let deny_warnings = config_store.deny_warnings();
         let max_warnings = config_store.max_warnings();
         let lint_options = LintOptions {
-            fix: if options.collect_fixes {
-                FixKind::SafeFix
-            } else {
-                FixKind::None
-            },
+            fix: if options.collect_fixes { FixKind::SafeFix } else { FixKind::None },
             ..LintOptions::default()
         };
         let linter = Linter::new(lint_options, config_store.clone(), None);
@@ -560,10 +517,7 @@ pub fn lint(request: &LintRequest<'_>) -> Result<LintResult, String> {
     let filters = request
         .rules
         .iter()
-        .map(|name| RuleFilter {
-            severity: RuleSeverity::Deny,
-            name: name.clone(),
-        })
+        .map(|name| RuleFilter { severity: RuleSeverity::Deny, name: name.clone() })
         .collect::<Vec<_>>();
     let engine = LintEngine::new(&LintEngineOptions {
         cwd: request.path.parent().unwrap_or_else(|| Path::new(".")),
@@ -591,12 +545,8 @@ impl LintEngine {
         let started = Instant::now();
         let mut parsed = Parser::new(&allocator, request.parse_source, source_type).parse();
         if !parsed.diagnostics.is_empty() {
-            let errors = parsed
-                .diagnostics
-                .iter()
-                .map(ToString::to_string)
-                .collect::<Vec<_>>()
-                .join("; ");
+            let errors =
+                parsed.diagnostics.iter().map(ToString::to_string).collect::<Vec<_>>().join("; ");
             return Err(format!("OXC parse failed: {errors}"));
         }
         validate_dynamic_tags(&parsed.program, request.dynamic_tags)?;
@@ -621,20 +571,13 @@ impl LintEngine {
         let semantic = semantic_return.semantic;
 
         let started = Instant::now();
-        let module_record = Arc::new(ModuleRecord::new(
-            request.path,
-            &parsed.module_record,
-            &semantic,
-        ));
+        let module_record =
+            Arc::new(ModuleRecord::new(request.path, &parsed.module_record, &semantic));
         let mut context_options = ContextSubHostOptions::default();
         context_options.respect_eslint_disable_directives =
             self.config_store.respect_eslint_disable_directives();
-        let context_sub_hosts = vec![ContextSubHost::new(
-            semantic,
-            module_record,
-            0,
-            context_options,
-        )];
+        let context_sub_hosts =
+            vec![ContextSubHost::new(semantic, module_record, 0, context_options)];
         let (messages, disable_directives) = if self.type_aware_enabled() {
             self.linter.run_with_disable_directives::<false>(
                 request.path,
@@ -644,10 +587,7 @@ impl LintEngine {
                 None,
             )
         } else {
-            (
-                self.linter.run(request.path, context_sub_hosts, &allocator),
-                None,
-            )
+            (self.linter.run(request.path, context_sub_hosts, &allocator), None)
         };
         let lint_ns = elapsed_ns(started);
 
@@ -655,11 +595,7 @@ impl LintEngine {
 
         Ok(LintResult {
             diagnostics,
-            timings: EngineTimings {
-                parse_ns,
-                semantic_ns,
-                lint_ns,
-            },
+            timings: EngineTimings { parse_ns, semantic_ns, lint_ns },
             parse_count: 1,
             disable_directives,
         })
@@ -676,27 +612,19 @@ impl LintEngine {
             return Err("type-aware linting requires the explicit opt-in".to_string());
         }
         if request.collect_fixes != self.collect_fixes {
-            return Err(
-                "type-aware lint request fix mode differs from the compiled lint session"
-                    .to_string(),
-            );
+            return Err("type-aware lint request fix mode differs from the compiled lint session"
+                .to_string());
         }
         let started = Instant::now();
         let state = TsGoLintState::try_new(
             &self.cwd,
             self.config_store.clone(),
-            if request.collect_fixes {
-                FixKind::SafeFix
-            } else {
-                FixKind::None
-            },
+            if request.collect_fixes { FixKind::SafeFix } else { FixKind::None },
         )?
         .with_silent(true)
         .with_type_check(self.type_check_enabled());
-        let file_system = ProjectedFileSystem {
-            path: request.virtual_path,
-            source: request.projected_source,
-        };
+        let file_system =
+            ProjectedFileSystem { path: request.virtual_path, source: request.projected_source };
         let mut directives = FxHashMap::default();
         if let Some(disable_directives) = request.disable_directives {
             directives.insert(request.virtual_path.to_path_buf(), disable_directives);
@@ -730,10 +658,8 @@ impl LintEngine {
             return Err("type-aware linting requires the explicit opt-in".to_string());
         }
         if collect_fixes != self.collect_fixes {
-            return Err(
-                "type-aware lint request fix mode differs from the compiled lint session"
-                    .to_string(),
-            );
+            return Err("type-aware lint request fix mode differs from the compiled lint session"
+                .to_string());
         }
         let started = Instant::now();
         let prepared = prepare_type_batch(self, files)?;
@@ -747,11 +673,7 @@ impl LintEngine {
         let executable = find_tsgolint_executable(&self.cwd)?;
         verify_tsgolint_version(&executable)?;
         let diagnostics = run_type_protocol(&executable, collect_fixes, &prepared)?;
-        Ok(TypeBatchResult {
-            diagnostics,
-            elapsed_ns: elapsed_ns(started),
-            process_count: 1,
-        })
+        Ok(TypeBatchResult { diagnostics, elapsed_ns: elapsed_ns(started), process_count: 1 })
     }
 }
 
@@ -779,10 +701,7 @@ impl RuntimeFileSystem for ProjectedFileSystem<'_> {
     fn write_file(&self, path: &Path, _content: &str) -> Result<(), io::Error> {
         Err(io::Error::new(
             io::ErrorKind::PermissionDenied,
-            format!(
-                "type-aware source overrides are read-only: {}",
-                path.display()
-            ),
+            format!("type-aware source overrides are read-only: {}", path.display()),
         ))
     }
 }
@@ -856,10 +775,7 @@ fn resolved_protocol_rules(
             }
             None => None,
         };
-        rules.push(ProtocolRule {
-            name: rule.name().to_string(),
-            options,
-        });
+        rules.push(ProtocolRule { name: rule.name().to_string(), options });
         severities.insert(rule.name().to_string(), *severity);
     }
     rules.sort_by(|left, right| {
@@ -878,36 +794,25 @@ fn run_type_protocol(
     prepared: &PreparedTypeBatch<'_>,
 ) -> Result<Vec<TypeBatchDiagnostic>, String> {
     let mut command = Command::new(executable);
-    command
-        .arg("headless")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::inherit());
+    command.arg("headless").stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::inherit());
     if collect_fixes {
         // Suggestions remain visible but are marked non-safe by `protocol_diagnostic`.
         command.args(["-fix", "-fix-suggestions"]);
     }
     let mut child = command.spawn().map_err(|error| {
-        format!(
-            "unable to start supported tsgolint at {}: {error}",
-            executable.display()
-        )
+        format!("unable to start supported tsgolint at {}: {error}", executable.display())
     })?;
     let encoded = serde_json::to_vec(&prepared.payload)
         .map_err(|error| format!("unable to encode tsgolint protocol v2 payload: {error}"))?;
-    let mut stdin = child
-        .stdin
-        .take()
-        .ok_or_else(|| "tsgolint did not expose stdin".to_string())?;
+    let mut stdin =
+        child.stdin.take().ok_or_else(|| "tsgolint did not expose stdin".to_string())?;
     stdin
         .write_all(&encoded)
         .map_err(|error| format!("unable to transfer in-memory TSRX sources: {error}"))?;
     drop(stdin);
 
-    let mut stdout = child
-        .stdout
-        .take()
-        .ok_or_else(|| "tsgolint did not expose stdout".to_string())?;
+    let mut stdout =
+        child.stdout.take().ok_or_else(|| "tsgolint did not expose stdout".to_string())?;
     let mut diagnostics = Vec::new();
     let mut protocol_error = None;
     while let Some(frame) = read_protocol_frame(&mut stdout)? {
@@ -926,9 +831,7 @@ fn run_type_protocol(
             kind => return Err(format!("unsupported tsgolint protocol frame type {kind}")),
         }
     }
-    let status = child
-        .wait()
-        .map_err(|error| format!("unable to wait for tsgolint: {error}"))?;
+    let status = child.wait().map_err(|error| format!("unable to wait for tsgolint: {error}"))?;
     if let Some(error) = protocol_error {
         return Err(format!("tsgolint protocol error: {error}"));
     }
@@ -1045,10 +948,7 @@ fn read_protocol_frame(reader: &mut impl Read) -> Result<Option<ProtocolFrame>, 
     reader
         .read_exact(&mut payload)
         .map_err(|error| format!("truncated tsgolint frame payload: {error}"))?;
-    Ok(Some(ProtocolFrame {
-        kind: kind[0],
-        payload,
-    }))
+    Ok(Some(ProtocolFrame { kind: kind[0], payload }))
 }
 
 fn protocol_diagnostic(
@@ -1106,18 +1006,14 @@ fn protocol_diagnostic(
                 safe: true,
             })
             .collect::<Vec<_>>();
-        fixes.extend(
-            message
-                .suggestions
-                .into_iter()
-                .flat_map(|suggestion| suggestion.fixes)
-                .map(|fix| EngineFix {
-                    offset: fix.range.pos,
-                    length: fix.range.end.saturating_sub(fix.range.pos),
-                    replacement: fix.text,
-                    safe: false,
-                }),
-        );
+        fixes.extend(message.suggestions.into_iter().flat_map(|suggestion| suggestion.fixes).map(
+            |fix| EngineFix {
+                offset: fix.range.pos,
+                length: fix.range.end.saturating_sub(fix.range.pos),
+                replacement: fix.text,
+                safe: false,
+            },
+        ));
         Some(TypeBatchDiagnostic {
             virtual_path,
             diagnostic: EngineDiagnostic {
@@ -1169,10 +1065,8 @@ fn find_tsgolint_executable(cwd: &Path) -> Result<PathBuf, String> {
             return Ok(path);
         }
         if path.is_dir()
-            && let Some(candidate) = FILES
-                .iter()
-                .map(|name| path.join(name))
-                .find(|candidate| candidate.is_file())
+            && let Some(candidate) =
+                FILES.iter().map(|name| path.join(name)).find(|candidate| candidate.is_file())
         {
             return Ok(candidate);
         }
@@ -1184,15 +1078,10 @@ fn find_tsgolint_executable(cwd: &Path) -> Result<PathBuf, String> {
     loop {
         let node_modules = directory.join("node_modules");
         if let Some(package) = tsgolint_platform_package() {
-            let native =
-                node_modules
-                    .join("@oxlint-tsgolint")
-                    .join(package)
-                    .join(if cfg!(windows) {
-                        "tsgolint.exe"
-                    } else {
-                        "tsgolint"
-                    });
+            let native = node_modules
+                .join("@oxlint-tsgolint")
+                .join(package)
+                .join(if cfg!(windows) { "tsgolint.exe" } else { "tsgolint" });
             if native.is_file() {
                 return Ok(native);
             }
@@ -1210,10 +1099,8 @@ fn find_tsgolint_executable(cwd: &Path) -> Result<PathBuf, String> {
     }
     if let Some(paths) = std::env::var_os("PATH") {
         for directory in std::env::split_paths(&paths) {
-            if let Some(candidate) = FILES
-                .iter()
-                .map(|name| directory.join(name))
-                .find(|candidate| candidate.is_file())
+            if let Some(candidate) =
+                FILES.iter().map(|name| directory.join(name)).find(|candidate| candidate.is_file())
             {
                 return Ok(candidate);
             }
@@ -1238,9 +1125,7 @@ fn tsgolint_platform_package() -> Option<&'static str> {
 }
 
 fn verify_tsgolint_version(executable: &Path) -> Result<(), String> {
-    let canonical = executable
-        .canonicalize()
-        .unwrap_or_else(|_| executable.to_path_buf());
+    let canonical = executable.canonicalize().unwrap_or_else(|_| executable.to_path_buf());
     for directory in canonical.ancestors().skip(1).take(6) {
         let manifest_path = directory.join("package.json");
         let Ok(source) = std::fs::read_to_string(&manifest_path) else {
@@ -1255,14 +1140,9 @@ fn verify_tsgolint_version(executable: &Path) -> Result<(), String> {
         {
             continue;
         }
-        let version = manifest
-            .get("version")
-            .and_then(serde_json::Value::as_str)
-            .ok_or_else(|| {
-                format!(
-                    "tsgolint package metadata at {} has no version",
-                    manifest_path.display()
-                )
+        let version =
+            manifest.get("version").and_then(serde_json::Value::as_str).ok_or_else(|| {
+                format!("tsgolint package metadata at {} has no version", manifest_path.display())
             })?;
         if version == SUPPORTED_TSGOLINT_VERSION {
             return Ok(());
@@ -1298,11 +1178,7 @@ fn load_oxlintrc(
         return Err("a config base requires an explicit materialized Oxlint config".to_string());
     }
     let path = if let Some(path) = explicit_path {
-        let path = if path.is_absolute() {
-            path.to_path_buf()
-        } else {
-            cwd.join(path)
-        };
+        let path = if path.is_absolute() { path.to_path_buf() } else { cwd.join(path) };
         if is_js_config_path(&path) {
             return Err(
                 "JavaScript/TypeScript Oxlint config modules require the future thin npm host; use JSON or JSONC for the native CLI"
@@ -1336,16 +1212,10 @@ fn load_oxlintrc(
 
 fn load_materialized_oxlintrc(path: &Path) -> Result<Oxlintrc, String> {
     let source = std::fs::read_to_string(path).map_err(|error| {
-        format!(
-            "unable to read materialized Oxlint config {}: {error}",
-            path.display()
-        )
+        format!("unable to read materialized Oxlint config {}: {error}", path.display())
     })?;
     let value: serde_json::Value = serde_json::from_str(&source).map_err(|error| {
-        format!(
-            "invalid materialized Oxlint config {}: {error}",
-            path.display()
-        )
+        format!("invalid materialized Oxlint config {}: {error}", path.display())
     })?;
     oxlintrc_from_materialized_value(value, "<root>")
 }
@@ -1381,10 +1251,7 @@ fn oxlintrc_from_materialized_value(
         }
     }
     if !path_extends.is_empty() {
-        object.insert(
-            "extends".to_string(),
-            serde_json::Value::Array(path_extends),
-        );
+        object.insert("extends".to_string(), serde_json::Value::Array(path_extends));
     }
     let source = serde_json::to_string(&value).map_err(|error| {
         format!("unable to serialize materialized Oxlint config {context}: {error}")
@@ -1395,22 +1262,12 @@ fn oxlintrc_from_materialized_value(
 }
 
 fn resolve_existing_config_base(cwd: &Path, base: &Path, tool: &str) -> Result<PathBuf, String> {
-    let base = if base.is_absolute() {
-        base.to_path_buf()
-    } else {
-        cwd.join(base)
-    };
+    let base = if base.is_absolute() { base.to_path_buf() } else { cwd.join(base) };
     let base = base.canonicalize().map_err(|error| {
-        format!(
-            "unable to resolve {tool} config base {}: {error}",
-            base.display()
-        )
+        format!("unable to resolve {tool} config base {}: {error}", base.display())
     })?;
     if !base.is_dir() {
-        return Err(format!(
-            "{tool} config base is not a directory: {}",
-            base.display()
-        ));
+        return Err(format!("{tool} config base is not a directory: {}", base.display()));
     }
     Ok(base)
 }
@@ -1419,9 +1276,8 @@ fn discover_oxlintrc(cwd: &Path) -> Result<Option<PathBuf>, String> {
     let discovery = ConfigDiscovery::new(OXLINT_CONFIG_FILE_NAMES, false);
     let mut directory = cwd.to_path_buf();
     loop {
-        let discovered = discovery
-            .find_unique_config_by_readdir(&directory, true)
-            .map_err(|error| {
+        let discovered =
+            discovery.find_unique_config_by_readdir(&directory, true).map_err(|error| {
                 format!(
                     "conflicting Oxlint configuration files in {}: {error:?}",
                     directory.display()
@@ -1448,11 +1304,7 @@ fn reject_unavailable_lint_capabilities(
     config: &Oxlintrc,
     type_aware_opt_in: bool,
 ) -> Result<(), String> {
-    if config
-        .external_plugins
-        .as_ref()
-        .is_some_and(|plugins| !plugins.is_empty())
-    {
+    if config.external_plugins.as_ref().is_some_and(|plugins| !plugins.is_empty()) {
         return Err(
             "JavaScript plugins are not supported by the native TSRX path yet: OXC's public package does not expose its zero-copy plugin host, and OXC for TSRX will not silently add a second parse"
                 .to_string(),
@@ -1483,10 +1335,7 @@ fn config_builder_error(error: ConfigBuilderError) -> String {
 
 fn map_message(message: &Message) -> EngineDiagnostic {
     let rule = message.rule.as_ref().map(|rule| rule.rule_name.to_string());
-    let plugin = message
-        .rule
-        .as_ref()
-        .map(|rule| rule.plugin_name.to_string());
+    let plugin = message.rule.as_ref().map(|rule| rule.plugin_name.to_string());
     let labels = message
         .error
         .labels

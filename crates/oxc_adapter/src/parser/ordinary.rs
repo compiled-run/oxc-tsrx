@@ -194,9 +194,7 @@ fn source_type(request: OrdinaryParseRequest<'_>) -> SourceType {
         Some("js") => SourceType::unambiguous(),
         Some("jsx") => SourceType::unambiguous().with_jsx(true),
         Some("ts") => SourceType::unambiguous().with_typescript(true),
-        Some("tsx") => SourceType::unambiguous()
-            .with_typescript(true)
-            .with_jsx(true),
+        Some("tsx") => SourceType::unambiguous().with_typescript(true).with_jsx(true),
         Some("dts") => SourceType::d_ts(),
         _ => SourceType::from_path(request.filename).unwrap_or_default(),
     };
@@ -219,10 +217,7 @@ fn ast_type(source_type: SourceType, requested: Option<&str>) -> AstType {
 }
 
 fn span(value: Span) -> OrdinarySpan {
-    OrdinarySpan {
-        start: value.start,
-        end: value.end,
-    }
+    OrdinarySpan { start: value.start, end: value.end }
 }
 
 fn value_span(value: &NameSpan<'_>) -> OrdinaryValueSpan {
@@ -242,19 +237,11 @@ fn import_name(value: &ImportImportName<'_>) -> OrdinaryImportName {
             Some(name.span.end),
         ),
         ImportImportName::NamespaceObject => (OrdinaryNameKind::NamespaceObject, None, None, None),
-        ImportImportName::Default(span) => (
-            OrdinaryNameKind::Default,
-            None,
-            Some(span.start),
-            Some(span.end),
-        ),
+        ImportImportName::Default(span) => {
+            (OrdinaryNameKind::Default, None, Some(span.start), Some(span.end))
+        }
     };
-    OrdinaryImportName {
-        kind,
-        name,
-        start,
-        end,
-    }
+    OrdinaryImportName { kind, name, start, end }
 }
 
 fn import_entry(value: &ImportEntry<'_>) -> OrdinaryStaticImportEntry {
@@ -277,12 +264,7 @@ fn export_import_name(value: &ExportImportName<'_>) -> OrdinaryExportImportName 
         ExportImportName::AllButDefault => (OrdinaryNameKind::AllButDefault, None, None, None),
         ExportImportName::Null => (OrdinaryNameKind::None, None, None, None),
     };
-    OrdinaryExportImportName {
-        kind,
-        name,
-        start,
-        end,
-    }
+    OrdinaryExportImportName { kind, name, start, end }
 }
 
 fn export_export_name(value: &ExportExportName<'_>) -> OrdinaryExportExportName {
@@ -293,20 +275,12 @@ fn export_export_name(value: &ExportExportName<'_>) -> OrdinaryExportExportName 
             Some(name.span.start),
             Some(name.span.end),
         ),
-        ExportExportName::Default(span) => (
-            OrdinaryNameKind::Default,
-            None,
-            Some(span.start),
-            Some(span.end),
-        ),
+        ExportExportName::Default(span) => {
+            (OrdinaryNameKind::Default, None, Some(span.start), Some(span.end))
+        }
         ExportExportName::Null => (OrdinaryNameKind::None, None, None, None),
     };
-    OrdinaryExportExportName {
-        kind,
-        name,
-        start,
-        end,
-    }
+    OrdinaryExportExportName { kind, name, start, end }
 }
 
 fn export_local_name(value: &ExportLocalName<'_>) -> OrdinaryExportLocalName {
@@ -325,12 +299,7 @@ fn export_local_name(value: &ExportLocalName<'_>) -> OrdinaryExportLocalName {
         ),
         ExportLocalName::Null => (OrdinaryNameKind::None, None, None, None),
     };
-    OrdinaryExportLocalName {
-        kind,
-        name,
-        start,
-        end,
-    }
+    OrdinaryExportLocalName { kind, name, start, end }
 }
 
 fn export_entry(value: &ExportEntry<'_>) -> OrdinaryStaticExportEntry {
@@ -350,27 +319,24 @@ fn module(record: &ModuleRecord<'_>) -> OrdinaryModule {
         .requested_modules
         .iter()
         .flat_map(|(name, requests)| {
-            requests
-                .iter()
-                .filter(|request| request.is_import)
-                .map(|request| {
-                    let entries = record
-                        .import_entries
-                        .iter()
-                        .filter(|entry| entry.statement_span == request.statement_span)
-                        .map(import_entry)
-                        .collect();
-                    OrdinaryStaticImport {
-                        start: request.statement_span.start,
-                        end: request.statement_span.end,
-                        module_request: OrdinaryValueSpan {
-                            value: name.to_string(),
-                            start: request.span.start,
-                            end: request.span.end,
-                        },
-                        entries,
-                    }
-                })
+            requests.iter().filter(|request| request.is_import).map(|request| {
+                let entries = record
+                    .import_entries
+                    .iter()
+                    .filter(|entry| entry.statement_span == request.statement_span)
+                    .map(import_entry)
+                    .collect();
+                OrdinaryStaticImport {
+                    start: request.statement_span.start,
+                    end: request.statement_span.end,
+                    module_request: OrdinaryValueSpan {
+                        value: name.to_string(),
+                        start: request.span.start,
+                        end: request.span.end,
+                    },
+                    entries,
+                }
+            })
         })
         .collect::<Vec<_>>();
     static_imports.sort_unstable_by_key(|entry| entry.start);
@@ -389,11 +355,7 @@ fn module(record: &ModuleRecord<'_>) -> OrdinaryModule {
     }
     let mut static_exports = grouped
         .into_iter()
-        .map(|((start, end), entries)| OrdinaryStaticExport {
-            start,
-            end,
-            entries,
-        })
+        .map(|((start, end), entries)| OrdinaryStaticExport { start, end, entries })
         .collect::<Vec<_>>();
     static_exports.sort_unstable_by_key(|entry| (entry.start, entry.end));
     let dynamic_imports = record
@@ -445,13 +407,7 @@ fn convert_diagnostics(
                 .collect();
             let help_message = diagnostic.help.as_ref().map(ToString::to_string);
             let codeframe = format!("{:?}", diagnostic.with_source_code(Arc::clone(&source)));
-            OrdinaryDiagnostic {
-                severity,
-                message,
-                labels,
-                help_message,
-                codeframe,
-            }
+            OrdinaryDiagnostic { severity, message, labels, help_message, codeframe }
         })
         .collect()
 }
@@ -489,10 +445,7 @@ pub fn parse_ordinary(request: OrdinaryParseRequest<'_>) -> OrdinaryParseResult 
                 CommentKind::Line => "Line",
                 CommentKind::SingleLineBlock | CommentKind::MultiLineBlock => "Block",
             },
-            value: comment
-                .content_span()
-                .source_text(request.source)
-                .to_string(),
+            value: comment.content_span().source_text(request.source).to_string(),
             start: comment.span.start,
             end: comment.span.end,
         })
@@ -578,14 +531,8 @@ mod tests {
         let result = parse_ordinary(input);
         assert_eq!((result.comments[0].start, result.comments[0].end), (0, 6));
         assert_eq!(result.module.static_imports[0].module_request.start, 21);
-        assert!(
-            result
-                .errors
-                .iter()
-                .flat_map(|error| &error.labels)
-                .all(|label| {
-                    usize::try_from(label.end).expect("label end") <= source.encode_utf16().count()
-                })
-        );
+        assert!(result.errors.iter().flat_map(|error| &error.labels).all(|label| {
+            usize::try_from(label.end).expect("label end") <= source.encode_utf16().count()
+        }));
     }
 }

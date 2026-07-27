@@ -155,9 +155,10 @@ pub(super) fn validate_authored_contexts(
 ) -> Result<FinalizationIndex, TsrxParseError> {
     let (promote, index) = Validator::new(tape).run()?;
     if promote {
-        let program = tape.root().as_object().ok_or(TsrxParseError::Unsupported(
-            "lexical validation root is not a Program",
-        ))?;
+        let program = tape
+            .root()
+            .as_object()
+            .ok_or(TsrxParseError::Unsupported("lexical validation root is not a Program"))?;
         let field = tape
             .field_index(program, "sourceType")
             .ok_or(TsrxParseError::Unsupported("Program has no sourceType"))?;
@@ -199,10 +200,7 @@ impl<'tape> Validator<'tape> {
         }
         Ok((
             self.promote_module,
-            FinalizationIndex {
-                object_states: self.object_states,
-                span_fields: self.span_fields,
-            },
+            FinalizationIndex { object_states: self.object_states, span_fields: self.span_fields },
         ))
     }
 
@@ -452,10 +450,7 @@ impl<'tape> Validator<'tape> {
     fn visit_property(&mut self, object: RecordIndex, context: Context) {
         let computed = scalar_field_is(self.tape, object, "computed", "true");
         let method = scalar_field_is(self.tape, object, "method", "true")
-            || matches!(
-                scalar_field(self.tape, object, "kind"),
-                Some(r#""get""# | r#""set""#)
-            );
+            || matches!(scalar_field(self.tape, object, "kind"), Some(r#""get""# | r#""set""#));
         for field in self.tape.fields(object) {
             let role = match self.tape.key(field) {
                 "key" if !computed => EdgeRole::NameOnly,
@@ -482,11 +477,7 @@ impl<'tape> Validator<'tape> {
             body.return_ok = true;
         }
         for field in self.tape.fields(object) {
-            let child = if self.tape.key(field) == "body" {
-                body
-            } else {
-                context
-            };
+            let child = if self.tape.key(field) == "body" { body } else { context };
             self.push(field.value, child, EdgeRole::Normal);
         }
         Ok(())
@@ -500,11 +491,7 @@ impl<'tape> Validator<'tape> {
         let mut cases = context;
         cases.break_depth = increment(cases.break_depth)?;
         for field in self.tape.fields(object) {
-            let child = if self.tape.key(field) == "cases" {
-                cases
-            } else {
-                context
-            };
+            let child = if self.tape.key(field) == "cases" { cases } else { context };
             self.push(field.value, child, EdgeRole::Normal);
         }
         Ok(())
@@ -525,10 +512,7 @@ impl<'tape> Validator<'tape> {
             remaining -= 1;
             let label = object_field(self.tape, current, "label")?;
             labels.push((
-                LabelKey {
-                    scope: context.flow_scope,
-                    name: identifier_name(self.tape, label)?,
-                },
+                LabelKey { scope: context.flow_scope, name: identifier_name(self.tape, label)? },
                 label,
             ));
             let body = field_value(self.tape, current, "body")?;
@@ -569,11 +553,7 @@ impl<'tape> Validator<'tape> {
         }
         let label = field_value(self.tape, object, "label")?;
         if is_null(self.tape, label) {
-            let depth = if is_continue {
-                context.continue_depth
-            } else {
-                context.break_depth
-            };
+            let depth = if is_continue { context.continue_depth } else { context.break_depth };
             if depth == 0 {
                 return Err(TsrxParseError::AuthoredGrammar(
                     if is_continue {
@@ -586,13 +566,10 @@ impl<'tape> Validator<'tape> {
             }
             return Ok(());
         }
-        let label = label.as_object().ok_or(TsrxParseError::Unsupported(
-            "break or continue label is not an Identifier",
-        ))?;
-        let key = LabelKey {
-            scope: context.flow_scope,
-            name: identifier_name(self.tape, label)?,
-        };
+        let label = label
+            .as_object()
+            .ok_or(TsrxParseError::Unsupported("break or continue label is not an Identifier"))?;
+        let key = LabelKey { scope: context.flow_scope, name: identifier_name(self.tape, label)? };
         let continuable = self.labels.get(&key).copied().ok_or_else(|| {
             TsrxParseError::AuthoredGrammar(
                 "break or continue has no authored label target".to_string(),
@@ -786,11 +763,7 @@ impl<'tape> Validator<'tape> {
         cases.return_ok = false;
         cases.break_depth = increment(cases.break_depth)?;
         for field in self.tape.fields(object) {
-            let child = if self.tape.key(field) == "cases" {
-                cases
-            } else {
-                active
-            };
+            let child = if self.tape.key(field) == "cases" { cases } else { active };
             self.push(field.value, child, EdgeRole::Normal);
         }
         Ok(())
@@ -848,9 +821,9 @@ impl<'tape> Validator<'tape> {
 
     fn fresh_scope(&mut self) -> Result<u32, TsrxParseError> {
         let scope = self.next_scope;
-        self.next_scope = scope.checked_add(1).ok_or(TsrxParseError::Unsupported(
-            "lexical flow-scope index overflow",
-        ))?;
+        self.next_scope = scope
+            .checked_add(1)
+            .ok_or(TsrxParseError::Unsupported("lexical flow-scope index overflow"))?;
         Ok(scope)
     }
 
@@ -864,36 +837,25 @@ impl<'tape> Validator<'tape> {
         let index = class
             .class_outer_id
             .checked_sub(1)
-            .ok_or(TsrxParseError::Unsupported(
-                "class element has no outer lexical context",
-            ))?;
-        self.class_outers
-            .get(index as usize)
-            .copied()
-            .ok_or(TsrxParseError::Unsupported(
-                "class outer-context index is outside the lexical table",
-            ))
+            .ok_or(TsrxParseError::Unsupported("class element has no outer lexical context"))?;
+        self.class_outers.get(index as usize).copied().ok_or(TsrxParseError::Unsupported(
+            "class outer-context index is outside the lexical table",
+        ))
     }
 
     fn validate_class_body(&self, value: ValueRef) -> Result<(), TsrxParseError> {
-        let body = value
-            .as_object()
-            .ok_or(TsrxParseError::Unsupported("class body is not an object"))?;
+        let body =
+            value.as_object().ok_or(TsrxParseError::Unsupported("class body is not an object"))?;
         if object_type(self.tape, body) != Some(r#""ClassBody""#) {
-            return Err(TsrxParseError::Unsupported(
-                "class body has an unexpected node type",
-            ));
+            return Err(TsrxParseError::Unsupported("class body has an unexpected node type"));
         }
-        let elements =
-            field_value(self.tape, body, "body")?
-                .as_list()
-                .ok_or(TsrxParseError::Unsupported(
-                    "class body elements are not a list",
-                ))?;
+        let elements = field_value(self.tape, body, "body")?
+            .as_list()
+            .ok_or(TsrxParseError::Unsupported("class body elements are not a list"))?;
         for element in self.tape.values(elements) {
-            let element = element.as_object().ok_or(TsrxParseError::Unsupported(
-                "class body element is not an object",
-            ))?;
+            let element = element
+                .as_object()
+                .ok_or(TsrxParseError::Unsupported("class body element is not an object"))?;
             if !matches!(
                 object_type(self.tape, element),
                 Some(
@@ -907,9 +869,7 @@ impl<'tape> Validator<'tape> {
                         | r#""TSIndexSignature""#
                 )
             ) {
-                return Err(TsrxParseError::Unsupported(
-                    "unknown lexical class-body element",
-                ));
+                return Err(TsrxParseError::Unsupported("unknown lexical class-body element"));
             }
         }
         Ok(())
@@ -917,9 +877,7 @@ impl<'tape> Validator<'tape> {
 
     fn exit_label(&mut self, key: LabelKey<'tape>) -> Result<(), TsrxParseError> {
         if self.labels.remove(&key).is_none() {
-            return Err(TsrxParseError::Unsupported(
-                "lexical label stack is inconsistent",
-            ));
+            return Err(TsrxParseError::Unsupported("lexical label stack is inconsistent"));
         }
         Ok(())
     }
@@ -933,15 +891,11 @@ impl<'tape> Validator<'tape> {
         let state = self
             .object_states
             .get_mut(index)
-            .ok_or(TsrxParseError::Unsupported(
-                "object reference outside lexical tape",
-            ))?;
+            .ok_or(TsrxParseError::Unsupported("object reference outside lexical tape"))?;
         match *state {
             0 => *state = 1,
             1 => {
-                return Err(TsrxParseError::Unsupported(
-                    "cycle in reconstructed object graph",
-                ));
+                return Err(TsrxParseError::Unsupported("cycle in reconstructed object graph"));
             }
             _ => {
                 return Err(TsrxParseError::Unsupported(
@@ -957,15 +911,11 @@ impl<'tape> Validator<'tape> {
         let state = self
             .list_states
             .get_mut(index)
-            .ok_or(TsrxParseError::Unsupported(
-                "list reference outside lexical tape",
-            ))?;
+            .ok_or(TsrxParseError::Unsupported("list reference outside lexical tape"))?;
         match *state {
             0 => *state = 1,
             1 => {
-                return Err(TsrxParseError::Unsupported(
-                    "cycle in reconstructed list graph",
-                ));
+                return Err(TsrxParseError::Unsupported("cycle in reconstructed list graph"));
             }
             _ => {
                 return Err(TsrxParseError::Unsupported(
@@ -1052,11 +1002,9 @@ fn field_value(
     object: RecordIndex,
     name: &str,
 ) -> Result<ValueRef, TsrxParseError> {
-    tape.field_index(object, name)
-        .and_then(|field| tape.field_value(field))
-        .ok_or(TsrxParseError::Unsupported(
-            "reconstructed object is missing a required lexical field",
-        ))
+    tape.field_index(object, name).and_then(|field| tape.field_value(field)).ok_or(
+        TsrxParseError::Unsupported("reconstructed object is missing a required lexical field"),
+    )
 }
 
 fn object_field(
@@ -1066,20 +1014,15 @@ fn object_field(
 ) -> Result<RecordIndex, TsrxParseError> {
     field_value(tape, object, name)?
         .as_object()
-        .ok_or(TsrxParseError::Unsupported(
-            "required lexical field is not an object",
-        ))
+        .ok_or(TsrxParseError::Unsupported("required lexical field is not an object"))
 }
 
 fn identifier_name(tape: &FlatTape, identifier: RecordIndex) -> Result<&str, TsrxParseError> {
     if object_type(tape, identifier) != Some(r#""Identifier""#) {
-        return Err(TsrxParseError::Unsupported(
-            "lexical name component is not an Identifier",
-        ));
+        return Err(TsrxParseError::Unsupported("lexical name component is not an Identifier"));
     }
-    scalar_field(tape, identifier, "name").ok_or(TsrxParseError::Unsupported(
-        "Identifier has no encoded name",
-    ))
+    scalar_field(tape, identifier, "name")
+        .ok_or(TsrxParseError::Unsupported("Identifier has no encoded name"))
 }
 
 fn is_null(tape: &FlatTape, value: ValueRef) -> bool {
@@ -1087,16 +1030,12 @@ fn is_null(tape: &FlatTape, value: ValueRef) -> bool {
 }
 
 fn increment(depth: u32) -> Result<u32, TsrxParseError> {
-    depth.checked_add(1).ok_or(TsrxParseError::Unsupported(
-        "lexical control-depth overflow",
-    ))
+    depth.checked_add(1).ok_or(TsrxParseError::Unsupported("lexical control-depth overflow"))
 }
 
 fn index_of(index: RecordIndex) -> Result<usize, TsrxParseError> {
     index
         .get()
         .map(|raw| raw as usize)
-        .ok_or(TsrxParseError::Unsupported(
-            "missing record index during lexical validation",
-        ))
+        .ok_or(TsrxParseError::Unsupported("missing record index during lexical validation"))
 }

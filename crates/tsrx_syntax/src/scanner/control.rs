@@ -27,14 +27,7 @@ impl Scanner<'_> {
         let (header, after_header) = self.parse_parenthesized(index)?;
         index = self.skip_trivia(after_header)?;
         let body = self.parse_body(node, index)?;
-        self.add_clause(
-            node,
-            ClauseRole::If,
-            start,
-            header,
-            body,
-            ForHeader::default(),
-        )?;
+        self.add_clause(node, ClauseRole::If, start, header, body, ForHeader::default())?;
         index = body.end as usize;
 
         loop {
@@ -174,14 +167,7 @@ impl Scanner<'_> {
                 let (header, colon) = self.parse_case_header(value_start)?;
                 let body_start = self.skip_trivia(colon + 1)?;
                 let body = self.parse_body(node, body_start)?;
-                self.add_clause(
-                    node,
-                    ClauseRole::Case,
-                    index,
-                    header,
-                    body,
-                    ForHeader::default(),
-                )?;
+                self.add_clause(node, ClauseRole::Case, index, header, body, ForHeader::default())?;
                 index = body.end as usize;
                 continue;
             }

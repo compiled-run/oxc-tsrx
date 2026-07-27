@@ -35,14 +35,8 @@ fn assert_reachable_ranges_match_spans(tape: &FlatTape) {
                         .expect("spanned object range");
                     let values = tape.values(range).collect::<Vec<_>>();
                     assert_eq!(values.len(), 2);
-                    assert_eq!(
-                        tape.scalar_u32(values[0]),
-                        Some(scalar_u32(tape, object, "start"))
-                    );
-                    assert_eq!(
-                        tape.scalar_u32(values[1]),
-                        Some(scalar_u32(tape, object, "end"))
-                    );
+                    assert_eq!(tape.scalar_u32(values[0]), Some(scalar_u32(tape, object, "start")));
+                    assert_eq!(tape.scalar_u32(values[1]), Some(scalar_u32(tape, object, "end")));
                 }
                 pending.extend(tape.fields(object).map(|field| field.value));
             }
@@ -60,10 +54,7 @@ fn assert_reachable_ranges_match_spans(tape: &FlatTape) {
 fn complete(source: &str) -> tsrx_parser_engine::TsrxParseResult {
     let result = parse_tsrx(&TsrxParseRequest { source }).expect("canonical parse result");
     assert_eq!(result.status, ParseCompleteness::Complete);
-    assert_eq!(
-        result.coordinate_domain,
-        CoordinateDomain::AuthoredUtf8Bytes
-    );
+    assert_eq!(result.coordinate_domain, CoordinateDomain::AuthoredUtf8Bytes);
     assert!(result.program.is_some());
     assert!(result.module.is_some());
     assert!(result.completeness.contains(Completeness::COMPLETE));
@@ -82,12 +73,7 @@ fn authored_module_and_comments_survive_while_projection_records_do_not() {
     assert_eq!(module.static_exports().len(), 2);
     assert_eq!(module.dynamic_imports().len(), 1);
     assert_eq!(module.import_metas().len(), 1);
-    assert!(
-        !module
-            .string_storage()
-            .expect("UTF-8 module storage")
-            .contains("_t")
-    );
+    assert!(!module.string_storage().expect("UTF-8 module storage").contains("_t"));
 
     let comments = result.comments.records();
     assert_eq!(comments.len(), 3);
@@ -101,13 +87,7 @@ fn authored_module_and_comments_survive_while_projection_records_do_not() {
         let spelling = &source[start..end];
         assert!(spelling.starts_with("//") || spelling.starts_with("/*"));
     }
-    assert!(
-        !result
-            .comments
-            .string_storage()
-            .expect("UTF-8 comment storage")
-            .contains("_t")
-    );
+    assert!(!result.comments.string_storage().expect("UTF-8 comment storage").contains("_t"));
 }
 
 #[test]
@@ -129,14 +109,8 @@ fn compatibility_transfer_omits_only_the_unobserved_module_table() {
     assert!(!lean.completeness.contains(Completeness::HAS_MODULE));
     assert_eq!(lean.comments.records(), full.comments.records());
     assert_eq!(
-        lean.program
-            .expect("lean Program")
-            .program_transfer_engine_owned()
-            .expect("lean transfer"),
-        full.program
-            .expect("full Program")
-            .program_transfer_owned()
-            .expect("full transfer"),
+        lean.program.expect("lean Program").program_transfer_engine_owned().expect("lean transfer"),
+        full.program.expect("full Program").program_transfer_owned().expect("full transfer"),
     );
 }
 
@@ -148,10 +122,7 @@ fn recordless_typescript_module_syntax_preserves_the_pinned_oxc_flag() {
     ] {
         let result = complete(source);
         let module = result.module.as_ref().expect("module table");
-        assert!(
-            module.has_module_syntax(),
-            "recordless module syntax: {source}"
-        );
+        assert!(module.has_module_syntax(), "recordless module syntax: {source}");
         assert!(module.static_imports().is_empty());
         assert!(module.static_exports().is_empty());
         assert!(module.import_metas().is_empty());
@@ -178,26 +149,14 @@ fn wide_reexports_share_one_packed_module_request() {
         .static_export_entries(module.static_exports()[0].entries)
         .expect("re-export entries");
     assert_eq!(entries.len(), ENTRIES);
-    let first = entries[0]
-        .module_request
-        .get()
-        .expect("first module request")
-        .value;
-    assert!(entries.iter().all(|entry| {
-        entry
-            .module_request
-            .get()
-            .is_some_and(|value| value.value == first)
-    }));
-    assert_eq!(module.string(first), Some(request.as_str()));
-    assert_eq!(
-        module
-            .string_storage()
-            .expect("UTF-8 module storage")
-            .matches(&request)
-            .count(),
-        1
+    let first = entries[0].module_request.get().expect("first module request").value;
+    assert!(
+        entries
+            .iter()
+            .all(|entry| { entry.module_request.get().is_some_and(|value| value.value == first) })
     );
+    assert_eq!(module.string(first), Some(request.as_str()));
+    assert_eq!(module.string_storage().expect("UTF-8 module storage").matches(&request).count(), 1);
 }
 
 #[test]
@@ -212,10 +171,7 @@ fn css_comments_and_every_projection_marker_are_suppressed() {
         .map(|comment| result.comments.value(comment).expect("comment value"))
         .collect::<Vec<_>>();
     assert_eq!(values, ["body", "close", "tail"]);
-    let comment_storage = result
-        .comments
-        .string_storage()
-        .expect("UTF-8 comment storage");
+    let comment_storage = result.comments.string_storage().expect("UTF-8 comment storage");
     assert!(!comment_storage.contains("css"));
     assert!(!comment_storage.contains("_t"));
 }
@@ -224,10 +180,7 @@ fn css_comments_and_every_projection_marker_are_suppressed() {
 fn fatal_javascript_and_tsrx_grammar_are_returned_as_failed_results() {
     for (source, expected_comments) in [
         ("/*js*/ export const broken = ; //after", &["js"][..]),
-        (
-            "/*before*/ function View() @{ @if(ok){<main/>} //tail\n",
-            &["before", "tail"][..],
-        ),
+        ("/*before*/ function View() @{ @if(ok){<main/>} //tail\n", &["before", "tail"][..]),
     ] {
         let result = parse_tsrx(&TsrxParseRequest { source }).expect("grammar result data");
         assert_eq!(result.status, ParseCompleteness::Failed);
@@ -248,19 +201,11 @@ fn fatal_javascript_and_tsrx_grammar_are_returned_as_failed_results() {
         assert_eq!(comments, expected_comments);
         for error in result.errors.records() {
             assert_eq!(error.phase, DiagnosticPhase::Grammar);
-            let codeframe = result
-                .errors
-                .optional_string(error.codeframe)
-                .expect("authored grammar codeframe");
+            let codeframe =
+                result.errors.optional_string(error.codeframe).expect("authored grammar codeframe");
             assert!(codeframe.contains("input.tsrx"));
             assert!(codeframe.contains(source));
-            assert!(
-                !result
-                    .errors
-                    .labels(error.labels)
-                    .expect("grammar labels")
-                    .is_empty()
-            );
+            assert!(!result.errors.labels(error.labels).expect("grammar labels").is_empty());
         }
     }
 }
@@ -294,10 +239,8 @@ fn optional_semantic_diagnostics_remain_complete_and_use_authored_spans() {
         let slice = &source[label.span.start as usize..label.span.end as usize];
         assert_eq!(slice, "x");
     }
-    let codeframe = result
-        .errors
-        .optional_string(error.codeframe)
-        .expect("authored semantic codeframe");
+    let codeframe =
+        result.errors.optional_string(error.codeframe).expect("authored semantic codeframe");
     assert!(codeframe.contains("Semantic.tsrx"));
     assert!(codeframe.contains(source));
 }
@@ -306,12 +249,7 @@ fn optional_semantic_diagnostics_remain_complete_and_use_authored_spans() {
 fn parser_options_reach_custom_and_ordinary_tsrx_nodes() {
     let source = "const value: number = (1); function View() @{ @if(ok){<main/>} }";
     let defaults = parse_tsrx(&TsrxParseRequest { source }).expect("default options");
-    assert!(
-        defaults
-            .program()
-            .scalar_storage()
-            .contains(r#""ParenthesizedExpression""#)
-    );
+    assert!(defaults.program().scalar_storage().contains(r#""ParenthesizedExpression""#));
 
     let configured = parse_tsrx_with_options(
         &TsrxParseRequest { source },
@@ -324,12 +262,7 @@ fn parser_options_reach_custom_and_ordinary_tsrx_nodes() {
         },
     )
     .expect("configured options");
-    assert!(
-        !configured
-            .program()
-            .scalar_storage()
-            .contains(r#""ParenthesizedExpression""#)
-    );
+    assert!(!configured.program().scalar_storage().contains(r#""ParenthesizedExpression""#));
     assert!(configured.program().field_count() > defaults.program().field_count());
     assert_reachable_ranges_match_spans(configured.program());
 }
@@ -352,23 +285,9 @@ fn wide_result_tables_are_source_ordered_and_scaffold_free() {
     assert_eq!(module.static_imports().len(), COUNT);
     assert_eq!(module.static_exports().len(), COUNT);
     assert_eq!(result.comments.len(), COUNT);
+    assert!(module.static_imports().windows(2).all(|pair| pair[0].span.start < pair[1].span.start));
     assert!(
-        module
-            .static_imports()
-            .windows(2)
-            .all(|pair| pair[0].span.start < pair[1].span.start)
+        result.comments.records().windows(2).all(|pair| pair[0].span.start < pair[1].span.start)
     );
-    assert!(
-        result
-            .comments
-            .records()
-            .windows(2)
-            .all(|pair| pair[0].span.start < pair[1].span.start)
-    );
-    assert!(
-        !module
-            .string_storage()
-            .expect("UTF-8 module storage")
-            .contains("_t")
-    );
+    assert!(!module.string_storage().expect("UTF-8 module storage").contains("_t"));
 }

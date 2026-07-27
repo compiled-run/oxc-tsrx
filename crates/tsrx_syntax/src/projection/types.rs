@@ -26,30 +26,21 @@ pub fn project_for_types(
     let built = build_projection_with_purpose(source, overlay, true, ProjectionPurpose::Types)?;
     let mut projected = built.mapped.projected;
     append_type_helper_declarations(&mut projected, overlay, &built.prefix);
-    Ok(TypeProjection {
-        projected,
-        segments: built.mapped.segments,
-    })
+    Ok(TypeProjection { projected, segments: built.mapped.segments })
 }
 
 fn append_type_helper_declarations(output: &mut String, overlay: &Overlay, prefix: &str) {
     if overlay.nodes.is_empty()
         && overlay.dynamic_tags.is_empty()
-        && overlay
-            .clauses
-            .iter()
-            .all(|clause| !clause.for_header.annotated)
+        && overlay.clauses.iter().all(|clause| !clause.for_header.annotated)
     {
         return;
     }
     output.push_str("\n/* OXC for TSRX type-only projection helpers. */\n");
     for (index, node) in overlay.nodes.iter().enumerate() {
         if node.context != ControlContext::Statement {
-            writeln!(
-                output,
-                "declare function {prefix}W{index}_<T>(value: T, end: unknown): any;"
-            )
-            .expect("writing to a String cannot fail");
+            writeln!(output, "declare function {prefix}W{index}_<T>(value: T, end: unknown): any;")
+                .expect("writing to a String cannot fail");
             writeln!(output, "declare const {prefix}E{index}_: unique symbol;")
                 .expect("writing to a String cannot fail");
         }
@@ -63,11 +54,8 @@ fn append_type_helper_declarations(output: &mut String, overlay: &Overlay, prefi
                 .expect("writing to a String cannot fail");
         }
     }
-    for (ordinal, clause) in overlay
-        .clauses
-        .iter()
-        .filter(|clause| clause.for_header.annotated)
-        .enumerate()
+    for (ordinal, clause) in
+        overlay.clauses.iter().filter(|clause| clause.for_header.annotated).enumerate()
     {
         writeln!(
             output,
@@ -75,18 +63,12 @@ fn append_type_helper_declarations(output: &mut String, overlay: &Overlay, prefi
         )
         .expect("writing to a String cannot fail");
         if !clause.for_header.index.is_empty() {
-            writeln!(
-                output,
-                "declare function {prefix}IH{ordinal}_<T>(value: T): T;"
-            )
-            .expect("writing to a String cannot fail");
+            writeln!(output, "declare function {prefix}IH{ordinal}_<T>(value: T): T;")
+                .expect("writing to a String cannot fail");
         }
         if !clause.for_header.key.is_empty() {
-            writeln!(
-                output,
-                "declare function {prefix}KH{ordinal}_<T>(value: T): T;"
-            )
-            .expect("writing to a String cannot fail");
+            writeln!(output, "declare function {prefix}KH{ordinal}_<T>(value: T): T;")
+                .expect("writing to a String cannot fail");
         }
         writeln!(output, "declare const {prefix}HE{ordinal}_: unique symbol;")
             .expect("writing to a String cannot fail");

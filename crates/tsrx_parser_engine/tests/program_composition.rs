@@ -31,9 +31,7 @@ fn write_value(tape: &FlatTape, value: ValueRef, output: &mut String) {
         }
         ValueKind::Object => {
             output.push('{');
-            for (index, record) in tape
-                .fields(value.as_object().expect("object index"))
-                .enumerate()
+            for (index, record) in tape.fields(value.as_object().expect("object index")).enumerate()
             {
                 if index != 0 {
                     output.push(',');
@@ -45,10 +43,7 @@ fn write_value(tape: &FlatTape, value: ValueRef, output: &mut String) {
         }
         ValueKind::List => {
             output.push('[');
-            for (index, item) in tape
-                .values(value.as_list().expect("list index"))
-                .enumerate()
-            {
+            for (index, item) in tape.values(value.as_list().expect("list index")).enumerate() {
                 if index != 0 {
                     output.push(',');
                 }
@@ -72,9 +67,7 @@ fn code_block(tape: &FlatTape, function: RecordIndex) -> RecordIndex {
 }
 
 fn rendered(tape: &FlatTape, block: RecordIndex) -> RecordIndex {
-    field(tape, block, "render")
-        .as_object()
-        .expect("render object")
+    field(tape, block, "render").as_object().expect("render object")
 }
 
 #[test]
@@ -94,10 +87,7 @@ fn plain_ascii_tsx_matches_the_public_oxc_tape_exactly() {
     assert!(ordinary.errors.is_empty());
     assert_eq!(
         ordinary.program_and_fixes,
-        format!(
-            "{{\"node\":\n{}\n,\"fixes\":[]}}",
-            flat_json(result.program())
-        )
+        format!("{{\"node\":\n{}\n,\"fixes\":[]}}", flat_json(result.program()))
     );
     assert_no_scaffold(result.program());
 }
@@ -122,10 +112,7 @@ fn imports_and_exported_tsrx_functions_preserve_program_wrappers_and_order() {
     require_type(result.program(), block, "JSXCodeBlock");
     assert_eq!(
         span(result.program(), block),
-        (
-            offset(source.find("@{").expect("code block start")),
-            offset(source.len())
-        )
+        (offset(source.find("@{").expect("code block start")), offset(source.len()))
     );
     assert_no_scaffold(result.program());
 }
@@ -142,11 +129,7 @@ fn multiple_tsrx_function_roots_reconstruct_independently_in_source_order() {
         "FunctionDeclaration",
         "VariableDeclaration",
     ]) {
-        require_type(
-            result.program(),
-            value.as_object().expect("Program body object"),
-            expected,
-        );
+        require_type(result.program(), value.as_object().expect("Program body object"), expected);
     }
     for function in [
         body[1].as_object().expect("first function"),
@@ -194,21 +177,10 @@ fn named_default_and_anonymous_exports_preserve_exact_wrappers_and_spans() {
 
     let source = "export default function() @{ <main/> }";
     let result = parse_tsrx(&TsrxParseRequest { source }).expect("anonymous default function");
-    let export = program_body(result.program())[0]
-        .as_object()
-        .expect("default export");
+    let export = program_body(result.program())[0].as_object().expect("default export");
     let function = object_field(result.program(), export, "declaration");
-    assert_eq!(
-        result
-            .program()
-            .scalar(field(result.program(), function, "id")),
-        Some("null")
-    );
-    require_type(
-        result.program(),
-        code_block(result.program(), function),
-        "JSXCodeBlock",
-    );
+    assert_eq!(result.program().scalar(field(result.program(), function, "id")), Some("null"));
+    require_type(result.program(), code_block(result.program(), function), "JSXCodeBlock");
     assert_no_scaffold(result.program());
 }
 
@@ -229,11 +201,7 @@ fn ordinary_module_declaration_forms_keep_source_order_around_custom_roots() {
         "ExportNamedDeclaration",
         "ExportNamedDeclaration",
     ]) {
-        require_type(
-            tape,
-            value.as_object().expect("module declaration"),
-            expected,
-        );
+        require_type(tape, value.as_object().expect("module declaration"), expected);
     }
     let export = body[6].as_object().expect("function export");
     let function = object_field(tape, export, "declaration");
@@ -247,10 +215,7 @@ fn ordinary_module_declaration_forms_keep_source_order_around_custom_roots() {
         offset(source.find("function View").expect("function start"))
     );
     let block = code_block(tape, function);
-    assert_eq!(
-        span(tape, block).0,
-        offset(source.find("@{ <main>").expect("code-block start"))
-    );
+    assert_eq!(span(tape, block).0, offset(source.find("@{ <main>").expect("code-block start")));
     require_type(tape, rendered(tape, block), "JSXElement");
     assert_no_scaffold(tape);
 }
@@ -310,9 +275,7 @@ fn functions_methods_arrows_and_ordinary_blocks_interleave_without_cross_associa
 
     let class = body[2].as_object().expect("class");
     let class_body = object_field(tape, class, "body");
-    let method = list_field(tape, class_body, "body")[0]
-        .as_object()
-        .expect("method");
+    let method = list_field(tape, class_body, "body")[0].as_object().expect("method");
     let method_function = object_field(tape, method, "value");
     assert_eq!(span(tape, code_block(tape, method_function)), (64, 73));
 
@@ -358,10 +321,7 @@ fn nested_code_blocks_follow_their_completed_owner_policies() {
     let outer_block = code_block(tape, outer);
     let inner = rendered(tape, outer_block);
     require_type(tape, inner, "JSXCodeBlock");
-    assert_eq!(
-        field_names(tape, inner),
-        ["type", "start", "end", "body", "render", "metadata"]
-    );
+    assert_eq!(field_names(tape, inner), ["type", "start", "end", "body", "render", "metadata"]);
     assert_eq!(span(tape, outer_block), (17, 31));
     assert_eq!(span(tape, inner), (20, 29));
     require_type(tape, rendered(tape, inner), "JSXElement");
@@ -369,16 +329,8 @@ fn nested_code_blocks_follow_their_completed_owner_policies() {
     assert_no_scaffold(tape);
 
     for (source, family, child_field) in [
-        (
-            "function Outer() @{ @if(ok){ @{<A/>} } }",
-            "JSXIfExpression",
-            "consequent",
-        ),
-        (
-            "function Outer() @{ @try{ @{<A/>} }@catch{<B/>} }",
-            "JSXTryExpression",
-            "block",
-        ),
+        ("function Outer() @{ @if(ok){ @{<A/>} } }", "JSXIfExpression", "consequent"),
+        ("function Outer() @{ @try{ @{<A/>} }@catch{<B/>} }", "JSXTryExpression", "block"),
     ] {
         let result = parse_tsrx(&TsrxParseRequest { source })
             .unwrap_or_else(|error| panic!("direct nested block failed for `{source}`: {error}"));
@@ -400,15 +352,10 @@ fn nested_code_blocks_follow_their_completed_owner_policies() {
     let outer = program_body(tape)[0].as_object().expect("Outer");
     let control = rendered(tape, code_block(tape, outer));
     let control_block = object_field(tape, control, "body");
-    let statement = list_field(tape, control_block, "body")[0]
-        .as_object()
-        .expect("wrapped nested code block");
+    let statement =
+        list_field(tape, control_block, "body")[0].as_object().expect("wrapped nested code block");
     require_type(tape, statement, "ExpressionStatement");
-    require_type(
-        tape,
-        object_field(tape, statement, "expression"),
-        "JSXCodeBlock",
-    );
+    require_type(tape, object_field(tape, statement, "expression"), "JSXCodeBlock");
     assert_no_scaffold(tape);
 
     let source = "function Outer() @{ @switch(x){@default:{ @{<A/>} }} }";
@@ -416,18 +363,11 @@ fn nested_code_blocks_follow_their_completed_owner_policies() {
     let tape = result.program();
     let outer = program_body(tape)[0].as_object().expect("Outer");
     let control = rendered(tape, code_block(tape, outer));
-    let case = list_field(tape, control, "cases")[0]
-        .as_object()
-        .expect("default case");
-    let statement = list_field(tape, case, "consequent")[0]
-        .as_object()
-        .expect("wrapped nested code block");
+    let case = list_field(tape, control, "cases")[0].as_object().expect("default case");
+    let statement =
+        list_field(tape, case, "consequent")[0].as_object().expect("wrapped nested code block");
     require_type(tape, statement, "ExpressionStatement");
-    require_type(
-        tape,
-        object_field(tape, statement, "expression"),
-        "JSXCodeBlock",
-    );
+    require_type(tape, object_field(tape, statement, "expression"), "JSXCodeBlock");
     assert_no_scaffold(tape);
 }
 
@@ -438,14 +378,9 @@ fn jsx_child_and_ordinary_block_code_blocks_keep_their_distinct_topology() {
     let tape = result.program();
     let function = program_body(tape)[0].as_object().expect("F");
     let element = rendered(tape, code_block(tape, function));
-    let child = list_field(tape, element, "children")[0]
-        .as_object()
-        .expect("JSX child");
+    let child = list_field(tape, element, "children")[0].as_object().expect("JSX child");
     require_type(tape, child, "JSXCodeBlock");
-    assert_eq!(
-        field_names(tape, child),
-        ["type", "start", "end", "body", "render", "metadata"]
-    );
+    assert_eq!(field_names(tape, child), ["type", "start", "end", "body", "render", "metadata"]);
     assert_eq!(span(tape, child), (21, 28));
     require_type(tape, rendered(tape, child), "JSXElement");
     assert_no_scaffold(tape);
@@ -455,20 +390,12 @@ fn jsx_child_and_ordinary_block_code_blocks_keep_their_distinct_topology() {
     let tape = result.program();
     let function = program_body(tape)[0].as_object().expect("F");
     let outer = code_block(tape, function);
-    let try_statement = list_field(tape, outer, "body")[0]
-        .as_object()
-        .expect("try statement");
+    let try_statement = list_field(tape, outer, "body")[0].as_object().expect("try statement");
     require_type(tape, try_statement, "TryStatement");
     let try_block = object_field(tape, try_statement, "block");
-    let statement = list_field(tape, try_block, "body")[0]
-        .as_object()
-        .expect("wrapped code block");
+    let statement = list_field(tape, try_block, "body")[0].as_object().expect("wrapped code block");
     require_type(tape, statement, "ExpressionStatement");
-    require_type(
-        tape,
-        object_field(tape, statement, "expression"),
-        "JSXCodeBlock",
-    );
+    require_type(tape, object_field(tape, statement, "expression"), "JSXCodeBlock");
     assert_no_scaffold(tape);
 }
 
@@ -479,20 +406,14 @@ fn jsx_child_code_blocks_preserve_statements_and_terminal_render() {
     let tape = result.program();
     let function = program_body(tape)[0].as_object().expect("F");
     let element = rendered(tape, code_block(tape, function));
-    let child = list_field(tape, element, "children")[0]
-        .as_object()
-        .expect("JSX child code block");
+    let child = list_field(tape, element, "children")[0].as_object().expect("JSX child code block");
     require_type(tape, child, "JSXCodeBlock");
     let start = offset(source.find("@{ const").expect("child start"));
     let end = offset(source.find(" }</main>").expect("child end") + 2);
     assert_eq!(span(tape, child), (start, end));
     let body = list_field(tape, child, "body");
     assert_eq!(body.len(), 1);
-    require_type(
-        tape,
-        body[0].as_object().expect("child declaration"),
-        "VariableDeclaration",
-    );
+    require_type(tape, body[0].as_object().expect("child declaration"), "VariableDeclaration");
     require_type(tape, rendered(tape, child), "JSXElement");
     assert_no_scaffold(tape);
 
@@ -502,9 +423,8 @@ fn jsx_child_code_blocks_preserve_statements_and_terminal_render() {
     let function = program_body(tape)[0].as_object().expect("F");
     let fragment = rendered(tape, code_block(tape, function));
     require_type(tape, fragment, "JSXFragment");
-    let child = list_field(tape, fragment, "children")[0]
-        .as_object()
-        .expect("fragment child code block");
+    let child =
+        list_field(tape, fragment, "children")[0].as_object().expect("fragment child code block");
     require_type(tape, child, "JSXCodeBlock");
     assert_eq!(list_field(tape, child, "body").len(), 1);
     require_type(tape, rendered(tape, child), "JSXElement");
@@ -515,9 +435,8 @@ fn jsx_child_code_blocks_preserve_statements_and_terminal_render() {
     let tape = result.program();
     let function = program_body(tape)[0].as_object().expect("F");
     let element = rendered(tape, code_block(tape, function));
-    let child = list_field(tape, element, "children")[0]
-        .as_object()
-        .expect("outer child code block");
+    let child =
+        list_field(tape, element, "children")[0].as_object().expect("outer child code block");
     let body = list_field(tape, child, "body");
     assert_eq!(body.len(), 1);
     require_type(
@@ -546,11 +465,7 @@ fn nested_code_block_semicolons_follow_direct_and_wrapped_oracle_topology() {
     ] {
         let body = list_field(tape, block, "body");
         assert_eq!(body.len(), 1, "direct semicolon must not survive");
-        require_type(
-            tape,
-            body[0].as_object().expect("direct code block"),
-            "JSXCodeBlock",
-        );
+        require_type(tape, body[0].as_object().expect("direct code block"), "JSXCodeBlock");
     }
     assert_no_scaffold(tape);
 
@@ -559,9 +474,7 @@ fn nested_code_block_semicolons_follow_direct_and_wrapped_oracle_topology() {
     let tape = result.program();
     let function = program_body(tape)[0].as_object().expect("F");
     let outer = code_block(tape, function);
-    let ordinary = list_field(tape, outer, "body")[0]
-        .as_object()
-        .expect("ordinary block");
+    let ordinary = list_field(tape, outer, "body")[0].as_object().expect("ordinary block");
     let ordinary_body = list_field(tape, ordinary, "body");
     assert_eq!(ordinary_body.len(), 2);
     let statement = ordinary_body[0].as_object().expect("wrapped statement");
@@ -569,11 +482,7 @@ fn nested_code_block_semicolons_follow_direct_and_wrapped_oracle_topology() {
     let statement_start = offset(source.find("@{<A/>").expect("statement start"));
     let statement_end = offset(source.find("}; const").expect("statement end") + 2);
     assert_eq!(span(tape, statement), (statement_start, statement_end));
-    require_type(
-        tape,
-        object_field(tape, statement, "expression"),
-        "JSXCodeBlock",
-    );
+    require_type(tape, object_field(tape, statement, "expression"), "JSXCodeBlock");
     require_type(
         tape,
         ordinary_body[1].as_object().expect("following declaration"),
@@ -590,16 +499,8 @@ fn nested_code_block_semicolons_follow_direct_and_wrapped_oracle_topology() {
     assert_eq!(body.len(), 2);
     let statement = body[0].as_object().expect("for wrapped statement");
     require_type(tape, statement, "ExpressionStatement");
-    require_type(
-        tape,
-        object_field(tape, statement, "expression"),
-        "JSXCodeBlock",
-    );
-    require_type(
-        tape,
-        body[1].as_object().expect("following declaration"),
-        "VariableDeclaration",
-    );
+    require_type(tape, object_field(tape, statement, "expression"), "JSXCodeBlock");
+    require_type(tape, body[1].as_object().expect("following declaration"), "VariableDeclaration");
     assert_no_scaffold(tape);
 }
 
@@ -619,11 +520,7 @@ fn direct_if_clause_semicolons_are_consumed_across_the_entire_chain() {
     for block in blocks {
         let body = list_field(tape, block, "body");
         assert_eq!(body.len(), 1);
-        require_type(
-            tape,
-            body[0].as_object().expect("direct if code block"),
-            "JSXCodeBlock",
-        );
+        require_type(tape, body[0].as_object().expect("direct if code block"), "JSXCodeBlock");
     }
     assert_no_scaffold(tape);
 }
@@ -665,11 +562,7 @@ fn commented_and_wide_wrapped_semicolons_rebuild_lists_once_in_order() {
     for value in body {
         let statement = value.as_object().expect("wrapped statement");
         require_type(tape, statement, "ExpressionStatement");
-        require_type(
-            tape,
-            object_field(tape, statement, "expression"),
-            "JSXCodeBlock",
-        );
+        require_type(tape, object_field(tape, statement, "expression"), "JSXCodeBlock");
     }
     assert_no_scaffold(tape);
 }
@@ -733,10 +626,7 @@ fn jsx_child_code_blocks_inherit_valid_function_class_and_flow_contexts() {
     let source = "const n=<main>@{ await foo(); <A/> }</main>;";
     let result = parse_tsrx(&TsrxParseRequest { source }).expect("top-level module await");
     let program = result.program().root().as_object().expect("Program");
-    assert_eq!(
-        scalar_field(result.program(), program, "sourceType"),
-        r#""module""#
-    );
+    assert_eq!(scalar_field(result.program(), program, "sourceType"), r#""module""#);
     assert_no_scaffold(result.program());
 }
 
@@ -946,10 +836,7 @@ fn wide_program_roots_remain_independently_associated() {
         let (start, end) = span(tape, block);
         let start = usize::try_from(start).expect("start fits usize");
         let end = usize::try_from(end).expect("end fits usize");
-        assert!(
-            source[start..end].starts_with("@{"),
-            "block {index} retains its authored start"
-        );
+        assert!(source[start..end].starts_with("@{"), "block {index} retains its authored start");
         require_type(tape, rendered(tape, block), "JSXElement");
     }
     assert_no_scaffold(tape);

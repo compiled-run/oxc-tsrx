@@ -60,9 +60,7 @@ fn adapter_owns_complete_module_comment_and_error_tables_after_source_drop() {
 
     let first = &module.static_imports()[0];
     assert_eq!(module.value(first.module_request), Some("pkg"));
-    let entries = module
-        .static_import_entries(first.entries)
-        .expect("first import entries");
+    let entries = module.static_import_entries(first.entries).expect("first import entries");
     assert_eq!(entries.len(), 3);
     assert_eq!(entries[0].import_name.kind, ImportNameKind::Default);
     assert!(entries[1].is_type);
@@ -74,9 +72,7 @@ fn adapter_owns_complete_module_comment_and_error_tables_after_source_drop() {
         .static_exports()
         .iter()
         .flat_map(|group| {
-            module
-                .static_export_entries(group.entries)
-                .expect("export group entries")
+            module.static_export_entries(group.entries).expect("export group entries")
         })
         .find(|entry| entry.import_name.kind == ExportImportNameKind::AllButDefault)
         .expect("star export");
@@ -85,11 +81,7 @@ fn adapter_owns_complete_module_comment_and_error_tables_after_source_drop() {
     let exports = module
         .static_exports()
         .iter()
-        .flat_map(|group| {
-            module
-                .static_export_entries(group.entries)
-                .expect("export entries")
-        })
+        .flat_map(|group| module.static_export_entries(group.entries).expect("export entries"))
         .collect::<Vec<_>>();
     let namespace = exports
         .iter()
@@ -109,12 +101,7 @@ fn adapter_owns_complete_module_comment_and_error_tables_after_source_drop() {
         .expect("default export");
     assert_eq!(default.local_name.kind, ExportLocalNameKind::Default);
     assert_eq!(module.name(default.local_name), Some("Named"));
-    assert!(
-        module
-            .static_exports()
-            .windows(2)
-            .all(|pair| pair[0].span.start < pair[1].span.start)
-    );
+    assert!(module.static_exports().windows(2).all(|pair| pair[0].span.start < pair[1].span.start));
 
     let dynamic = module.dynamic_imports()[0];
     let dynamic_text = "import('dyn')";
@@ -163,15 +150,9 @@ fn grammar_diagnostics_are_structured_and_remove_partial_program_and_module() {
     let error = &result.errors.records()[0];
     assert_eq!(error.phase, DiagnosticPhase::Grammar);
     assert_eq!(error.severity, DiagnosticSeverity::Error);
-    assert_eq!(
-        result.errors.string(error.message),
-        Some("Unexpected token")
-    );
+    assert_eq!(result.errors.string(error.message), Some("Unexpected token"));
     assert!(result.errors.optional_string(error.help).is_none());
-    let labels = result
-        .errors
-        .labels(error.labels)
-        .expect("diagnostic labels");
+    let labels = result.errors.labels(error.labels).expect("diagnostic labels");
     assert_eq!(labels.len(), 1);
     assert_eq!(labels[0].span.start, 22);
     assert_eq!(labels[0].span.end, 23);
@@ -202,14 +183,9 @@ fn pinned_oxc_rejects_the_active_noncharacter_interval_in_every_frozen_family() 
         let expected = (start, start + 3);
         assert!(
             result.errors.records().iter().any(|diagnostic| {
-                result
-                    .errors
-                    .labels(diagnostic.labels)
-                    .is_some_and(|labels| {
-                        labels
-                            .iter()
-                            .any(|label| (label.span.start, label.span.end) == expected)
-                    })
+                result.errors.labels(diagnostic.labels).is_some_and(|labels| {
+                    labels.iter().any(|label| (label.span.start, label.span.end) == expected)
+                })
             }),
             "{family} did not reject the exact three-byte U+FFFF interval: {:?}",
             result.errors
@@ -230,18 +206,13 @@ fn rebuilt_codeframe_is_byte_exact_with_the_pinned_oxc_diagnostic() {
             .with_source_code(Arc::new(NamedSource::new(filename, source.to_owned())))
     );
 
-    let mut result = parse_to_projected_tape(ProjectedParseRequest {
-        filename,
-        ..request(source, false)
-    })
-    .expect("structured grammar result");
+    let mut result =
+        parse_to_projected_tape(ProjectedParseRequest { filename, ..request(source, false) })
+            .expect("structured grammar result");
     render_diagnostic_codeframes(filename, source, &mut result.errors)
         .expect("rebuilt authored codeframe");
     let diagnostic = &result.errors.records()[0];
-    let actual = result
-        .errors
-        .optional_string(diagnostic.codeframe)
-        .expect("rebuilt codeframe");
+    let actual = result.errors.optional_string(diagnostic.codeframe).expect("rebuilt codeframe");
     assert_eq!(actual, expected);
 }
 
@@ -301,10 +272,7 @@ fn optional_semantic_errors_keep_the_complete_program_and_module() {
     assert_eq!(with.errors.len(), 1);
     let error = &with.errors.records()[0];
     assert_eq!(error.phase, DiagnosticPhase::Semantic);
-    assert_eq!(
-        with.errors.string(error.message),
-        Some("Identifier `x` has already been declared")
-    );
+    assert_eq!(with.errors.string(error.message), Some("Identifier `x` has already been declared"));
     let labels = with.errors.labels(error.labels).expect("semantic labels");
     assert_eq!(labels.len(), 2);
     assert_eq!((labels[0].span.start, labels[0].span.end), (4, 5));

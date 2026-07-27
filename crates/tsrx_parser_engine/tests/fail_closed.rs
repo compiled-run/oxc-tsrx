@@ -15,10 +15,7 @@ fn unsupported_tsrx_syntax_returns_no_partial_program() {
         assert_failed(source);
     }
     assert!(
-        parse_tsrx(&TsrxParseRequest {
-            source: "function Viéw() @{ <main /> }",
-        })
-        .is_err(),
+        parse_tsrx(&TsrxParseRequest { source: "function Viéw() @{ <main /> }" }).is_err(),
         "the retained ASCII guard must remain operational"
     );
 }

@@ -45,10 +45,7 @@ fn assert_dynamic_name(
 ) -> RecordIndex {
     require_type(tape, name, "JSXExpressionContainer");
     assert_eq!(span(tape, name), expected_span);
-    assert_eq!(
-        field_names(tape, name),
-        ["type", "start", "end", "expression", "isDynamic"]
-    );
+    assert_eq!(field_names(tape, name), ["type", "start", "end", "expression", "isDynamic"]);
     assert_eq!(scalar_field(tape, name, "isDynamic"), "true");
     let expression = object_field(tape, name, "expression");
     require_type(tape, expression, expression_type);
@@ -79,25 +76,14 @@ fn reconstructs_self_closing_dynamic_tag_with_exact_canonical_shape() {
     assert_empty_path(tape, element);
     assert!(list_field(tape, element, "children").is_empty());
     assert_eq!(scalar_field(tape, element, "isDynamic"), "true");
-    assert_eq!(
-        tape.scalar(field(tape, element, "closingElement")),
-        Some("null")
-    );
+    assert_eq!(tape.scalar(field(tape, element, "closingElement")), Some("null"));
 
     let (opening, name, closing) = dynamic_parts(tape, element);
     assert!(closing.is_none());
     assert_eq!(span(tape, opening), (12, 20));
     assert_eq!(
         field_names(tape, opening),
-        [
-            "type",
-            "start",
-            "end",
-            "attributes",
-            "name",
-            "isDynamic",
-            "selfClosing",
-        ]
+        ["type", "start", "end", "attributes", "name", "isDynamic", "selfClosing",]
     );
     assert!(list_field(tape, opening, "attributes").is_empty());
     assert_eq!(scalar_field(tape, opening, "isDynamic"), "true");
@@ -123,10 +109,7 @@ fn reconstructs_paired_dynamic_tag_with_distinct_authored_name_expressions() {
     assert_eq!(span(tape, opening), (12, 19));
     let (closing, closing_name) = closing.expect("paired closing element");
     assert_eq!(span(tape, closing), (21, 29));
-    assert_eq!(
-        field_names(tape, closing),
-        ["type", "start", "end", "name", "isDynamic"]
-    );
+    assert_eq!(field_names(tape, closing), ["type", "start", "end", "name", "isDynamic"]);
     assert_eq!(scalar_field(tape, closing, "isDynamic"), "true");
     let opening_expression =
         assert_dynamic_name(tape, opening_name, (13, 18), "Identifier", (14, 17));
@@ -151,10 +134,7 @@ fn reconstructs_dynamic_tags_when_parenthesis_nodes_are_disabled() {
     let source = "const value=<{tag}>Hi</{tag}>;";
     let result = parse_tsrx_with_options(
         &TsrxParseRequest { source },
-        TsrxParseOptions {
-            preserve_parens: Some(false),
-            ..TsrxParseOptions::default()
-        },
+        TsrxParseOptions { preserve_parens: Some(false), ..TsrxParseOptions::default() },
     )
     .expect("paired dynamic JSX without ParenthesizedExpression nodes");
     let tape = result.program();
@@ -177,14 +157,8 @@ fn preserves_authored_attributes_and_children_around_dynamic_scaffolding() {
     assert_eq!(span(tape, opening), (12, 56));
     let attributes = list_field(tape, opening, "attributes");
     assert_eq!(attributes.len(), 4);
-    for (value, expected) in attributes
-        .iter()
-        .zip([(19, 25), (26, 35), (36, 44), (45, 55)])
-    {
-        assert_eq!(
-            span(tape, value.as_object().expect("attribute object")),
-            expected
-        );
+    for (value, expected) in attributes.iter().zip([(19, 25), (26, 35), (36, 44), (45, 55)]) {
+        assert_eq!(span(tape, value.as_object().expect("attribute object")), expected);
     }
     let id = attributes[0].as_object().expect("id attribute");
     let count = attributes[1].as_object().expect("count attribute");
@@ -198,16 +172,9 @@ fn preserves_authored_attributes_and_children_around_dynamic_scaffolding() {
         );
     }
     require_type(tape, spread, "JSXSpreadAttribute");
-    assert_eq!(
-        scalar_field(tape, object_field(tape, spread, "argument"), "name"),
-        r#""props""#
-    );
+    assert_eq!(scalar_field(tape, object_field(tape, spread, "argument"), "name"), r#""props""#);
     assert_eq!(tape.scalar(field(tape, disabled, "value")), Some("null"));
-    require_type(
-        tape,
-        object_field(tape, count, "value"),
-        "JSXExpressionContainer",
-    );
+    require_type(tape, object_field(tape, count, "value"), "JSXExpressionContainer");
     let children = list_field(tape, element, "children");
     assert_eq!(children.len(), 3);
     for (value, kind, expected) in [
@@ -440,9 +407,7 @@ fn supports_dynamic_parent_placements_and_keeps_static_jsx_ordinary() {
     let statements = list_field(tape, body, "body");
     assert_eq!(statements.len(), 2);
     let dynamic = statements[0].as_object().expect("dynamic statement child");
-    let semicolon = statements[1]
-        .as_object()
-        .expect("semicolon empty statement");
+    let semicolon = statements[1].as_object().expect("semicolon empty statement");
     require_type(tape, dynamic, "JSXElement");
     require_type(tape, semicolon, "EmptyStatement");
     assert_eq!(span(tape, dynamic), (15, 23));
@@ -532,10 +497,9 @@ fn decoded_authored_scalars_cannot_be_mistaken_for_parser_scaffolding() {
 
 #[test]
 fn preserves_canonical_semicolon_topology_after_bare_dynamic_statements() {
-    for (source, semicolon_span) in [
-        ("function run(){<{tag}/> ;}", (24, 25)),
-        ("function run(){<{tag}/>\n  ;}", (26, 27)),
-    ] {
+    for (source, semicolon_span) in
+        [("function run(){<{tag}/> ;}", (24, 25)), ("function run(){<{tag}/>\n  ;}", (26, 27))]
+    {
         let result = parse_tsrx(&TsrxParseRequest { source })
             .unwrap_or_else(|error| panic!("spaced semicolon failed for `{source}`: {error}"));
         let tape = result.program();
@@ -580,11 +544,7 @@ fn preserves_parenthesized_and_commented_dynamic_statement_topology() {
     let block = object_field(tape, function, "body");
     let body = list_field(tape, block, "body");
     assert_eq!(body.len(), 2);
-    require_type(
-        tape,
-        body[0].as_object().expect("dynamic statement"),
-        "JSXElement",
-    );
+    require_type(tape, body[0].as_object().expect("dynamic statement"), "JSXElement");
     let statement = body[1].as_object().expect("semicolon statement");
     require_type(tape, statement, "ExpressionStatement");
     let text = object_field(tape, statement, "expression");
@@ -673,18 +633,9 @@ fn recursively_reconstructs_nested_tsrx_inside_dynamic_name_expressions() {
     assert_no_scaffold(tape);
 
     for (source, kind) in [
-        (
-            "const x=<{ok ? @if(foo){A}@else{B} : Fallback}/>;",
-            "JSXIfExpression",
-        ),
-        (
-            "const x=<{ok ? @for(x of xs){x} : Fallback}/>;",
-            "JSXForExpression",
-        ),
-        (
-            "const x=<{ok ? @try{A}@catch{B} : Fallback}/>;",
-            "JSXTryExpression",
-        ),
+        ("const x=<{ok ? @if(foo){A}@else{B} : Fallback}/>;", "JSXIfExpression"),
+        ("const x=<{ok ? @for(x of xs){x} : Fallback}/>;", "JSXForExpression"),
+        ("const x=<{ok ? @try{A}@catch{B} : Fallback}/>;", "JSXTryExpression"),
     ] {
         let result = parse_tsrx(&TsrxParseRequest { source })
             .unwrap_or_else(|error| panic!("nested control failed for `{source}`: {error}"));
@@ -712,10 +663,6 @@ fn bare_dynamic_statement_siblings_remain_linear_and_ordered() {
     assert_eq!(body.len(), 512);
     for pair in body.chunks_exact(2) {
         require_type(tape, pair[0].as_object().expect("dynamic"), "JSXElement");
-        require_type(
-            tape,
-            pair[1].as_object().expect("semicolon"),
-            "EmptyStatement",
-        );
+        require_type(tape, pair[1].as_object().expect("semicolon"), "EmptyStatement");
     }
 }

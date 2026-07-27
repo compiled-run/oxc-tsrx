@@ -14,10 +14,7 @@ fn assert_if_head(
     test_span: (u32, u32),
 ) {
     require_type(tape, if_node, "JSXIfExpression");
-    assert_eq!(
-        scalar_field(tape, if_node, "statementType"),
-        r#""IfStatement""#
-    );
+    assert_eq!(scalar_field(tape, if_node, "statementType"), r#""IfStatement""#);
     assert_eq!(span(tape, if_node), expected_span);
     let test = object_field(tape, if_node, "test");
     require_type(tape, test, "Identifier");
@@ -110,14 +107,8 @@ fn preserves_else_if_as_a_nested_standard_if_statement() {
     require_type(tape, alternate, "IfStatement");
     assert_eq!(span(tape, alternate), (42, 64));
     assert_eq!(span(tape, object_field(tape, alternate, "test")), (45, 46));
-    assert_eq!(
-        span(tape, object_field(tape, alternate, "consequent")),
-        (47, 53)
-    );
-    assert_eq!(
-        span(tape, object_field(tape, alternate, "alternate")),
-        (58, 64)
-    );
+    assert_eq!(span(tape, object_field(tape, alternate, "consequent")), (47, 53));
+    assert_eq!(span(tape, object_field(tape, alternate, "alternate")), (58, 64));
     assert_no_scaffold(tape);
 }
 

@@ -35,12 +35,7 @@ impl<'a> IndexedSource<'a> {
                 _ => offset += 1,
             }
         }
-        Self {
-            name,
-            source,
-            line_breaks,
-            line_starts,
-        }
+        Self { name, source, line_breaks, line_starts }
     }
 
     fn window_base(
@@ -48,24 +43,15 @@ impl<'a> IndexedSource<'a> {
         span_offset: usize,
         context_lines_before: usize,
     ) -> Result<(usize, usize), MietteError> {
-        let line = self
-            .line_breaks
-            .partition_point(|line_break| *line_break < span_offset);
+        let line = self.line_breaks.partition_point(|line_break| *line_break < span_offset);
         // Miette attributes a span on the LF byte of CRLF to the line ending at that CRLF.
         // Select that effective line directly instead of delegating from source offset zero.
         let on_crlf_lf = span_offset > 0
             && self.source.as_bytes().get(span_offset - 1) == Some(&b'\r')
             && self.source.as_bytes().get(span_offset) == Some(&b'\n');
-        let effective_line = if on_crlf_lf {
-            line.saturating_sub(1)
-        } else {
-            line
-        };
+        let effective_line = if on_crlf_lf { line.saturating_sub(1) } else { line };
         let base_line = effective_line.saturating_sub(context_lines_before);
-        let base_offset = *self
-            .line_starts
-            .get(base_line)
-            .ok_or(MietteError::OutOfBounds)?;
+        let base_offset = *self.line_starts.get(base_line).ok_or(MietteError::OutOfBounds)?;
         Ok((base_line, base_offset))
     }
 }
@@ -80,24 +66,17 @@ impl SourceCode for IndexedSource<'_> {
         let span_offset = usize::try_from(span.offset()).map_err(|_| MietteError::OutOfBounds)?;
         let (base_line, base_offset) = self.window_base(span_offset, context_lines_before)?;
         let base_u32 = u32::try_from(base_offset).map_err(|_| MietteError::OutOfBounds)?;
-        let adjusted_offset = span
-            .offset()
-            .checked_sub(base_u32)
-            .ok_or(MietteError::OutOfBounds)?;
+        let adjusted_offset =
+            span.offset().checked_sub(base_u32).ok_or(MietteError::OutOfBounds)?;
         let adjusted_span: SourceSpan = (adjusted_offset, span.len()).into();
         let inner = <str as SourceCode>::read_span(
-            self.source
-                .get(base_offset..)
-                .ok_or(MietteError::OutOfBounds)?,
+            self.source.get(base_offset..).ok_or(MietteError::OutOfBounds)?,
             &adjusted_span,
             context_lines_before,
             context_lines_after,
         )?;
-        let global_offset = inner
-            .span()
-            .offset()
-            .checked_add(base_u32)
-            .ok_or(MietteError::OutOfBounds)?;
+        let global_offset =
+            inner.span().offset().checked_add(base_u32).ok_or(MietteError::OutOfBounds)?;
         Ok(MietteSpanContents::new_named(
             Cow::Borrowed(self.name),
             inner.data(),
@@ -129,25 +108,18 @@ mod tests {
         ] {
             let indexed = IndexedSource::new("Exact.tsrx", source);
             let reference = NamedSource::new("Exact.tsrx", source.to_owned());
-            for (offset, length) in [
-                (0, 1),
-                (2, 5),
-                (6, 3),
-                (source.len() - 1, 1),
-                (source.len(), 0),
-            ] {
+            for (offset, length) in
+                [(0, 1), (2, 5), (6, 3), (source.len() - 1, 1), (source.len(), 0)]
+            {
                 let span: SourceSpan = (
                     u32::try_from(offset).expect("offset"),
                     u32::try_from(length).expect("length"),
                 )
                     .into();
                 for context in 0..=2 {
-                    let actual = indexed
-                        .read_span(&span, context, context)
-                        .expect("indexed span");
-                    let expected = reference
-                        .read_span(&span, context, context)
-                        .expect("reference span");
+                    let actual = indexed.read_span(&span, context, context).expect("indexed span");
+                    let expected =
+                        reference.read_span(&span, context, context).expect("reference span");
                     assert_eq!(
                         actual.data(),
                         expected.data(),
@@ -166,12 +138,10 @@ mod tests {
         let reference = NamedSource::new("Empty.tsrx", String::new());
         let eof: SourceSpan = (0, 0).into();
         for context in 0..=2 {
-            let actual = indexed
-                .read_span(&eof, context, context)
-                .expect("indexed empty-source EOF");
-            let expected = reference
-                .read_span(&eof, context, context)
-                .expect("reference empty-source EOF");
+            let actual =
+                indexed.read_span(&eof, context, context).expect("indexed empty-source EOF");
+            let expected =
+                reference.read_span(&eof, context, context).expect("reference empty-source EOF");
             assert_eq!(actual.data(), expected.data());
             assert_eq!(actual.span(), expected.span());
             assert_eq!(actual.line(), expected.line());
@@ -194,12 +164,10 @@ mod tests {
         let span: SourceSpan = (u32::try_from(late_lf).expect("late LF offset"), 1_u32).into();
         let reference = NamedSource::new("Late.tsrx", source.clone());
         for context in 0..=2 {
-            let actual = indexed
-                .read_span(&span, context, context)
-                .expect("indexed late CRLF span");
-            let expected = reference
-                .read_span(&span, context, context)
-                .expect("reference late CRLF span");
+            let actual =
+                indexed.read_span(&span, context, context).expect("indexed late CRLF span");
+            let expected =
+                reference.read_span(&span, context, context).expect("reference late CRLF span");
             assert_eq!(actual.data(), expected.data());
             assert_eq!(actual.span(), expected.span());
             assert_eq!(actual.line(), expected.line());

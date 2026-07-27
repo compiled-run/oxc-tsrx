@@ -205,9 +205,8 @@ mod tests {
         assert!(!RecordIndex::new(0).is_none());
         assert_eq!(RecordIndex::new(7).get(), Some(7));
 
-        let flags = Completeness::COMPLETE
-            .with(Completeness::HAS_PROGRAM)
-            .with(Completeness::HAS_MODULE);
+        let flags =
+            Completeness::COMPLETE.with(Completeness::HAS_PROGRAM).with(Completeness::HAS_MODULE);
         assert!(flags.contains(Completeness::COMPLETE));
         assert!(flags.contains(Completeness::HAS_PROGRAM));
         assert!(flags.contains(Completeness::HAS_MODULE));
@@ -233,19 +232,13 @@ mod tests {
     #[test]
     fn json_string_scalars_encode_directly_into_packed_storage() {
         let mut tape = FlatTape::default();
-        let escaped = tape
-            .push_json_string_scalar("a\"b\\c\n\r\t\x08\x0c\x01")
-            .expect("escaped scalar");
-        let unicode = tape
-            .push_json_string_scalar("é\u{2028}")
-            .expect("Unicode scalar");
+        let escaped =
+            tape.push_json_string_scalar("a\"b\\c\n\r\t\x08\x0c\x01").expect("escaped scalar");
+        let unicode = tape.push_json_string_scalar("é\u{2028}").expect("Unicode scalar");
 
         assert_eq!(tape.scalar(escaped), Some(r#""a\"b\\c\n\r\t\b\f\u0001""#));
         assert_eq!(tape.scalar(unicode), Some("\"é\u{2028}\""));
-        assert_eq!(
-            tape.scalar_storage(),
-            concat!(r#""a\"b\\c\n\r\t\b\f\u0001""#, "\"é\u{2028}\"")
-        );
+        assert_eq!(tape.scalar_storage(), concat!(r#""a\"b\\c\n\r\t\b\f\u0001""#, "\"é\u{2028}\""));
     }
 
     #[test]
@@ -262,12 +255,7 @@ mod tests {
             u16::from(b'\\'),
             0x0001,
         ];
-        let value = tape
-            .push_json_utf16_scalar(&units)
-            .expect("lossless UTF-16 JSON scalar");
-        assert_eq!(
-            tape.scalar(value),
-            Some("\"a\u{e000}\\ud800😀\\udc00\\\"\\\\\\u0001\"")
-        );
+        let value = tape.push_json_utf16_scalar(&units).expect("lossless UTF-16 JSON scalar");
+        assert_eq!(tape.scalar(value), Some("\"a\u{e000}\\ud800😀\\udc00\\\"\\\\\\u0001\""));
     }
 }

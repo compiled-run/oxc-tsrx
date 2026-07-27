@@ -66,40 +66,32 @@ impl ParentIndex {
     fn record_parent(&mut self, value: ValueRef, parent: ParentSlot) -> Result<(), TsrxParseError> {
         let target = match value.kind() {
             ValueKind::Object => {
-                let object = value
-                    .as_object()
-                    .ok_or(TsrxParseError::Unsupported("invalid object value"))?;
+                let object =
+                    value.as_object().ok_or(TsrxParseError::Unsupported("invalid object value"))?;
                 self.object_parents.get_mut(index_of(object)?)
             }
             ValueKind::List => {
-                let list = value
-                    .as_list()
-                    .ok_or(TsrxParseError::Unsupported("invalid list value"))?;
+                let list =
+                    value.as_list().ok_or(TsrxParseError::Unsupported("invalid list value"))?;
                 self.list_parents.get_mut(index_of(list)?)
             }
             ValueKind::Missing | ValueKind::Scalar => return Ok(()),
         }
         .ok_or(TsrxParseError::Unsupported("parent index outside tape"))?;
         if target.replace(parent).is_some() {
-            return Err(TsrxParseError::Unsupported(
-                "shared object or list in projected AST",
-            ));
+            return Err(TsrxParseError::Unsupported("shared object or list in projected AST"));
         }
         Ok(())
     }
 
     pub(super) fn parent_slot(&self, value: ValueRef) -> Option<ParentSlot> {
         match value.kind() {
-            ValueKind::Object => self
-                .object_parents
-                .get(index_of(value.as_object()?).ok()?)
-                .copied()
-                .flatten(),
-            ValueKind::List => self
-                .list_parents
-                .get(index_of(value.as_list()?).ok()?)
-                .copied()
-                .flatten(),
+            ValueKind::Object => {
+                self.object_parents.get(index_of(value.as_object()?).ok()?).copied().flatten()
+            }
+            ValueKind::List => {
+                self.list_parents.get(index_of(value.as_list()?).ok()?).copied().flatten()
+            }
             ValueKind::Missing | ValueKind::Scalar => None,
         }
     }
@@ -141,8 +133,6 @@ fn record_index(index: usize) -> Result<RecordIndex, TsrxParseError> {
 }
 
 fn index_of(index: RecordIndex) -> Result<usize, TsrxParseError> {
-    let raw = index
-        .get()
-        .ok_or(TsrxParseError::Unsupported("missing tape index"))?;
+    let raw = index.get().ok_or(TsrxParseError::Unsupported("missing tape index"))?;
     usize::try_from(raw).map_err(|_| TsrxParseError::Unsupported("tape index exceeds host usize"))
 }

@@ -27,8 +27,7 @@ impl Wtf8Fixture {
     }
 
     fn surrogate(&mut self, encoded: [u8; 3]) -> &mut Self {
-        self.probes
-            .push(u32::try_from(self.source.len()).expect("fixture fits a source offset"));
+        self.probes.push(u32::try_from(self.source.len()).expect("fixture fits a source offset"));
         self.source.extend_from_slice(&encoded);
         self
     }
@@ -50,80 +49,45 @@ fn quoted_strings_accept_both_surrogate_halves_next_to_escapes() {
 
     assert_eq!(
         fixture.classify(),
-        [
-            Some(OpaqueSurrogateContext::QuotedString),
-            Some(OpaqueSurrogateContext::QuotedString),
-        ]
+        [Some(OpaqueSurrogateContext::QuotedString), Some(OpaqueSurrogateContext::QuotedString),]
     );
 }
 
 #[test]
 fn template_raw_is_opaque_but_interpolation_is_active() {
     let mut fixture = Wtf8Fixture::default();
-    fixture
-        .text(b"const value = `raw ")
-        .high()
-        .text(b" ${")
-        .low()
-        .text(b"} tail`;");
+    fixture.text(b"const value = `raw ").high().text(b" ${").low().text(b"} tail`;");
 
-    assert_eq!(
-        fixture.classify(),
-        [Some(OpaqueSurrogateContext::TemplateRaw), None]
-    );
+    assert_eq!(fixture.classify(), [Some(OpaqueSurrogateContext::TemplateRaw), None]);
 }
 
 #[test]
 fn regex_body_is_opaque_but_flags_are_active() {
     let mut fixture = Wtf8Fixture::default();
-    fixture
-        .text(b"const value = /head[")
-        .high()
-        .text(b"]tail/gu")
-        .low()
-        .text(b";");
+    fixture.text(b"const value = /head[").high().text(b"]tail/gu").low().text(b";");
 
-    assert_eq!(
-        fixture.classify(),
-        [Some(OpaqueSurrogateContext::RegexBody), None]
-    );
+    assert_eq!(fixture.classify(), [Some(OpaqueSurrogateContext::RegexBody), None]);
 }
 
 #[test]
 fn line_and_block_comments_are_opaque() {
     let mut fixture = Wtf8Fixture::default();
-    fixture
-        .text(b"// high ")
-        .high()
-        .text(b"\n/* low ")
-        .low()
-        .text(b" */\nconst value = 1;");
+    fixture.text(b"// high ").high().text(b"\n/* low ").low().text(b" */\nconst value = 1;");
 
     assert_eq!(
         fixture.classify(),
-        [
-            Some(OpaqueSurrogateContext::Comment),
-            Some(OpaqueSurrogateContext::Comment),
-        ]
+        [Some(OpaqueSurrogateContext::Comment), Some(OpaqueSurrogateContext::Comment),]
     );
 }
 
 #[test]
 fn jsx_text_and_quoted_attributes_are_opaque() {
     let mut fixture = Wtf8Fixture::default();
-    fixture
-        .text(b"const value = <main title=\"")
-        .high()
-        .text(b"\">child ")
-        .low()
-        .text(b"</main>;");
+    fixture.text(b"const value = <main title=\"").high().text(b"\">child ").low().text(b"</main>;");
 
     assert_eq!(
         fixture.classify(),
-        [
-            Some(OpaqueSurrogateContext::QuotedString),
-            Some(OpaqueSurrogateContext::JsxText),
-        ]
+        [Some(OpaqueSurrogateContext::QuotedString), Some(OpaqueSurrogateContext::JsxText),]
     );
 }
 
@@ -139,10 +103,7 @@ fn raw_style_content_is_one_opaque_region() {
 
     assert_eq!(
         fixture.classify(),
-        [
-            Some(OpaqueSurrogateContext::RawStyle),
-            Some(OpaqueSurrogateContext::RawStyle),
-        ]
+        [Some(OpaqueSurrogateContext::RawStyle), Some(OpaqueSurrogateContext::RawStyle),]
     );
 }
 
@@ -166,10 +127,7 @@ fn executable_positions_fail_closed() {
         },
         {
             let mut fixture = Wtf8Fixture::default();
-            fixture
-                .text(b"const value = <main>{")
-                .low()
-                .text(b"}</main>;");
+            fixture.text(b"const value = <main>{").low().text(b"}</main>;");
             fixture
         },
     ];
@@ -182,17 +140,11 @@ fn executable_positions_fail_closed() {
 #[test]
 fn speculative_jsx_marks_are_rolled_back() {
     let mut accepted = Wtf8Fixture::default();
-    accepted
-        .text(b"const value = <A{}>committed ")
-        .high()
-        .text(b"</A>;");
+    accepted.text(b"const value = <A{}>committed ").high().text(b"</A>;");
     assert_eq!(accepted.classify(), [Some(OpaqueSurrogateContext::JsxText)]);
 
     let mut fixture = Wtf8Fixture::default();
-    fixture
-        .text(b"const value = <A{}>speculative ")
-        .high()
-        .low();
+    fixture.text(b"const value = <A{}>speculative ").high().low();
 
     assert_eq!(fixture.classify(), [None, None]);
 }
@@ -222,17 +174,11 @@ fn unicode_identifiers_preserve_expression_and_jsx_scanner_state() {
 #[test]
 fn detailed_classification_retains_an_earlier_structural_failure() {
     let mut fixture = Wtf8Fixture::default();
-    fixture
-        .text(b"function View() @{ @else{} const value=")
-        .high()
-        .text(b"; }");
+    fixture.text(b"function View() @{ @else{} const value=").high().text(b"; }");
     let classification = classify_wtf8_surrogates_detailed(&fixture.source, &fixture.probes);
     assert_eq!(classification.contexts, [None]);
     assert!(matches!(
         classification.earlier_error,
-        Some(ProjectionError::MalformedSyntax {
-            expected: "an owning TSRX control",
-            ..
-        })
+        Some(ProjectionError::MalformedSyntax { expected: "an owning TSRX control", .. })
     ));
 }

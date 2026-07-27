@@ -93,9 +93,6 @@ fn nullable_ranges_distinguish_null_from_present_empty_values() {
     let labels = diagnostics.labels(labels).expect("packed labels");
     assert!(labels[0].primary);
     assert!(!labels[1].primary);
-    assert_eq!(
-        diagnostics.optional_string(labels[0].message),
-        Some("primary")
-    );
+    assert_eq!(diagnostics.optional_string(labels[0].message), Some("primary"));
 }
 use std::mem::{align_of, size_of};

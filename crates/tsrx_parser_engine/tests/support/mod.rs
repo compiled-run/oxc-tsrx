@@ -20,8 +20,7 @@ pub fn assert_failed(source: &str) {
 }
 
 pub fn optional_field(tape: &FlatTape, object: RecordIndex, name: &str) -> Option<ValueRef> {
-    tape.field_index(object, name)
-        .and_then(|index| tape.field_value(index))
+    tape.field_index(object, name).and_then(|index| tape.field_value(index))
 }
 
 pub fn field(tape: &FlatTape, object: RecordIndex, name: &str) -> ValueRef {
@@ -29,36 +28,27 @@ pub fn field(tape: &FlatTape, object: RecordIndex, name: &str) -> ValueRef {
 }
 
 pub fn object_field(tape: &FlatTape, object: RecordIndex, name: &str) -> RecordIndex {
-    field(tape, object, name)
-        .as_object()
-        .unwrap_or_else(|| panic!("`{name}` is not an object"))
+    field(tape, object, name).as_object().unwrap_or_else(|| panic!("`{name}` is not an object"))
 }
 
 pub fn list_field(tape: &FlatTape, object: RecordIndex, name: &str) -> Vec<ValueRef> {
-    let list = field(tape, object, name)
-        .as_list()
-        .unwrap_or_else(|| panic!("`{name}` is not a list"));
+    let list =
+        field(tape, object, name).as_list().unwrap_or_else(|| panic!("`{name}` is not a list"));
     tape.values(list).collect()
 }
 
 pub fn scalar_field<'a>(tape: &'a FlatTape, object: RecordIndex, name: &str) -> &'a str {
-    tape.scalar(field(tape, object, name))
-        .unwrap_or_else(|| panic!("`{name}` is not a scalar"))
+    tape.scalar(field(tape, object, name)).unwrap_or_else(|| panic!("`{name}` is not a scalar"))
 }
 
 pub fn require_type(tape: &FlatTape, object: RecordIndex, expected: &str) {
-    assert_eq!(
-        scalar_field(tape, object, "type"),
-        format!(r#""{expected}""#)
-    );
+    assert_eq!(scalar_field(tape, object, "type"), format!(r#""{expected}""#));
 }
 
 pub fn span(tape: &FlatTape, object: RecordIndex) -> (u32, u32) {
     (
-        tape.scalar_u32(field(tape, object, "start"))
-            .expect("numeric start"),
-        tape.scalar_u32(field(tape, object, "end"))
-            .expect("numeric end"),
+        tape.scalar_u32(field(tape, object, "start")).expect("numeric start"),
+        tape.scalar_u32(field(tape, object, "end")).expect("numeric end"),
     )
 }
 
@@ -103,12 +93,9 @@ pub fn assert_all_records_and_scalar_bytes_reachable(tape: &FlatTape) {
                 let range = value.as_scalar().expect("scalar range");
                 let start = usize::try_from(range.start).expect("scalar start fits usize");
                 let length = usize::try_from(range.length).expect("scalar length fits usize");
-                let end = start
-                    .checked_add(length)
-                    .expect("scalar range does not overflow");
-                for byte in scalar_bytes
-                    .get_mut(start..end)
-                    .expect("scalar range is inside packed storage")
+                let end = start.checked_add(length).expect("scalar range does not overflow");
+                for byte in
+                    scalar_bytes.get_mut(start..end).expect("scalar range is inside packed storage")
                 {
                     *byte = true;
                 }

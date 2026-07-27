@@ -123,8 +123,7 @@ impl RejectionModuleNames {
     }
 
     fn push(&mut self, span: oxc_span::Span) {
-        self.spans
-            .push(tsrx_tape_schema::TapeSpan::new(span.start, span.end));
+        self.spans.push(tsrx_tape_schema::TapeSpan::new(span.start, span.end));
     }
 }
 
@@ -202,12 +201,10 @@ fn parse_to_projected_tape_with_retention(
     let source_type = match request.source_type {
         Some("script") => SourceKind::TypeScriptReact.source_type().with_script(true),
         Some("module") => SourceKind::TypeScriptReact.source_type().with_module(true),
-        Some("commonjs") => SourceKind::TypeScriptReact
-            .source_type()
-            .with_commonjs(true),
-        Some("unambiguous") | None => SourceKind::TypeScriptReact
-            .source_type()
-            .with_unambiguous(true),
+        Some("commonjs") => SourceKind::TypeScriptReact.source_type().with_commonjs(true),
+        Some("unambiguous") | None => {
+            SourceKind::TypeScriptReact.source_type().with_unambiguous(true)
+        }
         Some(_) => SourceKind::TypeScriptReact.source_type(),
     };
     let parsed = parse_counter.invoke(|| {
@@ -220,11 +217,7 @@ fn parse_to_projected_tape_with_retention(
     });
     let comments = serialize_comments(&parsed.program, request.source)?;
     let mut errors = DiagnosticTable::default();
-    append_diagnostics(
-        &mut errors,
-        parsed.diagnostics.iter(),
-        DiagnosticPhase::Grammar,
-    )?;
+    append_diagnostics(&mut errors, parsed.diagnostics.iter(), DiagnosticPhase::Grammar)?;
     let syntax_failed = parsed.panicked || !parsed.diagnostics.is_empty();
     if syntax_failed {
         let rejection_module_names = match request.rejection_metadata {
@@ -277,11 +270,7 @@ fn parse_to_projected_tape_with_retention(
     }
     if request.show_semantic_errors {
         let semantic = SemanticBuilder::new_compiler().build(&parsed.program);
-        append_diagnostics(
-            &mut errors,
-            semantic.diagnostics.iter(),
-            DiagnosticPhase::Semantic,
-        )?;
+        append_diagnostics(&mut errors, semantic.diagnostics.iter(), DiagnosticPhase::Semantic)?;
     }
     let module = retain_module
         .then(|| serialize_module(&parsed.program, &parsed.module_record))
@@ -320,21 +309,12 @@ pub fn parse_failed_tsrx_metadata(
     let allocator = Allocator::default();
     let mut parse_counter = PublicOxcParseCounter::default();
     let parsed = parse_counter.invoke(|| {
-        Parser::new(
-            &allocator,
-            source,
-            SourceKind::TypeScriptReact.source_type(),
-        )
-        .parse()
+        Parser::new(&allocator, source, SourceKind::TypeScriptReact.source_type()).parse()
     });
     let comments = serialize_comments(&parsed.program, source)?;
     let mut errors = DiagnosticTable::default();
     if rejection_metadata.retains_module_names() {
-        append_diagnostics(
-            &mut errors,
-            parsed.diagnostics.iter(),
-            DiagnosticPhase::Grammar,
-        )?;
+        append_diagnostics(&mut errors, parsed.diagnostics.iter(), DiagnosticPhase::Grammar)?;
     }
     let rejection_module_names = match rejection_metadata {
         RejectionMetadata::None => RejectionModuleNames::default(),
@@ -377,10 +357,7 @@ pub fn render_diagnostic_codeframes(
     for index in 0..diagnostics.len() {
         let record = diagnostics.records()[index];
         let diagnostic = rebuild_diagnostic(diagnostics, &record)?;
-        let sourced = SourcedDiagnostic {
-            diagnostic: &diagnostic,
-            source: &indexed_source,
-        };
+        let sourced = SourcedDiagnostic { diagnostic: &diagnostic, source: &indexed_source };
         let index = u32::try_from(index)
             .map(RecordIndex::new)
             .map_err(|_| TapeBuildError::CapacityOverflow)?;
@@ -463,13 +440,9 @@ fn rebuild_diagnostic(
     let labels = labels
         .iter()
         .map(|label| {
-            let length = label
-                .span
-                .end
-                .checked_sub(label.span.start)
-                .ok_or_else(|| {
-                    ProjectedParseError::Invariant("reversed diagnostic label".to_string())
-                })?;
+            let length = label.span.end.checked_sub(label.span.start).ok_or_else(|| {
+                ProjectedParseError::Invariant("reversed diagnostic label".to_string())
+            })?;
             let message = optional_diagnostic_string(table, label.message)?.map(str::to_owned);
             let span = (label.span.start, length);
             Ok(if label.primary {

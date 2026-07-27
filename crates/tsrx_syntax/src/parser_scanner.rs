@@ -108,11 +108,7 @@ struct TinyStack<T: Copy, const N: usize> {
 
 impl<T: Copy, const N: usize> TinyStack<T, N> {
     fn new() -> Self {
-        Self {
-            inline: [None; N],
-            length: 0,
-            spill: Vec::new(),
-        }
+        Self { inline: [None; N], length: 0, spill: Vec::new() }
     }
 
     fn push(&mut self, value: T) {
@@ -467,10 +463,7 @@ impl<'a> Scanner<'a> {
                 }
                 b')' | b']' | b'}' => {
                     let mut closed_block = false;
-                    if delimiters
-                        .last()
-                        .is_some_and(|delimiter| delimiter.0 == byte)
-                    {
+                    if delimiters.last().is_some_and(|delimiter| delimiter.0 == byte) {
                         closed_block = delimiters.pop().is_some_and(|delimiter| delimiter.1);
                         index += 1;
                         if delimiters.is_empty() && closing.is_some() {
@@ -544,11 +537,7 @@ impl<'a> Scanner<'a> {
                     closed_control_paren = false;
                 }
                 b'.' => {
-                    index += if self.bytes.get(index..index + 3) == Some(b"...") {
-                        3
-                    } else {
-                        1
-                    };
+                    index += if self.bytes.get(index..index + 3) == Some(b"...") { 3 } else { 1 };
                     can_start_expression = false;
                     can_start_jsx = false;
                     pending_control_paren = false;
@@ -594,14 +583,7 @@ impl<'a> Scanner<'a> {
         let (header, after_header) = self.parse_parenthesized(index)?;
         index = self.skip_trivia(after_header)?;
         let body = self.parse_body(node, index)?;
-        self.add_clause(
-            node,
-            ClauseRole::If,
-            start,
-            header,
-            body,
-            ForHeader::default(),
-        )?;
+        self.add_clause(node, ClauseRole::If, start, header, body, ForHeader::default())?;
         index = body.end as usize;
 
         loop {
@@ -741,14 +723,7 @@ impl<'a> Scanner<'a> {
                 let (header, colon) = self.parse_case_header(value_start)?;
                 let body_start = self.skip_trivia(colon + 1)?;
                 let body = self.parse_body(node, body_start)?;
-                self.add_clause(
-                    node,
-                    ClauseRole::Case,
-                    index,
-                    header,
-                    body,
-                    ForHeader::default(),
-                )?;
+                self.add_clause(node, ClauseRole::Case, index, header, body, ForHeader::default())?;
                 index = body.end as usize;
                 continue;
             }
@@ -998,11 +973,8 @@ impl<'a> Scanner<'a> {
             });
         }
         let first_start = self.skip_ascii_whitespace(inner_start, inner_end);
-        let first_end = trim_ascii_end(
-            self.bytes,
-            first_start,
-            commas.first().copied().unwrap_or(inner_end),
-        );
+        let first_end =
+            trim_ascii_end(self.bytes, first_start, commas.first().copied().unwrap_or(inner_end));
         if first_start == first_end {
             return Err(ProjectionError::MalformedSyntax {
                 offset: to_u32(first_start)?,
@@ -1318,9 +1290,8 @@ impl<'a> Scanner<'a> {
             index += 1;
         } else if dynamic {
             let owner = to_u32(self.dynamic_tags.len())?;
-            let initial_subtree_end = owner
-                .checked_add(1)
-                .ok_or(ProjectionError::SourceTooLarge)?;
+            let initial_subtree_end =
+                owner.checked_add(1).ok_or(ProjectionError::SourceTooLarge)?;
             let parser_nested = self.parser_mode && !self.parser_dynamic_parents.is_empty();
             let embedded_slot = if self.parser_mode && !parser_nested {
                 let slot = self.embedded_tokens.len();
@@ -1583,12 +1554,7 @@ impl<'a> Scanner<'a> {
                     } else {
                         let closing_name_start = index;
                         index = self.skip_jsx_name(index);
-                        (
-                            closing_name_start,
-                            index,
-                            ByteSpan::default(),
-                            ByteSpan::default(),
-                        )
+                        (closing_name_start, index, ByteSpan::default(), ByteSpan::default())
                     };
                     index = self.skip_jsx_tag_trivia(index)?;
                     if self.bytes.get(index) != Some(&b'>') {
@@ -1929,10 +1895,7 @@ impl<'a> Scanner<'a> {
         if normalized_start > trailing_inner_end {
             normalized_start = trailing_inner_end;
         }
-        Ok(ByteSpan::new(
-            to_u32(normalized_start)?,
-            to_u32(trailing_inner_end)?,
-        ))
+        Ok(ByteSpan::new(to_u32(normalized_start)?, to_u32(trailing_inner_end)?))
     }
 
     fn next_dynamic_identity_token(
@@ -2057,8 +2020,7 @@ impl<'a> Scanner<'a> {
                 *nested_cursor = subtree_end;
             }
             #[cfg(test)]
-            self.identity_token_visits
-                .set(self.identity_token_visits.get().saturating_add(1));
+            self.identity_token_visits.set(self.identity_token_visits.get().saturating_add(1));
             return Ok(Some((token_start, *index)));
         }
         Ok(None)
@@ -2084,16 +2046,14 @@ impl<'a> Scanner<'a> {
         while index < end {
             if self.bytes.get(index..index + 2) == Some(b"//") {
                 let comment_end = self.skip_line_comment(index + 2).min(end);
-                self.dynamic_comments
-                    .push(ByteSpan::new(to_u32(index)?, to_u32(comment_end)?));
+                self.dynamic_comments.push(ByteSpan::new(to_u32(index)?, to_u32(comment_end)?));
                 index = comment_end;
             } else if self.bytes.get(index..index + 2) == Some(b"/*") {
                 let comment_end = self.skip_block_comment(index)?;
                 if comment_end > end {
                     return Err(ProjectionError::StructuralMismatch);
                 }
-                self.dynamic_comments
-                    .push(ByteSpan::new(to_u32(index)?, to_u32(comment_end)?));
+                self.dynamic_comments.push(ByteSpan::new(to_u32(index)?, to_u32(comment_end)?));
                 index = comment_end;
             } else {
                 index += 1;
@@ -2204,10 +2164,8 @@ impl<'a> Scanner<'a> {
 
         let manifest = self.parser_code_blocks.len();
         let body_start = to_u32(start + 1)?;
-        self.parser_code_blocks.push(ParserCodeBlock {
-            token,
-            body: ByteSpan::new(body_start, body_start),
-        });
+        self.parser_code_blocks
+            .push(ParserCodeBlock { token, body: ByteSpan::new(body_start, body_start) });
         let end = self.scan_region(start + 2, Some(b'}'))?;
         self.parser_code_blocks[manifest].body.end = to_u32(end)?;
         Ok(end)
@@ -2243,10 +2201,8 @@ impl<'a> Scanner<'a> {
         self.nodes.truncate(checkpoint.nodes);
         self.clauses.truncate(checkpoint.clauses);
         self.embedded_tokens.truncate(checkpoint.embedded_tokens);
-        self.parser_dynamic_tokens
-            .truncate(checkpoint.parser_dynamic_tokens);
-        self.parser_code_blocks
-            .truncate(checkpoint.parser_code_blocks);
+        self.parser_dynamic_tokens.truncate(checkpoint.parser_dynamic_tokens);
+        self.parser_code_blocks.truncate(checkpoint.parser_code_blocks);
         self.dynamic_tags.truncate(checkpoint.dynamic_tags);
         self.dynamic_comments.truncate(checkpoint.dynamic_comments);
         self.style_blocks.truncate(checkpoint.style_blocks);
@@ -2291,9 +2247,8 @@ impl<'a> Scanner<'a> {
                 index -= 1;
             }
             if index >= 2 && self.bytes.get(index - 2..index) == Some(b"*/") {
-                let Some(comment_start) = self.bytes[..index - 2]
-                    .windows(2)
-                    .rposition(|window| window == b"/*")
+                let Some(comment_start) =
+                    self.bytes[..index - 2].windows(2).rposition(|window| window == b"/*")
                 else {
                     break;
                 };
@@ -2305,10 +2260,8 @@ impl<'a> Scanner<'a> {
                 .rposition(|byte| matches!(byte, b'\n' | b'\r'))
                 .map_or(0, |position| position + 1);
             let line = &self.bytes[line_start..index];
-            let first = line
-                .iter()
-                .position(|byte| !byte.is_ascii_whitespace())
-                .unwrap_or(line.len());
+            let first =
+                line.iter().position(|byte| !byte.is_ascii_whitespace()).unwrap_or(line.len());
             if line.get(first..first + 2) == Some(b"//") {
                 index = line_start;
                 continue;
@@ -2501,11 +2454,7 @@ impl<'a> Scanner<'a> {
         loop {
             if let Some(width) = self.identifier_continue_width(index) {
                 index += width;
-            } else if self
-                .bytes
-                .get(index)
-                .is_some_and(|byte| matches!(byte, b'.' | b':' | b'-'))
-            {
+            } else if self.bytes.get(index).is_some_and(|byte| matches!(byte, b'.' | b':' | b'-')) {
                 index += 1;
             } else {
                 return index;
@@ -2515,10 +2464,7 @@ impl<'a> Scanner<'a> {
 
     fn looks_like_jsx_start(&self, index: usize) -> bool {
         self.identifier_start_width(index + 1).is_some()
-            || self
-                .bytes
-                .get(index + 1)
-                .is_some_and(|byte| matches!(byte, b'>' | b'{'))
+            || self.bytes.get(index + 1).is_some_and(|byte| matches!(byte, b'>' | b'{'))
     }
 }
 
@@ -2533,22 +2479,15 @@ fn find_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
     if needle.is_empty() {
         return Some(0);
     }
-    haystack
-        .windows(needle.len())
-        .position(|window| window == needle)
+    haystack.windows(needle.len()).position(|window| window == needle)
 }
 
 fn contains_collision_scalar(bytes: &[u8]) -> bool {
-    bytes
-        .windows(3)
-        .any(|window| window == [0xee, 0x80, 0x80] || window == [0xef, 0xbf, 0xbf])
+    bytes.windows(3).any(|window| window == [0xee, 0x80, 0x80] || window == [0xef, 0xbf, 0xbf])
 }
 
 fn previous_significant_byte(bytes: &[u8], before: usize) -> Option<u8> {
-    bytes[..before]
-        .iter()
-        .rfind(|byte| !byte.is_ascii_whitespace())
-        .copied()
+    bytes[..before].iter().rfind(|byte| !byte.is_ascii_whitespace()).copied()
 }
 
 fn unsupported_at_construct(bytes: &[u8], index: usize) -> Option<&'static str> {
@@ -2562,27 +2501,18 @@ fn unsupported_at_construct(bytes: &[u8], index: usize) -> Option<&'static str> 
 }
 
 fn jsx_text_looks_structural(bytes: &[u8], index: usize) -> bool {
-    [b"if".as_slice(), b"for", b"switch", b"try"]
-        .iter()
-        .any(|keyword| {
-            let end = index + 1 + keyword.len();
-            if bytes.get(index + 1..end) != Some(*keyword)
-                || identifier_continue_width(bytes, end).is_some()
-            {
-                return false;
-            }
-            bytes[end..]
-                .iter()
-                .find(|byte| !byte.is_ascii_whitespace())
-                .copied()
-                == Some(b'(')
-                || (*keyword == b"try"
-                    && bytes[end..]
-                        .iter()
-                        .find(|byte| !byte.is_ascii_whitespace())
-                        .copied()
-                        == Some(b'{'))
-        })
+    [b"if".as_slice(), b"for", b"switch", b"try"].iter().any(|keyword| {
+        let end = index + 1 + keyword.len();
+        if bytes.get(index + 1..end) != Some(*keyword)
+            || identifier_continue_width(bytes, end).is_some()
+        {
+            return false;
+        }
+        bytes[end..].iter().find(|byte| !byte.is_ascii_whitespace()).copied() == Some(b'(')
+            || (*keyword == b"try"
+                && bytes[end..].iter().find(|byte| !byte.is_ascii_whitespace()).copied()
+                    == Some(b'{'))
+    })
 }
 
 pub(crate) fn source_fingerprint(bytes: &[u8]) -> u128 {
@@ -2592,12 +2522,9 @@ pub(crate) fn source_fingerprint(bytes: &[u8]) -> u128 {
         let mut word = [0_u8; 8];
         word[..chunk.len()].copy_from_slice(chunk);
         let value = u64::from_le_bytes(word);
-        first = (first ^ value)
-            .wrapping_mul(0x9e37_79b1_85eb_ca87)
-            .rotate_left(27);
-        second = (second ^ value.rotate_left(31))
-            .wrapping_mul(0xc2b2_ae3d_27d4_eb4f)
-            .rotate_left(33);
+        first = (first ^ value).wrapping_mul(0x9e37_79b1_85eb_ca87).rotate_left(27);
+        second =
+            (second ^ value.rotate_left(31)).wrapping_mul(0xc2b2_ae3d_27d4_eb4f).rotate_left(33);
     }
     u128::from(first) << 64 | u128::from(second)
 }

@@ -51,10 +51,7 @@ pub fn classify_wtf8_surrogates_detailed(
     let (contexts, earlier_error) =
         parser_scanner::Scanner::new_for_surrogate_classification(source, byte_offsets)
             .classify_surrogates_detailed();
-    Wtf8SurrogateClassification {
-        contexts,
-        earlier_error,
-    }
+    Wtf8SurrogateClassification { contexts, earlier_error }
 }
 
 /// Performs one byte-oriented structural scan and returns a compact overlay over `source`.

@@ -307,10 +307,7 @@ impl Overlay {
     pub fn is_identity_range(&self, range: Range<u32>) -> bool {
         range.start <= range.end
             && range.end <= self.source_len
-            && self
-                .tokens
-                .iter()
-                .all(|token| !token.span.intersects(range.start, range.end))
+            && self.tokens.iter().all(|token| !token.span.intersects(range.start, range.end))
             && self
                 .embedded_tokens
                 .iter()

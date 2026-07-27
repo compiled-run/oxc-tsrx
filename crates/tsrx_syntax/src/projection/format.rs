@@ -123,13 +123,8 @@ pub fn project_for_format(
     for (slot, manifest) in built.tries.iter().enumerate() {
         try_slots[manifest.node as usize] = to_u32(slot)?;
     }
-    let styles = overlay
-        .style_blocks
-        .iter()
-        .map(|style| StyleManifest {
-            payload: style.content,
-        })
-        .collect();
+    let styles =
+        overlay.style_blocks.iter().map(|style| StyleManifest { payload: style.content }).collect();
     let dynamic_count = to_u32(overlay.dynamic_tags.len())?;
     Ok(FormatProjection {
         projected: built.mapped.projected,
@@ -137,10 +132,7 @@ pub fn project_for_format(
         tokens: overlay
             .tokens
             .iter()
-            .map(|token| TokenManifest {
-                kind: token.kind,
-                owner: token.owner,
-            })
+            .map(|token| TokenManifest { kind: token.kind, owner: token.owner })
             .collect(),
         wrappers: built.wrappers,
         headers: built.headers,
@@ -149,16 +141,10 @@ pub fn project_for_format(
         dynamics: overlay
             .dynamic_tags
             .iter()
-            .map(|tag| DynamicManifest {
-                self_closing: tag.self_closing,
-            })
+            .map(|tag| DynamicManifest { self_closing: tag.self_closing })
             .collect(),
         dynamic_count,
-        dynamic_offsets: overlay
-            .dynamic_tags
-            .iter()
-            .map(|tag| tag.expression.start)
-            .collect(),
+        dynamic_offsets: overlay.dynamic_tags.iter().map(|tag| tag.expression.start).collect(),
         dynamic_comments: overlay.dynamic_comments.clone(),
         styles,
         shape_fingerprint: structural_fingerprint(overlay),

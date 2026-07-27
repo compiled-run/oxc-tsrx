@@ -38,10 +38,7 @@ pub(crate) fn validate_dynamic_tags_with_synthetic_calls(
     contract: Option<DynamicTagContract<'_>>,
     synthetic_callee_spans: &[(u32, u32)],
 ) -> Result<(), DynamicTagValidationError> {
-    if synthetic_callee_spans
-        .windows(2)
-        .any(|pair| pair[0] >= pair[1])
-    {
+    if synthetic_callee_spans.windows(2).any(|pair| pair[0] >= pair[1]) {
         return Err(DynamicTagValidationError::Invariant(
             "unordered synthetic callee span contract".to_string(),
         ));
@@ -220,11 +217,7 @@ fn dynamic_tag_expression<'a, 'element>(
 
 fn scaffold_ordinal(name: &str, prefix: &str, kind: char, suffix: bool) -> Option<u32> {
     let rest = name.strip_prefix(prefix)?.strip_prefix(kind)?;
-    let digits = if suffix {
-        rest.strip_suffix('_')?
-    } else {
-        rest
-    };
+    let digits = if suffix { rest.strip_suffix('_')? } else { rest };
     if digits.is_empty() || !digits.bytes().all(|byte| byte.is_ascii_digit()) {
         return None;
     }
@@ -263,9 +256,7 @@ fn root_is_synthetic_call(
         return false;
     };
     let span = call.callee.span();
-    synthetic_callee_spans
-        .binary_search(&(span.start, span.end))
-        .is_ok()
+    synthetic_callee_spans.binary_search(&(span.start, span.end)).is_ok()
 }
 
 fn is_valid_dynamic_root(expression: &Expression<'_>) -> bool {

@@ -178,18 +178,13 @@ impl BoundedString {
     fn with_capacity(capacity: usize) -> Result<Self, TapeBuildError> {
         let capacity = capacity.min(PROGRAM_TRANSFER_MAX_BYTES);
         let mut value = String::new();
-        value
-            .try_reserve(capacity)
-            .map_err(|_| TapeBuildError::CapacityOverflow)?;
+        value.try_reserve(capacity).map_err(|_| TapeBuildError::CapacityOverflow)?;
         Ok(Self { value })
     }
 
     fn ensure(&mut self, additional: usize) -> Result<(), TapeBuildError> {
-        let length = self
-            .value
-            .len()
-            .checked_add(additional)
-            .ok_or(TapeBuildError::CapacityOverflow)?;
+        let length =
+            self.value.len().checked_add(additional).ok_or(TapeBuildError::CapacityOverflow)?;
         if length > PROGRAM_TRANSFER_MAX_BYTES {
             return Err(TapeBuildError::CapacityOverflow);
         }
@@ -292,23 +287,13 @@ enum Work {
 
 #[derive(Clone, Copy)]
 enum ContainerWork {
-    Object {
-        next: RecordIndex,
-        remaining: u32,
-        first: bool,
-    },
-    List {
-        next: RecordIndex,
-        remaining: u32,
-        first: bool,
-    },
+    Object { next: RecordIndex, remaining: u32, first: bool },
+    List { next: RecordIndex, remaining: u32, first: bool },
 }
 
 fn zero_flags(length: usize) -> Result<Vec<u8>, TapeBuildError> {
     let mut flags = Vec::new();
-    flags
-        .try_reserve_exact(length)
-        .map_err(|_| TapeBuildError::CapacityOverflow)?;
+    flags.try_reserve_exact(length).map_err(|_| TapeBuildError::CapacityOverflow)?;
     flags.resize(length, 0);
     Ok(flags)
 }
@@ -316,10 +301,7 @@ fn zero_flags(length: usize) -> Result<Vec<u8>, TapeBuildError> {
 fn push_json_string(output: &mut BoundedString, value: &str) -> Result<(), TapeBuildError> {
     const HEX: &[u8; 16] = b"0123456789abcdef";
 
-    if !value
-        .bytes()
-        .any(|byte| byte == b'"' || byte == b'\\' || byte <= 0x1f)
-    {
+    if !value.bytes().any(|byte| byte == b'"' || byte == b'\\' || byte <= 0x1f) {
         output.push('"')?;
         output.push_str(value)?;
         return output.push('"');
@@ -342,11 +324,7 @@ fn push_json_string(output: &mut BoundedString, value: &str) -> Result<(), TapeB
         let Some(escape) = escape else {
             continue;
         };
-        output.push_str(
-            value
-                .get(copied..index)
-                .ok_or(TapeBuildError::InvalidRecordIndex)?,
-        )?;
+        output.push_str(value.get(copied..index).ok_or(TapeBuildError::InvalidRecordIndex)?)?;
         output.push('\\')?;
         if escape == '\0' {
             output.push_str("u00")?;
@@ -357,11 +335,7 @@ fn push_json_string(output: &mut BoundedString, value: &str) -> Result<(), TapeB
         }
         copied = index + 1;
     }
-    output.push_str(
-        value
-            .get(copied..)
-            .ok_or(TapeBuildError::InvalidRecordIndex)?,
-    )?;
+    output.push_str(value.get(copied..).ok_or(TapeBuildError::InvalidRecordIndex)?)?;
     output.push('"')
 }
 
@@ -429,13 +403,11 @@ impl<'a> ProgramSerializer<'a> {
         let (capacity, track_paths, keys_are_json_safe) = transfer_layout(tape)?;
         let mut work = Vec::new();
         if track_paths {
-            work.try_reserve(64)
-                .map_err(|_| TapeBuildError::CapacityOverflow)?;
+            work.try_reserve(64).map_err(|_| TapeBuildError::CapacityOverflow)?;
         }
         let mut path = Vec::new();
         if track_paths {
-            path.try_reserve(64)
-                .map_err(|_| TapeBuildError::CapacityOverflow)?;
+            path.try_reserve(64).map_err(|_| TapeBuildError::CapacityOverflow)?;
         }
         let mut node = BoundedString::with_capacity(capacity)?;
         node.push_str("{\"version\":")?;
@@ -458,17 +430,13 @@ impl<'a> ProgramSerializer<'a> {
     }
 
     fn push_work(&mut self, work: Work) -> Result<(), TapeBuildError> {
-        self.work
-            .try_reserve(1)
-            .map_err(|_| TapeBuildError::CapacityOverflow)?;
+        self.work.try_reserve(1).map_err(|_| TapeBuildError::CapacityOverflow)?;
         self.work.push(work);
         Ok(())
     }
 
     fn push_path(&mut self, segment: PathSegment<'a>) -> Result<(), TapeBuildError> {
-        self.path
-            .try_reserve(1)
-            .map_err(|_| TapeBuildError::CapacityOverflow)?;
+        self.path.try_reserve(1).map_err(|_| TapeBuildError::CapacityOverflow)?;
         self.path.push(segment);
         Ok(())
     }
@@ -478,9 +446,7 @@ impl<'a> ProgramSerializer<'a> {
     fn mark(flags: &mut [u8], index: RecordIndex) -> Result<(), TapeBuildError> {
         let index = usize::try_from(index.get().ok_or(TapeBuildError::InvalidRecordIndex)?)
             .map_err(|_| TapeBuildError::InvalidRecordIndex)?;
-        let flag = flags
-            .get_mut(index)
-            .ok_or(TapeBuildError::InvalidRecordIndex)?;
+        let flag = flags.get_mut(index).ok_or(TapeBuildError::InvalidRecordIndex)?;
         if *flag != 0 {
             return Err(TapeBuildError::InvalidRecordIndex);
         }
@@ -541,9 +507,7 @@ impl<'a> ProgramSerializer<'a> {
         mut self,
     ) -> Result<String, TapeBuildError> {
         let mut containers = Vec::new();
-        containers
-            .try_reserve(64)
-            .map_err(|_| TapeBuildError::CapacityOverflow)?;
+        containers.try_reserve(64).map_err(|_| TapeBuildError::CapacityOverflow)?;
         let mut next_value = Some(self.tape.root());
 
         loop {
@@ -565,18 +529,14 @@ impl<'a> ProgramSerializer<'a> {
                         }
                     }
                     ValueKind::Object => {
-                        let object = value
-                            .as_object()
-                            .ok_or(TapeBuildError::InvalidRecordIndex)?;
+                        let object = value.as_object().ok_or(TapeBuildError::InvalidRecordIndex)?;
                         Self::mark(&mut self.objects, object)?;
                         let record = self
                             .tape
                             .object_record(object)
                             .ok_or(TapeBuildError::InvalidRecordIndex)?;
                         self.push_node::<KEYS_ARE_JSON_SAFE>('{')?;
-                        containers
-                            .try_reserve(1)
-                            .map_err(|_| TapeBuildError::CapacityOverflow)?;
+                        containers.try_reserve(1).map_err(|_| TapeBuildError::CapacityOverflow)?;
                         containers.push(ContainerWork::Object {
                             next: record.first_field,
                             remaining: record.field_count,
@@ -591,9 +551,7 @@ impl<'a> ProgramSerializer<'a> {
                             .list_record(list)
                             .ok_or(TapeBuildError::InvalidRecordIndex)?;
                         self.push_node::<KEYS_ARE_JSON_SAFE>('[')?;
-                        containers
-                            .try_reserve(1)
-                            .map_err(|_| TapeBuildError::CapacityOverflow)?;
+                        containers.try_reserve(1).map_err(|_| TapeBuildError::CapacityOverflow)?;
                         containers.push(ContainerWork::List {
                             next: record.first_value,
                             remaining: record.length,
@@ -608,11 +566,7 @@ impl<'a> ProgramSerializer<'a> {
                 break;
             };
             match container {
-                ContainerWork::Object {
-                    next,
-                    remaining,
-                    first,
-                } => {
+                ContainerWork::Object { next, remaining, first } => {
                     if remaining == 0 {
                         if !next.is_none() {
                             return Err(TapeBuildError::InvalidRecordIndex);
@@ -630,29 +584,22 @@ impl<'a> ProgramSerializer<'a> {
                         .tape
                         .field_record(field_index)
                         .ok_or(TapeBuildError::InvalidRecordIndex)?;
-                    let key = self
-                        .tape
-                        .checked_key(field)
-                        .ok_or(TapeBuildError::InvalidRecordIndex)?;
+                    let key =
+                        self.tape.checked_key(field).ok_or(TapeBuildError::InvalidRecordIndex)?;
                     if !first {
                         self.push_node::<KEYS_ARE_JSON_SAFE>(',')?;
                     }
                     self.write_key::<KEYS_ARE_JSON_SAFE>(key)?;
                     self.push_node::<KEYS_ARE_JSON_SAFE>(':')?;
-                    *containers
-                        .last_mut()
-                        .ok_or(TapeBuildError::InvalidRecordIndex)? = ContainerWork::Object {
-                        next: field.next,
-                        remaining: remaining - 1,
-                        first: false,
-                    };
+                    *containers.last_mut().ok_or(TapeBuildError::InvalidRecordIndex)? =
+                        ContainerWork::Object {
+                            next: field.next,
+                            remaining: remaining - 1,
+                            first: false,
+                        };
                     next_value = Some(field.value);
                 }
-                ContainerWork::List {
-                    next,
-                    remaining,
-                    first,
-                } => {
+                ContainerWork::List { next, remaining, first } => {
                     if remaining == 0 {
                         if !next.is_none() {
                             return Err(TapeBuildError::InvalidRecordIndex);
@@ -673,13 +620,12 @@ impl<'a> ProgramSerializer<'a> {
                     if !first {
                         self.push_node::<KEYS_ARE_JSON_SAFE>(',')?;
                     }
-                    *containers
-                        .last_mut()
-                        .ok_or(TapeBuildError::InvalidRecordIndex)? = ContainerWork::List {
-                        next: item.next,
-                        remaining: remaining - 1,
-                        first: false,
-                    };
+                    *containers.last_mut().ok_or(TapeBuildError::InvalidRecordIndex)? =
+                        ContainerWork::List {
+                            next: item.next,
+                            remaining: remaining - 1,
+                            first: false,
+                        };
                     next_value = Some(item.value);
                 }
             }
@@ -689,26 +635,16 @@ impl<'a> ProgramSerializer<'a> {
     }
 
     fn run_with_fixes(mut self) -> Result<String, TapeBuildError> {
-        self.push_work(Work::Value {
-            value: self.tape.root(),
-            fix_owner: None,
-        })?;
+        self.push_work(Work::Value { value: self.tape.root(), fix_owner: None })?;
         while let Some(work) = self.work.pop() {
             match work {
                 Work::Value { value, fix_owner } => self.write_value(value, fix_owner)?,
-                Work::Object {
-                    object,
-                    next,
-                    remaining,
-                    first,
-                    fix_recorded,
-                } => self.write_object_field(object, next, remaining, first, fix_recorded)?,
-                Work::List {
-                    next,
-                    remaining,
-                    index,
-                    first,
-                } => self.write_list_value(next, remaining, index, first)?,
+                Work::Object { object, next, remaining, first, fix_recorded } => {
+                    self.write_object_field(object, next, remaining, first, fix_recorded)?
+                }
+                Work::List { next, remaining, index, first } => {
+                    self.write_list_value(next, remaining, index, first)?
+                }
                 Work::PopPath => {
                     self.path.pop().ok_or(TapeBuildError::InvalidRecordIndex)?;
                 }
@@ -749,21 +685,15 @@ impl<'a> ProgramSerializer<'a> {
                     self.node.push_u32(value)
                 } else {
                     self.node.push_str(
-                        self.tape
-                            .scalar(value)
-                            .ok_or(TapeBuildError::InvalidRecordIndex)?,
+                        self.tape.scalar(value).ok_or(TapeBuildError::InvalidRecordIndex)?,
                     )
                 }
             }
             ValueKind::Object => {
-                let object = value
-                    .as_object()
-                    .ok_or(TapeBuildError::InvalidRecordIndex)?;
+                let object = value.as_object().ok_or(TapeBuildError::InvalidRecordIndex)?;
                 Self::mark(&mut self.objects, object)?;
-                let record = self
-                    .tape
-                    .object_record(object)
-                    .ok_or(TapeBuildError::InvalidRecordIndex)?;
+                let record =
+                    self.tape.object_record(object).ok_or(TapeBuildError::InvalidRecordIndex)?;
                 self.node.push('{')?;
                 self.push_work(Work::Object {
                     object,
@@ -776,10 +706,8 @@ impl<'a> ProgramSerializer<'a> {
             ValueKind::List => {
                 let list = value.as_list().ok_or(TapeBuildError::InvalidRecordIndex)?;
                 Self::mark(&mut self.lists, list)?;
-                let record = self
-                    .tape
-                    .list_record(list)
-                    .ok_or(TapeBuildError::InvalidRecordIndex)?;
+                let record =
+                    self.tape.list_record(list).ok_or(TapeBuildError::InvalidRecordIndex)?;
                 self.node.push('[')?;
                 self.push_work(Work::List {
                     next: record.first_value,
@@ -805,19 +733,12 @@ impl<'a> ProgramSerializer<'a> {
             }
             return self.node.push('}');
         }
-        let field_index = next
-            .get()
-            .map(RecordIndex::new)
-            .ok_or(TapeBuildError::InvalidRecordIndex)?;
+        let field_index =
+            next.get().map(RecordIndex::new).ok_or(TapeBuildError::InvalidRecordIndex)?;
         Self::mark(&mut self.fields, field_index)?;
-        let field = self
-            .tape
-            .field_record(field_index)
-            .ok_or(TapeBuildError::InvalidRecordIndex)?;
-        let key = self
-            .tape
-            .checked_key(field)
-            .ok_or(TapeBuildError::InvalidRecordIndex)?;
+        let field =
+            self.tape.field_record(field_index).ok_or(TapeBuildError::InvalidRecordIndex)?;
+        let key = self.tape.checked_key(field).ok_or(TapeBuildError::InvalidRecordIndex)?;
         if field.value.needs_fix() {
             if !matches!(field.value.kind(), ValueKind::Scalar) {
                 return Err(TapeBuildError::InvalidRecordIndex);
@@ -845,16 +766,10 @@ impl<'a> ProgramSerializer<'a> {
         })?;
         if self.track_paths {
             self.push_work(Work::PopPath)?;
-            self.push_work(Work::Value {
-                value: field.value,
-                fix_owner: Some(object),
-            })?;
+            self.push_work(Work::Value { value: field.value, fix_owner: Some(object) })?;
             self.push_path(PathSegment::Key(key))
         } else {
-            self.push_work(Work::Value {
-                value: field.value,
-                fix_owner: Some(object),
-            })
+            self.push_work(Work::Value { value: field.value, fix_owner: Some(object) })
         }
     }
 
@@ -871,38 +786,26 @@ impl<'a> ProgramSerializer<'a> {
             }
             return self.node.push(']');
         }
-        let value_index = next
-            .get()
-            .map(RecordIndex::new)
-            .ok_or(TapeBuildError::InvalidRecordIndex)?;
+        let value_index =
+            next.get().map(RecordIndex::new).ok_or(TapeBuildError::InvalidRecordIndex)?;
         Self::mark(&mut self.values, value_index)?;
-        let item = self
-            .tape
-            .list_value_record(value_index)
-            .ok_or(TapeBuildError::InvalidRecordIndex)?;
+        let item =
+            self.tape.list_value_record(value_index).ok_or(TapeBuildError::InvalidRecordIndex)?;
         if !first {
             self.node.push(',')?;
         }
         self.push_work(Work::List {
             next: item.next,
             remaining: remaining - 1,
-            index: index
-                .checked_add(1)
-                .ok_or(TapeBuildError::CapacityOverflow)?,
+            index: index.checked_add(1).ok_or(TapeBuildError::CapacityOverflow)?,
             first: false,
         })?;
         if self.track_paths {
             self.push_work(Work::PopPath)?;
-            self.push_work(Work::Value {
-                value: item.value,
-                fix_owner: None,
-            })?;
+            self.push_work(Work::Value { value: item.value, fix_owner: None })?;
             self.push_path(PathSegment::Index(index))
         } else {
-            self.push_work(Work::Value {
-                value: item.value,
-                fix_owner: None,
-            })
+            self.push_work(Work::Value { value: item.value, fix_owner: None })
         }
     }
 }
@@ -923,19 +826,11 @@ impl OwnedProgramSerializer {
         node.push_str("{\"version\":")?;
         node.push_u32(u32::from(PROGRAM_TRANSFER_VERSION))?;
         node.push_str(",\"node\":")?;
-        Ok(Self {
-            tape,
-            node,
-            keys_are_json_safe,
-        })
+        Ok(Self { tape, node, keys_are_json_safe })
     }
 
     fn run(self) -> Result<String, TapeBuildError> {
-        if self.keys_are_json_safe {
-            self.run_inner::<true>()
-        } else {
-            self.run_inner::<false>()
-        }
+        if self.keys_are_json_safe { self.run_inner::<true>() } else { self.run_inner::<false>() }
     }
 
     #[allow(clippy::inline_always)]
@@ -971,9 +866,7 @@ impl OwnedProgramSerializer {
     #[allow(clippy::too_many_lines)]
     fn run_inner<const KEYS_ARE_JSON_SAFE: bool>(mut self) -> Result<String, TapeBuildError> {
         let mut containers = Vec::new();
-        containers
-            .try_reserve(64)
-            .map_err(|_| TapeBuildError::CapacityOverflow)?;
+        containers.try_reserve(64).map_err(|_| TapeBuildError::CapacityOverflow)?;
         let mut next_value = Some(self.tape.root());
 
         loop {
@@ -999,14 +892,10 @@ impl OwnedProgramSerializer {
                         }
                     }
                     ValueKind::Object => {
-                        let object = value
-                            .as_object()
-                            .ok_or(TapeBuildError::InvalidRecordIndex)?;
+                        let object = value.as_object().ok_or(TapeBuildError::InvalidRecordIndex)?;
                         let record = self.tape.take_object_record_for_transfer(object)?;
                         Self::push_node::<KEYS_ARE_JSON_SAFE>(&mut self.node, '{')?;
-                        containers
-                            .try_reserve(1)
-                            .map_err(|_| TapeBuildError::CapacityOverflow)?;
+                        containers.try_reserve(1).map_err(|_| TapeBuildError::CapacityOverflow)?;
                         containers.push(ContainerWork::Object {
                             next: record.first_field,
                             remaining: record.field_count,
@@ -1017,9 +906,7 @@ impl OwnedProgramSerializer {
                         let list = value.as_list().ok_or(TapeBuildError::InvalidRecordIndex)?;
                         let record = self.tape.take_list_record_for_transfer(list)?;
                         Self::push_node::<KEYS_ARE_JSON_SAFE>(&mut self.node, '[')?;
-                        containers
-                            .try_reserve(1)
-                            .map_err(|_| TapeBuildError::CapacityOverflow)?;
+                        containers.try_reserve(1).map_err(|_| TapeBuildError::CapacityOverflow)?;
                         containers.push(ContainerWork::List {
                             next: record.first_value,
                             remaining: record.length,
@@ -1034,11 +921,7 @@ impl OwnedProgramSerializer {
                 break;
             };
             match container {
-                ContainerWork::Object {
-                    next,
-                    remaining,
-                    first,
-                } => {
+                ContainerWork::Object { next, remaining, first } => {
                     if remaining == 0 {
                         if !next.is_none() {
                             return Err(TapeBuildError::InvalidRecordIndex);
@@ -1063,20 +946,15 @@ impl OwnedProgramSerializer {
                         Self::write_key::<KEYS_ARE_JSON_SAFE>(&mut self.node, key)?;
                     }
                     Self::push_node::<KEYS_ARE_JSON_SAFE>(&mut self.node, ':')?;
-                    *containers
-                        .last_mut()
-                        .ok_or(TapeBuildError::InvalidRecordIndex)? = ContainerWork::Object {
-                        next: field.next,
-                        remaining: remaining - 1,
-                        first: false,
-                    };
+                    *containers.last_mut().ok_or(TapeBuildError::InvalidRecordIndex)? =
+                        ContainerWork::Object {
+                            next: field.next,
+                            remaining: remaining - 1,
+                            first: false,
+                        };
                     next_value = Some(field.value);
                 }
-                ContainerWork::List {
-                    next,
-                    remaining,
-                    first,
-                } => {
+                ContainerWork::List { next, remaining, first } => {
                     if remaining == 0 {
                         if !next.is_none() {
                             return Err(TapeBuildError::InvalidRecordIndex);
@@ -1093,13 +971,12 @@ impl OwnedProgramSerializer {
                     if !first {
                         Self::push_node::<KEYS_ARE_JSON_SAFE>(&mut self.node, ',')?;
                     }
-                    *containers
-                        .last_mut()
-                        .ok_or(TapeBuildError::InvalidRecordIndex)? = ContainerWork::List {
-                        next: item.next,
-                        remaining: remaining - 1,
-                        first: false,
-                    };
+                    *containers.last_mut().ok_or(TapeBuildError::InvalidRecordIndex)? =
+                        ContainerWork::List {
+                            next: item.next,
+                            remaining: remaining - 1,
+                            first: false,
+                        };
                     next_value = Some(item.value);
                 }
             }
@@ -1165,16 +1042,8 @@ struct BinaryPathNode {
 
 #[derive(Clone, Copy)]
 enum BinaryPending {
-    Object {
-        source: RecordIndex,
-        wire: u32,
-        path: Option<u32>,
-    },
-    List {
-        source: RecordIndex,
-        wire: u32,
-        path: Option<u32>,
-    },
+    Object { source: RecordIndex, wire: u32, path: Option<u32> },
+    List { source: RecordIndex, wire: u32, path: Option<u32> },
 }
 
 #[derive(Clone, Copy)]
@@ -1183,20 +1052,12 @@ struct InternSlot {
     id: u32,
 }
 
-const EMPTY_INTERN_SLOT: InternSlot = InternSlot {
-    hash: 0,
-    id: u32::MAX,
-};
+const EMPTY_INTERN_SLOT: InternSlot = InternSlot { hash: 0, id: u32::MAX };
 
 fn intern_slots(upper: usize) -> Result<(Vec<InternSlot>, usize), TapeBuildError> {
-    let slots = upper
-        .max(1)
-        .checked_next_power_of_two()
-        .ok_or(TapeBuildError::CapacityOverflow)?;
+    let slots = upper.max(1).checked_next_power_of_two().ok_or(TapeBuildError::CapacityOverflow)?;
     let mut table = Vec::new();
-    table
-        .try_reserve_exact(slots)
-        .map_err(|_| TapeBuildError::CapacityOverflow)?;
+    table.try_reserve_exact(slots).map_err(|_| TapeBuildError::CapacityOverflow)?;
     table.resize(slots, EMPTY_INTERN_SLOT);
     Ok((table, slots - 1))
 }
@@ -1237,9 +1098,8 @@ impl BinaryProgramSerializer {
         let list_count = tape.list_count();
         let field_count = tape.field_count();
         let value_count = tape.list_value_count();
-        let container_count = object_count
-            .checked_add(list_count)
-            .ok_or(TapeBuildError::CapacityOverflow)?;
+        let container_count =
+            object_count.checked_add(list_count).ok_or(TapeBuildError::CapacityOverflow)?;
         let scalar_upper = field_count
             .checked_add(value_count)
             .and_then(|value| value.checked_add(1))
@@ -1247,40 +1107,21 @@ impl BinaryProgramSerializer {
         let track_paths = tape.retained_transfer_layout()?.1;
 
         let mut objects = Vec::new();
-        objects
-            .try_reserve_exact(object_count)
-            .map_err(|_| TapeBuildError::CapacityOverflow)?;
+        objects.try_reserve_exact(object_count).map_err(|_| TapeBuildError::CapacityOverflow)?;
         objects.resize(
             object_count,
-            BinaryObject {
-                field_start: BINARY_UNUSED_RANGE,
-                field_count: 0,
-            },
+            BinaryObject { field_start: BINARY_UNUSED_RANGE, field_count: 0 },
         );
         let mut fields = Vec::new();
-        fields
-            .try_reserve_exact(field_count)
-            .map_err(|_| TapeBuildError::CapacityOverflow)?;
+        fields.try_reserve_exact(field_count).map_err(|_| TapeBuildError::CapacityOverflow)?;
         let mut lists = Vec::new();
-        lists
-            .try_reserve_exact(list_count)
-            .map_err(|_| TapeBuildError::CapacityOverflow)?;
-        lists.resize(
-            list_count,
-            BinaryList {
-                value_start: BINARY_UNUSED_RANGE,
-                value_count: 0,
-            },
-        );
+        lists.try_reserve_exact(list_count).map_err(|_| TapeBuildError::CapacityOverflow)?;
+        lists.resize(list_count, BinaryList { value_start: BINARY_UNUSED_RANGE, value_count: 0 });
         let mut values = Vec::new();
-        values
-            .try_reserve_exact(value_count)
-            .map_err(|_| TapeBuildError::CapacityOverflow)?;
+        values.try_reserve_exact(value_count).map_err(|_| TapeBuildError::CapacityOverflow)?;
         let keys = Vec::new();
         let mut scalars = Vec::new();
-        scalars
-            .try_reserve_exact(scalar_upper)
-            .map_err(|_| TapeBuildError::CapacityOverflow)?;
+        scalars.try_reserve_exact(scalar_upper).map_err(|_| TapeBuildError::CapacityOverflow)?;
         let (key_slots, key_mask) = (Vec::new(), 0);
         let (scalar_slots, scalar_mask) = intern_slots(scalar_upper)?;
         let mut paths = Vec::new();
@@ -1291,14 +1132,10 @@ impl BinaryProgramSerializer {
         }
         let mut fixes = Vec::new();
         if track_paths {
-            fixes
-                .try_reserve_exact(object_count)
-                .map_err(|_| TapeBuildError::CapacityOverflow)?;
+            fixes.try_reserve_exact(object_count).map_err(|_| TapeBuildError::CapacityOverflow)?;
         }
         let mut pending = Vec::new();
-        pending
-            .try_reserve_exact(container_count)
-            .map_err(|_| TapeBuildError::CapacityOverflow)?;
+        pending.try_reserve_exact(container_count).map_err(|_| TapeBuildError::CapacityOverflow)?;
 
         Ok(Self {
             tape,
@@ -1321,10 +1158,7 @@ impl BinaryProgramSerializer {
     }
 
     fn key_id(&mut self, range: StringRange) -> Result<u32, TapeBuildError> {
-        let key = self
-            .tape
-            .checked_key_range(range)
-            .ok_or(TapeBuildError::InvalidRecordIndex)?;
+        let key = self.tape.checked_key_range(range).ok_or(TapeBuildError::InvalidRecordIndex)?;
         // Engine-origin ESTree field names are schema keys, never authored object-property names.
         // Reject the one setter-bearing JavaScript key before the trusted decoder sees it.
         if key == "__proto__" {
@@ -1345,9 +1179,7 @@ impl BinaryProgramSerializer {
             if slot.id == u32::MAX {
                 let id =
                     u32::try_from(self.keys.len()).map_err(|_| TapeBuildError::CapacityOverflow)?;
-                self.keys
-                    .try_reserve(1)
-                    .map_err(|_| TapeBuildError::CapacityOverflow)?;
+                self.keys.try_reserve(1).map_err(|_| TapeBuildError::CapacityOverflow)?;
                 self.keys.push(range);
                 self.key_slots[slot_index] = InternSlot { hash, id };
                 return Ok(id);
@@ -1367,13 +1199,8 @@ impl BinaryProgramSerializer {
     }
 
     fn scalar_id(&mut self, value: ValueRef) -> Result<u32, TapeBuildError> {
-        let range = value
-            .as_scalar()
-            .ok_or(TapeBuildError::InvalidRecordIndex)?;
-        let scalar = self
-            .tape
-            .scalar(value)
-            .ok_or(TapeBuildError::InvalidRecordIndex)?;
+        let range = value.as_scalar().ok_or(TapeBuildError::InvalidRecordIndex)?;
+        let scalar = self.tape.scalar(value).ok_or(TapeBuildError::InvalidRecordIndex)?;
         if value.needs_fix() && scalar != "null" {
             return Err(TapeBuildError::InvalidRecordIndex);
         }
@@ -1425,15 +1252,10 @@ impl BinaryProgramSerializer {
     ) -> Result<BinaryValue, TapeBuildError> {
         let source_index = usize::try_from(source.get().ok_or(TapeBuildError::InvalidRecordIndex)?)
             .map_err(|_| TapeBuildError::InvalidRecordIndex)?;
-        self.objects
-            .get(source_index)
-            .ok_or(TapeBuildError::InvalidRecordIndex)?;
+        self.objects.get(source_index).ok_or(TapeBuildError::InvalidRecordIndex)?;
         let wire = source.into_raw();
-        let path = path
-            .map(|(parent, segment)| self.path_id(parent, segment))
-            .transpose()?;
-        self.pending
-            .push(BinaryPending::Object { source, wire, path });
+        let path = path.map(|(parent, segment)| self.path_id(parent, segment)).transpose()?;
+        self.pending.push(BinaryPending::Object { source, wire, path });
         BinaryValue::new(BINARY_OBJECT_TAG, wire)
     }
 
@@ -1444,15 +1266,10 @@ impl BinaryProgramSerializer {
     ) -> Result<BinaryValue, TapeBuildError> {
         let source_index = usize::try_from(source.get().ok_or(TapeBuildError::InvalidRecordIndex)?)
             .map_err(|_| TapeBuildError::InvalidRecordIndex)?;
-        self.lists
-            .get(source_index)
-            .ok_or(TapeBuildError::InvalidRecordIndex)?;
+        self.lists.get(source_index).ok_or(TapeBuildError::InvalidRecordIndex)?;
         let wire = source.into_raw();
-        let path = path
-            .map(|(parent, segment)| self.path_id(parent, segment))
-            .transpose()?;
-        self.pending
-            .push(BinaryPending::List { source, wire, path });
+        let path = path.map(|(parent, segment)| self.path_id(parent, segment)).transpose()?;
+        self.pending.push(BinaryPending::List { source, wire, path });
         BinaryValue::new(BINARY_LIST_TAG, wire)
     }
 
@@ -1470,16 +1287,11 @@ impl BinaryProgramSerializer {
                 },
                 |index| BinaryValue::new(BINARY_INLINE_U32_TAG, index),
             ),
-            ValueKind::Object => self.object_value(
-                value
-                    .as_object()
-                    .ok_or(TapeBuildError::InvalidRecordIndex)?,
-                path,
-            ),
-            ValueKind::List => self.list_value(
-                value.as_list().ok_or(TapeBuildError::InvalidRecordIndex)?,
-                path,
-            ),
+            ValueKind::Object => self
+                .object_value(value.as_object().ok_or(TapeBuildError::InvalidRecordIndex)?, path),
+            ValueKind::List => {
+                self.list_value(value.as_list().ok_or(TapeBuildError::InvalidRecordIndex)?, path)
+            }
         }
     }
 
@@ -1495,10 +1307,8 @@ impl BinaryProgramSerializer {
         let mut next = record.first_field;
         let mut fix_recorded = false;
         for _ in 0..record.field_count {
-            let field_index = next
-                .get()
-                .map(RecordIndex::new)
-                .ok_or(TapeBuildError::InvalidRecordIndex)?;
+            let field_index =
+                next.get().map(RecordIndex::new).ok_or(TapeBuildError::InvalidRecordIndex)?;
             let field = self.tape.take_field_record_for_transfer(field_index)?;
             let key = self.key_id(field.key)?;
             if field.value.needs_fix() {
@@ -1512,9 +1322,7 @@ impl BinaryProgramSerializer {
                     fix_recorded = true;
                 }
             }
-            let child_path = self
-                .track_paths
-                .then_some((path, BinaryPathSegment::Key(key)));
+            let child_path = self.track_paths.then_some((path, BinaryPathSegment::Key(key)));
             let value = self.encode_value(field.value, child_path)?;
             self.fields.push(BinaryField { key, value });
             next = field.next;
@@ -1526,10 +1334,7 @@ impl BinaryProgramSerializer {
             .objects
             .get_mut(usize::try_from(wire).map_err(|_| TapeBuildError::InvalidRecordIndex)?)
             .ok_or(TapeBuildError::InvalidRecordIndex)?;
-        *slot = BinaryObject {
-            field_start,
-            field_count: record.field_count,
-        };
+        *slot = BinaryObject { field_start, field_count: record.field_count };
         Ok(())
     }
 
@@ -1544,17 +1349,13 @@ impl BinaryProgramSerializer {
             u32::try_from(self.values.len()).map_err(|_| TapeBuildError::CapacityOverflow)?;
         let mut next = record.first_value;
         for index in 0..record.length {
-            let value_index = next
-                .get()
-                .map(RecordIndex::new)
-                .ok_or(TapeBuildError::InvalidRecordIndex)?;
+            let value_index =
+                next.get().map(RecordIndex::new).ok_or(TapeBuildError::InvalidRecordIndex)?;
             let item = self.tape.take_list_value_record_for_transfer(value_index)?;
             if item.value.needs_fix() {
                 return Err(TapeBuildError::InvalidRecordIndex);
             }
-            let child_path = self
-                .track_paths
-                .then_some((path, BinaryPathSegment::Index(index)));
+            let child_path = self.track_paths.then_some((path, BinaryPathSegment::Index(index)));
             let value = self.encode_value(item.value, child_path)?;
             self.values.push(value);
             next = item.next;
@@ -1566,10 +1367,7 @@ impl BinaryProgramSerializer {
             .lists
             .get_mut(usize::try_from(wire).map_err(|_| TapeBuildError::InvalidRecordIndex)?)
             .ok_or(TapeBuildError::InvalidRecordIndex)?;
-        *slot = BinaryList {
-            value_start,
-            value_count: record.length,
-        };
+        *slot = BinaryList { value_start, value_count: record.length };
         Ok(())
     }
 
@@ -1588,9 +1386,7 @@ impl BinaryProgramSerializer {
             }
             push_json_string(
                 &mut output,
-                self.tape
-                    .checked_key_range(range)
-                    .ok_or(TapeBuildError::InvalidRecordIndex)?,
+                self.tape.checked_key_range(range).ok_or(TapeBuildError::InvalidRecordIndex)?,
             )?;
         }
         output.push_str("],[")?;
@@ -1606,9 +1402,7 @@ impl BinaryProgramSerializer {
         }
         output.push_str("],[")?;
         let mut scratch = Vec::new();
-        scratch
-            .try_reserve(self.paths.len())
-            .map_err(|_| TapeBuildError::CapacityOverflow)?;
+        scratch.try_reserve(self.paths.len()).map_err(|_| TapeBuildError::CapacityOverflow)?;
         for (fix_index, mut tail) in self.fixes.iter().copied().enumerate() {
             if fix_index != 0 {
                 output.push(',')?;
@@ -1666,20 +1460,13 @@ impl BinaryProgramSerializer {
 
     fn words(&self, root: BinaryValue) -> Result<Vec<u32>, TapeBuildError> {
         let word_count = PROGRAM_BINARY_HEADER_WORDS
-            .checked_add(
-                self.objects
-                    .len()
-                    .checked_mul(2)
-                    .ok_or(TapeBuildError::CapacityOverflow)?,
-            )
+            .checked_add(self.objects.len().checked_mul(2).ok_or(TapeBuildError::CapacityOverflow)?)
             .and_then(|value| value.checked_add(self.fields.len().checked_mul(2)?))
             .and_then(|value| value.checked_add(self.lists.len().checked_mul(2)?))
             .and_then(|value| value.checked_add(self.values.len()))
             .ok_or(TapeBuildError::CapacityOverflow)?;
         let mut words = Vec::new();
-        words
-            .try_reserve_exact(word_count)
-            .map_err(|_| TapeBuildError::CapacityOverflow)?;
+        words.try_reserve_exact(word_count).map_err(|_| TapeBuildError::CapacityOverflow)?;
         words.extend_from_slice(&[
             PROGRAM_BINARY_TRANSFER_MAGIC,
             PROGRAM_BINARY_TRANSFER_VERSION,
@@ -1720,9 +1507,7 @@ impl BinaryProgramSerializer {
         }
         let mut cursor = 0_usize;
         while let Some(pending) = self.pending.get(cursor).copied() {
-            cursor = cursor
-                .checked_add(1)
-                .ok_or(TapeBuildError::CapacityOverflow)?;
+            cursor = cursor.checked_add(1).ok_or(TapeBuildError::CapacityOverflow)?;
             match pending {
                 BinaryPending::Object { source, wire, path } => {
                     self.encode_object(source, wire, path)?;

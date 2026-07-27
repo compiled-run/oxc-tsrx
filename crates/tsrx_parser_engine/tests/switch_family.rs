@@ -19,26 +19,12 @@ fn assert_switch_head(
 ) {
     require_type(tape, node, "JSXSwitchExpression");
     assert_eq!(span(tape, node), expected_span);
-    assert_eq!(
-        scalar_field(tape, node, "statementType"),
-        r#""SwitchStatement""#
-    );
-    assert_eq!(
-        span(tape, object_field(tape, node, "discriminant")),
-        discriminant_span
-    );
+    assert_eq!(scalar_field(tape, node, "statementType"), r#""SwitchStatement""#);
+    assert_eq!(span(tape, object_field(tape, node, "discriminant")), discriminant_span);
     assert_empty_path(tape, node);
     assert_eq!(
         field_names(tape, node),
-        [
-            "type",
-            "start",
-            "end",
-            "discriminant",
-            "cases",
-            "metadata",
-            "statementType",
-        ]
+        ["type", "start", "end", "discriminant", "cases", "metadata", "statementType",]
     );
 }
 
@@ -57,10 +43,7 @@ fn assert_case(
 ) -> Vec<RecordIndex> {
     require_type(tape, case, "SwitchCase");
     assert_eq!(span(tape, case), expected_span);
-    assert_eq!(
-        field_names(tape, case),
-        ["type", "start", "end", "consequent", "test"]
-    );
+    assert_eq!(field_names(tape, case), ["type", "start", "end", "consequent", "test"]);
     match test_span {
         Some(expected) => assert_eq!(span(tape, object_field(tape, case, "test")), expected),
         None => assert_eq!(tape.scalar(field(tape, case, "test")), Some("null")),
@@ -115,10 +98,8 @@ fn reconstructs_expression_switch_directly_as_the_initializer() {
 
 #[test]
 fn reconstructs_jsx_child_switch_without_an_expression_container() {
-    let source = concat!(
-        "function View() @{<main>@switch(kind){",
-        "@case 1:{<b/>}@default:{<i/>}}</main>}"
-    );
+    let source =
+        concat!("function View() @{<main>@switch(kind){", "@case 1:{<b/>}@default:{<i/>}}</main>}");
     let result = parse_tsrx(&TsrxParseRequest { source }).expect("JSX-child @switch");
     let tape = result.program();
     let function = one_object(&program_body(tape));
@@ -136,10 +117,8 @@ fn reconstructs_jsx_child_switch_without_an_expression_container() {
 
 #[test]
 fn preserves_empty_switches_and_empty_case_consequents() {
-    let empty = parse_tsrx(&TsrxParseRequest {
-        source: "const x=@switch(kind){};",
-    })
-    .expect("empty @switch");
+    let empty = parse_tsrx(&TsrxParseRequest { source: "const x=@switch(kind){};" })
+        .expect("empty @switch");
     let declaration = one_object(&program_body(empty.program()));
     let declarator = one_object(&list_field(empty.program(), declaration, "declarations"));
     let switch = object_field(empty.program(), declarator, "init");
@@ -147,16 +126,10 @@ fn preserves_empty_switches_and_empty_case_consequents() {
     assert!(cases(empty.program(), switch).is_empty());
     assert_no_scaffold(empty.program());
 
-    let empty_case = parse_tsrx(&TsrxParseRequest {
-        source: "const x=@switch(kind){@case 1:{}};",
-    })
-    .expect("empty @case");
+    let empty_case = parse_tsrx(&TsrxParseRequest { source: "const x=@switch(kind){@case 1:{}};" })
+        .expect("empty @case");
     let declaration = one_object(&program_body(empty_case.program()));
-    let declarator = one_object(&list_field(
-        empty_case.program(),
-        declaration,
-        "declarations",
-    ));
+    let declarator = one_object(&list_field(empty_case.program(), declaration, "declarations"));
     let switch = object_field(empty_case.program(), declarator, "init");
     assert_switch_head(empty_case.program(), switch, (8, 33), (16, 20));
     let case = one_object_value(&cases(empty_case.program(), switch));
@@ -166,10 +139,8 @@ fn preserves_empty_switches_and_empty_case_consequents() {
 
 #[test]
 fn preserves_default_first_source_order_and_flattens_clause_braces() {
-    let source = concat!(
-        "const x=@switch(kind){@default:{zero}",
-        "@case 1:{const y=1;<b/>}@case 2:{two}};"
-    );
+    let source =
+        concat!("const x=@switch(kind){@default:{zero}", "@case 1:{const y=1;<b/>}@case 2:{two}};");
     let result = parse_tsrx(&TsrxParseRequest { source }).expect("ordered @switch");
     let tape = result.program();
     let declaration = one_object(&program_body(tape));
@@ -231,10 +202,8 @@ fn composes_nested_if_and_for_controls_as_flat_case_consequents() {
 
 #[test]
 fn reconstructs_an_inner_switch_before_its_outer_if_block() {
-    let source = concat!(
-        "function View() @{ @if(ok){",
-        "@switch(kind){@case 1:{<b/>}@default:{<i/>}}} }"
-    );
+    let source =
+        concat!("function View() @{ @if(ok){", "@switch(kind){@case 1:{<b/>}@default:{<i/>}}} }");
     let result = parse_tsrx(&TsrxParseRequest { source }).expect("switch inside if");
     let tape = result.program();
     let function = one_object(&program_body(tape));
@@ -249,10 +218,8 @@ fn reconstructs_an_inner_switch_before_its_outer_if_block() {
 
 #[test]
 fn reconstructs_an_inner_switch_before_its_outer_for_block() {
-    let source = concat!(
-        "function View() @{ @for(const x of xs){",
-        "@switch(x.kind){@default:{<i/>}}} }"
-    );
+    let source =
+        concat!("function View() @{ @for(const x of xs){", "@switch(x.kind){@default:{<i/>}}} }");
     let result = parse_tsrx(&TsrxParseRequest { source }).expect("switch inside for");
     let tape = result.program();
     let function = one_object(&program_body(tape));
@@ -282,11 +249,7 @@ fn leaves_an_ordinary_javascript_switch_case_block_unchanged() {
         consequent[0].as_object().expect("expression statement"),
         "ExpressionStatement",
     );
-    require_type(
-        tape,
-        consequent[1].as_object().expect("break statement"),
-        "BreakStatement",
-    );
+    require_type(tape, consequent[1].as_object().expect("break statement"), "BreakStatement");
     require_type(tape, object_field(tape, code_block, "render"), "JSXElement");
     assert_no_scaffold(tape);
 }
