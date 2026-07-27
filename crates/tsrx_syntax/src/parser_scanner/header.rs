@@ -203,7 +203,7 @@ impl Scanner<'_> {
             });
         }
 
-        let mut result = ForHeader {
+        let mut for_header = ForHeader {
             left: ByteSpan::new(to_u32(inner_start)?, to_u32(left_end)?),
             right: ByteSpan::new(to_u32(right_start)?, to_u32(right_end)?),
             annotated: true,
@@ -241,10 +241,10 @@ impl Scanner<'_> {
                 });
             }
             match kind {
-                ClauseRole::For if result.index.is_empty() && result.key.is_empty() => {
-                    result.index = span;
+                ClauseRole::For if for_header.index.is_empty() && for_header.key.is_empty() => {
+                    for_header.index = span;
                 }
-                ClauseRole::Empty if result.key.is_empty() => result.key = span,
+                ClauseRole::Empty if for_header.key.is_empty() => for_header.key = span,
                 ClauseRole::For => {
                     return Err(ProjectionError::MalformedSyntax {
                         offset: to_u32(keyword_start)?,
@@ -260,7 +260,7 @@ impl Scanner<'_> {
                 _ => unreachable!(),
             }
         }
-        Ok(result)
+        Ok(for_header)
     }
 
     fn top_level_separators(
@@ -270,7 +270,7 @@ impl Scanner<'_> {
         separator: u8,
     ) -> Result<Vec<usize>, ProjectionError> {
         let mut delimiters = TinyStack::<u8, 16>::new();
-        let mut result = Vec::new();
+        let mut separators = Vec::new();
         let mut can_start_expression = true;
         while index < end {
             match self.bytes[index] {
@@ -300,7 +300,7 @@ impl Scanner<'_> {
                     can_start_expression = false;
                 }
                 byte if byte == separator && delimiters.is_empty() => {
-                    result.push(index);
+                    separators.push(index);
                     index += 1;
                     can_start_expression = true;
                 }
@@ -317,7 +317,7 @@ impl Scanner<'_> {
                 }
             }
         }
-        Ok(result)
+        Ok(separators)
     }
 
     fn find_top_level_keyword(
