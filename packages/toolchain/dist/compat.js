@@ -822,6 +822,46 @@ function declaresTsrxPlugin(tsconfig) {
   );
 }
 
+/**
+ * A solution-style tsconfig owns no files: it is `{ "files": [], "references": [...] }`,
+ * the shape `vp create` scaffolds. Naming it in the advice below is worse than useless,
+ * because a plugin declared there is inert. Measured on a stock Vite+ React app with
+ * TypeScript 5.9.3: the plugin in the solution root answers `hover: any`, the same
+ * plugin in the referenced project that owns `src` answers `hover: const legacy: number`.
+ * So point at the project that actually contains the source.
+ */
+function isSolutionStyle(tsconfig) {
+  const files = tsconfig?.files;
+  const references = tsconfig?.references;
+  return (
+    Array.isArray(references) &&
+    references.length > 0 &&
+    Array.isArray(files) &&
+    files.length === 0 &&
+    tsconfig?.include === undefined
+  );
+}
+
+/** The referenced project a solution-style root delegates source files to. */
+async function referencedSourceProject(tsconfigPath, tsconfig) {
+  const references = Array.isArray(tsconfig?.references) ? tsconfig.references : [];
+  const directory = dirname(tsconfigPath);
+  for (const reference of references) {
+    const target = typeof reference?.path === "string" ? reference.path : null;
+    if (target === null) continue;
+    const candidate = target.endsWith(".json") ? join(directory, target) : join(directory, target, "tsconfig.json");
+    const text = await readFile(candidate, "utf8").catch(() => null);
+    if (text === null) continue;
+    const parsed = parseJsoncValue(text);
+    // The one that includes source, not the one describing build tooling.
+    const include = parsed?.include;
+    if (Array.isArray(include) && include.some((entry) => typeof entry === "string" && entry.includes("src"))) {
+      return { path: candidate, declaresPlugin: declaresTsrxPlugin(parsed) };
+    }
+  }
+  return null;
+}
+
 function typescriptSupported(version) {
   const [major, minor] = String(version ?? "")
     .split(".")
@@ -873,6 +913,8 @@ async function inspectLanguageSupport(projectRoot, modules) {
       path: tsconfigPath,
       readable: tsconfig !== null,
       declaresPlugin: tsconfig !== null && declaresTsrxPlugin(tsconfig),
+      solutionStyle: tsconfig !== null && isSolutionStyle(tsconfig),
+      delegate: null,
     },
     typescript: {
       requirement: TYPESCRIPT_REQUIREMENT,
@@ -901,6 +943,18 @@ async function inspectLanguageSupport(projectRoot, modules) {
     report.notes.push(
       `${report.tsconfig.path} could not be read as JSON, so its "plugins" list was not checked; oxc-tsrx never edits it`,
     );
+  } else if (report.tsconfig.solutionStyle) {
+    const delegate = await referencedSourceProject(report.tsconfig.path, tsconfig);
+    report.tsconfig.delegate = delegate?.path ?? null;
+    if (delegate === null) {
+      report.notes.push(
+        `${report.tsconfig.path} is solution-style ("files": [], "references": [...]), so a plugin declared there is inert. Add "plugins": [{ "name": "${TSRX_TYPESCRIPT_PLUGIN}" }] to whichever referenced project includes your source; oxc-tsrx never edits tsconfig.json`,
+      );
+    } else if (!delegate.declaresPlugin) {
+      report.notes.push(
+        `add "plugins": [{ "name": "${TSRX_TYPESCRIPT_PLUGIN}" }] under compilerOptions in ${delegate.path} yourself. Not ${report.tsconfig.path}: that one is solution-style ("files": [], "references": [...]) and a plugin declared there is inert. oxc-tsrx never edits tsconfig.json`,
+      );
+    }
   } else if (!report.tsconfig.declaresPlugin) {
     report.notes.push(
       `add "plugins": [{ "name": "${TSRX_TYPESCRIPT_PLUGIN}" }] under compilerOptions in ${report.tsconfig.path} yourself; oxc-tsrx never edits tsconfig.json`,
