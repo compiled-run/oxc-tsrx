@@ -59,11 +59,25 @@ impl DynamicTagError {
     /// Only [`Self::AuthoredGrammar`] is positioned; the rest describe a whole-contract defect
     /// with no authored location. This accessor exists so a caller that needs the position never
     /// has to scrape it back out of the [`fmt::Display`] text.
+    ///
+    /// Every positionless variant is written out rather than caught by a wildcard, so adding a
+    /// positioned variant fails the build here instead of silently reporting `None` and handing an
+    /// editor the wrong diagnostic range.
     #[must_use]
     pub const fn byte_offset(&self) -> Option<u32> {
         match self {
             Self::AuthoredGrammar { offset, .. } => Some(*offset),
-            _ => None,
+            Self::UnorderedSyntheticCallees
+            | Self::CountExceedsAddressableMemory
+            | Self::EmptyContract
+            | Self::MalformedScaffold
+            | Self::InvalidScaffold { .. }
+            | Self::LostScaffold { .. }
+            | Self::MismatchedEndScaffold { .. }
+            | Self::MalformedAttribute { .. }
+            | Self::MismatchedAttribute { .. }
+            | Self::MissingExpression { .. }
+            | Self::MissingEndScaffold { .. } => None,
         }
     }
 }
@@ -406,6 +420,40 @@ impl<'a> Visit<'a> for DisallowedDynamicSyntax<'_> {
             self.found = true;
         } else {
             walk::walk_binary_expression(self, expression);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::DynamicTagError;
+
+    #[test]
+    fn byte_offset_covers_exactly_the_positioned_variants() {
+        let positioned = [DynamicTagError::AuthoredGrammar { index: 0, offset: 7 }];
+        for error in &positioned {
+            assert_eq!(error.byte_offset(), Some(7), "{error}");
+            // The accessor must agree with the offset the message already prints, which is the
+            // whole reason a caller must never scrape the position back out of the text.
+            assert!(error.to_string().contains("source byte 7"), "{error}");
+        }
+
+        let positionless = [
+            DynamicTagError::UnorderedSyntheticCallees,
+            DynamicTagError::CountExceedsAddressableMemory,
+            DynamicTagError::EmptyContract,
+            DynamicTagError::MalformedScaffold,
+            DynamicTagError::InvalidScaffold { index: 3 },
+            DynamicTagError::LostScaffold { index: 3 },
+            DynamicTagError::MismatchedEndScaffold { index: 3 },
+            DynamicTagError::MalformedAttribute { index: 3 },
+            DynamicTagError::MismatchedAttribute { index: 3 },
+            DynamicTagError::MissingExpression { index: 3 },
+            DynamicTagError::MissingEndScaffold { index: 3 },
+        ];
+        for error in &positionless {
+            assert_eq!(error.byte_offset(), None, "{error}");
+            assert!(!error.to_string().contains("byte "), "{error}");
         }
     }
 }
