@@ -328,10 +328,21 @@ jobs:
           VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
+          # A read here can hit a replica that has not caught up with the write
+          # that just succeeded, so a bare `npm view` reports E404 for a package
+          # that is already published. That turned a completely successful
+          # publish into a red run, which is the worst possible false alarm on
+          # an irreversible operation. Retry before believing it.
           while read -r name path; do
-            resolved="$(npm view "$name@$VERSION" version)"
+            resolved=""
+            for attempt in 1 2 3 4 5 6; do
+              resolved="$(npm view "$name@$VERSION" version 2>/dev/null || true)"
+              [[ "$resolved" == "$VERSION" ]] && break
+              echo "$name is not visible yet (attempt $attempt), waiting for the registry"
+              sleep 10
+            done
             if [[ "$resolved" != "$VERSION" ]]; then
-              echo "$name resolved to $resolved, expected $VERSION" >&2
+              echo "$name resolved to '${resolved:-nothing}' after retries, expected $VERSION" >&2
               exit 1
             fi
             echo "$name@$resolved is on the registry"
