@@ -1,24 +1,11 @@
-use super::entry::ProjectionPurpose;
 use crate::{
     diagnostics::{ProjectionError, to_u32},
     model::{Overlay, ParserDynamicKind, StructuralKind},
 };
 
-pub(super) fn validate_projection_lane(
-    overlay: &Overlay,
-    purpose: ProjectionPurpose,
-) -> Result<(), ProjectionError> {
-    if purpose == ProjectionPurpose::Parser {
-        validate_parser_code_blocks(overlay)?;
-        return validate_parser_dynamic_boundaries(overlay);
-    }
-    if overlay.parser_dynamic_tokens.is_empty()
-        && overlay.style_blocks.iter().all(|style| !style.self_closing)
-    {
-        Ok(())
-    } else {
-        Err(ProjectionError::StructuralMismatch)
-    }
+pub(super) fn validate_projection_lane(overlay: &Overlay) -> Result<(), ProjectionError> {
+    validate_parser_code_blocks(overlay)?;
+    validate_parser_dynamic_boundaries(overlay)
 }
 
 fn validate_parser_code_blocks(overlay: &Overlay) -> Result<(), ProjectionError> {

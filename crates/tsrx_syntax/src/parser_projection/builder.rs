@@ -1,6 +1,5 @@
 use std::fmt::Write as _;
 
-use super::entry::ProjectionPurpose;
 use super::mapping::MappedProjection;
 use crate::{
     diagnostics::{ProjectionError, to_u32},
@@ -17,19 +16,11 @@ pub(super) struct Builder<'a> {
     prefix: &'a str,
     output: String,
     segments: Vec<ProjectionSegment>,
-    record_segments: bool,
-    purpose: ProjectionPurpose,
     cursor: usize,
     synthetic_callee_spans: Vec<(u32, u32)>,
 }
 impl<'a> Builder<'a> {
-    pub(super) fn new(
-        source: &'a str,
-        overlay: &'a Overlay,
-        prefix: &'a str,
-        record_segments: bool,
-        purpose: ProjectionPurpose,
-    ) -> Self {
+    pub(super) fn new(source: &'a str, overlay: &'a Overlay, prefix: &'a str) -> Self {
         let raw_style_bytes = overlay.style_blocks.iter().fold(0_usize, |bytes, style| {
             bytes.saturating_add(style.content.end.saturating_sub(style.content.start) as usize)
         });
@@ -44,21 +35,15 @@ impl<'a> Builder<'a> {
                     .saturating_add(overlay.tokens.len().saturating_mul(64))
                     .saturating_add(overlay.embedded_tokens.len().saturating_mul(32)),
             ),
-            segments: if record_segments {
-                Vec::with_capacity(
-                    overlay
-                        .tokens
-                        .len()
-                        .saturating_mul(2)
-                        .saturating_add(overlay.dynamic_tags.len())
-                        .saturating_add(overlay.style_blocks.len())
-                        .saturating_add(1),
-                )
-            } else {
-                Vec::new()
-            },
-            record_segments,
-            purpose,
+            segments: Vec::with_capacity(
+                overlay
+                    .tokens
+                    .len()
+                    .saturating_mul(2)
+                    .saturating_add(overlay.dynamic_tags.len())
+                    .saturating_add(overlay.style_blocks.len())
+                    .saturating_add(1),
+            ),
             cursor: 0,
             synthetic_callee_spans: Vec::new(),
         }
@@ -96,30 +81,19 @@ impl<'a> Builder<'a> {
         Ok(())
     }
 
+    /// Copies an authored span and records it as a fixable segment. Every span this lane copies
+    /// verbatim survives a round trip, so the parser can map a fix range back onto any of them.
     fn copy_original(&mut self, span: ByteSpan) -> Result<(), ProjectionError> {
-        self.copy_original_with_fixability(span, true)
-    }
-
-    fn copy_original_with_fixability(
-        &mut self,
-        span: ByteSpan,
-        fixable: bool,
-    ) -> Result<(), ProjectionError> {
         let start = span.start as usize;
         let end = span.end as usize;
         let Some(value) = self.source.get(start..end) else {
             return Err(ProjectionError::SourceChanged { offset: span.start });
         };
-        let projected_start =
-            self.record_segments.then(|| to_u32(self.output.len())).transpose()?;
+        let projected_start = to_u32(self.output.len())?;
         self.output.push_str(value);
-        let Some(projected_start) = projected_start else {
-            return Ok(());
-        };
         let projected_end = to_u32(self.output.len())?;
         if let Some(previous) = self.segments.last_mut()
             && previous.projected.end == projected_start
-            && previous.fixable == fixable
             && previous.original_start + (previous.projected.end - previous.projected.start)
                 == span.start
         {
@@ -128,7 +102,7 @@ impl<'a> Builder<'a> {
             self.segments.push(ProjectionSegment {
                 projected: ByteSpan::new(projected_start, projected_end),
                 original_start: span.start,
-                fixable,
+                fixable: true,
             });
         }
         Ok(())
@@ -200,18 +174,8 @@ impl<'a> Builder<'a> {
             return Err(ProjectionError::SourceChanged { offset: token.span.start });
         }
         match token.kind {
-            StructuralKind::FunctionBody if self.purpose == ProjectionPurpose::Parser => {
+            StructuralKind::FunctionBody => {
                 self.parser_function_body(token_index, start)?;
-            }
-            StructuralKind::FunctionBody if self.purpose == ProjectionPurpose::Types => {
-                write!(self.output, "/*{}{token_index}*/", self.prefix)
-                    .expect("writing to a String cannot fail");
-                self.cursor = start + 1;
-                if self.source.as_bytes().get(self.cursor) != Some(&b'{') {
-                    return Err(ProjectionError::SourceChanged { offset: token.span.start });
-                }
-                self.copy_to(self.cursor + 1)?;
-                self.output.push_str("\nif (false) return null as any;\n");
             }
             StructuralKind::Try => {
                 if token.owner == NONE {
@@ -300,9 +264,6 @@ impl<'a> Builder<'a> {
         &mut self,
         block_index: u32,
     ) -> Result<(), ProjectionError> {
-        if self.purpose != ProjectionPurpose::Parser {
-            return Err(ProjectionError::StructuralMismatch);
-        }
         let block = self
             .overlay
             .parser_code_blocks
@@ -338,9 +299,6 @@ impl<'a> Builder<'a> {
         ordinal: u32,
     ) -> Result<(), ProjectionError> {
         let clause = self.overlay.clauses[clause_index as usize];
-        if self.purpose == ProjectionPurpose::Types {
-            return self.type_header(clause);
-        }
         let header = clause.for_header;
         if !header.annotated {
             return Err(ProjectionError::ScaffoldMismatch { index: ordinal as usize });
@@ -387,181 +345,32 @@ impl<'a> Builder<'a> {
         Ok(())
     }
 
-    fn type_header(&mut self, clause: crate::model::Clause) -> Result<(), ProjectionError> {
-        if clause.role != ClauseRole::For {
-            return Err(ProjectionError::StructuralMismatch);
-        }
-        let header = clause.for_header;
-        if header.left.is_empty() || header.right.is_empty() {
-            return Err(ProjectionError::StructuralMismatch);
-        }
-        self.copy_to(clause.header.start as usize)?;
-        self.output.push('(');
-        let left = self
-            .source
-            .get(header.left.start as usize..header.left.end as usize)
-            .ok_or(ProjectionError::SourceChanged { offset: header.left.start })?;
-        let trimmed = left.trim_start();
-        if !trimmed.starts_with("const ")
-            && !trimmed.starts_with("let ")
-            && !trimmed.starts_with("var ")
-            && !trimmed.starts_with("using ")
-            && !trimmed.starts_with("await using ")
-        {
-            self.output.push_str("const ");
-        }
-        self.copy_original(header.left)?;
-        self.output.push_str(" of ");
-        self.copy_original(header.right)?;
-        self.output.push(')');
-        self.cursor = clause.header.end as usize;
-        Ok(())
-    }
-
-    pub(super) fn for_body(&mut self, clause_index: u32) -> Result<(), ProjectionError> {
-        if self.purpose != ProjectionPurpose::Types {
-            return Err(ProjectionError::StructuralMismatch);
-        }
-        let clause = self.overlay.clauses[clause_index as usize];
-        if clause.role != ClauseRole::For
-            || self.source.as_bytes().get(clause.body.start as usize) != Some(&b'{')
-        {
-            return Err(ProjectionError::StructuralMismatch);
-        }
-        self.copy_to(clause.body.start.saturating_add(1) as usize)?;
-        let header = clause.for_header;
-        if !header.index.is_empty() {
-            self.output.push_str("\nlet ");
-            self.copy_original(header.index)?;
-            self.output.push_str(" = 0;\n");
-        }
-        if !header.key.is_empty() {
-            self.output.push_str("\nvoid (");
-            self.copy_original(header.key)?;
-            self.output.push_str(");\n");
-        }
-        Ok(())
-    }
-
-    #[expect(
-        clippy::too_many_lines,
-        reason = "one flat match over every embedded-language token shape"
-    )]
+    /// Projects the raw content of an inline `<style>` block.
+    ///
+    /// The parser lane rewrites dynamic openings and closings from `parser_dynamic_tokens`, which
+    /// carry the authored closing expression this lane must retain, so `project_actions` routes
+    /// only style content here.
     pub(super) fn embedded(&mut self, token_index: u32) -> Result<(), ProjectionError> {
         let token = self.overlay.embedded_tokens[token_index as usize];
-        let span_start = token.span.start as usize;
-        let span_end = token.span.end as usize;
-        self.copy_to(span_start)?;
-        match token.kind {
-            EmbeddedKind::DynamicOpen => {
-                let tag = self
-                    .overlay
-                    .dynamic_tags
-                    .get(token.owner as usize)
-                    .ok_or(ProjectionError::StructuralMismatch)?;
-                if self.source.as_bytes().get(span_start..span_start + 2) != Some(b"<{")
-                    || tag.expression.start < token.span.start + 2
-                    || tag.expression.end + 1 != token.span.end
-                    || self.source.as_bytes().get(tag.expression.end as usize) != Some(&b'}')
-                {
-                    return Err(ProjectionError::SourceChanged { offset: token.span.start });
-                }
-                write!(
-                    self.output,
-                    "<{}D{} {}A{}_={{",
-                    self.prefix, token.owner, self.prefix, token.owner
-                )
-                .expect("writing to a String cannot fail");
-                if self.purpose == ProjectionPurpose::Parser {
-                    self.output.push('(');
-                }
-                self.cursor = tag.expression.start as usize;
-                self.copy_original_with_fixability(
-                    tag.expression,
-                    tag.self_closing || self.purpose == ProjectionPurpose::Parser,
-                )?;
-                self.cursor = tag.expression.end as usize;
-                if self.purpose == ProjectionPurpose::Parser {
-                    self.output.push(')');
-                }
-                write!(self.output, "}} {}Z{}_={{null}}", self.prefix, token.owner)
-                    .expect("writing to a String cannot fail");
-                self.cursor = span_end;
-            }
-            EmbeddedKind::DynamicClose => {
-                if self.source.as_bytes().get(span_start..span_start + 3) != Some(b"</{")
-                    || self.source.as_bytes().get(span_end.saturating_sub(1)) != Some(&b'>')
-                {
-                    return Err(ProjectionError::SourceChanged { offset: token.span.start });
-                }
-                let tag = self
-                    .overlay
-                    .dynamic_tags
-                    .get(token.owner as usize)
-                    .ok_or(ProjectionError::StructuralMismatch)?;
-                if self.purpose == ProjectionPurpose::Parser {
-                    if tag.closing_expression.is_empty() {
-                        return Err(ProjectionError::StructuralMismatch);
-                    }
-                    write!(self.output, "{{{}C{}_((", self.prefix, token.owner)
-                        .expect("writing to a String cannot fail");
-                    self.cursor = tag.closing_expression.start as usize;
-                    self.copy_original_with_fixability(tag.closing_expression, true)?;
-                    self.cursor = tag.closing_expression.end as usize;
-                    self.output.push_str("))}");
-                } else {
-                    let first = tag.first_closing_comment as usize;
-                    let end = first
-                        .checked_add(tag.closing_comment_count as usize)
-                        .ok_or(ProjectionError::SourceTooLarge)?;
-                    let comments = self
-                        .overlay
-                        .dynamic_comments
-                        .get(first..end)
-                        .ok_or(ProjectionError::StructuralMismatch)?;
-                    for (offset, comment) in comments.iter().enumerate() {
-                        let comment_source = self
-                            .source
-                            .as_bytes()
-                            .get(comment.start as usize..comment.end as usize)
-                            .ok_or(ProjectionError::SourceChanged { offset: comment.start })?;
-                        if comment.start < tag.closing_expression.start
-                            || comment.end > tag.closing_expression.end
-                            || (!comment_source.starts_with(b"//")
-                                && !comment_source.starts_with(b"/*"))
-                        {
-                            return Err(ProjectionError::StructuralMismatch);
-                        }
-                        let ordinal = first + offset;
-                        write!(self.output, "{{/*{}Q{ordinal}__*/ null}}", self.prefix)
-                            .expect("writing to a String cannot fail");
-                    }
-                }
-                write!(self.output, "</{}D{}>", self.prefix, token.owner)
-                    .expect("writing to a String cannot fail");
-                self.cursor = span_end;
-            }
-            EmbeddedKind::StyleContent => {
-                let style = self
-                    .overlay
-                    .style_blocks
-                    .get(token.owner as usize)
-                    .ok_or(ProjectionError::StructuralMismatch)?;
-                if style.content != token.span {
-                    return Err(ProjectionError::StructuralMismatch);
-                }
-                write!(self.output, "{{/*{}S{}__*/ null}}", self.prefix, token.owner)
-                    .expect("writing to a String cannot fail");
-                self.cursor = span_end;
-            }
+        if token.kind != EmbeddedKind::StyleContent {
+            return Ok(());
         }
+        self.copy_to(token.span.start as usize)?;
+        let style = self
+            .overlay
+            .style_blocks
+            .get(token.owner as usize)
+            .ok_or(ProjectionError::StructuralMismatch)?;
+        if style.content != token.span {
+            return Err(ProjectionError::StructuralMismatch);
+        }
+        write!(self.output, "{{/*{}S{}__*/ null}}", self.prefix, token.owner)
+            .expect("writing to a String cannot fail");
+        self.cursor = token.span.end as usize;
         Ok(())
     }
 
     pub(super) fn parser_dynamic(&mut self, token_index: u32) -> Result<(), ProjectionError> {
-        if self.purpose != ProjectionPurpose::Parser {
-            return Err(ProjectionError::StructuralMismatch);
-        }
         let token = self.overlay.parser_dynamic_tokens[token_index as usize];
         let tag = self
             .overlay

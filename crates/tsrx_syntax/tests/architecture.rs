@@ -85,6 +85,32 @@ fn the_parser_lanes_mirror_the_base_scanner_and_projection_module_boundaries() {
 }
 
 #[test]
+fn the_parser_lanes_carry_no_switch_between_a_configuration_they_are_never_built_in() {
+    // `scan()` and every `project*` entry point but `scan_for_parser` / `project_for_parser` run
+    // the base lanes in `src/scanner` and `src/projection`. The parser lanes therefore only ever
+    // run in one configuration, and a switch naming the other one is dead code rustc cannot see,
+    // because a comparison counts as a use.
+    let crate_root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    for (lane, switch) in [
+        ("src/parser_scanner", "parser_mode"),
+        ("src/parser_projection", "ProjectionPurpose"),
+        ("src/parser_projection", "BuiltProjection"),
+    ] {
+        for entry in fs::read_dir(crate_root.join(lane)).unwrap() {
+            let path = entry.unwrap().path();
+            if path.extension().is_none_or(|extension| extension != "rs") {
+                continue;
+            }
+            assert!(
+                !fs::read_to_string(&path).unwrap().contains(switch),
+                "{} names the removed fork switch `{switch}`",
+                path.strip_prefix(crate_root).unwrap().display()
+            );
+        }
+    }
+}
+
+#[test]
 fn no_source_file_carries_a_module_wide_lint_suppression() {
     let crate_root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let mut pending = vec![crate_root.join("src")];
