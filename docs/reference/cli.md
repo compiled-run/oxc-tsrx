@@ -74,7 +74,7 @@ use no arguments, or `help`.
 
 ```text
 $ npx oxc-tsrx status
-oxc-tsrx 0.1.0 compatibility (npm)
+oxc-tsrx 0.1.1 compatibility (npm)
 - oxc-parser: missing
 - oxlint: missing
 - oxfmt: missing

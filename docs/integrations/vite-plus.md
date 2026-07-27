@@ -144,7 +144,7 @@ before running `setup` or in a project that does not use Vite+ at all:
 
 ```text
 $ pnpm exec oxc-tsrx status
-oxc-tsrx 0.1.0 compatibility (npm)
+oxc-tsrx 0.1.1 compatibility (npm)
 - oxc-parser: missing
 - oxlint: missing
 - oxfmt: missing

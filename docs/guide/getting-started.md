@@ -163,7 +163,7 @@ this guide works with no command at all.
 command-line or editor project it prints this, exit code 0:
 
 ```text
-oxc-tsrx 0.1.0 compatibility (npm)
+oxc-tsrx 0.1.1 compatibility (npm)
 - oxc-parser: missing
 - oxlint: missing
 - oxfmt: missing
