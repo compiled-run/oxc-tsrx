@@ -262,6 +262,10 @@ struct Report {
     limitations: [&'static str; 3],
 }
 
+#[expect(
+    clippy::print_stderr,
+    reason = "the benchmark binary reports failures on stderr and exits non-zero"
+)]
 fn main() -> ExitCode {
     let arguments = env::args().skip(1).collect::<Vec<_>>();
     if arguments.first().is_some_and(|value| value == "--memory-child") {
@@ -761,8 +765,8 @@ fn run_process_measurements(
     for _ in 0..budgets.batch_warmups {
         black_box(measure_batch(&budgets.candidate_binary, &paths)?);
     }
-    let batch_ns = (0..budgets.batch_samples)
-        .map(|_| measure_batch(&budgets.candidate_binary, &paths))
+    let batch_ns = std::iter::repeat_with(|| measure_batch(&budgets.candidate_binary, &paths))
+        .take(budgets.batch_samples)
         .collect::<Result<Vec<_>, _>>()?;
 
     let stdin_tsrx = build_corpus(10 * 1024);
@@ -860,6 +864,10 @@ fn measure_stdin_process(
     Ok((elapsed, output.stdout))
 }
 
+#[expect(
+    clippy::print_stdout,
+    reason = "the memory child process hands its measurement back to the parent on stdout"
+)]
 fn run_memory_child(arguments: &[String]) -> Result<(), String> {
     if arguments.len() != 2 {
         return Err("--memory-child requires one source path".to_string());
@@ -1160,6 +1168,10 @@ fn command_path_text(program: &Path, arguments: &[&str]) -> String {
         )
 }
 
+#[expect(
+    clippy::print_stdout,
+    reason = "the benchmark binary's report on stdout is its contract with the docs site"
+)]
 fn print_summary(report: &Report, path: &Path) {
     println!("formatter benchmark report: {}", path.display());
     for assertion in &report.assertions {

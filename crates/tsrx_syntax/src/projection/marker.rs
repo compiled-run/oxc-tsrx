@@ -22,11 +22,11 @@ pub(super) fn structural_fingerprint(overlay: &Overlay) -> u128 {
     };
     mix(overlay.tokens.len() as u64);
     for token in &overlay.tokens {
-        mix(u64::from(token.owner) << 8 | token.kind as u64);
+        mix((u64::from(token.owner) << 8) | token.kind as u64);
     }
     mix(overlay.nodes.len() as u64);
     for node in &overlay.nodes {
-        mix(u64::from(node.parent) << 16 | (node.kind as u64) << 8 | node.context as u64);
+        mix((u64::from(node.parent) << 16) | ((node.kind as u64) << 8) | node.context as u64);
     }
     mix(overlay.clauses.len() as u64);
     for clause in &overlay.clauses {
@@ -36,11 +36,11 @@ pub(super) fn structural_fingerprint(overlay: &Overlay) -> u128 {
             | (u64::from(!clause.for_header.key.is_empty()) << 3)
             | (u64::from(!clause.header.is_empty()) << 4)
             | (u64::from(clause.bindings) << 5);
-        mix((clause.role as u64) << 8 | flags);
+        mix(((clause.role as u64) << 8) | flags);
     }
     mix(overlay.embedded_tokens.len() as u64);
     for token in &overlay.embedded_tokens {
-        mix(u64::from(token.owner) << 8 | token.kind as u64);
+        mix((u64::from(token.owner) << 8) | token.kind as u64);
     }
     mix(overlay.dynamic_tags.len() as u64);
     for tag in &overlay.dynamic_tags {
@@ -49,7 +49,7 @@ pub(super) fn structural_fingerprint(overlay: &Overlay) -> u128 {
         mix(flags);
     }
     mix(overlay.style_blocks.len() as u64);
-    u128::from(first) << 64 | u128::from(second)
+    (u128::from(first) << 64) | u128::from(second)
 }
 
 pub(super) fn collision_free_prefix(source: &str) -> Result<String, ProjectionError> {

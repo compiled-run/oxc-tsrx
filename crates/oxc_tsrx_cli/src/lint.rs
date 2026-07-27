@@ -30,6 +30,10 @@ prints human-readable diagnostics, and covers .tsrx and ordinary files in one
 run.
 ";
 
+#[expect(
+    clippy::print_stderr,
+    reason = "oxc-tsrx reports errors on stderr; the text and the exit code are the CLI's contract"
+)]
 pub fn run_cli(arguments: Vec<String>) -> ExitCode {
     match run(arguments.into_iter()) {
         Ok(code) => ExitCode::from(code),
@@ -40,6 +44,10 @@ pub fn run_cli(arguments: Vec<String>) -> ExitCode {
     }
 }
 
+#[expect(
+    clippy::print_stdout,
+    reason = "oxc-tsrx's help text and diagnostic report are the CLI's contract"
+)]
 fn run(arguments: impl Iterator<Item = String>) -> Result<u8, String> {
     let arguments = arguments.collect::<Vec<_>>();
     if arguments.iter().any(|argument| matches!(argument.as_str(), "-h" | "--help")) {
@@ -102,8 +110,7 @@ struct ParsedArguments {
     type_check: bool,
 }
 
-fn parse_arguments(arguments: impl Iterator<Item = String>) -> Result<ParsedArguments, String> {
-    let mut arguments = arguments.peekable();
+fn parse_arguments(mut arguments: impl Iterator<Item = String>) -> Result<ParsedArguments, String> {
     let mut filters = Vec::new();
     let mut files = Vec::new();
     let mut fix = false;

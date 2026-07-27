@@ -744,7 +744,10 @@ impl<'a> Builder<'a> {
         Ok(())
     }
 
-    #[allow(clippy::too_many_lines)]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one flat match over every embedded-language token shape"
+    )]
     fn embedded(&mut self, token_index: u32) -> Result<(), ProjectionError> {
         let token = self.overlay.embedded_tokens[token_index as usize];
         let span_start = token.span.start as usize;
@@ -1161,7 +1164,6 @@ fn build_projection_with_purpose(
     Ok(BuiltProjection { mapped, prefix, wrappers, headers, tries })
 }
 
-#[allow(clippy::too_many_arguments)]
 fn project_actions(
     builder: &mut Builder<'_>,
     overlay: &Overlay,
@@ -1923,7 +1925,10 @@ fn lift_scaffolds(
     render_scaffolds(formatted, &wrappers, &edits)
 }
 
-#[allow(clippy::too_many_lines)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one indexing pass over every scaffold kind the lift can emit"
+)]
 fn index_scaffolds(
     source: &str,
     projection: &FormatProjection,
@@ -2939,11 +2944,11 @@ fn structural_fingerprint(overlay: &Overlay) -> u128 {
     };
     mix(overlay.tokens.len() as u64);
     for token in &overlay.tokens {
-        mix(u64::from(token.owner) << 8 | token.kind as u64);
+        mix((u64::from(token.owner) << 8) | token.kind as u64);
     }
     mix(overlay.nodes.len() as u64);
     for node in &overlay.nodes {
-        mix(u64::from(node.parent) << 16 | (node.kind as u64) << 8 | node.context as u64);
+        mix((u64::from(node.parent) << 16) | ((node.kind as u64) << 8) | node.context as u64);
     }
     mix(overlay.clauses.len() as u64);
     for clause in &overlay.clauses {
@@ -2953,15 +2958,15 @@ fn structural_fingerprint(overlay: &Overlay) -> u128 {
             | (u64::from(!clause.for_header.key.is_empty()) << 3)
             | (u64::from(!clause.header.is_empty()) << 4)
             | (u64::from(clause.bindings) << 5);
-        mix((clause.role as u64) << 8 | flags);
+        mix(((clause.role as u64) << 8) | flags);
     }
     mix(overlay.embedded_tokens.len() as u64);
     for token in &overlay.embedded_tokens {
-        mix(u64::from(token.owner) << 8 | token.kind as u64);
+        mix((u64::from(token.owner) << 8) | token.kind as u64);
     }
     mix(overlay.parser_code_blocks.len() as u64);
     for block in &overlay.parser_code_blocks {
-        mix(u64::from(block.token) << 32 | u64::from(block.body.end));
+        mix((u64::from(block.token) << 32) | u64::from(block.body.end));
     }
     mix(overlay.dynamic_tags.len() as u64);
     for tag in &overlay.dynamic_tags {
@@ -2970,7 +2975,7 @@ fn structural_fingerprint(overlay: &Overlay) -> u128 {
         mix(flags);
     }
     mix(overlay.style_blocks.len() as u64);
-    u128::from(first) << 64 | u128::from(second)
+    (u128::from(first) << 64) | u128::from(second)
 }
 
 fn collision_free_prefix(source: &str) -> Result<String, ProjectionError> {

@@ -74,7 +74,10 @@ impl Scanner<'_> {
         self.add_clause_with_bindings(node, role, keyword_start, header, body, for_header, 0)
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "one parameter per binding slot the overlay clause records"
+    )]
     pub(super) fn add_clause_with_bindings(
         &mut self,
         node: u32,

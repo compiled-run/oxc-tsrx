@@ -816,7 +816,10 @@ fn parse_direct<W: Utf16WorkObserver>(
 
 // Keeping the parse, authored-coordinate repair, and fail-closed exits together makes the exact
 // one-OXC-parse invariant auditable; splitting this pipeline would obscure its ordered ownership.
-#[allow(clippy::too_many_lines)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "the projected parse is one linear pipeline; splitting it would hide the stage order rather than clarify it"
+)]
 fn parse_projected<W: Utf16WorkObserver>(
     source: &str,
     options: TsrxParseOptions<'_>,
@@ -1503,6 +1506,10 @@ mod tests {
 
     #[test]
     #[ignore = "run explicitly in release mode for retained repair-copy evidence"]
+    #[expect(
+        clippy::print_stdout,
+        reason = "the scaling campaign prints its measured lanes under `cargo test -- --nocapture`"
+    )]
     fn release_repair_copy_campaign_is_linear_and_lane_complete() {
         require_release_copy_campaign();
         let counts = [16_usize, 32, 64, 128];

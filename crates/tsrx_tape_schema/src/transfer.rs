@@ -208,14 +208,20 @@ impl BoundedString {
         Ok(())
     }
 
-    #[allow(clippy::inline_always)]
+    #[expect(
+        clippy::inline_always,
+        reason = "a single-push writer called once per byte on the transfer hot loop"
+    )]
     #[inline(always)]
     fn push_reserved(&mut self, value: char) {
         debug_assert!(self.value.len() + value.len_utf8() <= self.value.capacity());
         self.value.push(value);
     }
 
-    #[allow(clippy::inline_always)]
+    #[expect(
+        clippy::inline_always,
+        reason = "a single-push writer called once per byte on the transfer hot loop"
+    )]
     #[inline(always)]
     fn push_str_reserved(&mut self, value: &str) {
         debug_assert!(self.value.len() + value.len() <= self.value.capacity());
@@ -228,14 +234,20 @@ impl BoundedString {
         Ok(())
     }
 
-    #[allow(clippy::inline_always)]
+    #[expect(
+        clippy::inline_always,
+        reason = "a single-push writer called once per byte on the transfer hot loop"
+    )]
     #[inline(always)]
     fn push_u32_reserved(&mut self, value: u32) {
         debug_assert!(self.value.len() + 10 <= self.value.capacity());
         self.push_u32_digits(value);
     }
 
-    #[allow(clippy::inline_always)]
+    #[expect(
+        clippy::inline_always,
+        reason = "a single-push writer called once per byte on the transfer hot loop"
+    )]
     #[inline(always)]
     fn push_u32_digits(&mut self, mut value: u32) {
         let mut digits = [0_u8; 10];
@@ -441,7 +453,10 @@ impl<'a> ProgramSerializer<'a> {
         Ok(())
     }
 
-    #[allow(clippy::inline_always)]
+    #[expect(
+        clippy::inline_always,
+        reason = "a two-instruction bitmap write performed once per visited record"
+    )]
     #[inline(always)]
     fn mark(flags: &mut [u8], index: RecordIndex) -> Result<(), TapeBuildError> {
         let index = usize::try_from(index.get().ok_or(TapeBuildError::InvalidRecordIndex)?)
@@ -464,7 +479,10 @@ impl<'a> ProgramSerializer<'a> {
         }
     }
 
-    #[allow(clippy::inline_always)]
+    #[expect(
+        clippy::inline_always,
+        reason = "a single-push writer called once per byte on the transfer hot loop"
+    )]
     #[inline(always)]
     fn write_key<const KEYS_ARE_JSON_SAFE: bool>(
         &mut self,
@@ -480,7 +498,10 @@ impl<'a> ProgramSerializer<'a> {
         }
     }
 
-    #[allow(clippy::inline_always)]
+    #[expect(
+        clippy::inline_always,
+        reason = "a single-push writer called once per byte on the transfer hot loop"
+    )]
     #[inline(always)]
     fn push_node<const RESERVED: bool>(&mut self, value: char) -> Result<(), TapeBuildError> {
         if RESERVED {
@@ -491,7 +512,10 @@ impl<'a> ProgramSerializer<'a> {
         }
     }
 
-    #[allow(clippy::inline_always)]
+    #[expect(
+        clippy::inline_always,
+        reason = "a single-push writer called once per byte on the transfer hot loop"
+    )]
     #[inline(always)]
     fn push_node_str<const RESERVED: bool>(&mut self, value: &str) -> Result<(), TapeBuildError> {
         if RESERVED {
@@ -502,7 +526,10 @@ impl<'a> ProgramSerializer<'a> {
         }
     }
 
-    #[allow(clippy::too_many_lines)]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "the transfer writer is one linear pass over the tape and every branch shares the output cursor"
+    )]
     fn run_without_fixes<const KEYS_ARE_JSON_SAFE: bool>(
         mut self,
     ) -> Result<String, TapeBuildError> {
@@ -833,7 +860,10 @@ impl OwnedProgramSerializer {
         if self.keys_are_json_safe { self.run_inner::<true>() } else { self.run_inner::<false>() }
     }
 
-    #[allow(clippy::inline_always)]
+    #[expect(
+        clippy::inline_always,
+        reason = "a single-push writer called once per byte on the transfer hot loop"
+    )]
     #[inline(always)]
     fn write_key<const KEYS_ARE_JSON_SAFE: bool>(
         node: &mut BoundedString,
@@ -849,7 +879,10 @@ impl OwnedProgramSerializer {
         }
     }
 
-    #[allow(clippy::inline_always)]
+    #[expect(
+        clippy::inline_always,
+        reason = "a single-push writer called once per byte on the transfer hot loop"
+    )]
     #[inline(always)]
     fn push_node<const RESERVED: bool>(
         node: &mut BoundedString,
@@ -863,7 +896,10 @@ impl OwnedProgramSerializer {
         }
     }
 
-    #[allow(clippy::too_many_lines)]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "the transfer writer is one linear pass over the tape and every branch shares the output cursor"
+    )]
     fn run_inner<const KEYS_ARE_JSON_SAFE: bool>(mut self) -> Result<String, TapeBuildError> {
         let mut containers = Vec::new();
         containers.try_reserve(64).map_err(|_| TapeBuildError::CapacityOverflow)?;
@@ -1062,7 +1098,10 @@ fn intern_slots(upper: usize) -> Result<(Vec<InternSlot>, usize), TapeBuildError
     Ok((table, slots - 1))
 }
 
-#[allow(clippy::inline_always)]
+#[expect(
+    clippy::inline_always,
+    reason = "a short hash evaluated once per interned key on the transfer hot loop"
+)]
 #[inline(always)]
 fn intern_hash(value: &str) -> u32 {
     let mut hash = 0x811c_9dc5_u32;

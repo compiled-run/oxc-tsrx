@@ -63,6 +63,10 @@ pub struct EditorRelatedDiagnostic {
 }
 
 /// One diagnostic expressed entirely in authored UTF-8 byte offsets.
+#[expect(
+    clippy::derive_partial_eq_without_eq,
+    reason = "deriving `Eq` would add a public trait impl, and this crate's public surface is frozen"
+)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct EditorDiagnostic {
     pub range: EditorRange,
@@ -95,6 +99,10 @@ pub enum EditorActionKind {
 }
 
 /// A validated editor action. The adapter never derives edits itself.
+#[expect(
+    clippy::derive_partial_eq_without_eq,
+    reason = "deriving `Eq` would add a public trait impl, and this crate's public surface is frozen"
+)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct EditorCodeAction {
     pub title: String,

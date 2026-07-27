@@ -1179,7 +1179,6 @@ fn expand_tabs(source: &str, tab_width: usize) -> TabProjection {
     TabProjection { text, source_to_display }
 }
 
-#[allow(clippy::too_many_arguments)]
 fn map_rendered_line(
     rendered: RenderedSourceLine<'_>,
     projected: &str,

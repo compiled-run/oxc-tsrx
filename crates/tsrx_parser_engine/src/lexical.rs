@@ -17,7 +17,10 @@ enum EdgeRole {
 
 // A compact copyable traversal state is faster and clearer here than repeatedly
 // materializing nested state-machine wrappers for independent lexical capabilities.
-#[allow(clippy::struct_excessive_bools)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "a compact copyable traversal state, for the reason spelled out in the comment above"
+)]
 #[derive(Clone, Copy)]
 struct Context {
     validate: bool,

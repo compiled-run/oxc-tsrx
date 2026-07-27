@@ -474,6 +474,10 @@ mod tests {
 
     #[test]
     #[ignore = "run explicitly in release mode for retained scaling evidence"]
+    #[expect(
+        clippy::print_stdout,
+        reason = "the scaling campaign prints its measured lanes under `cargo test -- --nocapture`"
+    )]
     fn release_bridge_scaling_campaign_is_linear_and_copy_bounded() {
         require_release_build();
         let sizes = [4_096_usize, 8_192, 16_384, 32_768];

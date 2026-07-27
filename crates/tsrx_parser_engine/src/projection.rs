@@ -117,7 +117,10 @@ fn code_block_owner_matches(view: OverlayView<'_>, token: tsrx_syntax::Structura
     false
 }
 
-#[allow(clippy::too_many_lines)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one flat validation pass; each check reads the cursor the previous one left"
+)]
 fn validate_dynamic_overlay(view: OverlayView<'_>) -> Result<(), TsrxParseError> {
     let mut opened = vec![false; view.dynamic_tags.len()];
     let mut closed = vec![false; view.dynamic_tags.len()];
@@ -682,7 +685,10 @@ pub(super) fn validate_projection(
     Ok(())
 }
 
-#[allow(clippy::too_many_lines)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one pass that walks the overlay and the authored source in lockstep"
+)]
 fn build_allowed_gaps(
     source: &str,
     overlay: OverlayView<'_>,

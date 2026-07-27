@@ -701,7 +701,10 @@ fn run_syntax_lint(
     Ok((prepared, syntax))
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the run's inputs and timings are threaded in explicitly; a parameter struct would relocate these fields, not remove them"
+)]
 fn finish_lint(
     session: &LintSession,
     path: &Path,
@@ -1177,7 +1180,7 @@ mod tests {
         )
         .unwrap();
         let outputs = session
-            .lint_files(&[good.clone(), broken.clone()])
+            .lint_files(&[good, broken.clone()])
             .expect("an unprojectable file must not fail the batch");
 
         assert_eq!(outputs.len(), 2);
@@ -1216,7 +1219,7 @@ mod tests {
                 .count(),
             1
         );
-        std::fs::remove_dir_all(&directory).ok();
+        let _ = std::fs::remove_dir_all(&directory);
     }
 
     #[test]

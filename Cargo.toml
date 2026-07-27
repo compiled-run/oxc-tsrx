@@ -20,12 +20,73 @@ license = "MIT"
 repository = "https://github.com/thejackshelton/oxc-tsrx"
 rust-version = "1.95"
 
+# Lint posture: this workspace's existing rules unioned with upstream oxc's.
+# Stricter than oxc in two places, deliberately:
+#   * `unsafe_code = "forbid"` rather than oxc's `unsafe_op_in_unsafe_fn`. That also makes
+#     `unsafe_op_in_unsafe_fn` and `clippy::undocumented_unsafe_blocks` no-ops here, so
+#     both are omitted.
+#   * none of the eight pedantic lints oxc relaxes are relaxed here.
+# The only escape hatch is `#[expect(lint, reason = "...")]` on the narrowest item.
 [workspace.lints.rust]
 unsafe_code = "forbid"
+absolute_paths_not_starting_with_crate = "deny"
+non_ascii_idents = "deny"
+tail_expr_drop_order = "deny"
+unit_bindings = "deny"
+unused_unsafe = "deny"
 
 [workspace.lints.clippy]
 all = { level = "deny", priority = -1 }
 pedantic = { level = "deny", priority = -1 }
+nursery = { level = "deny", priority = -1 }
+
+# Nursery allowances. The first eleven are oxc's.
+branches_sharing_code = "allow"
+cognitive_complexity = "allow"
+fallible_impl_from = "allow"
+impl_trait_in_params = "allow"
+missing_const_for_fn = "allow"
+non_send_fields_in_send_ty = "allow"
+option_if_let_else = "allow"
+or_fun_call = "allow"
+significant_drop_tightening = "allow"
+use_self = "allow"
+useless_let_if_seq = "allow"
+# Its own suggested fix widens `pub(crate)` to `pub`, which grows the public API of any
+# crate whose `lib.rs` re-exports module contents.
+redundant_pub_crate = "allow"
+# Every hit is a TSX fixture containing destructuring such as `({ready}: Props)`, which is
+# not a format string.
+literal_string_with_formatting_args = "allow"
+
+# Restriction lints, adopted from oxc.
+allow_attributes = "deny"
+clone_on_ref_ptr = "deny"
+dbg_macro = "deny"
+empty_drop = "deny"
+error_impl_error = "deny"
+exit = "deny"
+filetype_is_file = "deny"
+fn_to_numeric_cast_any = "deny"
+format_push_string = "deny"
+get_unwrap = "deny"
+infinite_loop = "deny"
+map_with_unused_argument_over_ranges = "deny"
+non_zero_suggestions = "deny"
+pathbuf_init_then_push = "deny"
+precedence_bits = "deny"
+print_stderr = "deny"
+print_stdout = "deny"
+pub_underscore_fields = "deny"
+rc_buffer = "deny"
+rc_mutex = "deny"
+rest_pat_in_fully_bound_structs = "deny"
+self_named_module_files = "deny"
+todo = "deny"
+try_err = "deny"
+unimplemented = "deny"
+unnecessary_self_imports = "deny"
+unused_result_ok = "deny"
 
 [profile.release]
 codegen-units = 1

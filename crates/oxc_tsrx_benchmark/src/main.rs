@@ -296,6 +296,10 @@ struct Report {
     limitations: [&'static str; 3],
 }
 
+#[expect(
+    clippy::print_stderr,
+    reason = "the benchmark binary reports failures on stderr and exits non-zero"
+)]
 fn main() -> ExitCode {
     let mut arguments = env::args().skip(1);
     if arguments.next().as_deref() == Some("--memory-child") {
@@ -320,6 +324,10 @@ fn main() -> ExitCode {
     }
 }
 
+#[expect(
+    clippy::print_stdout,
+    reason = "the benchmark binary's report on stdout is its contract with the docs site"
+)]
 fn run() -> Result<(), String> {
     if cfg!(debug_assertions) {
         return Err("performance gates require a release build".to_string());
@@ -903,6 +911,10 @@ fn sample_peak_rss(source: &Path) -> Result<u64, String> {
         .map_err(|error| format!("memory child returned an invalid RSS value: {error}"))
 }
 
+#[expect(
+    clippy::print_stdout,
+    reason = "the memory child process hands its measurement back to the parent on stdout"
+)]
 fn run_memory_child(path: &Path) -> Result<(), String> {
     if cfg!(debug_assertions) {
         return Err("RSS samples require a release build".to_string());
@@ -1130,8 +1142,7 @@ fn fnv1a64(bytes: &[u8]) -> u64 {
     })
 }
 
-fn parse_args(arguments: impl Iterator<Item = String>) -> Result<Args, String> {
-    let mut arguments = arguments.peekable();
+fn parse_args(mut arguments: impl Iterator<Item = String>) -> Result<Args, String> {
     let mut budget_path = None;
     let mut output_path = None;
     while let Some(argument) = arguments.next() {

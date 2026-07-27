@@ -248,7 +248,10 @@ impl<'a> Scanner<'a> {
     }
 
     #[cfg(test)]
-    #[allow(dead_code)]
+    #[expect(
+        dead_code,
+        reason = "a test-only overlay helper that not every test module in this crate exercises"
+    )]
     pub(crate) fn finish_with_identity_token_visits(
         mut self,
     ) -> Result<(Overlay, usize), ProjectionError> {
@@ -276,7 +279,6 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    #[allow(clippy::too_many_lines)]
     fn scan_region(&mut self, index: usize, closing: Option<u8>) -> Result<usize, ProjectionError> {
         self.scan_region_with_root_context(index, closing, None)
     }
@@ -290,7 +292,10 @@ impl<'a> Scanner<'a> {
         self.scan_region_with_root_context(index, closing, Some(root_control_start))
     }
 
-    #[allow(clippy::too_many_lines)]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "a byte-level scanner state machine whose arms only make sense read in source order"
+    )]
     fn scan_region_with_root_context(
         &mut self,
         mut index: usize,
@@ -1275,7 +1280,10 @@ impl<'a> Scanner<'a> {
         })
     }
 
-    #[allow(clippy::too_many_lines)]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "a byte-level scanner state machine whose arms only make sense read in source order"
+    )]
     fn scan_jsx_element(&mut self, start: usize) -> Result<usize, ProjectionError> {
         let mut index = start + 1;
         let fragment = self.bytes.get(index) == Some(&b'>');
@@ -2113,7 +2121,10 @@ impl<'a> Scanner<'a> {
         self.add_clause_with_bindings(node, role, keyword_start, header, body, for_header, 0)
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "one parameter per binding slot the overlay clause records"
+    )]
     fn add_clause_with_bindings(
         &mut self,
         node: u32,
@@ -2526,7 +2537,7 @@ pub(crate) fn source_fingerprint(bytes: &[u8]) -> u128 {
         second =
             (second ^ value.rotate_left(31)).wrapping_mul(0xc2b2_ae3d_27d4_eb4f).rotate_left(33);
     }
-    u128::from(first) << 64 | u128::from(second)
+    (u128::from(first) << 64) | u128::from(second)
 }
 
 #[inline]

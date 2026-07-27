@@ -12,6 +12,11 @@ use serde_json::{Value, json};
 use tsrx_format::FormatSession;
 use tsrx_lint::{ConfigRuleFilter, LintSession};
 
+#[expect(
+    clippy::print_stdout,
+    clippy::print_stderr,
+    reason = "oxc-tsrx-lsp's version banner and errors are the CLI's contract"
+)]
 pub fn run_cli(arguments: &[String]) -> ExitCode {
     if arguments.iter().any(|argument| matches!(argument.as_str(), "-V" | "--version")) {
         println!("oxc-tsrx-lsp {} (OXC {})", env!("CARGO_PKG_VERSION"), oxc_adapter::OXC_REVISION);
@@ -270,6 +275,10 @@ fn error_byte_offset(message: &str) -> Option<usize> {
     (!digits.is_empty()).then(|| digits.parse().ok()).flatten()
 }
 
+#[expect(
+    clippy::suspicious_operation_groupings,
+    reason = "an empty `left` overlaps when its single position lies inside `right`, so both comparisons are against `left.start` on purpose"
+)]
 fn ranges_overlap(left: EditorRange, right: EditorRange) -> bool {
     if left.start == left.end {
         return right.start <= left.start && left.start <= right.end;

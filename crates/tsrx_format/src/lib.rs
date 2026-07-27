@@ -18,9 +18,10 @@ use tsrx_syntax::{lift_formatted, project_for_format, scan};
 
 pub use oxc_adapter::OXC_REVISION;
 
-/// Deliberate embedded-CSS boundary for this release. `<style>` payloads never leave the
-/// current process and stay byte-exact until canonical OXC CSS can share the pinned allocator
-/// graph without a downstream Cargo patch.
+/// Deliberate embedded-CSS boundary for this release.
+///
+/// `<style>` payloads never leave the current process and stay byte-exact until canonical OXC
+/// CSS can share the pinned allocator graph without a downstream Cargo patch.
 pub const EMBEDDED_CSS_MODE: &str = "KEEP_RAW";
 pub const EMBEDDED_CSS_PARSE_COUNT: u32 = 0;
 pub const EMBEDDED_CSS_FORMAT_NS: u64 = 0;

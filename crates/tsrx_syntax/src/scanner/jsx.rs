@@ -12,7 +12,10 @@ use super::{
 };
 
 impl Scanner<'_> {
-    #[allow(clippy::too_many_lines)]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "a byte-level scanner state machine whose arms only make sense read in source order"
+    )]
     pub(super) fn scan_jsx_element(&mut self, start: usize) -> Result<usize, ProjectionError> {
         let mut index = start + 1;
         let fragment = self.bytes.get(index) == Some(&b'>');

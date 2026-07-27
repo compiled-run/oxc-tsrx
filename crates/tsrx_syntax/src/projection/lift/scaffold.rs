@@ -198,7 +198,10 @@ pub(super) fn lift_scaffolds(
     render_scaffolds(formatted, &wrappers, &edits)
 }
 
-#[allow(clippy::too_many_lines)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one indexing pass over every scaffold kind the lift can emit"
+)]
 fn index_scaffolds(
     source: &str,
     projection: &FormatProjection,

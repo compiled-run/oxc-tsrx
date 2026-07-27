@@ -69,7 +69,8 @@ impl<'a> PackedTextRef<'a> {
                 output.extend(character.encode_utf16(&mut units).iter().copied());
             }
         }
-        debug_assert!(fixups.next().is_none());
+        let unconsumed = fixups.peek().is_some();
+        debug_assert!(!unconsumed, "unconsumed surrogate fixups");
     }
 
     /// Returns the exact JavaScript UTF-16 code units.
@@ -957,7 +958,10 @@ impl ModuleTable {
     }
 
     #[must_use]
-    #[allow(clippy::needless_pass_by_value)]
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "the record is a small copyable index pair; borrowing it would add an indirection to a field read"
+    )]
     pub fn name<K>(&self, name: ModuleNameRecord<K>) -> Option<&str> {
         self.string(name.name.get()?)
     }
@@ -1358,7 +1362,10 @@ pub struct DiagnosticRecord {
 }
 
 impl DiagnosticRecord {
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "a const field-by-field constructor: one parameter per record field"
+    )]
     #[must_use]
     pub const fn new(
         phase: DiagnosticPhase,
@@ -1627,7 +1634,7 @@ impl DiagnosticTable {
     /// # Errors
     ///
     /// Returns [`TapeBuildError::CapacityOverflow`] at a 32-bit table or string limit.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments, reason = "one parameter per diagnostic record field")]
     pub fn push_diagnostic(
         &mut self,
         phase: DiagnosticPhase,
@@ -2004,7 +2011,10 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::too_many_lines)]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one exhaustive table test over every result-table span"
+    )]
     fn every_result_table_source_span_is_mapped_once_without_touching_strings() {
         let mut module = ModuleTable::new();
         let text_units = [u16::from(b'n'), 0xd800, u16::from(b'm')];
@@ -2269,13 +2279,11 @@ mod tests {
         );
 
         let mut batch = ModuleTable::new();
-        let ranges = (0..4_096)
-            .map(|_| {
-                batch
-                    .push_string(&format!("{}x", '\u{e000}'))
-                    .expect("placeholder-width batch value")
-            })
-            .collect::<Vec<_>>();
+        let ranges = std::iter::repeat_with(|| {
+            batch.push_string(&format!("{}x", '\u{e000}')).expect("placeholder-width batch value")
+        })
+        .take(4_096)
+        .collect::<Vec<_>>();
         let repaired = [0xd800, u16::from(b'x')];
         batch
             .repair_utf16_batch(ranges.iter().copied().map(|range| (range, repaired.as_slice())))

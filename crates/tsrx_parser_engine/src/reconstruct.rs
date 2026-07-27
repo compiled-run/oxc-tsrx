@@ -133,7 +133,6 @@ enum LoopStatementKind {
     Of,
 }
 
-#[allow(clippy::too_many_lines)]
 pub(super) fn reconstruct_projected(
     tape: &mut FlatTape,
     authored: &str,
@@ -814,7 +813,10 @@ impl TryReconstructor<'_, '_, '_> {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the reconstruction context is threaded down explicitly; a parameter struct would relocate these fields, not remove them"
+)]
 fn validate_try_helper(
     tape: &FlatTape,
     authored: &str,
@@ -894,7 +896,10 @@ fn validate_try_helper(
     Ok(ProjectedTry { block, pending, handler })
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the reconstruction context is threaded down explicitly; a parameter struct would relocate these fields, not remove them"
+)]
 fn validate_try_method(
     tape: &FlatTape,
     authored: &str,
@@ -1466,7 +1471,10 @@ fn style_opening_postorder(overlay: OverlayView<'_>) -> Result<Vec<usize>, TsrxP
     Ok(order)
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the reconstruction context is threaded down explicitly; a parameter struct would relocate these fields, not remove them"
+)]
 fn reconstruct_style_element(
     tape: &mut FlatTape,
     authored: &str,
@@ -1696,7 +1704,10 @@ fn rebuild_style_closing(
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the reconstruction context is threaded down explicitly; a parameter struct would relocate these fields, not remove them"
+)]
 fn rebuild_style_element_node(
     tape: &mut FlatTape,
     element: RecordIndex,
@@ -2230,8 +2241,14 @@ fn collect_dynamic_openings(
     Ok(openings)
 }
 
-#[allow(clippy::too_many_arguments)]
-#[allow(clippy::too_many_lines)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the reconstruction context is threaded down explicitly; a parameter struct would relocate these fields, not remove them"
+)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one flat match over every dynamic-tag shape the projection can carry"
+)]
 fn reconstruct_dynamic_tag(
     tape: &mut FlatTape,
     authored: &str,
@@ -2610,7 +2627,10 @@ fn rebuild_dynamic_closing(
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the reconstruction context is threaded down explicitly; a parameter struct would relocate these fields, not remove them"
+)]
 fn rebuild_dynamic_element(
     tape: &mut FlatTape,
     element: RecordIndex,
@@ -2638,7 +2658,10 @@ fn rebuild_dynamic_element(
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the reconstruction context is threaded down explicitly; a parameter struct would relocate these fields, not remove them"
+)]
 fn normalize_custom_jsx_statement(
     tape: &mut FlatTape,
     authored: &str,
@@ -3126,7 +3149,10 @@ fn reconstruct_code_blocks(
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the reconstruction context is threaded down explicitly; a parameter struct would relocate these fields, not remove them"
+)]
 fn reconstruct_block_code_block(
     tape: &mut FlatTape,
     authored: &str,
@@ -3332,7 +3358,6 @@ fn validate_jsx_child_container(
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
 fn prepare_code_block_placement(
     tape: &FlatTape,
     authored: &str,
@@ -3862,7 +3887,10 @@ fn place_control(
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the reconstruction context is threaded down explicitly; a parameter struct would relocate these fields, not remove them"
+)]
 fn place_try_control(
     tape: &mut FlatTape,
     parents: &ParentIndex,

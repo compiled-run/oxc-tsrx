@@ -316,25 +316,37 @@ impl FlatTape {
         self.values.get(index_usize(entry)).map(|record| record.next)
     }
 
-    #[allow(clippy::inline_always)]
+    #[expect(
+        clippy::inline_always,
+        reason = "a single-expression tape lookup that must compile down to the field read it wraps"
+    )]
     #[inline(always)]
     pub(crate) fn object_record(&self, object: RecordIndex) -> Option<ObjectRecord> {
         self.objects.get(index_usize(object)).copied()
     }
 
-    #[allow(clippy::inline_always)]
+    #[expect(
+        clippy::inline_always,
+        reason = "a single-expression tape lookup that must compile down to the field read it wraps"
+    )]
     #[inline(always)]
     pub(crate) fn field_record(&self, field: RecordIndex) -> Option<FieldRecord> {
         self.fields.get(index_usize(field)).copied()
     }
 
-    #[allow(clippy::inline_always)]
+    #[expect(
+        clippy::inline_always,
+        reason = "a single-expression tape lookup that must compile down to the field read it wraps"
+    )]
     #[inline(always)]
     pub(crate) fn list_record(&self, list: RecordIndex) -> Option<ListRecord> {
         self.lists.get(index_usize(list)).copied()
     }
 
-    #[allow(clippy::inline_always)]
+    #[expect(
+        clippy::inline_always,
+        reason = "a single-expression tape lookup that must compile down to the field read it wraps"
+    )]
     #[inline(always)]
     pub(crate) fn list_value_record(&self, value: RecordIndex) -> Option<ListValueRecord> {
         self.values.get(index_usize(value)).copied()
@@ -398,13 +410,19 @@ impl FlatTape {
         Ok(std::mem::replace(record, VISITED))
     }
 
-    #[allow(clippy::inline_always)]
+    #[expect(
+        clippy::inline_always,
+        reason = "a single-expression tape lookup that must compile down to the field read it wraps"
+    )]
     #[inline(always)]
     pub(crate) fn checked_key(&self, field: FieldRecord) -> Option<&str> {
         slice_range(&self.keys, field.key)
     }
 
-    #[allow(clippy::inline_always)]
+    #[expect(
+        clippy::inline_always,
+        reason = "a single-expression tape lookup that must compile down to the field read it wraps"
+    )]
     #[inline(always)]
     pub(crate) fn checked_key_range(&self, key: StringRange) -> Option<&str> {
         slice_range(&self.keys, key)
@@ -472,14 +490,20 @@ impl FlatTape {
     }
 
     #[must_use]
-    #[allow(clippy::inline_always)]
+    #[expect(
+        clippy::inline_always,
+        reason = "a single-expression tape lookup that must compile down to the field read it wraps"
+    )]
     #[inline(always)]
     pub fn key(&self, field: &FieldRecord) -> &str {
         self.checked_key(*field).unwrap_or("")
     }
 
     #[must_use]
-    #[allow(clippy::inline_always)]
+    #[expect(
+        clippy::inline_always,
+        reason = "a single-expression tape lookup that must compile down to the field read it wraps"
+    )]
     #[inline(always)]
     pub fn scalar(&self, value: ValueRef) -> Option<&str> {
         slice_range(&self.scalars, value.as_scalar()?)
@@ -487,7 +511,10 @@ impl FlatTape {
 
     /// Reads an exact unsigned integer from either inline storage or legacy scalar text.
     #[must_use]
-    #[allow(clippy::inline_always)]
+    #[expect(
+        clippy::inline_always,
+        reason = "a single-expression tape lookup that must compile down to the field read it wraps"
+    )]
     #[inline(always)]
     pub fn scalar_u32(&self, value: ValueRef) -> Option<u32> {
         value.as_inline_u32().or_else(|| self.scalar(value)?.parse().ok())
@@ -1047,7 +1074,6 @@ impl FlatTape {
     ///
     /// Returns [`TapeBuildError::InvalidRecordIndex`] when a list chain or removal is invalid, or
     /// [`TapeBuildError::CapacityOverflow`] when validation storage cannot be allocated.
-    #[allow(clippy::too_many_lines)]
     pub fn remove_list_values(
         &mut self,
         removals: &[(RecordIndex, RecordIndex)],
@@ -1640,7 +1666,10 @@ fn compact_value(
     }
 }
 
-#[allow(clippy::inline_always)]
+#[expect(
+    clippy::inline_always,
+    reason = "a single-expression tape lookup that must compile down to the field read it wraps"
+)]
 #[inline(always)]
 fn slice_range(storage: &str, range: StringRange) -> Option<&str> {
     let start = range.start as usize;

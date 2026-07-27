@@ -191,7 +191,6 @@ pub fn parse_to_projected_tape_program_only(
     parse_to_projected_tape_with_retention(request, false)
 }
 
-#[allow(clippy::too_many_lines)]
 fn parse_to_projected_tape_with_retention(
     request: ProjectedParseRequest<'_>,
     retain_module: bool,

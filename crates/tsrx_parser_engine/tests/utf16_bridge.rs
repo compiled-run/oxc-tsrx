@@ -1,6 +1,9 @@
 use std::{hint::black_box, time::Instant};
 
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "the shared test-support module is compiled into every integration binary and each one uses a different part of it"
+)]
 mod support;
 
 use support::{field, object_field, scalar_field, span};
@@ -277,7 +280,6 @@ fn semantic_labels_and_codeframes_use_utf16_after_astral_and_crlf() {
 // One table-driven case per opaque surface. Splitting it would scatter the
 // shared template and the surrogate pair it substitutes across several
 // functions without making any of them clearer.
-#[allow(clippy::too_many_lines)]
 #[test]
 fn lone_surrogates_round_trip_in_every_opaque_surface() {
     let template = "import X from \"m<U>\"; function View() @{ const s=\"q<U>\"; const t=`t<U>`; const r=/r<U>/u; /*c<U>*/ <main title=\"a<U>\">x<U><style>.x{content:\"s<U>\"}</style></main> }";
@@ -854,7 +856,7 @@ fn jsx_entities_private_use_and_surrogate_fixups_remain_distinct() {
         let source =
             substitute_unit(r#"const x=<main title="&#xE000;<U>">&#xE000;<U></main>;"#, unit);
         let result = parse_units(&source);
-        let literals = all_objects(result.program())
+        let attribute = all_objects(result.program())
             .into_iter()
             .filter(|object| {
                 result
@@ -864,9 +866,6 @@ fn jsx_entities_private_use_and_surrogate_fixups_remain_distinct() {
                     .and_then(|value| result.program().scalar(value))
                     == Some(r#""Literal""#)
             })
-            .collect::<Vec<_>>();
-        let attribute = literals
-            .into_iter()
             .find(|object| scalar_field(result.program(), *object, "raw").contains("&#xE000;"))
             .expect("JSX attribute literal");
         assert_eq!(
@@ -1087,6 +1086,10 @@ fn shared_module_requests_accept_and_repair_lone_surrogates_once() {
 
 #[test]
 #[ignore = "run explicitly in release mode for retained full-pipeline scaling evidence"]
+#[expect(
+    clippy::print_stdout,
+    reason = "the scaling campaign prints its measured lanes under `cargo test -- --nocapture`"
+)]
 fn release_dense_module_and_diagnostic_scaling_campaign_is_linear() {
     require_release_build();
 

@@ -1,7 +1,6 @@
 use tsrx_parser_engine::{TsrxParseRequest, parse_tsrx};
 use tsrx_tape_schema::{FlatTape, RecordIndex, ValueKind, ValueRef};
 
-#[allow(dead_code)]
 pub fn assert_failed(source: &str) {
     let result = parse_tsrx(&TsrxParseRequest { source }).unwrap_or_else(|error| {
         panic!("authored grammar escaped as an operational error: {error}")

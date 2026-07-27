@@ -42,7 +42,7 @@ pub(crate) fn source_fingerprint(bytes: &[u8]) -> u128 {
         second =
             (second ^ value.rotate_left(31)).wrapping_mul(0xc2b2_ae3d_27d4_eb4f).rotate_left(33);
     }
-    u128::from(first) << 64 | u128::from(second)
+    (u128::from(first) << 64) | u128::from(second)
 }
 
 impl<'a> Scanner<'a> {
@@ -85,7 +85,10 @@ impl<'a> Scanner<'a> {
         })
     }
 
-    #[allow(clippy::too_many_lines)]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "a byte-level scanner state machine whose arms only make sense read in source order"
+    )]
     fn scan_region(
         &mut self,
         mut index: usize,

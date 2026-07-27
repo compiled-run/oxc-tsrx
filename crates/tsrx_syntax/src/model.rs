@@ -304,6 +304,10 @@ impl Overlay {
 
     /// Returns true only when an edit stays wholly in unchanged authored syntax.
     #[must_use]
+    #[expect(
+        clippy::suspicious_operation_groupings,
+        reason = "the range is checked for well-formedness and then against the source length; the suggested `self.end` does not exist"
+    )]
     pub fn is_identity_range(&self, range: Range<u32>) -> bool {
         range.start <= range.end
             && range.end <= self.source_len

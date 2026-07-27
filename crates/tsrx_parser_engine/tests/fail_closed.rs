@@ -1,4 +1,7 @@
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "the shared test-support module is compiled into every integration binary and each one uses a different part of it"
+)]
 mod support;
 
 use support::assert_failed;

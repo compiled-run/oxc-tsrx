@@ -122,6 +122,10 @@ struct StagedFile {
     temporary: PathBuf,
 }
 
+#[expect(
+    clippy::print_stderr,
+    reason = "oxc-tsrx-fmt reports errors on stderr; the text and the exit code are the CLI's contract"
+)]
 pub fn run_cli(arguments: Vec<String>) -> ExitCode {
     match run(arguments.into_iter()) {
         Ok(code) => ExitCode::from(code),
@@ -132,6 +136,11 @@ pub fn run_cli(arguments: Vec<String>) -> ExitCode {
     }
 }
 
+#[expect(
+    clippy::print_stdout,
+    clippy::print_stderr,
+    reason = "oxc-tsrx-fmt's help text, report and warnings are the CLI's contract"
+)]
 fn run(arguments: impl Iterator<Item = String>) -> Result<u8, String> {
     let arguments = arguments.collect::<Vec<_>>();
     if arguments.iter().any(|argument| matches!(argument.as_str(), "-h" | "--help")) {
@@ -240,9 +249,7 @@ fn check_report(
     report
 }
 
-#[allow(clippy::too_many_lines)]
-fn parse_args(arguments: impl Iterator<Item = String>) -> Result<Args, String> {
-    let mut arguments = arguments.peekable();
+fn parse_args(mut arguments: impl Iterator<Item = String>) -> Result<Args, String> {
     let mut file_mode = None;
     let mut stdin_filepath = None;
     let mut files = Vec::new();
@@ -431,6 +438,10 @@ fn format_files(
 
 /// Stages every changed output next to its source, then swaps all originals through backups.
 /// Any recoverable staging or rename error restores the original bytes before returning.
+#[expect(
+    clippy::print_stderr,
+    reason = "a failed backup cleanup is warned about on stderr without failing the run"
+)]
 fn commit_all(files: &[FormattedFile]) -> Result<(), String> {
     let changed = files.iter().filter(|file| file.output.changed).collect::<Vec<_>>();
     if changed.is_empty() {
@@ -611,7 +622,7 @@ mod tests {
         // Argument order survives, so the failed path still sits between its neighbours.
         assert_eq!(
             batch.formatted.iter().map(|file| file.path.clone()).collect::<Vec<_>>(),
-            vec![clean.clone(), dirty.clone()]
+            vec![clean, dirty.clone()]
         );
         assert_eq!(batch.changed_paths(), vec![dirty.display().to_string()]);
 
