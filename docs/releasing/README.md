@@ -16,6 +16,17 @@ The releaser must also read:
 - [external account prerequisites](external-prerequisites.md); and
 - [the publish runbook](publish-runbook.md).
 
+## Release notes
+
+One file per released version, written before the candidate is built and
+reviewed as part of it:
+
+- [0.1.2](v0.1.2.md) — JavaScript lint plugins run on `.tsrx` in the CLI and the
+  editor, and a `jsPlugins` config no longer silences every editor diagnostic.
+- [0.1.1](v0.1.1.md) — `oxc-tsrx/parser` loads, because the native packages ship
+  `parser.node` again.
+- [0.1.0](v0.1.0.md) — first release.
+
 ## Release identities
 
 One version is released as a unit:

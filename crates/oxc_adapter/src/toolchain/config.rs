@@ -50,7 +50,8 @@ pub enum ConfigError {
     BaseNotDirectory { path: PathBuf },
     /// One directory holds more than one Oxlint configuration file.
     ConflictingConfigFiles { directory: PathBuf, detail: String },
-    /// The config declares external JavaScript plugins, which the native path cannot host.
+    /// The config declares external JavaScript plugins, which this Rust process cannot host
+    /// itself; the `oxlint` command runs them over the TSX projection instead.
     UnsupportedJsPlugins,
     /// The config turns on type-aware linting without the explicit command-line opt-in.
     TypeAwareWithoutOptIn,
@@ -62,6 +63,8 @@ pub enum ConfigError {
     Oxlintrc { detail: String },
     /// A caller-supplied rule filter is not a rule canonical OXC recognizes.
     Filter { detail: String },
+    /// A discovered config could not be re-emitted with its `jsPlugins` stripped.
+    UnserializableStrippedConfig { path: PathBuf, detail: String },
 }
 
 impl fmt::Display for ConfigError {
@@ -111,18 +114,30 @@ impl fmt::Display for ConfigError {
                 "conflicting Oxlint configuration files in {}: {detail}",
                 directory.display()
             ),
+            // The first clause of this message used to claim OXC's public package exposes no plugin
+            // host. That was false, and it is why JavaScript rules were refused on `.tsrx` for so
+            // long: the published `oxlint` binary hosts them perfectly well, over legal TSX. What
+            // this process cannot do is host them itself, because it is Rust with no Node runtime in
+            // it. The `oxlint` command OXC for TSRX installs closes that gap by linting each `.tsrx`
+            // file's TSX projection with the published binary and mapping every diagnostic back to
+            // authored bytes, and it strips `jsPlugins` from the config it hands here. So reaching
+            // this branch means one of two things: this target was run directly instead of through
+            // `oxlint`, or the projection lane was switched off in the config.
             Self::UnsupportedJsPlugins => formatter.write_str(
-                "JavaScript plugins are not supported by the native TSRX path yet: OXC's public package does not expose its zero-copy plugin host, and OXC for TSRX will not silently add a second parse",
+                "JavaScript plugins are not hosted by the native TSRX lint target itself: it is a Rust process with no Node runtime. The `oxlint` command OXC for TSRX installs runs them on .tsrx for you, by linting the TSX projection with the published Oxlint binary and mapping every diagnostic back to your authored source. Run `oxlint` instead of this target, or remove the settings.oxcTsrx.jsPluginsOnTsrx false opt-out that turned that lane off",
             ),
             Self::TypeAwareWithoutOptIn => formatter.write_str(
                 "type-aware tsgolint/type-check mode requires the explicit --type-aware or --type-check opt-in; it is never started or silently disabled by config alone",
             ),
             Self::JsPluginsUnavailable { detail } => write!(
                 formatter,
-                "JavaScript plugins are unavailable on the native TSRX path without OXC's public zero-copy host: {detail}"
+                "JavaScript plugins are not hosted by the native TSRX lint target itself; the `oxlint` command OXC for TSRX installs runs them over the TSX projection instead: {detail}"
             ),
             Self::Invalid { detail } => {
                 write!(formatter, "invalid Oxlint configuration: {detail}")
+            }
+            Self::UnserializableStrippedConfig { path, detail } => {
+                write!(formatter, "unable to re-emit {}: {detail}", path.display())
             }
             Self::Oxlintrc { detail } | Self::Filter { detail } => formatter.write_str(detail),
         }
@@ -276,6 +291,212 @@ fn discover_oxlintrc(cwd: &Path) -> Result<Option<PathBuf>, ConfigError> {
     }
 }
 
+/// One Oxlint configuration re-emitted with every `jsPlugins` declaration removed.
+///
+/// The `oxlint` command runs a project's JavaScript plugins over each `.tsrx` file's
+/// TSX projection and hands this stripped configuration to the native lint target, so
+/// `reject_unavailable_lint_capabilities` is never reached and the plugins are hosted
+/// exactly once. Any other caller that hosts the plugins itself — the language server
+/// does — needs the same treatment, and this is where that stripping lives so both
+/// paths cannot drift apart.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct JsPluginFreeLintConfig {
+    /// The configuration file the native lint engine would have loaded on its own.
+    pub source_path: PathBuf,
+    /// The directory that configuration was authored in.
+    ///
+    /// Relative `extends`, `overrides` globs and `ignorePatterns` are all resolved
+    /// against it, so it has to be handed back to the engine as the config base or a
+    /// stripped copy in a temporary directory would silently change what they match.
+    pub base: PathBuf,
+    /// The same configuration as JSON, minus `jsPlugins`.
+    pub json: String,
+}
+
+/// The Oxlint configuration the native lint engine would load for `cwd`, re-emitted
+/// without its JavaScript plugins.
+///
+/// Returns `Ok(None)` when there is nothing to strip: no configuration file, a
+/// JavaScript config module, a file this cannot read or parse, or a configuration that
+/// declares no `jsPlugins`. In every one of those cases the caller keeps whatever
+/// configuration it already had, so a broken config is reported once, by the engine, in
+/// the engine's own words.
+///
+/// Only the top level and `overrides` are stripped, which is exactly what the `oxlint`
+/// wrapper strips. A `jsPlugins` declared by an `extends` target still reaches the
+/// engine, and the engine still refuses it — callers must surface that refusal rather
+/// than swallow it.
+///
+/// # Errors
+///
+/// Returns an error only when config discovery itself fails, which is the same error
+/// the engine would have produced, or when the stripped copy cannot be re-encoded.
+pub fn lint_config_without_js_plugins(
+    cwd: &Path,
+    explicit_path: Option<&Path>,
+) -> Result<Option<JsPluginFreeLintConfig>, ConfigError> {
+    let path = match explicit_path {
+        Some(path) if path.is_absolute() => Some(path.to_path_buf()),
+        Some(path) => Some(cwd.join(path)),
+        None => discover_oxlintrc(cwd)?,
+    };
+    let Some(path) = path else {
+        return Ok(None);
+    };
+    if is_js_config_path(&path) {
+        return Ok(None);
+    }
+    let path = path.canonicalize().unwrap_or(path);
+    let Ok(source) = std::fs::read_to_string(&path) else {
+        return Ok(None);
+    };
+    let Ok(mut value) = serde_json::from_str::<serde_json::Value>(&strip_jsonc(&source)) else {
+        return Ok(None);
+    };
+    // The same opt-out the `oxlint` command reads. A project that has switched the
+    // projection lane off has asked for the refusal, so nothing is stripped and the
+    // engine answers in its own words — which the caller then has to show, because the
+    // point of the opt-out is a stated position, not a blank editor.
+    if opted_out_of_js_plugin_projection(&value) {
+        return Ok(None);
+    }
+    if !remove_js_plugins(&mut value) {
+        return Ok(None);
+    }
+    let base = path.parent().map_or_else(|| cwd.to_path_buf(), Path::to_path_buf);
+    let json = serde_json::to_string(&value).map_err(|error| {
+        ConfigError::UnserializableStrippedConfig { path: path.clone(), detail: error.to_string() }
+    })?;
+    Ok(Some(JsPluginFreeLintConfig { source_path: path, base, json }))
+}
+
+/// Whether one parsed configuration sets `settings.oxcTsrx.jsPluginsOnTsrx` to `false`.
+///
+/// `settings` is the only place a key Oxlint does not know can live: canonical Oxlint
+/// rejects an unknown top-level key outright and ignores unknown `settings` subkeys.
+fn opted_out_of_js_plugin_projection(value: &serde_json::Value) -> bool {
+    value
+        .get("settings")
+        .and_then(|settings| settings.get("oxcTsrx"))
+        .and_then(|section| section.get("jsPluginsOnTsrx"))
+        .and_then(serde_json::Value::as_bool)
+        == Some(false)
+}
+
+/// Delete `jsPlugins` from one parsed configuration and from each of its `overrides`,
+/// reporting whether anything was there. Nothing else is touched: every other key is
+/// still the user's, and Oxlint is still the thing that decides what it means.
+fn remove_js_plugins(value: &mut serde_json::Value) -> bool {
+    let Some(object) = value.as_object_mut() else {
+        return false;
+    };
+    let mut removed = object.remove("jsPlugins").is_some();
+    if let Some(overrides) = object.get_mut("overrides").and_then(|value| value.as_array_mut()) {
+        for entry in overrides {
+            if let Some(entry) = entry.as_object_mut() {
+                removed |= entry.remove("jsPlugins").is_some();
+            }
+        }
+    }
+    removed
+}
+
+/// JSONC as plain JSON: `//` and `/* */` comments dropped, trailing commas dropped,
+/// string contents left exactly as written.
+///
+/// `Oxlintrc::from_file` accepts JSONC, so a configuration this has to re-emit may be
+/// JSONC, and `serde_json` is not. Only comments and trailing commas are removed, so
+/// nothing a configuration means can change on the way through.
+///
+/// Comments go first and trailing commas second, in that order and not together: a
+/// comma is trailing only when the next thing that survives is `}` or `]`, and
+/// `"rules": { "a": "error", // note` puts a comment between the two.
+fn strip_jsonc(source: &str) -> String {
+    strip_trailing_commas(&strip_json_comments(source))
+}
+
+fn strip_json_comments(source: &str) -> String {
+    let bytes = source.as_bytes();
+    let mut stripped = String::with_capacity(source.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        match bytes[index] {
+            b'"' => {
+                let start = index;
+                index = end_of_json_string(source, index);
+                stripped.push_str(&source[start..index]);
+            }
+            b'/' if bytes.get(index + 1) == Some(&b'/') => {
+                while index < bytes.len() && bytes[index] != b'\n' {
+                    index += 1;
+                }
+            }
+            b'/' if bytes.get(index + 1) == Some(&b'*') => {
+                index =
+                    source[index + 2..].find("*/").map_or(bytes.len(), |end| index + 2 + end + 2);
+            }
+            _ => {
+                let width = char_width(source, index);
+                stripped.push_str(&source[index..index + width]);
+                index += width;
+            }
+        }
+    }
+    stripped
+}
+
+fn strip_trailing_commas(source: &str) -> String {
+    let bytes = source.as_bytes();
+    let mut stripped = String::with_capacity(source.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        match bytes[index] {
+            b'"' => {
+                let start = index;
+                index = end_of_json_string(source, index);
+                stripped.push_str(&source[start..index]);
+            }
+            b',' => {
+                let trailing = source[index + 1..]
+                    .chars()
+                    .find(|character| !character.is_whitespace())
+                    .is_some_and(|character| character == '}' || character == ']');
+                if !trailing {
+                    stripped.push(',');
+                }
+                index += 1;
+            }
+            _ => {
+                let width = char_width(source, index);
+                stripped.push_str(&source[index..index + width]);
+                index += width;
+            }
+        }
+    }
+    stripped
+}
+
+/// One past the closing quote of the JSON string starting at `index`.
+fn end_of_json_string(source: &str, index: usize) -> usize {
+    let bytes = source.as_bytes();
+    let mut cursor = index + 1;
+    while cursor < bytes.len() {
+        if bytes[cursor] == b'"' {
+            return cursor + 1;
+        }
+        if bytes[cursor] == b'\\' {
+            cursor += 1;
+        }
+        cursor += char_width(source, cursor);
+    }
+    cursor.min(bytes.len())
+}
+
+/// The UTF-8 length of the character starting at `index`, or 1 past the end.
+fn char_width(source: &str, index: usize) -> usize {
+    source[index..].chars().next().map_or(1, char::len_utf8)
+}
+
 pub(super) fn reject_unavailable_lint_capabilities(
     config: &Oxlintrc,
     type_aware_opt_in: bool,
@@ -293,8 +514,9 @@ pub(super) fn reject_unavailable_lint_capabilities(
 
 /// Classifies an OXC config-build failure by variant, keeping its rendered wording verbatim.
 ///
-/// The four plugin variants become [`ConfigError::JsPluginsUnavailable`], because the native TSRX
-/// path has no zero-copy plugin host to load them with. The other five are ordinary configuration
+/// The four plugin variants become [`ConfigError::JsPluginsUnavailable`], because this Rust
+/// process has no Node runtime to execute a JavaScript rule in; the `oxlint` command OXC for TSRX
+/// installs hosts them over the TSX projection. The other five are ordinary configuration
 /// defects and become [`ConfigError::Invalid`]. Matching the variant rather than searching the
 /// rendered text matters: `UnsupportedNamedConfig` and `InvalidConfigFile` echo an authored
 /// `extends` entry or file path back, so a substring test blamed the missing plugin host for
@@ -329,7 +551,65 @@ mod tests {
 
     use oxc_linter::ConfigBuilderError;
 
-    use super::{ConfigError, config_builder_error};
+    use super::{
+        ConfigError, config_builder_error, opted_out_of_js_plugin_projection, remove_js_plugins,
+        strip_jsonc,
+    };
+
+    /// A JSONC config the language server has to be able to re-emit. The comma before
+    /// the line comment is the one this used to get wrong: it is trailing, but only
+    /// after the comment it is followed by has gone.
+    #[test]
+    fn jsonc_configs_survive_the_trip_through_plain_json() {
+        let stripped = strip_jsonc(
+            r#"{
+  // the project's own rules
+  "jsPlugins": ["./plugin.mjs"], /* hosted by the oxlint wrapper */
+  "rules": {
+    "no-debugger": "error", // a comma, then a comment, then the brace
+  },
+  "settings": { "url": "https://oxc.rs", "note": "a } and a , inside a string" },
+  "ignorePatterns": ["dist/**"],
+}
+"#,
+        );
+        let mut value: serde_json::Value = match serde_json::from_str(&stripped) {
+            Ok(value) => value,
+            Err(error) => panic!("stripped JSONC is not JSON ({error}):\n{stripped}"),
+        };
+        assert_eq!(value["settings"]["url"], "https://oxc.rs");
+        assert_eq!(value["settings"]["note"], "a } and a , inside a string");
+        assert_eq!(value["rules"]["no-debugger"], "error");
+
+        assert!(remove_js_plugins(&mut value));
+        assert!(value.get("jsPlugins").is_none());
+        // Nothing else may move: the native engine still has to see the user's own
+        // rules, ignore patterns and settings.
+        assert_eq!(value["rules"]["no-debugger"], "error");
+        assert_eq!(value["ignorePatterns"][0], "dist/**");
+        // And a config with no plugins reports that there was nothing to strip, so the
+        // caller keeps loading the file the user actually wrote.
+        assert!(!remove_js_plugins(&mut value));
+    }
+
+    #[test]
+    fn overrides_declare_js_plugins_too_and_the_opt_out_is_read_where_oxlint_allows_it() {
+        let mut value: serde_json::Value = serde_json::from_str(
+            r#"{"overrides":[{"files":["**/*.tsrx"],"jsPlugins":["./p.mjs"],"rules":{"a":"warn"}}]}"#,
+        )
+        .unwrap();
+        assert!(remove_js_plugins(&mut value));
+        assert!(value["overrides"][0].get("jsPlugins").is_none());
+        assert_eq!(value["overrides"][0]["rules"]["a"], "warn");
+
+        let opted_out: serde_json::Value =
+            serde_json::from_str(r#"{"settings":{"oxcTsrx":{"jsPluginsOnTsrx":false}}}"#).unwrap();
+        assert!(opted_out_of_js_plugin_projection(&opted_out));
+        let opted_in: serde_json::Value =
+            serde_json::from_str(r#"{"settings":{"oxcTsrx":{"jsPluginsOnTsrx":true}}}"#).unwrap();
+        assert!(!opted_out_of_js_plugin_projection(&opted_in));
+        assert!(!opted_out_of_js_plugin_projection(&serde_json::json!({ "settings": {} })));
+    }
 
     #[test]
     fn config_builder_errors_classify_by_variant_not_by_rendered_text() {

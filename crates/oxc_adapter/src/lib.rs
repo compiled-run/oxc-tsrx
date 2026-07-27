@@ -29,9 +29,10 @@ mod toolchain;
 pub use toolchain::{
     ConfigError, EngineDiagnostic, EngineFix, EngineFormatResult, EngineSpan, EngineTimings,
     FormatEngineTimings, FormatError, FormatOptionError, FormatOptions, FormatRequest, FramePart,
-    LintEngine, LintEngineOptions, LintError, LintRequest, LintResult, RuleFilter, RuleSeverity,
-    SUPPORTED_TSGOLINT_VERSION, TsgolintError, TypeBatchDiagnostic, TypeBatchFile, TypeBatchResult,
-    TypeLintError, TypeLintRequest, TypeLintResult, format, lint,
+    JsPluginFreeLintConfig, LintEngine, LintEngineOptions, LintError, LintRequest, LintResult,
+    RuleFilter, RuleSeverity, SUPPORTED_TSGOLINT_VERSION, TsgolintError, TypeBatchDiagnostic,
+    TypeBatchFile, TypeBatchResult, TypeLintError, TypeLintRequest, TypeLintResult, format, lint,
+    lint_config_without_js_plugins,
 };
 
 pub const OXC_REVISION: &str = "8e0ed2ebb96137fb1611cdbd5742d5cb46037d40";

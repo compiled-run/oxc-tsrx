@@ -8,7 +8,7 @@ mod session;
 mod timings;
 mod tsgolint;
 
-pub use config::ConfigError;
+pub use config::{ConfigError, JsPluginFreeLintConfig, lint_config_without_js_plugins};
 pub use diagnostics::{EngineDiagnostic, EngineFix, EngineSpan};
 pub use engine::{LintEngine, LintEngineOptions};
 pub use format::{

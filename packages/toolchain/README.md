@@ -1,9 +1,8 @@
 # `oxc-tsrx`
 
 One package for the OXC-shaped TSRX parser, Oxlint-compatible linting,
-Oxfmt-compatible formatting, helpers for *authoring* custom JavaScript lint
-plugins (via `oxc-tsrx/lint/plugins-dev`), and the native TSRX language
-server.
+Oxfmt-compatible formatting, custom JavaScript lint plugins on `.tsrx` as well
+as on ordinary files, and the native TSRX language server.
 
 ```sh
 npm install --save-dev oxc-tsrx
@@ -18,11 +17,15 @@ import { format } from "oxc-tsrx/format";
 JavaScript, TypeScript, JSX, and TSX keep the exact official OXC code paths.
 Only `.tsrx` files enter TSRX-specific work.
 
-Note on the plugin helpers: they help you write a JS plugin. They are not a
-host that executes one against `.tsrx`. The native TSRX CLI and language server
-are Rust and run no JavaScript rules. Running a custom JS rule on `.tsrx` today
-means either the ESLint AST-only proof or the unmerged upstream Oxlint draft;
-see [Custom JavaScript plugins](../../docs/integrations/custom-js-plugins.md).
+Note on custom JavaScript plugins: a plugin listed in `jsPlugins` runs on
+`.tsrx` from the `oxlint` command and from the language server, but through the
+legal-TSX projection of your file rather than against the authored TSRX tree.
+That costs one extra parse per linted `.tsrx` file, which both lanes announce,
+and `settings.oxcTsrx.jsPluginsOnTsrx: false` turns it off. `oxc-tsrx-lint`,
+the leaf capability target, is a Rust process with no Node.js runtime and still
+refuses `jsPlugins`; run `oxlint` instead. `oxc-tsrx/lint/plugins-dev` is for
+*authoring* a plugin (it re-exports Oxlint's `RuleTester`) and is not a host.
+See [Custom JavaScript plugins](../../docs/integrations/custom-js-plugins.md).
 
 ## Read the status table before you read anything else
 
@@ -51,7 +54,7 @@ installed from the registry into a clean project on darwin-arm64.
 | Where you use it | Steps | What you run |
 | --- | --- | --- |
 | Command line (`oxlint`, `oxfmt`) | 1 | `npm install --save-dev oxc-tsrx` |
-| Editor, through released `oxc.oxc-vscode` | 1 | the same install, and nothing else |
+| Editor, through released `oxc.oxc-vscode` | 1 | the same install, and nothing else (open one JS/TS/JSON file per session to activate the extension) |
 | Vite+ (`vp lint`, `vp fmt`) | 2 | the same install, then `oxc-tsrx setup` |
 
 The Vite+ step repeats after every clean dependency install, because `setup`
@@ -645,9 +648,14 @@ extension, no fork.
 
 Two caveats:
 
-- The released OXC extension does not list `.tsrx` as an activation event, so a
-  TSRX-only workspace has to open any JavaScript, TypeScript, or JSON file once
-  to activate it.
+- The released OXC extension does not list `.tsrx` as an activation event, and
+  that is not only a TSRX-only-workspace problem. Its 21 `onLanguage:` entries
+  cover no `.tsrx` language, and Ripple's extension contributes `.tsrx` as the
+  language id `ripple`, so opening a `.tsrx` file activates that extension and
+  not this path. Open any JavaScript, TypeScript, or JSON file in the workspace
+  once, and the rest of the session serves `.tsrx`. The dynamic registrations
+  the multiplexer sends match on `**/*.tsrx`, not on a language id, so the
+  language another extension assigned does not matter after that.
 - If your project directly declares official `oxlint`, that command defers to it
   (see [the bin names](#the-oxlint-and-oxfmt-bin-names)), so the editor gets
   official Oxlint and no `.tsrx` support.

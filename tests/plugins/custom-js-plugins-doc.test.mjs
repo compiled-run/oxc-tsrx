@@ -33,6 +33,12 @@ const rejectionSource = join(root, "crates/oxc_adapter/src/toolchain/config.rs")
 const page = await readFile(pagePath, "utf8");
 const transcripts = JSON.parse(await readFile(transcriptsPath, "utf8"));
 
+// The lane has an editor half, and it was documented one page late. These are
+// the pages a reader lands on before the tutorial, so they are held to the same
+// standard as the tutorial itself.
+const editorPagePath = join(root, "docs/integrations/editor.md");
+const readmePath = join(root, "README.md");
+
 function fences(markdown) {
   const found = [];
   const pattern = /^```([\w-]*)\r?\n([\s\S]*?)^```[ \t]*$/gm;
@@ -209,19 +215,28 @@ test("the page prints no hand-typed terminal output", () => {
   }
 });
 
+// The refusal did not disappear when JS plugins started running on `.tsrx`; it
+// moved. It is now what you get if you switch the projection lane off, or if you
+// drive the native lint target directly instead of through `oxlint`. The page
+// still has to print it in the exact words the source writes, because a reader
+// who sees it needs to recognise it.
+const REFUSAL_PATTERN =
+  /"(JavaScript plugins are not hosted by the native TSRX lint target itself:[^"]*)"/;
+
 test("the page prints the native refusal exactly as the source writes it", async () => {
   const rust = await readFile(rejectionSource, "utf8");
-  const quoted = rust.match(
-    /"(JavaScript plugins are not supported by the native TSRX path yet:[^"]*)"/,
+  const quoted = rust.match(REFUSAL_PATTERN);
+  assert.ok(
+    quoted,
+    "the rejection message moved out of crates/oxc_adapter/src/toolchain/config.rs",
   );
-  assert.ok(quoted, "the rejection message moved out of crates/oxc_adapter/src/toolchain/config.rs");
   const message = quoted[1];
 
-  const wall = transcripts.demos?.["custom-plugins-tsrx-wall"];
-  assert.ok(wall, "the .tsrx wall demo is missing");
+  const optOut = transcripts.demos?.["custom-plugins-tsrx-opt-out"];
+  assert.ok(optOut, "the .tsrx opt-out demo is missing");
   assert.ok(
-    wall.transcript.some((entry) => entry.output.includes(message)),
-    "the captured wall transcript no longer contains the native refusal",
+    optOut.transcript.some((entry) => entry.output.includes(message)),
+    "the captured opt-out transcript no longer contains the native refusal",
   );
 
   const rendered = join(root, "docs/dist/integrations/custom-js-plugins.md");
@@ -229,6 +244,86 @@ test("the page prints the native refusal exactly as the source writes it", async
     assert.ok(
       (await readFile(rendered, "utf8")).includes(message),
       "the built page no longer shows the native refusal",
+    );
+  }
+});
+
+test("the page no longer claims a JavaScript plugin cannot run on .tsrx", async () => {
+  const rust = await readFile(rejectionSource, "utf8");
+  assert.ok(
+    !rust.includes("does not expose its zero-copy plugin host"),
+    "the refusal still asserts a claim the projection lane disproves",
+  );
+  assert.ok(
+    !page.includes("a JavaScript plugin does not run on `.tsrx`"),
+    "the page still describes the removed wall",
+  );
+  assert.ok(
+    transcripts.demos?.["custom-plugins-tsrx-wall"] === undefined,
+    "the captured wall transcript outlived the wall",
+  );
+});
+
+test("the editor page documents the editor half of the lane", async () => {
+  const editor = await readFile(editorPagePath, "utf8");
+
+  // The four facts a reader needs before their own rule surprises them.
+  assert.match(editor, /jsPlugins/u, "the editor page never mentions jsPlugins");
+  assert.match(
+    editor,
+    /parses every linted \.tsrx file once more|extra parse of each `\.tsrx` file/u,
+    "the editor page does not disclose the extra parse",
+  );
+  assert.match(editor, /jsPluginsOnTsrx/u, "the editor page omits the opt-out key");
+  assert.match(
+    editor,
+    /context\.filename/u,
+    "the editor page omits the mirror-path difference",
+  );
+  assert.match(
+    editor,
+    /js-plugins-unavailable/u,
+    "the editor page does not say a failing plugin is surfaced",
+  );
+
+  // The stale claim this lane disproved, in the words the page used to use.
+  assert.doesNotMatch(
+    editor,
+    /runs no JavaScript rules\)/u,
+    "the editor page still says the native path runs no JavaScript rules",
+  );
+});
+
+test("no page still claims a plain install serves .tsrx before activation", async () => {
+  for (const path of [editorPagePath, readmePath]) {
+    const text = await readFile(path, "utf8");
+    // Every page that promises editor diagnostics has to name the activation
+    // step in the same breath, because Ripple's extension owns `.tsrx` as the
+    // language id `ripple` and the official OXC extension activates on neither.
+    assert.match(
+      text,
+      /activation event|activationEvents|onLanguage/u,
+      `${path} promises editor diagnostics without naming the activation step`,
+    );
+    assert.match(text, /ripple/iu, `${path} does not name the extension that owns .tsrx`);
+  }
+});
+
+test("the pages that describe the .tsrx lint boundary no longer wall off plugins", async () => {
+  const claims = [
+    // Each entry is a page and a phrase that was true before this lane shipped.
+    [join(root, "docs/reference/limitations.md"), /JavaScript lint plugins do not run in the native TSRX CLI/u],
+    [join(root, "docs/integrations/configuration.md"), /JavaScript plugins \(`jsPlugins`\) on the `\.tsrx` lane\./u],
+    [join(root, "packages/toolchain/README.md"), /They are not a\s+host that executes one against `\.tsrx`/u],
+    [readmePath, /On `\.tsrx` they fail loudly/u],
+  ];
+  for (const [path, stale] of claims) {
+    const text = await readFile(path, "utf8");
+    assert.doesNotMatch(text, stale, `${path} still describes the removed wall`);
+    assert.match(
+      text,
+      /jsPluginsOnTsrx|extra parse|once more/u,
+      `${path} describes the lane without its cost`,
     );
   }
 });
@@ -275,17 +370,70 @@ test("the page's commands really do what the page says", async (t) => {
       );
     });
 
-    await t.test("oxlint refuses the same plugin on .tsrx with exit 2", async () => {
-      const rust = await readFile(rejectionSource, "utf8");
-      const message = rust.match(
-        /"(JavaScript plugins are not supported by the native TSRX path yet:[^"]*)"/,
-      )[1];
+    await t.test("oxlint runs the same plugin on .tsrx, and says what it cost", async () => {
       const result = await oxlint(project, ["src/TaskList.tsrx"]);
-      assert.equal(result.code, 2, result.stdout);
-      assert.ok(
-        result.stderr.includes(message),
-        `expected the native refusal on stderr, got:\n${result.stderr}`,
+      // `require-keyed-map` looks for `.map()`, and TaskList.tsrx has an `@for`
+      // block, so the rule runs and finds nothing. The page says exactly that.
+      assert.equal(result.code, 0, result.stdout + result.stderr);
+      assert.match(
+        result.stderr,
+        /^oxlint \(oxc-tsrx\): running JS plugins on 1 \.tsrx file\(s\)/mu,
+        `expected the extra-parse disclosure on stderr, got:\n${result.stderr}`,
       );
+      assert.match(
+        result.stdout + result.stderr,
+        diagnosticPattern(composedReporter, {
+          file: "src/TaskList.tsrx",
+          line: 4,
+          column: 3,
+          severity: "warning",
+          code: "eslint(no-debugger)",
+        }),
+        "the native Rust rules stopped reporting once a plugin was configured",
+      );
+    });
+
+    await t.test("the page's own src/TaskFeed.tsrx really reports the plugin rule", async () => {
+      // The fence the page tells you to add is executed here rather than
+      // trusted, because it is the one file on the page that is not mirrored in
+      // examples/custom-js-plugins.
+      const fence = page.match(/Add this as `src\/TaskFeed\.tsrx`:\r?\n\r?\n```tsrx\r?\n([\s\S]*?)^```/mu);
+      assert.ok(fence, "the page stopped telling readers to add src/TaskFeed.tsrx");
+      await writeFile(join(project, "src/TaskFeed.tsrx"), fence[1]);
+      const result = await oxlint(project, ["src/TaskFeed.tsrx"]);
+      assert.equal(result.code, 1, result.stdout + result.stderr);
+      assert.match(
+        result.stdout + result.stderr,
+        diagnosticPattern(composedReporter, {
+          file: "src/TaskFeed.tsrx",
+          line: 4,
+          column: 36,
+          severity: "error",
+          code: "tsrx-demo(require-keyed-map)",
+        }),
+        result.stdout + result.stderr,
+      );
+      await rm(join(project, "src/TaskFeed.tsrx"));
+    });
+
+    await t.test("the settings opt-out restores the native refusal with exit 2", async () => {
+      const rust = await readFile(rejectionSource, "utf8");
+      const message = rust.match(REFUSAL_PATTERN)[1];
+      const config = JSON.parse(await readFile(join(project, ".oxlintrc.json"), "utf8"));
+      await writeFile(
+        join(project, ".oxlintrc.json"),
+        JSON.stringify({ ...config, settings: { oxcTsrx: { jsPluginsOnTsrx: false } } }, null, 2),
+      );
+      try {
+        const result = await oxlint(project, ["src/TaskList.tsrx"]);
+        assert.equal(result.code, 2, result.stdout);
+        assert.ok(
+          result.stderr.includes(message),
+          `expected the native refusal on stderr, got:\n${result.stderr}`,
+        );
+      } finally {
+        await writeFile(join(project, ".oxlintrc.json"), JSON.stringify(config, null, 2));
+      }
     });
 
     await t.test("the ESLint escape hatch reports both tsrx-demo rules", async () => {

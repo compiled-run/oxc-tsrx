@@ -1,0 +1,14 @@
+{
+  "jsPlugins": ["./demo-plugin.mjs"],
+  "rules": {
+    "tsrx-js-demo/no-banned-identifier": "warn"
+  },
+  "overrides": [
+    {
+      "files": ["**/*.tsrx"],
+      "rules": {
+        "tsrx-js-demo/no-banned-identifier": "error"
+      }
+    }
+  ]
+}

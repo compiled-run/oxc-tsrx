@@ -1,8 +1,8 @@
 {
-  "packageVersion": "0.1.1",
+  "packageVersion": "0.1.3",
   "target": "aarch64-apple-darwin",
   "bytes": 2507936,
-  "sha256": "8327de11ecb31b9ca91531629073ff989f9f43b7d61a3ec6447227d1eba30be2",
+  "sha256": "08e928cfd70ffbe63c62d26a03a32ad5fa890637eb8d5b3f595053515bdb75d4",
   "object": {
     "format": "mach-o",
     "imageKind": "dynamic-library",

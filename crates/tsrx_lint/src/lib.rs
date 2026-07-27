@@ -14,3 +14,4 @@ pub use report::{
     TimingOutput,
 };
 pub use session::LintSession;
+pub use translate::{PluginLabel, PluginProjection};

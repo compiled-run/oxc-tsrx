@@ -4,6 +4,7 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  readdir,
   rm,
   writeFile,
 } from "node:fs/promises";
@@ -149,7 +150,7 @@ test(
             name: `oxc-tsrx-${manager.name}-consumer`,
             private: true,
             type: "module",
-            devDependencies: { "oxc-tsrx": "0.1.1" },
+            devDependencies: { "oxc-tsrx": "0.1.3" },
           };
           await writeFile(
             join(consumer, "package.json"),
@@ -178,6 +179,23 @@ test(
           assert.equal(firstReport.packageManager, manager.name);
           assert.deepEqual(firstReport.changed, ["oxc-parser", "oxlint", "oxfmt"]);
           assert.ok(firstReport.slots.every((slot) => slot.state === "active"));
+
+          // The fourth slot, on the install this package manager actually
+          // wrote. Nothing but `oxc-tsrx` is installed here, so `.bin/oxlint`
+          // is already this package's and the editor setting would be noise.
+          // This is the assertion that says the detection reads a real shim
+          // rather than a fixture, per package manager.
+          assert.equal(firstReport.editorSlot.state, "unnecessary");
+          assert.equal(firstReport.editorSlot.linterShim.owner, "oxc-tsrx");
+          assert.ok(
+            ["symlink", "shim-text"].includes(firstReport.editorSlot.linterShim.resolvedBy),
+            `${manager.name}: ${firstReport.editorSlot.linterShim.resolvedBy}`,
+          );
+          assert.equal(
+            (await readdir(consumer)).includes(".vscode"),
+            false,
+            "no settings file may be written when the ordinary lookup already works",
+          );
 
           const second = await mustRun(
             process.execPath,
@@ -221,7 +239,7 @@ test(
             assert.deepEqual(facade.oxcTsrxCompatibility, {
               schemaVersion: 1,
               provider: "oxc-tsrx",
-              providerVersion: "0.1.1",
+              providerVersion: "0.1.3",
               capability,
             });
           }
@@ -287,6 +305,79 @@ test(
               await readFile(join(lintSlot, "package.json"), "utf8"),
             ),
             { name: "custom-oxlint", version: "999.0.0" },
+          );
+
+          // --- the editor slot, with the lookup taken away ------------------
+          // A Vite+ project is this shape: `node_modules/.bin/oxlint` belongs to
+          // another tool, so the official OXC extension finds that tool and
+          // serves no `.tsrx` diagnostics, with nothing anywhere saying why.
+          // Every `oxlint*` entry the package manager wrote is replaced, which
+          // covers the POSIX symlink and the Windows `.cmd`/`.ps1` text shims in
+          // one step.
+          await rm(lintSlot, { recursive: true, force: true });
+          const binDirectory = join(consumer, "node_modules/.bin");
+          for (const entry of await readdir(binDirectory)) {
+            if (!/^oxlint(\.cmd|\.ps1)?$/u.test(entry)) continue;
+            await rm(join(binDirectory, entry), { force: true });
+            await writeFile(
+              join(binDirectory, entry),
+              "#!/usr/bin/env node\nconsole.error('another tool owns this name');\n",
+            );
+          }
+
+          const settings = join(consumer, ".vscode/settings.json");
+          const editorSetup = JSON.parse(
+            (await mustRun(process.execPath, [cli, "setup", "--json"], {
+              cwd: consumer,
+              env: environment,
+            })).stdout,
+          );
+          assert.equal(editorSetup.editorSlot.linterShim.owner, "other");
+          assert.equal(editorSetup.editorSlot.state, "active");
+          assert.ok(editorSetup.changed.includes("oxc.path.oxlint"));
+          assert.deepEqual(JSON.parse(await readFile(settings, "utf8")), {
+            "oxc.path.oxlint": "node_modules/oxc-tsrx/bin/oxlint",
+          });
+
+          const settled = await readFile(settings, "utf8");
+          const editorAgain = JSON.parse(
+            (await mustRun(process.execPath, [cli, "setup", "--json"], {
+              cwd: consumer,
+              env: environment,
+            })).stdout,
+          );
+          assert.deepEqual(editorAgain.changed, []);
+          assert.equal(await readFile(settings, "utf8"), settled);
+
+          // The user's own file, with the key this package wrote in the middle
+          // of it. `remove` gives back exactly that key.
+          const authored = [
+            "{",
+            "  // team-wide",
+            '  "editor.tabSize": 2,',
+            '  "oxc.path.oxlint": "node_modules/oxc-tsrx/bin/oxlint",',
+            '  "files.eol": "\\n",',
+            "}",
+            "",
+          ].join("\n");
+          await writeFile(settings, authored);
+          const editorRemoved = JSON.parse(
+            (await mustRun(process.execPath, [cli, "remove", "--json"], {
+              cwd: consumer,
+              env: environment,
+            })).stdout,
+          );
+          assert.ok(editorRemoved.removed.includes("oxc.path.oxlint"));
+          assert.equal(
+            await readFile(settings, "utf8"),
+            [
+              "{",
+              "  // team-wide",
+              '  "editor.tabSize": 2,',
+              '  "files.eol": "\\n",',
+              "}",
+              "",
+            ].join("\n"),
           );
         });
       }

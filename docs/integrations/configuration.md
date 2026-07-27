@@ -63,6 +63,14 @@ Opt-in type lanes:
 - official tsgolint rules through `--type-aware`; and
 - TypeScript syntactic and semantic diagnostics through `--type-check`.
 
+Custom JavaScript plugins:
+
+- `jsPlugins` on ordinary files and on `.tsrx`, through the `oxlint` command
+  and the language server, with your own severities, rule options, `extends`,
+  and `overrides` resolved by Oxlint itself. See
+  [`jsPlugins` and the two lanes](#jsplugins-and-the-two-lanes) for the extra
+  parse this costs and the one command that still refuses it.
+
 For example:
 
 <!-- annotate-config -->
@@ -160,20 +168,39 @@ start:
   command with exit status 2 instead of silently downgrading or writing
   source.
 
+### `jsPlugins` and the two lanes
+
+`jsPlugins` works on both halves of a project, but which command you run
+decides whether it works at all, so it gets its own section.
+
+- **The `oxlint` command and the language server run them on `.tsrx`.** They
+  build the legal-TSX projection of each `.tsrx` file, run the published Oxlint
+  binary over it with your own config, and map every diagnostic back onto your
+  authored bytes. Ordinary files are untouched and go straight to canonical
+  Oxlint.
+- **That costs one extra parse per linted `.tsrx` file, and it is never
+  silent.** `oxlint` prints one line to stderr ahead of the report and repeats
+  the fact in `--format=json` under `oxcTsrx.jsPluginProjection`; the language
+  server writes the same fact to its output log once per session.
+- **`settings.oxcTsrx.jsPluginsOnTsrx: false` turns the lane off.** Your
+  plugins keep running on ordinary files. On `.tsrx` you then get the refusal
+  below instead of quietly fewer rules.
+- **The direct native target refuses `jsPlugins` and always did.**
+  `oxc-tsrx-lint` is a Rust process with no Node.js runtime, so it cannot host
+  your module. It exits 2 with a message naming `oxlint` as the command that
+  can. `vp lint` is not that target: it reaches this package through the
+  `oxlint` command, so a Vite+ project keeps its plugins on both halves. See
+  [Vite and Vite+](/integrations/vite-plus#one-template-default-you-have-to-turn-off-first).
+
+`context.filename` is the mirror path, `@if` and `@for` arrive already
+compiled, and a diagnostic that lands on projected-only text is dropped. Those
+are documented in full under [Custom JavaScript
+plugins](/integrations/custom-js-plugins#what-your-rule-sees-on-tsrx).
+
 ### Not yet supported
 
 These fail before a source parse or write; they are not silently disabled:
 
-- JavaScript plugins (`jsPlugins`) on the `.tsrx` lane. This is a scoping
-  limit, not a blanket "JS plugins never work" statement. Ordinary `.js`/`.ts`
-  files can use released Oxlint JS plugins in the normal Oxlint lane (including
-  through Vite+). What rejects `jsPlugins` is the native TSRX CLI and language
-  server, and the serialized `.tsrx` Vite+ lane that forwards config to them,
-  because that native Rust path has no Node JS-plugin host. The source-only VS
-  Code experiment routes the official OXC extension through a Node-enabled
-  Oxlint draft to run a JS rule on `.tsrx`; it does not make `jsPlugins` valid
-  for the native CLI. See
-  [Custom JavaScript plugins](/integrations/custom-js-plugins).
 - JavaScript/TypeScript config modules passed to the direct native command.
 - Alternate reporters and nested per-directory config discovery.
 

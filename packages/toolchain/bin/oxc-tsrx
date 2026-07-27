@@ -16,10 +16,23 @@ and imports, requires, or spawns no dependency. It exits non-zero when a
 provider claims a reserved extension or when two providers collide.
 
 setup, status, and remove are the temporary compatibility bridge for consumers
-whose resolver is not provider-aware yet. The bridge creates only the exact
-oxc-parser, oxlint, and oxfmt package-name facades those consumers need. It
-never edits package.json. Transitive official packages in those exact slots
-are preserved and restored; direct or unrecognized packages are never replaced.
+whose resolver is not provider-aware yet. The bridge creates the exact
+oxc-parser, oxlint, and oxfmt package-name facades those consumers need, and one
+fourth slot for the editor. Transitive official packages in those exact slots are
+preserved and restored; direct or unrecognized packages are never replaced.
+
+The editor slot is the one thing setup writes outside node_modules. When
+node_modules/.bin/oxlint belongs to another tool, the official OXC extension
+finds that tool and serves no .tsrx diagnostics, so setup merges the single key
+"oxc.path.oxlint" into your .vscode/settings.json. Everything else in that file
+is preserved, an existing "oxc.path.oxlint" is reported rather than overwritten,
+and remove takes back only that key. It never edits package.json or
+tsconfig.json.
+
+setup also reports the TSRX editor prerequisites it deliberately does not own:
+@tsrx/typescript-plugin, a framework binding, the tsconfig.json plugins entry,
+and a TypeScript version the plugin supports. It installs and changes none of
+them.
 `;
 }
 
@@ -60,19 +73,10 @@ function parseArguments(argv) {
   return options;
 }
 
-function printResult(result, json) {
-  if (json) {
-    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
-    return;
-  }
-  const changes = result.changed ?? result.removed ?? [];
-  const verb = result.action === "remove" ? "removed" : result.action;
+function printResult(result, json, format) {
   process.stdout.write(
-    `${verb} ${changes.length} compatibility slot(s) for oxc-tsrx ${result.providerVersion} (${result.packageManager})\n`,
+    json ? `${JSON.stringify(result, null, 2)}\n` : format(result),
   );
-  for (const slot of result.slots) {
-    process.stdout.write(`- ${slot.name}: ${slot.state}\n`);
-  }
 }
 
 try {
@@ -98,24 +102,16 @@ try {
   } else {
     const {
       compatibilityStatus,
+      formatCompatibilityReport,
       removeCompatibility,
       setupCompatibility,
     } = await import("../dist/compat.js");
     if (options.command === "setup" || options.command === "activate") {
-      printResult(await setupCompatibility(options), options.json);
+      printResult(await setupCompatibility(options), options.json, formatCompatibilityReport);
     } else if (options.command === "status") {
-      const result = await compatibilityStatus(options);
-      if (options.json) process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
-      else {
-        process.stdout.write(
-          `oxc-tsrx ${result.providerVersion} compatibility (${result.packageManager})\n`,
-        );
-        for (const slot of result.slots) {
-          process.stdout.write(`- ${slot.name}: ${slot.state}\n`);
-        }
-      }
+      printResult(await compatibilityStatus(options), options.json, formatCompatibilityReport);
     } else if (options.command === "remove" || options.command === "deactivate") {
-      printResult(await removeCompatibility(options), options.json);
+      printResult(await removeCompatibility(options), options.json, formatCompatibilityReport);
     } else {
       throw new Error(`unknown command: ${options.command}\n\n${usage()}`);
     }
