@@ -4,6 +4,7 @@ use oxc_adapter::{DynamicTagContract, EngineDiagnostic, LintRequest, SourceKind}
 use tsrx_syntax::{MappedProjection, project_for_lint, scan};
 
 use crate::{
+    error::LintError,
     pipeline::PreparedSource,
     report::{EditorFix, diagnostic_code},
     session::LintSession,
@@ -24,7 +25,7 @@ pub(crate) fn apply_safe_fixes(
     prepared: &PreparedSource,
     diagnostics: &[EngineDiagnostic],
     rejected_fixes: u32,
-) -> Result<AppliedFixes, String> {
+) -> Result<AppliedFixes, LintError> {
     let mut result = AppliedFixes { rejected: rejected_fixes, ..AppliedFixes::default() };
     let mut edits = Vec::new();
     for diagnostic in diagnostics {
@@ -53,8 +54,7 @@ pub(crate) fn apply_safe_fixes(
     if result.applied > 0 {
         validate_fixed(session, path, &fixed, prepared.is_tsrx, prepared.source_kind)?;
         result.reparse_count = 1;
-        fs::write(path, fixed)
-            .map_err(|error| format!("Unable to write {}: {error}", path.display()))?;
+        fs::write(path, fixed).map_err(|error| LintError::unwritable(path, error))?;
     }
     Ok(result)
 }
@@ -104,13 +104,8 @@ fn validate_fixed(
     fixed: &str,
     is_tsrx: bool,
     source_kind: SourceKind,
-) -> Result<(), String> {
-    let projection = if is_tsrx {
-        let overlay = scan(fixed).map_err(|error| error.to_string())?;
-        Some(project_for_lint(fixed, &overlay).map_err(|error| error.to_string())?)
-    } else {
-        None
-    };
+) -> Result<(), LintError> {
+    let projection = if is_tsrx { Some(project_for_lint(fixed, &scan(fixed)?)?) } else { None };
     let parse_source = projection.as_ref().map_or(fixed, MappedProjection::source);
     session.engine.lint(&LintRequest {
         path,

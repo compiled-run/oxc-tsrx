@@ -5,6 +5,7 @@ fn the_linter_keeps_one_concept_per_module_file() {
     let crate_root = Path::new(env!("CARGO_MANIFEST_DIR"));
     for path in [
         "src/lib.rs",
+        "src/error.rs",
         "src/fixes.rs",
         "src/pipeline.rs",
         "src/report.rs",

@@ -1,6 +1,5 @@
 use std::{
     ffi::OsString,
-    fmt,
     path::{Path, PathBuf},
     time::Instant,
 };
@@ -9,11 +8,10 @@ use oxc_adapter::{
     DynamicTagContract, EngineDiagnostic, LintRequest, LintResult, OXC_REVISION, SourceKind,
     TypeBatchFile,
 };
-use tsrx_syntax::{
-    MappedProjection, ProjectionError, TypeProjection, project_for_lint, project_for_types, scan,
-};
+use tsrx_syntax::{MappedProjection, TypeProjection, project_for_lint, project_for_types, scan};
 
 use crate::{
+    error::LintError,
     fixes::{AppliedFixes, apply_safe_fixes},
     report::{
         FileCounts, FixOutput, Metadata, Output, TimingOutput, map_diagnostics,
@@ -39,39 +37,6 @@ pub(crate) struct PendingBatchFile {
     pub(crate) syntax: LintResult,
 }
 
-/// A per-file failure that has not yet been decided to be a diagnostic or a command failure.
-///
-/// `Projection` is the one kind the CLI lint lane turns into a diagnostic: it is a syntax error in
-/// the user's own TSRX file, positioned by [`ProjectionError::byte_offset`]. Everything else is a
-/// genuine tool failure. `Display` reproduces each message unchanged, so a caller that maps this
-/// straight back to a `String` keeps the exact text it had before.
-#[derive(Debug)]
-pub(crate) enum PrepareError {
-    Projection(ProjectionError),
-    Other(String),
-}
-
-impl fmt::Display for PrepareError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Projection(error) => error.fmt(formatter),
-            Self::Other(message) => formatter.write_str(message),
-        }
-    }
-}
-
-impl From<ProjectionError> for PrepareError {
-    fn from(error: ProjectionError) -> Self {
-        Self::Projection(error)
-    }
-}
-
-impl From<String> for PrepareError {
-    fn from(message: String) -> Self {
-        Self::Other(message)
-    }
-}
-
 impl PreparedSource {
     fn parse_source<'a>(&'a self, original: &'a str) -> &'a str {
         self.projection.as_ref().map_or(original, MappedProjection::source)
@@ -92,13 +57,10 @@ pub(crate) fn lint_loaded_file(
     path: &Path,
     source: &str,
     allow_writes: bool,
-) -> Result<Output, String> {
+) -> Result<Output, LintError> {
     match lint_loaded_source(session, path, source, allow_writes) {
-        Ok(output) => Ok(output),
-        Err(PrepareError::Projection(error)) => {
-            Ok(projection_failure_output(session, path, &error))
-        }
-        Err(PrepareError::Other(message)) => Err(message),
+        Err(LintError::Projection(error)) => Ok(projection_failure_output(session, path, &error)),
+        result => result,
     }
 }
 
@@ -107,11 +69,11 @@ pub(crate) fn lint_loaded_source(
     path: &Path,
     source: &str,
     allow_writes: bool,
-) -> Result<Output, PrepareError> {
+) -> Result<Output, LintError> {
     let (prepared, syntax) = run_syntax_lint(session, path, source)?;
     let (diagnostics, type_aware_ns, type_aware_processes) =
         run_type_lint(session, path, source, &prepared, &syntax)?;
-    Ok(finish_lint(
+    finish_lint(
         session,
         path,
         source,
@@ -121,7 +83,7 @@ pub(crate) fn lint_loaded_source(
         allow_writes,
         type_aware_ns,
         type_aware_processes,
-    )?)
+    )
 }
 
 pub(crate) fn run_type_lint(
@@ -130,7 +92,7 @@ pub(crate) fn run_type_lint(
     source: &str,
     prepared: &PreparedSource,
     syntax: &LintResult,
-) -> Result<(Vec<EngineDiagnostic>, u64, u32), String> {
+) -> Result<(Vec<EngineDiagnostic>, u64, u32), LintError> {
     if !session.engine.type_aware_enabled() {
         return Ok((Vec::new(), 0, 0));
     }
@@ -160,7 +122,7 @@ pub(crate) fn run_syntax_lint(
     session: &LintSession,
     path: &Path,
     source: &str,
-) -> Result<(PreparedSource, LintResult), PrepareError> {
+) -> Result<(PreparedSource, LintResult), LintError> {
     let prepared = prepare_source(path, source, session.engine.type_aware_enabled())?;
     let parse_source = prepared.parse_source(source);
     let syntax = session.engine.lint(&LintRequest {
@@ -193,7 +155,7 @@ pub(crate) fn finish_lint(
     allow_writes: bool,
     type_aware_ns: u64,
     type_aware_processes: u32,
-) -> Result<Output, String> {
+) -> Result<Output, LintError> {
     prepared.timings.parse_ns = syntax.timings.parse_ns;
     prepared.timings.semantic_ns = syntax.timings.semantic_ns;
     prepared.timings.lint_ns = syntax.timings.lint_ns;
@@ -253,14 +215,14 @@ fn prepare_source(
     path: &Path,
     source: &str,
     type_aware: bool,
-) -> Result<PreparedSource, PrepareError> {
+) -> Result<PreparedSource, LintError> {
     let is_tsrx = path.extension().is_some_and(|extension| extension == "tsrx");
     let mut timings = TimingOutput::default();
     if !is_tsrx {
         return Ok(PreparedSource {
             projection: None,
             type_projection: None,
-            source_kind: source_kind(path)?,
+            source_kind: SourceKind::from_path(path)?,
             is_tsrx,
             timings,
         });
@@ -285,16 +247,6 @@ pub(crate) fn virtual_type_path(path: &Path) -> PathBuf {
     let mut path = OsString::from(path.as_os_str());
     path.push(".tsx");
     PathBuf::from(path)
-}
-
-fn source_kind(path: &Path) -> Result<SourceKind, String> {
-    match path.extension().and_then(|extension| extension.to_str()) {
-        Some("js" | "mjs" | "cjs") => Ok(SourceKind::JavaScript),
-        Some("jsx") => Ok(SourceKind::JavaScriptReact),
-        Some("ts" | "mts" | "cts") => Ok(SourceKind::TypeScript),
-        Some("tsx") => Ok(SourceKind::TypeScriptReact),
-        extension => Err(format!("Unsupported source extension: {extension:?}")),
-    }
 }
 
 fn elapsed_ns(started: Instant) -> u64 {

@@ -10,10 +10,11 @@ use oxc_adapter::{
 use tsrx_syntax::TypeProjection;
 
 use crate::{
+    error::LintError,
     fixes::collect_editor_fixes,
     pipeline::{
-        PendingBatchFile, PrepareError, finish_lint, lint_loaded_file, lint_loaded_source,
-        run_syntax_lint, run_type_lint, virtual_type_path,
+        PendingBatchFile, finish_lint, lint_loaded_file, lint_loaded_source, run_syntax_lint,
+        run_type_lint, virtual_type_path,
     },
     report::{EditorFix, Output, aggregate_outputs, projection_failure_output},
     translate::{translate_diagnostics, translate_type_diagnostics},
@@ -42,7 +43,7 @@ impl LintSession {
         config_path: Option<&Path>,
         filters: &[RuleFilter],
         fix: bool,
-    ) -> Result<Self, String> {
+    ) -> Result<Self, LintError> {
         Self::new_with_config_base(cwd, config_path, None, filters, fix)
     }
 
@@ -57,7 +58,7 @@ impl LintSession {
         config_base: Option<&Path>,
         filters: &[RuleFilter],
         fix: bool,
-    ) -> Result<Self, String> {
+    ) -> Result<Self, LintError> {
         Self::new_with_capabilities(cwd, config_path, config_base, filters, fix, false, false)
     }
 
@@ -74,7 +75,7 @@ impl LintSession {
         filters: &[RuleFilter],
         fix: bool,
         type_check: bool,
-    ) -> Result<Self, String> {
+    ) -> Result<Self, LintError> {
         Self::new_with_capabilities(cwd, config_path, config_base, filters, fix, true, type_check)
     }
 
@@ -89,7 +90,7 @@ impl LintSession {
         config_source: Option<&str>,
         filters: &[RuleFilter],
         fix: bool,
-    ) -> Result<Self, String> {
+    ) -> Result<Self, LintError> {
         let engine = LintEngine::new_from_config_source(cwd, config_source, filters, fix)?;
         Ok(Self { engine, fix })
     }
@@ -102,7 +103,7 @@ impl LintSession {
         fix: bool,
         type_aware: bool,
         type_check: bool,
-    ) -> Result<Self, String> {
+    ) -> Result<Self, LintError> {
         let options =
             LintEngineOptions { cwd, config_path, config_base, filters, collect_fixes: fix };
         let engine = if type_aware {
@@ -138,9 +139,9 @@ impl LintSession {
     /// # Errors
     ///
     /// Returns an error without writing for read, parser, semantic, or lint failures.
-    pub fn lint_file(&self, path: &Path) -> Result<Output, String> {
-        let source = fs::read_to_string(path)
-            .map_err(|error| format!("Unable to read {}: {error}", path.display()))?;
+    pub fn lint_file(&self, path: &Path) -> Result<Output, LintError> {
+        let source =
+            fs::read_to_string(path).map_err(|error| LintError::unreadable(path, error))?;
         lint_loaded_file(self, path, &source, true)
     }
 
@@ -152,7 +153,7 @@ impl LintSession {
     /// # Errors
     ///
     /// Returns before writing if any source, OXC pass, or type-aware batch fails.
-    pub fn lint_files(&self, paths: &[PathBuf]) -> Result<Vec<Output>, String> {
+    pub fn lint_files(&self, paths: &[PathBuf]) -> Result<Vec<Output>, LintError> {
         if !self.engine.type_aware_enabled() {
             return paths.iter().map(|path| self.lint_file(path)).collect();
         }
@@ -162,8 +163,8 @@ impl LintSession {
         ordered.resize_with(paths.len(), || None);
         let mut pending = Vec::with_capacity(paths.len());
         for (slot, path) in paths.iter().enumerate() {
-            let source = fs::read_to_string(path)
-                .map_err(|error| format!("Unable to read {}: {error}", path.display()))?;
+            let source =
+                fs::read_to_string(path).map_err(|error| LintError::unreadable(path, error))?;
             match run_syntax_lint(self, path, &source) {
                 Ok((prepared, syntax)) => pending.push(PendingBatchFile {
                     slot,
@@ -172,10 +173,10 @@ impl LintSession {
                     prepared,
                     syntax,
                 }),
-                Err(PrepareError::Projection(error)) => {
+                Err(LintError::Projection(error)) => {
                     ordered[slot] = Some(projection_failure_output(self, path, &error));
                 }
-                Err(PrepareError::Other(message)) => return Err(message),
+                Err(error) => return Err(error),
             }
         }
         if pending.is_empty() {
@@ -245,11 +246,11 @@ impl LintSession {
     /// # Errors
     ///
     /// Returns an error when this session was created with fixes enabled or linting fails.
-    pub fn lint_text(&self, path: &Path, source: &str) -> Result<Output, String> {
+    pub fn lint_text(&self, path: &Path, source: &str) -> Result<Output, LintError> {
         if self.fix {
-            return Err("LintSession::lint_text cannot apply filesystem fixes".to_string());
+            return Err(LintError::TextLintWithFixes);
         }
-        lint_loaded_source(self, path, source, false).map_err(|error| error.to_string())
+        lint_loaded_source(self, path, source, false)
     }
 
     /// Collect safe, mapped, validation-passed edits for an in-memory editor document.
@@ -262,12 +263,11 @@ impl LintSession {
     /// # Errors
     ///
     /// Returns an error when fix collection was not enabled or linting cannot complete.
-    pub fn code_actions(&self, path: &Path, source: &str) -> Result<Vec<EditorFix>, String> {
+    pub fn code_actions(&self, path: &Path, source: &str) -> Result<Vec<EditorFix>, LintError> {
         if !self.fix {
-            return Err("LintSession::code_actions requires a fix-enabled session".to_string());
+            return Err(LintError::CodeActionsWithoutFixes);
         }
-        let (prepared, syntax) =
-            run_syntax_lint(self, path, source).map_err(|error| error.to_string())?;
+        let (prepared, syntax) = run_syntax_lint(self, path, source)?;
         let (type_diagnostics, _, _) = run_type_lint(self, path, source, &prepared, &syntax)?;
         let mut translated =
             translate_diagnostics(syntax.diagnostics, prepared.projection.as_ref());
@@ -290,7 +290,7 @@ impl LintSession {
 ///
 /// Returns an error without writing when the file cannot be read, projected, parsed, analyzed,
 /// linted, fix-validated, or written.
-pub fn lint_file(path: &Path, options: &Options) -> Result<Output, String> {
+pub fn lint_file(path: &Path, options: &Options) -> Result<Output, LintError> {
     let session = legacy_session(path, options)?;
     session.lint_file(path)
 }
@@ -305,15 +305,15 @@ pub fn lint_file(path: &Path, options: &Options) -> Result<Output, String> {
 ///
 /// Returns an error when fixes are requested or the source cannot be projected, parsed, analyzed,
 /// or linted.
-pub fn lint_text(path: &Path, source: &str, options: &Options) -> Result<Output, String> {
+pub fn lint_text(path: &Path, source: &str, options: &Options) -> Result<Output, LintError> {
     if options.fix {
-        return Err("lint_text does not write or apply fixes; use lint_file".to_string());
+        return Err(LintError::FreeTextLintWithFixes);
     }
     let session = legacy_session(path, options)?;
-    lint_loaded_source(&session, path, source, false).map_err(|error| error.to_string())
+    lint_loaded_source(&session, path, source, false)
 }
 
-fn legacy_session(path: &Path, options: &Options) -> Result<LintSession, String> {
+fn legacy_session(path: &Path, options: &Options) -> Result<LintSession, LintError> {
     let filters = options
         .rules
         .iter()
@@ -439,7 +439,8 @@ mod tests {
         let session = LintSession::new(Path::new("."), None, &[], false).unwrap();
         let error = session
             .lint_text(Path::new("Broken.tsrx"), "export function Broken() @{\n  <main>\n}\n")
-            .expect_err("the LSP boundary must keep receiving projection failures as errors");
+            .expect_err("the LSP boundary must keep receiving projection failures as errors")
+            .to_string();
         assert!(error.contains("unterminated"), "{error}");
     }
 
@@ -448,7 +449,8 @@ mod tests {
         let error =
             LintSession::new_with_config_source(Path::new("/demo"), Some("{ not-json"), &[], false)
                 .err()
-                .expect("invalid JSON must fail before linting");
+                .expect("invalid JSON must fail before linting")
+                .to_string();
         assert!(!error.is_empty());
     }
 }
