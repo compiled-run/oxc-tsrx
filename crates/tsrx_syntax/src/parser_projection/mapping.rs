@@ -1,0 +1,108 @@
+use std::ops::Range;
+
+use crate::{
+    model::ByteSpan,
+    projection_view::{ProjectionSegment, ProjectionView},
+};
+
+/// Legal TSX plus an affine map for ranges copied byte-for-byte from authored TSRX.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MappedProjection {
+    pub(super) projected: String,
+    pub(super) segments: Vec<ProjectionSegment>,
+    pub(super) dynamic_prefix: Option<String>,
+    pub(super) dynamic_count: u32,
+    pub(super) dynamic_offsets: Vec<u32>,
+    pub(super) synthetic_generator_spans: Vec<ByteSpan>,
+    pub(super) synthetic_callee_spans: Vec<(u32, u32)>,
+}
+
+impl MappedProjection {
+    #[must_use]
+    pub fn source(&self) -> &str {
+        &self.projected
+    }
+
+    #[must_use]
+    pub fn view(&self) -> ProjectionView<'_> {
+        ProjectionView { source: &self.projected, segments: &self.segments }
+    }
+
+    /// Maps a projected range only when every byte belongs to one unchanged authored segment.
+    #[must_use]
+    pub fn map_range(&self, range: Range<u32>) -> Option<Range<u32>> {
+        self.map_range_with(range, false)
+    }
+
+    /// Maps a projected fix only when it is affine and cannot invalidate a paired dynamic name.
+    #[must_use]
+    pub fn map_fix_range(&self, range: Range<u32>) -> Option<Range<u32>> {
+        self.map_range_with(range, true)
+    }
+
+    fn map_range_with(&self, range: Range<u32>, require_fixable: bool) -> Option<Range<u32>> {
+        map_single_segment(&self.segments, range, require_fixable)
+    }
+
+    /// Returns the collision-free synthetic dynamic-tag namespace and expected tag count.
+    #[must_use]
+    pub fn dynamic_contract(&self) -> Option<(&str, u32, &[u32])> {
+        if self.dynamic_count == 0 {
+            return None;
+        }
+        self.dynamic_prefix
+            .as_deref()
+            .map(|prefix| (prefix, self.dynamic_count, self.dynamic_offsets.as_slice()))
+    }
+
+    /// Collision-free marker namespace used by the parser-only reconstruction lane.
+    ///
+    /// Parser projections retain this even when their only implemented construct has no emitted
+    /// marker (for example a self-closing raw style element), so validation never has to infer a
+    /// namespace from untrusted projected comments.
+    #[must_use]
+    pub fn parser_marker_prefix(&self) -> Option<&str> {
+        self.dynamic_prefix.as_deref()
+    }
+
+    /// Returns true when an authored range belongs to a generator introduced only as projection
+    /// scaffolding. Generator-specific built-in diagnostics in these ranges are synthetic.
+    #[must_use]
+    pub fn is_synthetic_generator_range(&self, range: Range<u32>) -> bool {
+        self.synthetic_generator_spans.iter().any(|span| span.intersects(range.start, range.end))
+    }
+
+    /// Projected byte spans of helper callees introduced by this projection.
+    ///
+    /// The parser's dynamic-expression validator uses these exact spans to distinguish generated
+    /// control helpers from authored calls, including authored escaped identifiers that decode to
+    /// the same collision-free prefix.
+    #[must_use]
+    pub fn synthetic_callee_spans(&self) -> &[(u32, u32)] {
+        &self.synthetic_callee_spans
+    }
+}
+
+fn map_single_segment(
+    segments: &[ProjectionSegment],
+    range: Range<u32>,
+    require_fixable: bool,
+) -> Option<Range<u32>> {
+    if range.start > range.end {
+        return None;
+    }
+    segments.iter().find_map(|segment| {
+        if require_fixable && !segment.fixable {
+            return None;
+        }
+        let inside = if range.is_empty() {
+            segment.projected.start < range.start && range.start < segment.projected.end
+        } else {
+            segment.projected.start <= range.start && range.end <= segment.projected.end
+        };
+        inside.then(|| {
+            let start = segment.original_start + (range.start - segment.projected.start);
+            start..start + (range.end - range.start)
+        })
+    })
+}
