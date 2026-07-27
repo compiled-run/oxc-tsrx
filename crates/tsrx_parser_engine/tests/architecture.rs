@@ -13,6 +13,16 @@ fn the_parser_engine_keeps_one_concept_per_private_module_file() {
         "src/pipeline.rs",
         "src/request.rs",
         "src/utf16_route.rs",
+        "src/projection/mod.rs",
+        "src/projection/clauses.rs",
+        "src/projection/comments.rs",
+        "src/projection/embedded.rs",
+        "src/projection/gaps.rs",
+        "src/projection/mapping.rs",
+        "src/projection/marker.rs",
+        "src/projection/marker_validation.rs",
+        "src/projection/overlay.rs",
+        "src/projection/text.rs",
         "src/reconstruct/mod.rs",
         "src/reconstruct/access.rs",
         "src/reconstruct/code_blocks.rs",
@@ -31,14 +41,45 @@ fn the_parser_engine_keeps_one_concept_per_private_module_file() {
         "src/reconstruct/style.rs",
         "src/reconstruct/switch.rs",
         "src/reconstruct/try_catch.rs",
+        "src/utf16_result/mod.rs",
+        "src/utf16_result/codeframe.rs",
+        "src/utf16_result/comments.rs",
+        "src/utf16_result/finalize.rs",
+        "src/utf16_result/ledger.rs",
+        "src/utf16_result/module_values.rs",
+        "src/utf16_result/observer.rs",
+        "src/utf16_result/program_values.rs",
+        "src/utf16_result/pua_markers.rs",
+        "src/utf16_result/reachability.rs",
+        "src/utf16_result/tape_fields.rs",
     ] {
         assert!(crate_root.join(path).is_file(), "missing {path}");
     }
 
-    assert!(
-        !crate_root.join("src/reconstruct.rs").exists(),
-        "legacy monolith remains: src/reconstruct.rs"
-    );
+    for path in ["src/reconstruct.rs", "src/projection.rs", "src/utf16_result.rs"] {
+        assert!(!crate_root.join(path).exists(), "legacy monolith remains: {path}");
+    }
+}
+
+#[test]
+fn no_parser_engine_source_file_exceeds_the_layout_cap() {
+    let crate_root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let mut pending = vec![crate_root.join("src")];
+    while let Some(directory) = pending.pop() {
+        for entry in std::fs::read_dir(&directory).expect("readable source directory") {
+            let path = entry.expect("readable source entry").path();
+            if path.is_dir() {
+                pending.push(path);
+                continue;
+            }
+            if path.extension().is_none_or(|extension| extension != "rs") {
+                continue;
+            }
+            let lines =
+                std::fs::read_to_string(&path).expect("readable source file").lines().count();
+            assert!(lines <= 1500, "{} carries {lines} lines", path.display());
+        }
+    }
 }
 
 #[test]
