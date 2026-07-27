@@ -4,7 +4,7 @@
 // large in the center, TSRX @-syntax tokens as edge decoration. Rendered at
 // 2x with system Chrome, then downscaled to 1200x630 so text stays crisp in
 // link previews.
-import { readFile, unlink } from 'node:fs/promises'
+import { mkdir, readFile, unlink } from 'node:fs/promises'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import path from 'node:path'
@@ -156,3 +156,19 @@ const out = path.join(assetsDir, 'social-card.png')
 await run('magick', [raw, '-resize', '1200x630', '-unsharp', '0x0.6+0.6+0.01', '-strip', out])
 await unlink(raw)
 console.log(`wrote ${out}`)
+
+// The README shows the same card with rounded corners. GitHub strips `style`
+// attributes from README HTML, so the radius has to be baked into the pixels:
+// 150 by 78.75 is 12.5% of each side, what `border-radius: 12.5%` means in CSS.
+// This copy keeps its alpha, so it lives outside docs/assets/, which the site
+// build copies wholesale into every deploy.
+const hero = path.join(docsDir, '..', '.github', 'assets', 'readme-hero.png')
+await mkdir(path.dirname(hero), { recursive: true })
+await run('magick', [
+  out,
+  '-alpha', 'set',
+  '(', '+clone', '-alpha', 'transparent', '-background', 'none',
+  '-fill', 'white', '-draw', 'roundrectangle 0,0,1199,629,150,78.75', ')',
+  '-compose', 'DstIn', '-composite', '-strip', hero,
+])
+console.log(`wrote ${hero}`)

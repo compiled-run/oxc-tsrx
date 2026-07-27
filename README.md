@@ -1,7 +1,7 @@
 <p align="center">
   <br>
   <a href="https://oxc-tsrx-docs.vercel.app/">
-    <img alt="OXC for TSRX" width="600" src="https://raw.githubusercontent.com/markless-dev/oxc-tsrx/HEAD/docs/assets/social-card.png">
+    <img alt="OXC for TSRX" width="600" src="https://raw.githubusercontent.com/markless-dev/oxc-tsrx/HEAD/.github/assets/readme-hero.png">
   </a>
   <br>
 </p>
