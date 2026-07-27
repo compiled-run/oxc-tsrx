@@ -38,6 +38,12 @@ function run(executable, args, input = null) {
     child.once('close', (code, signal) => {
       resolvePromise({ code, signal, stdout, stderr });
     });
+    // A command that rejects its config exits before draining stdin, so this
+    // write can land on a closed pipe. That is the behaviour under test; report
+    // what the child did and let the assertions judge it.
+    child.stdin.once('error', (error) => {
+      if (error?.code !== 'EPIPE' && error?.code !== 'ERR_STREAM_DESTROYED') reject(error);
+    });
     child.stdin.end(input ?? undefined);
   });
 }

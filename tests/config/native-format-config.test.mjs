@@ -35,6 +35,14 @@ function run(executable, cwd, args, input = null) {
     child.stderr.on("data", (chunk) => (stderr += chunk));
     child.once("error", reject);
     child.once("close", (code, signal) => resolvePromise({ code, signal, stdout, stderr }));
+    // Several tests here assert that the command rejects a config *before* it
+    // reads stdin, so the child is expected to be gone by the time this write
+    // lands. Losing that race is the behaviour under test, not a harness
+    // failure: report what the child did and let the assertions judge it. Any
+    // other stdin error is real and still rejects.
+    child.stdin.once("error", (error) => {
+      if (error?.code !== "EPIPE" && error?.code !== "ERR_STREAM_DESTROYED") reject(error);
+    });
     child.stdin.end(input ?? undefined);
   });
 }

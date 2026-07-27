@@ -776,3 +776,50 @@ test("the maintainer guide defines a source-backed upstream transplant contract"
   assert.match(siteConfig, /link:\s*['"]\/architecture\/upstreaming-to-oxc['"]/);
   assert.match(core, /(?:\.\/|architecture\/)upstreaming-to-oxc\.md/);
 });
+
+// The docs Rust tools sit outside the product workspace, so each keeps its own
+// Cargo.lock. Those locks record a resolved version for every path dependency
+// they pull out of crates/, which means a workspace version bump leaves them
+// stale. build-docs-wasm.mjs refuses to let a build rewrite its lock, so a
+// stale lock does not produce a wrong artifact, it fails the docs site build
+// outright. That is the correct behaviour and a terrible way to find out: it
+// costs a four-minute cargo build to learn a version string is one digit off.
+// Check it here in milliseconds instead.
+test("the out-of-workspace docs locks record the current workspace version", async () => {
+  const workspaceManifest = await readFile(join(root, "Cargo.toml"), "utf8");
+  const workspaceVersion = workspaceManifest.match(
+    /^\[workspace\.package\][^[]*?^version\s*=\s*"([^"]+)"/ms,
+  )?.[1];
+  assert.match(
+    workspaceVersion ?? "",
+    /^\d+\.\d+\.\d+$/,
+    "the workspace must declare one shared crate version",
+  );
+
+  const localCrates = new Set(
+    (await readdir(join(root, "crates"), { withFileTypes: true }))
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name),
+  );
+
+  const toolLocks = ["docs/tools/demo-wasm", "docs/tools/projection-dump"];
+  for (const tool of toolLocks) {
+    const lock = await readFile(join(root, tool, "Cargo.lock"), "utf8");
+    const pathEntries = lockPackages(lock).filter(
+      // A path dependency is the one kind of package a lock records with no
+      // source at all; registry and git packages always carry one.
+      (entry) => entry.source === undefined && localCrates.has(entry.name),
+    );
+    assert.ok(
+      pathEntries.length > 0,
+      `${tool}/Cargo.lock must resolve at least one crate from this repository`,
+    );
+    for (const entry of pathEntries) {
+      assert.equal(
+        entry.block.match(/^version\s*=\s*"([^"]+)"/m)?.[1],
+        workspaceVersion,
+        `${tool}/Cargo.lock pins ${entry.name} at a stale version; relock it after a version bump`,
+      );
+    }
+  }
+});
