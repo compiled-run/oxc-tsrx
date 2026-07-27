@@ -65,14 +65,24 @@ your editor. Running the result in a browser is not part of this project yet.
   are mapped back to your bytes. Four consequences:
   - `@if`, `@for`, `@switch`, and `@try` reach your rule as the ordinary `if`,
     `for`, and `switch` statements they project to. A rule keyed on
-    `JSXForExpression` never fires on this route.
+    `JSXForExpression` never fires on this route. Your rule does visit those
+    projected statements, but a report *on* one is dropped, because its span
+    covers text the projection wrote. A rule keyed on `IfStatement` fires inside
+    Oxlint and produces nothing on a file whose `if` came from `@if`.
   - `context.filename` is the mirror path, ending in `.tsrx.tsx`, not your
     authored path.
   - Each linted `.tsrx` file is parsed once more. The cost is announced on
     stderr by the CLI and in the server log by the editor, and
     `settings.oxcTsrx.jsPluginsOnTsrx: false` turns the lane off.
   - A diagnostic whose position falls on projected-only text is dropped rather
-    than reported at an invented location.
+    than reported at an invented location. Dropped reports are counted, not
+    silent: `--format=json` carries `oxcTsrx.jsPluginProjection.unmapped`, the
+    CLI notes the count on stderr, and the editor publishes a
+    `js-plugins-unmapped` warning. The exit code is unchanged, so a CI job that
+    wants to fail on dropped rules has to read that field itself.
+  - **Windows is unexercised.** Both Windows targets are published and build
+    green, but nothing has driven the editor lane there, where a Rust process
+    spawns the Node host. Treat it as unverified rather than known-good.
 
   For a rule that must see authored TSRX nodes there is still no released
   Oxlint route. *The local ESLint adapter* is one escape hatch and is AST-only:

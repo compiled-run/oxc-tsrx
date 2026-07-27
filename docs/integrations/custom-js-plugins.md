@@ -307,12 +307,33 @@ your rules quietly switched off.
 Your rule is handed the projection, not your authored TSRX tree. Four
 consequences, in the order they tend to bite:
 
-**TSRX control syntax is already compiled away.** `@if`, `@for`, `@switch`, and
-`@try` do not reach your rule as `JSXIfExpression` and friends; they arrive as
-the ordinary `if`, `for`, and `switch` statements they project to. A rule keyed
-on `JSXForExpression` will never fire on this route. If that is the rule you
-need, use [the ESLint route](#when-your-rule-must-see-authored-tsrx-nodes-eslint),
-which parses your file directly.
+**TSRX control syntax is already compiled away, and reporting on it does not
+work.** `@if`, `@for`, `@switch`, and `@try` do not reach your rule as
+`JSXIfExpression` and friends; they arrive as the ordinary `if`, `for`, and
+`switch` statements they project to. A rule keyed on `JSXForExpression` will
+never fire on this route.
+
+Read the next sentence carefully, because the two facts together are easy to get
+wrong. Your rule *visits* those projected statements, but a report *on* one of
+them is dropped, because its span covers text the projection wrote rather than
+text you did. A rule keyed on `IfStatement` therefore fires inside Oxlint and
+produces nothing on a file whose `if` came from `@if`:
+
+| rule keyed on | reported | dropped |
+| --- | ---: | ---: |
+| `JSXElement` | 7 | 0 |
+| `IfStatement` | 0 | 1 |
+| `SwitchStatement` | 0 | 1 |
+| `FunctionDeclaration` | 0 | 1 |
+| `Identifier` | 11 | 5 |
+
+Measured on one `.tsrx` file using `@if`, `@switch`, and `@try`, with one rule
+per node type.
+
+The drops are counted, not silent: see `unmapped` below. But if your rule needs
+to report on TSRX control flow, this route cannot do it. Use
+[the ESLint route](#when-your-rule-must-see-authored-tsrx-nodes-eslint), which
+parses your file directly.
 
 **`context.filename` is the projection's path, not yours.** It points inside the
 throwaway directory and ends in `.tsrx.tsx`: a `src/View.tsrx` in your project
