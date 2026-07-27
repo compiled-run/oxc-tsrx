@@ -9,6 +9,7 @@ use oxc_linter::{AllowWarnDeny, DisableDirectives};
 use oxc_span::Span;
 use rustc_hash::FxHashMap;
 
+use super::TsgolintError;
 use super::protocol::{ProtocolConfigGroup, ProtocolDiagnostic, ProtocolPayload, ProtocolRule};
 use crate::toolchain::{
     EngineDiagnostic, EngineFix, EngineSpan, LintEngine, TypeBatchDiagnostic, TypeBatchFile,
@@ -23,7 +24,7 @@ pub(crate) struct PreparedTypeBatch<'a> {
 pub(crate) fn prepare_type_batch<'a>(
     engine: &LintEngine,
     files: &'a [TypeBatchFile<'a>],
-) -> Result<PreparedTypeBatch<'a>, String> {
+) -> Result<PreparedTypeBatch<'a>, TsgolintError> {
     let mut groups = BTreeMap::<String, ProtocolConfigGroup>::new();
     let mut source_overrides = FxHashMap::default();
     let mut severities = FxHashMap::default();
@@ -34,7 +35,7 @@ pub(crate) fn prepare_type_batch<'a>(
         let (rules, file_severities) = resolved_protocol_rules(engine, file.authored_path)?;
         if !rules.is_empty() || engine.type_check_enabled() {
             let signature = serde_json::to_string(&rules)
-                .map_err(|error| format!("unable to group type-aware rules: {error}"))?;
+                .map_err(|error| TsgolintError::UngroupableRules { detail: error.to_string() })?;
             groups
                 .entry(signature)
                 .or_insert_with(|| ProtocolConfigGroup {
@@ -65,7 +66,7 @@ pub(crate) fn prepare_type_batch<'a>(
 fn resolved_protocol_rules(
     engine: &LintEngine,
     authored_path: &Path,
-) -> Result<(Vec<ProtocolRule>, FxHashMap<&'static str, AllowWarnDeny>), String> {
+) -> Result<(Vec<ProtocolRule>, FxHashMap<&'static str, AllowWarnDeny>), TsgolintError> {
     let resolved = engine.config_store.resolve(authored_path);
     let mut rules = Vec::new();
     let mut severities = FxHashMap::default();
@@ -76,10 +77,10 @@ fn resolved_protocol_rules(
         let options = match rule.to_configuration() {
             Some(Ok(options)) => Some(options),
             Some(Err(error)) => {
-                return Err(format!(
-                    "unable to serialize type-aware rule {}: {error}",
-                    rule.name()
-                ));
+                return Err(TsgolintError::UnserializableRule {
+                    rule: rule.name(),
+                    detail: error.to_string(),
+                });
             }
             None => None,
         };

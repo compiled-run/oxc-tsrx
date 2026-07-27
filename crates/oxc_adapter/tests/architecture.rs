@@ -15,6 +15,7 @@ fn the_adapter_keeps_one_concept_per_private_module_file() {
         "src/toolchain/tsgolint/mod.rs",
         "src/toolchain/tsgolint/batch.rs",
         "src/toolchain/tsgolint/discovery.rs",
+        "src/toolchain/tsgolint/error.rs",
         "src/toolchain/tsgolint/protocol.rs",
         "src/parser/mod.rs",
     ] {
@@ -66,6 +67,31 @@ fn the_lint_engine_inherent_surface_stays_in_two_impl_blocks() {
         "`cargo public-api` reports one line per inherent impl block, so splitting these grows the \
          frozen public surface"
     );
+}
+
+/// The same `rustdoc` behaviour that pins `RuleFilter` also pins every error type a sibling crate
+/// names. `tsrx_lint::LintError` names `oxc_adapter::toolchain::config::ConfigError` and
+/// `oxc_adapter::toolchain::session::{LintError, TypeLintError}`; `tsrx_format::FormatError` names
+/// `oxc_adapter::toolchain::format::FormatError`. Moving any of them to another module rewrites
+/// those lines of a sibling's public surface without changing one signature here, so each error
+/// type stays in the module whose failures it describes.
+#[test]
+fn the_error_types_a_sibling_crate_names_stay_in_their_defining_modules() {
+    let crate_root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    for (module, item) in [
+        ("src/toolchain/config.rs", "pub enum ConfigError"),
+        ("src/toolchain/session.rs", "pub enum LintError"),
+        ("src/toolchain/session.rs", "pub enum TypeLintError"),
+        ("src/toolchain/format.rs", "pub enum FormatError"),
+        ("src/toolchain/format.rs", "pub enum FormatOptionError"),
+        ("src/toolchain/tsgolint/error.rs", "pub enum TsgolintError"),
+        ("src/lib.rs", "pub struct SourceKindError"),
+        ("src/dynamic_tags.rs", "pub enum DynamicTagError"),
+        ("src/editor.rs", "pub struct EditorServerError"),
+    ] {
+        let source = std::fs::read_to_string(crate_root.join(module)).expect("defining module");
+        assert!(source.contains(item), "`{item}` left {module}");
+    }
 }
 
 fn source_files() -> Vec<std::path::PathBuf> {

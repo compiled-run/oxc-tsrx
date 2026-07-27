@@ -2,9 +2,11 @@
 
 use std::path::{Path, PathBuf};
 
+use super::TsgolintError;
+
 pub const SUPPORTED_TSGOLINT_VERSION: &str = "0.24.0";
 
-pub(crate) fn find_tsgolint_executable(cwd: &Path) -> Result<PathBuf, String> {
+pub(crate) fn find_tsgolint_executable(cwd: &Path) -> Result<PathBuf, TsgolintError> {
     #[cfg(windows)]
     const FILES: &[&str] = &["tsgolint.CMD", "tsgolint.exe"];
     #[cfg(not(windows))]
@@ -21,9 +23,7 @@ pub(crate) fn find_tsgolint_executable(cwd: &Path) -> Result<PathBuf, String> {
         {
             return Ok(candidate);
         }
-        return Err(format!(
-            "OXLINT_TSGOLINT_PATH does not identify a tsgolint executable: {configured}"
-        ));
+        return Err(TsgolintError::ConfiguredPathInvalid { configured });
     }
     let mut directory = cwd.to_path_buf();
     loop {
@@ -57,10 +57,7 @@ pub(crate) fn find_tsgolint_executable(cwd: &Path) -> Result<PathBuf, String> {
             }
         }
     }
-    Err(
-        "type-aware linting requires oxlint-tsgolint 0.24.0; install it in this project or set OXLINT_TSGOLINT_PATH"
-            .to_string(),
-    )
+    Err(TsgolintError::NotInstalled)
 }
 
 fn tsgolint_platform_package() -> Option<&'static str> {
@@ -75,7 +72,7 @@ fn tsgolint_platform_package() -> Option<&'static str> {
     }
 }
 
-pub(crate) fn verify_tsgolint_version(executable: &Path) -> Result<(), String> {
+pub(crate) fn verify_tsgolint_version(executable: &Path) -> Result<(), TsgolintError> {
     let canonical = executable.canonicalize().unwrap_or_else(|_| executable.to_path_buf());
     for directory in canonical.ancestors().skip(1).take(6) {
         let manifest_path = directory.join("package.json");
@@ -93,22 +90,17 @@ pub(crate) fn verify_tsgolint_version(executable: &Path) -> Result<(), String> {
         }
         let version =
             manifest.get("version").and_then(serde_json::Value::as_str).ok_or_else(|| {
-                format!("tsgolint package metadata at {} has no version", manifest_path.display())
+                TsgolintError::MetadataWithoutVersion { manifest: manifest_path.clone() }
             })?;
         if version == SUPPORTED_TSGOLINT_VERSION {
             return Ok(());
         }
-        return Err(format!(
-            "unsupported tsgolint version {version}; OXC for TSRX requires oxlint-tsgolint {SUPPORTED_TSGOLINT_VERSION} for protocol v2"
-        ));
+        return Err(TsgolintError::UnsupportedVersion { version: version.to_string() });
     }
     if std::env::var("OXC_TSRX_TSGOLINT_VERSION")
         .is_ok_and(|version| version == SUPPORTED_TSGOLINT_VERSION)
     {
         return Ok(());
     }
-    Err(format!(
-        "unable to verify tsgolint version for {}; use the oxlint-tsgolint {SUPPORTED_TSGOLINT_VERSION} npm package or set OXC_TSRX_TSGOLINT_VERSION={SUPPORTED_TSGOLINT_VERSION} for a verified standalone binary",
-        executable.display()
-    ))
+    Err(TsgolintError::UnverifiableVersion { executable: executable.to_path_buf() })
 }

@@ -1,6 +1,6 @@
 //! The only revision-specific boundary between OXC for TSRX and canonical OXC crates.
 
-use std::path::Path;
+use std::{error::Error, fmt, path::Path};
 
 use oxc_span::SourceType;
 
@@ -13,10 +13,11 @@ pub mod editor;
 #[cfg(any(feature = "parser", feature = "toolchain"))]
 mod dynamic_tags;
 
+#[cfg(any(feature = "parser", feature = "toolchain"))]
+pub use dynamic_tags::DynamicTagError;
+
 #[cfg(feature = "parser")]
-pub(crate) use dynamic_tags::{
-    DynamicTagValidationError, validate_dynamic_tags_with_synthetic_calls,
-};
+pub(crate) use dynamic_tags::validate_dynamic_tags_with_synthetic_calls;
 
 #[cfg(feature = "toolchain")]
 pub(crate) use dynamic_tags::validate_dynamic_tags;
@@ -26,10 +27,11 @@ mod toolchain;
 
 #[cfg(feature = "toolchain")]
 pub use toolchain::{
-    EngineDiagnostic, EngineFix, EngineFormatResult, EngineSpan, EngineTimings,
-    FormatEngineTimings, FormatOptions, FormatRequest, LintEngine, LintEngineOptions, LintRequest,
-    LintResult, RuleFilter, RuleSeverity, SUPPORTED_TSGOLINT_VERSION, TypeBatchDiagnostic,
-    TypeBatchFile, TypeBatchResult, TypeLintRequest, TypeLintResult, format, lint,
+    ConfigError, EngineDiagnostic, EngineFix, EngineFormatResult, EngineSpan, EngineTimings,
+    FormatEngineTimings, FormatError, FormatOptionError, FormatOptions, FormatRequest, FramePart,
+    LintEngine, LintEngineOptions, LintError, LintRequest, LintResult, RuleFilter, RuleSeverity,
+    SUPPORTED_TSGOLINT_VERSION, TsgolintError, TypeBatchDiagnostic, TypeBatchFile, TypeBatchResult,
+    TypeLintError, TypeLintRequest, TypeLintResult, format, lint,
 };
 
 pub const OXC_REVISION: &str = "8e0ed2ebb96137fb1611cdbd5742d5cb46037d40";
@@ -42,19 +44,45 @@ pub enum SourceKind {
     TypeScriptReact,
 }
 
+/// A path whose extension is outside the `.js`, `.jsx`, `.ts`, and `.tsx` families.
+///
+/// This is the only way [`SourceKind::from_path`] fails, so it is a struct rather than a
+/// single-variant enum.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SourceKindError {
+    extension: Option<String>,
+}
+
+impl SourceKindError {
+    /// The rejected extension, or `None` when the path carried none at all.
+    #[must_use]
+    pub fn extension(&self) -> Option<&str> {
+        self.extension.as_deref()
+    }
+}
+
+impl fmt::Display for SourceKindError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "Unsupported source extension: {:?}", self.extension)
+    }
+}
+
+impl Error for SourceKindError {}
+
 impl SourceKind {
     /// Infers the canonical OXC source type from a standard JavaScript/TypeScript path.
     ///
     /// # Errors
     ///
-    /// Returns an error for extensions outside `.js`, `.jsx`, `.ts`, and `.tsx` families.
-    pub fn from_path(path: &Path) -> Result<Self, String> {
+    /// Returns [`SourceKindError`] for extensions outside `.js`, `.jsx`, `.ts`, and `.tsx`
+    /// families.
+    pub fn from_path(path: &Path) -> Result<Self, SourceKindError> {
         match path.extension().and_then(|extension| extension.to_str()) {
             Some("js" | "mjs" | "cjs") => Ok(Self::JavaScript),
             Some("jsx") => Ok(Self::JavaScriptReact),
             Some("ts" | "mts" | "cts") => Ok(Self::TypeScript),
             Some("tsx") => Ok(Self::TypeScriptReact),
-            extension => Err(format!("Unsupported source extension: {extension:?}")),
+            extension => Err(SourceKindError { extension: extension.map(ToString::to_string) }),
         }
     }
 

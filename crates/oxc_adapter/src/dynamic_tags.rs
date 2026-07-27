@@ -1,3 +1,5 @@
+use std::{error::Error, fmt};
+
 use oxc_ast::ast::{
     ArrayExpression, BinaryExpression, CallExpression, ChainElement, Expression, JSXAttributeValue,
     JSXOpeningElement, NewExpression, ObjectExpression, SpreadElement, TaggedTemplateExpression,
@@ -13,48 +15,118 @@ use crate::DynamicTagContract;
 pub(crate) fn validate_dynamic_tags(
     program: &oxc_ast::ast::Program<'_>,
     contract: Option<DynamicTagContract<'_>>,
-) -> Result<(), String> {
+) -> Result<(), DynamicTagError> {
     validate_dynamic_tags_with_synthetic_calls(program, contract, &[])
-        .map_err(DynamicTagValidationError::into_message)
 }
 
-#[derive(Debug, PartialEq, Eq)]
-pub(crate) enum DynamicTagValidationError {
-    AuthoredGrammar { message: String, offset: u32 },
-    Invariant(String),
+/// Why a TSRX dynamic-tag scaffold did not validate against the parsed OXC AST.
+///
+/// Exactly one variant, [`Self::AuthoredGrammar`], is the user's defect: it names a tag expression
+/// the TSRX grammar does not accept and positions it in the authored source. Every other variant
+/// describes an inconsistent scaffold contract, which is a projector or adapter defect rather than
+/// anything an author wrote.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DynamicTagError {
+    /// The authored expression is not one of the shapes a TSRX dynamic tag may hold.
+    AuthoredGrammar { index: usize, offset: u32 },
+    /// The synthetic callee spans were not handed over in ascending order.
+    UnorderedSyntheticCallees,
+    /// The contract claims more dynamic tags than this target can address.
+    CountExceedsAddressableMemory,
+    /// The contract has no prefix, no tags, or an offset list that does not match its count.
+    EmptyContract,
+    /// A prefixed element name did not parse as a scaffold ordinal.
+    MalformedScaffold,
+    /// A scaffold ordinal is out of range or was seen twice.
+    InvalidScaffold { index: usize },
+    /// Canonical OXC's parse did not preserve one of the scaffolds the projector emitted.
+    LostScaffold { index: usize },
+    /// The end sentinel does not belong to the scaffold that opened it.
+    MismatchedEndScaffold { index: usize },
+    /// A prefixed attribute name did not parse as a scaffold ordinal.
+    MalformedAttribute { index: usize },
+    /// The expression attribute does not belong to the scaffold that opened it.
+    MismatchedAttribute { index: usize },
+    /// The scaffold carries no dynamic-tag expression.
+    MissingExpression { index: usize },
+    /// The scaffold was never closed by its end sentinel.
+    MissingEndScaffold { index: usize },
 }
 
-impl DynamicTagValidationError {
-    #[cfg(feature = "toolchain")]
-    fn into_message(self) -> String {
+impl DynamicTagError {
+    /// The authored-source UTF-8 byte offset this failure points at, when it has one.
+    ///
+    /// Only [`Self::AuthoredGrammar`] is positioned; the rest describe a whole-contract defect
+    /// with no authored location. This accessor exists so a caller that needs the position never
+    /// has to scrape it back out of the [`fmt::Display`] text.
+    #[must_use]
+    pub const fn byte_offset(&self) -> Option<u32> {
         match self {
-            Self::AuthoredGrammar { message, .. } | Self::Invariant(message) => message,
+            Self::AuthoredGrammar { offset, .. } => Some(*offset),
+            _ => None,
         }
     }
 }
+
+impl fmt::Display for DynamicTagError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::AuthoredGrammar { index, offset } => write!(
+                formatter,
+                "TSRX dynamic tag {index} at source byte {offset} must be an identifier, member, static string, or runtime expression without calls, construction, spreads, concatenation, interpolation, objects, or arrays"
+            ),
+            Self::UnorderedSyntheticCallees => {
+                formatter.write_str("unordered synthetic callee span contract")
+            }
+            Self::CountExceedsAddressableMemory => {
+                formatter.write_str("TSRX dynamic-tag count exceeds addressable memory")
+            }
+            Self::EmptyContract => {
+                formatter.write_str("invalid empty TSRX dynamic-tag scaffold contract")
+            }
+            Self::MalformedScaffold => formatter.write_str("malformed TSRX dynamic-tag scaffold"),
+            Self::InvalidScaffold { index } => {
+                write!(formatter, "invalid TSRX dynamic-tag scaffold {index}")
+            }
+            Self::LostScaffold { index } => {
+                write!(formatter, "OXC parse lost TSRX dynamic-tag scaffold {index}")
+            }
+            Self::MismatchedEndScaffold { index } => {
+                write!(formatter, "mismatched TSRX dynamic-tag end scaffold {index}")
+            }
+            Self::MalformedAttribute { index } => {
+                write!(formatter, "malformed TSRX dynamic-tag attribute {index}")
+            }
+            Self::MismatchedAttribute { index } => {
+                write!(formatter, "mismatched TSRX dynamic-tag attribute {index}")
+            }
+            Self::MissingExpression { index } => {
+                write!(formatter, "missing TSRX dynamic-tag expression {index}")
+            }
+            Self::MissingEndScaffold { index } => {
+                write!(formatter, "missing TSRX dynamic-tag end scaffold {index}")
+            }
+        }
+    }
+}
+
+impl Error for DynamicTagError {}
 
 pub(crate) fn validate_dynamic_tags_with_synthetic_calls(
     program: &oxc_ast::ast::Program<'_>,
     contract: Option<DynamicTagContract<'_>>,
     synthetic_callee_spans: &[(u32, u32)],
-) -> Result<(), DynamicTagValidationError> {
+) -> Result<(), DynamicTagError> {
     if synthetic_callee_spans.windows(2).any(|pair| pair[0] >= pair[1]) {
-        return Err(DynamicTagValidationError::Invariant(
-            "unordered synthetic callee span contract".to_string(),
-        ));
+        return Err(DynamicTagError::UnorderedSyntheticCallees);
     }
     let Some(contract) = contract else {
         return Ok(());
     };
-    let count = usize::try_from(contract.count).map_err(|_| {
-        DynamicTagValidationError::Invariant(
-            "TSRX dynamic-tag count exceeds addressable memory".to_string(),
-        )
-    })?;
+    let count = usize::try_from(contract.count)
+        .map_err(|_| DynamicTagError::CountExceedsAddressableMemory)?;
     if count == 0 || contract.prefix.is_empty() || contract.original_offsets.len() != count {
-        return Err(DynamicTagValidationError::Invariant(
-            "invalid empty TSRX dynamic-tag scaffold contract".to_string(),
-        ));
+        return Err(DynamicTagError::EmptyContract);
     }
     let mut validator = DynamicTagValidator {
         prefix: contract.prefix,
@@ -69,9 +141,7 @@ pub(crate) fn validate_dynamic_tags_with_synthetic_calls(
         return Err(error);
     }
     if let Some(index) = validator.seen.iter().position(|seen| !seen) {
-        return Err(DynamicTagValidationError::Invariant(format!(
-            "OXC parse lost TSRX dynamic-tag scaffold {index}"
-        )));
+        return Err(DynamicTagError::LostScaffold { index });
     }
     Ok(())
 }
@@ -82,7 +152,7 @@ struct DynamicTagValidator<'c> {
     synthetic_callee_spans: &'c [(u32, u32)],
     seen: Vec<bool>,
     validated_expression: Option<Span>,
-    error: Option<DynamicTagValidationError>,
+    error: Option<DynamicTagError>,
 }
 
 impl<'a> Visit<'a> for DynamicTagValidator<'_> {
@@ -96,9 +166,7 @@ impl<'a> Visit<'a> for DynamicTagValidator<'_> {
         };
         let Some(index) = scaffold_ordinal(name.as_str(), self.prefix, 'D', false) else {
             if name.as_str().starts_with(self.prefix) {
-                self.error = Some(DynamicTagValidationError::Invariant(
-                    "malformed TSRX dynamic-tag scaffold".to_string(),
-                ));
+                self.error = Some(DynamicTagError::MalformedScaffold);
                 return;
             }
             walk::walk_jsx_opening_element(self, element);
@@ -106,9 +174,7 @@ impl<'a> Visit<'a> for DynamicTagValidator<'_> {
         };
         let index = index as usize;
         if index >= self.seen.len() || self.seen[index] {
-            self.error = Some(DynamicTagValidationError::Invariant(format!(
-                "invalid TSRX dynamic-tag scaffold {index}"
-            )));
+            self.error = Some(DynamicTagError::InvalidScaffold { index });
             return;
         }
 
@@ -136,12 +202,9 @@ impl<'a> Visit<'a> for DynamicTagValidator<'_> {
                     self.synthetic_callee_spans,
                 )
         {
-            let original_offset = self.original_offsets[index];
-            self.error = Some(DynamicTagValidationError::AuthoredGrammar {
-                message: format!(
-                    "TSRX dynamic tag {index} at source byte {original_offset} must be an identifier, member, static string, or runtime expression without calls, construction, spreads, concatenation, interpolation, objects, or arrays",
-                ),
-                offset: original_offset,
+            self.error = Some(DynamicTagError::AuthoredGrammar {
+                index,
+                offset: self.original_offsets[index],
             });
             return;
         }
@@ -157,7 +220,7 @@ fn dynamic_tag_expression<'a, 'element>(
     element: &'element JSXOpeningElement<'a>,
     prefix: &str,
     index: usize,
-) -> Result<&'element Expression<'a>, DynamicTagValidationError> {
+) -> Result<&'element Expression<'a>, DynamicTagError> {
     let mut expression = None;
     let mut end_sentinel = false;
     for item in &element.attributes {
@@ -177,25 +240,19 @@ fn dynamic_tag_expression<'a, 'element>(
                 )
             });
             if attribute_index as usize != index || end_sentinel || !valid_value {
-                return Err(DynamicTagValidationError::Invariant(format!(
-                    "mismatched TSRX dynamic-tag end scaffold {index}"
-                )));
+                return Err(DynamicTagError::MismatchedEndScaffold { index });
             }
             end_sentinel = true;
             continue;
         }
         let Some(attribute_index) = scaffold_ordinal(name, prefix, 'A', true) else {
             if name.starts_with(prefix) {
-                return Err(DynamicTagValidationError::Invariant(format!(
-                    "malformed TSRX dynamic-tag attribute {index}"
-                )));
+                return Err(DynamicTagError::MalformedAttribute { index });
             }
             continue;
         };
         if attribute_index as usize != index || expression.is_some() {
-            return Err(DynamicTagValidationError::Invariant(format!(
-                "mismatched TSRX dynamic-tag attribute {index}"
-            )));
+            return Err(DynamicTagError::MismatchedAttribute { index });
         }
         expression = attribute.value.as_ref().and_then(|value| match value {
             JSXAttributeValue::ExpressionContainer(container) => {
@@ -204,13 +261,9 @@ fn dynamic_tag_expression<'a, 'element>(
             _ => None,
         });
     }
-    let expression = expression.ok_or_else(|| {
-        DynamicTagValidationError::Invariant(format!("missing TSRX dynamic-tag expression {index}"))
-    })?;
+    let expression = expression.ok_or(DynamicTagError::MissingExpression { index })?;
     if !end_sentinel {
-        return Err(DynamicTagValidationError::Invariant(format!(
-            "missing TSRX dynamic-tag end scaffold {index}"
-        )));
+        return Err(DynamicTagError::MissingEndScaffold { index });
     }
     Ok(expression)
 }

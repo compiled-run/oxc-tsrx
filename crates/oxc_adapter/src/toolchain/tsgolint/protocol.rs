@@ -10,41 +10,38 @@ use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 
 use super::batch::{PreparedTypeBatch, protocol_diagnostic};
+use super::{FramePart, TsgolintError};
 use crate::toolchain::TypeBatchDiagnostic;
 
 pub(crate) fn run_type_protocol(
     executable: &Path,
     collect_fixes: bool,
     prepared: &PreparedTypeBatch<'_>,
-) -> Result<Vec<TypeBatchDiagnostic>, String> {
+) -> Result<Vec<TypeBatchDiagnostic>, TsgolintError> {
     let mut command = Command::new(executable);
     command.arg("headless").stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::inherit());
     if collect_fixes {
         // Suggestions remain visible but are marked non-safe by `protocol_diagnostic`.
         command.args(["-fix", "-fix-suggestions"]);
     }
-    let mut child = command.spawn().map_err(|error| {
-        format!("unable to start supported tsgolint at {}: {error}", executable.display())
-    })?;
+    let mut child = command.spawn().map_err(|error| TsgolintError::spawn(executable, error))?;
     let encoded = serde_json::to_vec(&prepared.payload)
-        .map_err(|error| format!("unable to encode tsgolint protocol v2 payload: {error}"))?;
-    let mut stdin =
-        child.stdin.take().ok_or_else(|| "tsgolint did not expose stdin".to_string())?;
-    stdin
-        .write_all(&encoded)
-        .map_err(|error| format!("unable to transfer in-memory TSRX sources: {error}"))?;
+        .map_err(|error| TsgolintError::EncodePayload { detail: error.to_string() })?;
+    let mut stdin = child.stdin.take().ok_or(TsgolintError::NoStdin)?;
+    stdin.write_all(&encoded).map_err(TsgolintError::TransferSources)?;
     drop(stdin);
 
-    let mut stdout =
-        child.stdout.take().ok_or_else(|| "tsgolint did not expose stdout".to_string())?;
+    let mut stdout = child.stdout.take().ok_or(TsgolintError::NoStdout)?;
     let mut diagnostics = Vec::new();
     let mut protocol_error = None;
     while let Some(frame) = read_protocol_frame(&mut stdout)? {
         match frame.kind {
             0 => protocol_error = Some(parse_protocol_error(&frame.payload)?),
             1 => {
-                let message: ProtocolDiagnostic = serde_json::from_slice(&frame.payload)
-                    .map_err(|error| format!("invalid tsgolint diagnostic frame: {error}"))?;
+                let message: ProtocolDiagnostic =
+                    serde_json::from_slice(&frame.payload).map_err(|error| {
+                        TsgolintError::InvalidDiagnosticFrame { detail: error.to_string() }
+                    })?;
                 if let Some(diagnostic) =
                     protocol_diagnostic(message, &prepared.severities, &prepared.directives)
                 {
@@ -52,23 +49,23 @@ pub(crate) fn run_type_protocol(
                 }
             }
             2 => {}
-            kind => return Err(format!("unsupported tsgolint protocol frame type {kind}")),
+            kind => return Err(TsgolintError::UnsupportedFrameKind { kind }),
         }
     }
-    let status = child.wait().map_err(|error| format!("unable to wait for tsgolint: {error}"))?;
-    if let Some(error) = protocol_error {
-        return Err(format!("tsgolint protocol error: {error}"));
+    let status = child.wait().map_err(TsgolintError::Wait)?;
+    if let Some(detail) = protocol_error {
+        return Err(TsgolintError::Protocol { detail });
     }
     if !status.success() {
-        return Err(format!("tsgolint exited with {status}"));
+        return Err(TsgolintError::Exit { status });
     }
     Ok(diagnostics)
 }
 
-fn parse_protocol_error(payload: &[u8]) -> Result<String, String> {
+fn parse_protocol_error(payload: &[u8]) -> Result<String, TsgolintError> {
     serde_json::from_slice::<ProtocolError>(payload)
         .map(|error| error.error)
-        .map_err(|error| format!("invalid tsgolint error frame: {error}"))
+        .map_err(|error| TsgolintError::InvalidErrorFrame { detail: error.to_string() })
 }
 
 /// `RuleEnum::name` returns `&'static str`, so the grouped payload borrows every rule name that
@@ -153,11 +150,9 @@ struct ProtocolFrame {
     payload: Vec<u8>,
 }
 
-fn read_protocol_frame(reader: &mut impl Read) -> Result<Option<ProtocolFrame>, String> {
+fn read_protocol_frame(reader: &mut impl Read) -> Result<Option<ProtocolFrame>, TsgolintError> {
     let mut first = [0_u8; 1];
-    let read = reader
-        .read(&mut first)
-        .map_err(|error| format!("unable to read tsgolint protocol frame: {error}"))?;
+    let read = reader.read(&mut first).map_err(TsgolintError::ReadFrame)?;
     if read == 0 {
         return Ok(None);
     }
@@ -165,16 +160,16 @@ fn read_protocol_frame(reader: &mut impl Read) -> Result<Option<ProtocolFrame>, 
     size_bytes[0] = first[0];
     reader
         .read_exact(&mut size_bytes[1..])
-        .map_err(|error| format!("truncated tsgolint frame size: {error}"))?;
+        .map_err(|error| TsgolintError::truncated_frame(FramePart::Size, error))?;
     let size = usize::try_from(u32::from_le_bytes(size_bytes))
-        .map_err(|_| "tsgolint frame exceeds addressable memory".to_string())?;
+        .map_err(|_| TsgolintError::FrameTooLarge)?;
     let mut kind = [0_u8; 1];
     reader
         .read_exact(&mut kind)
-        .map_err(|error| format!("truncated tsgolint frame kind: {error}"))?;
+        .map_err(|error| TsgolintError::truncated_frame(FramePart::Kind, error))?;
     let mut payload = vec![0_u8; size];
     reader
         .read_exact(&mut payload)
-        .map_err(|error| format!("truncated tsgolint frame payload: {error}"))?;
+        .map_err(|error| TsgolintError::truncated_frame(FramePart::Payload, error))?;
     Ok(Some(ProtocolFrame { kind: kind[0], payload }))
 }

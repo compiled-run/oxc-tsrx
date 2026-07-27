@@ -19,8 +19,7 @@ use tsrx_tape_schema::{
 };
 
 use crate::{
-    DynamicTagContract, DynamicTagValidationError, SourceKind,
-    validate_dynamic_tags_with_synthetic_calls,
+    DynamicTagContract, DynamicTagError, SourceKind, validate_dynamic_tags_with_synthetic_calls,
 };
 pub use ordinary::{
     OrdinaryComment, OrdinaryDiagnostic, OrdinaryDiagnosticLabel, OrdinaryDynamicImport,
@@ -243,7 +242,7 @@ fn parse_to_projected_tape_with_retention(
         request.synthetic_callee_spans,
     ) {
         return match error {
-            DynamicTagValidationError::AuthoredGrammar { message, offset } => {
+            DynamicTagError::AuthoredGrammar { offset, .. } => {
                 let rejection_module_names = match request.rejection_metadata {
                     RejectionMetadata::None => RejectionModuleNames::default(),
                     RejectionMetadata::ModuleNames => {
@@ -257,14 +256,17 @@ fn parse_to_projected_tape_with_retention(
                     rejection_module_names,
                     comments,
                     errors,
-                    authored_grammar: Some(AuthoredGrammarFailure { message, offset }),
+                    authored_grammar: Some(AuthoredGrammarFailure {
+                        message: error.to_string(),
+                        offset,
+                    }),
                     syntax_failed: true,
                     panicked: false,
                 })
             }
-            DynamicTagValidationError::Invariant(error) => {
-                Err(ProjectedParseError::Invariant(error))
-            }
+            // Every other variant describes an inconsistent scaffold contract, which is a
+            // projector or adapter defect rather than anything the author wrote.
+            _ => Err(ProjectedParseError::Invariant(error.to_string())),
         };
     }
     if request.show_semantic_errors {

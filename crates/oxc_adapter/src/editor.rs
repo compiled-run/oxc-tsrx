@@ -7,6 +7,8 @@
 use std::{
     borrow::Cow,
     collections::HashMap,
+    error::Error,
+    fmt, io,
     path::{Path, PathBuf},
     str::FromStr,
     sync::{Arc, RwLock},
@@ -156,6 +158,13 @@ pub struct EditorWorkspace {
 }
 
 /// Native lint/format behavior hosted by the canonical OXC language-server transport.
+///
+/// These methods keep `String` errors on purpose, and they are the only surface in this crate that
+/// still does. The message is produced by the downstream implementor, never interpreted here, and
+/// handed straight to `oxc_language_server`'s `Tool::run_format` and `DiagnosticResult`, both of
+/// which are foreign traits typed `Result<_, String>`. An adapter-owned enum could therefore only
+/// be a single `Other(String)` variant plus a conversion at every implementor and at every
+/// forwarding site, which is ceremony rather than type safety.
 pub trait EditorTool: Send + Sync {
     /// Produce diagnostics for an opened document.
     ///
@@ -212,6 +221,9 @@ pub trait EditorTool: Send + Sync {
 }
 
 /// Creates one configured native tool per OXC language-server workspace.
+///
+/// [`Self::create`]'s error is a `String` for the same reason [`EditorTool`]'s are: it is stored
+/// verbatim and replayed into the same foreign `Result<_, String>` transport.
 pub trait EditorToolFactory: Send + Sync + 'static {
     /// Build a workspace tool from JSON-compatible editor options.
     ///
@@ -467,22 +479,40 @@ impl ToolBuilder for AdapterToolBuilder {
 ///
 /// # Errors
 ///
-/// Returns an error when the private asynchronous runtime cannot be constructed.
+/// Returns [`EditorServerError`] when the private asynchronous runtime cannot be constructed.
 pub fn run_editor_server(
     server_name: impl Into<String>,
     server_version: impl Into<String>,
     factory: Arc<dyn EditorToolFactory>,
-) -> Result<(), String> {
+) -> Result<(), EditorServerError> {
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
-        .map_err(|error| format!("unable to start editor runtime: {error}"))?;
+        .map_err(EditorServerError)?;
     runtime.block_on(run_server(
         server_name.into(),
         server_version.into(),
         WorkerManager::new(Arc::new(AdapterToolBuilder { factory })),
     ));
     Ok(())
+}
+
+/// The private asynchronous runtime backing the editor transport could not be constructed.
+///
+/// [`run_editor_server`] fails exactly one way, so this is a newtype rather than an enum.
+#[derive(Debug)]
+pub struct EditorServerError(io::Error);
+
+impl fmt::Display for EditorServerError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "unable to start editor runtime: {}", self.0)
+    }
+}
+
+impl Error for EditorServerError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        Some(&self.0)
+    }
 }
 
 fn rebuilt_tool(builder: &dyn ToolBuilder, root_uri: &Uri, options: Value) -> ToolRestartChanges {

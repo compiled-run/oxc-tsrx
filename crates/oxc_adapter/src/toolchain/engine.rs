@@ -9,7 +9,9 @@ use oxc_linter::{
 };
 use rustc_hash::FxHashMap;
 
-use super::config::{config_builder_error, load_oxlintrc, reject_unavailable_lint_capabilities};
+use super::config::{
+    ConfigError, config_builder_error, load_oxlintrc, reject_unavailable_lint_capabilities,
+};
 use super::timings::elapsed_ns;
 use super::{RuleFilter, RuleSeverity};
 
@@ -53,9 +55,9 @@ impl LintEngine {
     ///
     /// # Errors
     ///
-    /// Returns an actionable error for invalid, conflicting, JavaScript/TypeScript, external-plugin,
+    /// Returns [`ConfigError`] for invalid, conflicting, JavaScript/TypeScript, external-plugin,
     /// or type-aware configuration before any source file is parsed or changed.
-    pub fn new(options: &LintEngineOptions<'_>) -> Result<Self, String> {
+    pub fn new(options: &LintEngineOptions<'_>) -> Result<Self, ConfigError> {
         Self::new_with_capabilities(options, false, false)
     }
 
@@ -68,7 +70,7 @@ impl LintEngine {
     pub fn new_type_aware(
         options: &LintEngineOptions<'_>,
         type_check: bool,
-    ) -> Result<Self, String> {
+    ) -> Result<Self, ConfigError> {
         Self::new_with_capabilities(options, true, type_check)
     }
 
@@ -84,10 +86,10 @@ impl LintEngine {
         config_source: Option<&str>,
         filters: &[RuleFilter],
         collect_fixes: bool,
-    ) -> Result<Self, String> {
+    ) -> Result<Self, ConfigError> {
         let started = Instant::now();
         let config = match config_source {
-            Some(source) => Oxlintrc::from_string(source).map_err(|error| error.to_string())?,
+            Some(source) => Oxlintrc::from_string(source).map_err(ConfigError::oxlintrc)?,
             None => Oxlintrc::default(),
         };
         let options =
@@ -99,7 +101,7 @@ impl LintEngine {
         options: &LintEngineOptions<'_>,
         type_aware: bool,
         requested_type_check: bool,
-    ) -> Result<Self, String> {
+    ) -> Result<Self, ConfigError> {
         let started = Instant::now();
         let (config, config_path) =
             load_oxlintrc(options.cwd, options.config_path, options.config_base)?;
@@ -113,7 +115,7 @@ impl LintEngine {
         type_aware: bool,
         requested_type_check: bool,
         started: Instant,
-    ) -> Result<Self, String> {
+    ) -> Result<Self, ConfigError> {
         reject_unavailable_lint_capabilities(&config, type_aware)?;
         let type_check = requested_type_check || config.options.type_check == Some(true);
 
@@ -134,7 +136,7 @@ impl LintEngine {
                 )
             })
             .collect::<Result<Vec<_>, _>>()
-            .map_err(|error| error.to_string())?;
+            .map_err(|error| ConfigError::Filter { detail: error.to_string() })?;
         let built = ConfigStoreBuilder::from_oxlintrc(
             false,
             config,
