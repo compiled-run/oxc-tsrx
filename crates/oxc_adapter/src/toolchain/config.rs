@@ -291,12 +291,107 @@ pub(super) fn reject_unavailable_lint_capabilities(
     Ok(())
 }
 
+/// Classifies an OXC config-build failure by variant, keeping its rendered wording verbatim.
+///
+/// The four plugin variants become [`ConfigError::JsPluginsUnavailable`], because the native TSRX
+/// path has no zero-copy plugin host to load them with. The other five are ordinary configuration
+/// defects and become [`ConfigError::Invalid`]. Matching the variant rather than searching the
+/// rendered text matters: `UnsupportedNamedConfig` and `InvalidConfigFile` echo an authored
+/// `extends` entry or file path back, so a substring test blamed the missing plugin host for
+/// `extends: ["eslint-plugin-react"]` or a config named `plugin-overrides.json`.
+///
+/// `ConfigBuilderError` is not `#[non_exhaustive]`, so this match is exhaustive and a new upstream
+/// variant fails the build here instead of being silently misfiled.
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "both call sites are `map_err`, which hands the error over by value; the exhaustive match reads every variant without binding one, and only the rendered text outlives it"
+)]
 pub(super) fn config_builder_error(error: ConfigBuilderError) -> ConfigError {
     let detail = error.to_string();
-    drop(error);
-    if detail.to_ascii_lowercase().contains("plugin") {
-        ConfigError::JsPluginsUnavailable { detail }
-    } else {
-        ConfigError::Invalid { detail }
+    match error {
+        ConfigBuilderError::PluginLoadFailed { .. }
+        | ConfigBuilderError::NoExternalLinterConfigured { .. }
+        | ConfigBuilderError::ReservedExternalPluginName { .. }
+        | ConfigBuilderError::RelativeExternalPluginSpecifierInExtends { .. } => {
+            ConfigError::JsPluginsUnavailable { detail }
+        }
+        ConfigBuilderError::UnknownRules { .. }
+        | ConfigBuilderError::InvalidConfigFile { .. }
+        | ConfigBuilderError::RuleConfigurationErrors { .. }
+        | ConfigBuilderError::UnsupportedNamedConfig { .. }
+        | ConfigBuilderError::CircularExtends { .. } => ConfigError::Invalid { detail },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use oxc_linter::ConfigBuilderError;
+
+    use super::{ConfigError, config_builder_error};
+
+    #[test]
+    fn config_builder_errors_classify_by_variant_not_by_rendered_text() {
+        let plugin_related = [
+            ConfigBuilderError::PluginLoadFailed {
+                plugin_specifier: "./local-plugin.js".to_string(),
+                error: "boom".to_string(),
+            },
+            ConfigBuilderError::NoExternalLinterConfigured {
+                plugin_specifier: "./local-plugin.js".to_string(),
+            },
+            ConfigBuilderError::ReservedExternalPluginName { plugin_name: "eslint".to_string() },
+            ConfigBuilderError::RelativeExternalPluginSpecifierInExtends {
+                plugin_specifier: "./local-plugin.js".to_string(),
+            },
+        ];
+        for error in plugin_related {
+            let rendered = error.to_string();
+            let classified = config_builder_error(error);
+            assert!(
+                matches!(&classified, ConfigError::JsPluginsUnavailable { detail } if *detail == rendered),
+                "{classified:?}"
+            );
+        }
+
+        // Every one of these five can echo an authored string containing "plugin" back at the
+        // user, which is what the old substring test tripped over.
+        let not_plugin_related = [
+            ConfigBuilderError::UnknownRules { rules: Vec::new() },
+            ConfigBuilderError::InvalidConfigFile {
+                file: "configs/plugin-overrides.json".to_string(),
+                reason: "unreadable".to_string(),
+            },
+            ConfigBuilderError::RuleConfigurationErrors { errors: Vec::new() },
+            ConfigBuilderError::UnsupportedNamedConfig { name: "eslint-plugin-react".to_string() },
+            ConfigBuilderError::CircularExtends {
+                cycle: vec![PathBuf::from("plugin.oxlintrc.json")],
+                referenced_from: vec![PathBuf::from(".oxlintrc.json")],
+            },
+        ];
+        for error in not_plugin_related {
+            let rendered = error.to_string();
+            let classified = config_builder_error(error);
+            assert!(
+                matches!(&classified, ConfigError::Invalid { detail } if *detail == rendered),
+                "{classified:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn an_extends_entry_named_after_a_plugin_is_not_blamed_on_the_missing_plugin_host() {
+        // The exact user-visible symptom: `extends: ["eslint-plugin-react"]` used to be refused
+        // with "JavaScript plugins are unavailable..." because the config name it echoes back
+        // contains "plugin".
+        let error =
+            ConfigBuilderError::UnsupportedNamedConfig { name: "eslint-plugin-react".to_string() };
+        let classified = config_builder_error(error);
+        assert!(matches!(classified, ConfigError::Invalid { .. }), "{classified:?}");
+        let message = classified.to_string();
+        assert!(message.starts_with("invalid Oxlint configuration: "), "{message}");
+        assert!(message.contains("eslint-plugin-react"), "{message}");
+        assert!(!message.contains("JavaScript plugins are unavailable"), "{message}");
     }
 }
