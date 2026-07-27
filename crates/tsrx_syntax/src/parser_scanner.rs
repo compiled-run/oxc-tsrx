@@ -7,9 +7,6 @@ use crate::model::{
 
 use std::cell::RefCell;
 
-#[cfg(test)]
-use std::cell::Cell;
-
 /// Opaque lexical context in which an actual lone UTF-16 surrogate is reference-valid.
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -166,8 +163,6 @@ pub(crate) struct Scanner<'a> {
     parser_dynamic_parents: TinyStack<u32, 8>,
     parser_mode: bool,
     surrogate_probes: Option<Box<RefCell<SurrogateProbes>>>,
-    #[cfg(test)]
-    identity_token_visits: Cell<usize>,
 }
 
 impl<'a> Scanner<'a> {
@@ -195,8 +190,6 @@ impl<'a> Scanner<'a> {
             parser_dynamic_parents: TinyStack::new(),
             parser_mode: false,
             surrogate_probes: None,
-            #[cfg(test)]
-            identity_token_visits: Cell::new(0),
         }
     }
 
@@ -245,20 +238,6 @@ impl<'a> Scanner<'a> {
         let source_len = to_u32(self.bytes.len())?;
         self.scan_region(0, None)?;
         Ok(self.into_overlay(source_len))
-    }
-
-    #[cfg(test)]
-    #[expect(
-        dead_code,
-        reason = "a test-only overlay helper that not every test module in this crate exercises"
-    )]
-    pub(crate) fn finish_with_identity_token_visits(
-        mut self,
-    ) -> Result<(Overlay, usize), ProjectionError> {
-        let source_len = to_u32(self.bytes.len())?;
-        self.scan_region(0, None)?;
-        let visits = self.identity_token_visits.get();
-        Ok((self.into_overlay(source_len), visits))
     }
 
     fn into_overlay(self, source_len: u32) -> Overlay {
@@ -1934,9 +1913,6 @@ impl<'a> Scanner<'a> {
                     *index = tag_end;
                     *nested_cursor = subtree_end;
                     *can_start_expression = false;
-                    #[cfg(test)]
-                    self.identity_token_visits
-                        .set(self.identity_token_visits.get().saturating_add(1));
                     return Ok(Some((token_start, tag_end)));
                 }
                 if (tag.opening.start as usize) < *index {
@@ -2027,8 +2003,6 @@ impl<'a> Scanner<'a> {
                 }
                 *nested_cursor = subtree_end;
             }
-            #[cfg(test)]
-            self.identity_token_visits.set(self.identity_token_visits.get().saturating_add(1));
             return Ok(Some((token_start, *index)));
         }
         Ok(None)
