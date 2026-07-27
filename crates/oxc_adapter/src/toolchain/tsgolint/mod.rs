@@ -1,0 +1,10 @@
+//! The type-aware lane: finding a supported tsgolint, and talking its documented protocol v2.
+
+mod batch;
+mod discovery;
+mod protocol;
+
+pub(crate) use batch::prepare_type_batch;
+pub use discovery::SUPPORTED_TSGOLINT_VERSION;
+pub(crate) use discovery::{find_tsgolint_executable, verify_tsgolint_version};
+pub(crate) use protocol::run_type_protocol;
