@@ -25,7 +25,12 @@ pub(crate) use dynamic_tags::validate_dynamic_tags;
 mod toolchain;
 
 #[cfg(feature = "toolchain")]
-pub use toolchain::*;
+pub use toolchain::{
+    EngineDiagnostic, EngineFix, EngineFormatResult, EngineSpan, EngineTimings,
+    FormatEngineTimings, FormatOptions, FormatRequest, LintEngine, LintEngineOptions, LintRequest,
+    LintResult, RuleFilter, RuleSeverity, SUPPORTED_TSGOLINT_VERSION, TypeBatchDiagnostic,
+    TypeBatchFile, TypeBatchResult, TypeLintRequest, TypeLintResult, format, lint,
+};
 
 pub const OXC_REVISION: &str = "8e0ed2ebb96137fb1611cdbd5742d5cb46037d40";
 
