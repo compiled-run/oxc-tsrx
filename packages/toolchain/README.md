@@ -52,7 +52,7 @@ installed from the registry into a clean project on darwin-arm64.
 | --- | --- | --- |
 | Command line (`oxlint`, `oxfmt`) | 1 | `npm install --save-dev oxc-tsrx` |
 | Editor, through released `oxc.oxc-vscode` | 1 | the same install, and nothing else |
-| Vite+ (`vp lint`, `vp fmt`) | 2 | the same install, then `npx oxc-tsrx setup` |
+| Vite+ (`vp lint`, `vp fmt`) | 2 | the same install, then `oxc-tsrx setup` |
 
 The Vite+ step repeats after every clean dependency install, because `setup`
 writes inside `node_modules`. Nothing in this table asks you to create a config
@@ -501,7 +501,7 @@ They are not all the same kind of thing, though:
   Deleting them would not make the protocol arrive sooner; it would only make
   `npm install oxc-tsrx` do nothing for a released editor. They stay, and they
   arbitrate rather than assume.
-- **`npx oxc-tsrx setup`** is a genuine shim. It exists for hosts that resolve a
+- **`oxc-tsrx setup`** is a genuine shim. It exists for hosts that resolve a
   package name, which a bin cannot answer, and Vite+ is the one that matters.
 
 ### The `oxlint` and `oxfmt` bin names
@@ -595,22 +595,30 @@ What that actually looks like, measured against Vite+ 0.2.4:
 - `npx oxlint` and `npx oxfmt` in the same project still handle `.tsrx`,
   because Vite+'s own `oxlint` dependency is transitive.
 
-To get `.tsrx` through `vp`, run `npx oxc-tsrx setup` once after installing.
-There is no install-time substitute for it: a lifecycle script that rewrote
-another tool's `node_modules` would be worse than an explicit command.
+To get `.tsrx` through `vp`, run `oxc-tsrx setup` once after installing. There
+is no install-time substitute for it: a lifecycle script that rewrote another
+tool's `node_modules` would be worse than an explicit command.
 
-### `npx oxc-tsrx setup` and dependency aliases
+### `oxc-tsrx setup` and dependency aliases
 
 Some released tools, including Vite+, still resolve packages by those literal
 names. The temporary compatibility facades are activated explicitly after
-installing dependencies:
+installing dependencies, using your own package manager:
 
 ```sh
-npx oxc-tsrx setup
+pnpm exec oxc-tsrx setup   # pnpm
+yarn oxc-tsrx setup        # yarn
+bunx oxc-tsrx setup        # bun
+npx oxc-tsrx setup         # npm
 ```
 
+Reach for `npx` only when npm is your package manager. A project scaffolded by
+`vp create` declares `devEngines.packageManager`, and npm refuses to run there
+with `EBADDEVENGINES` when that block names a different manager. Any modern
+package manager version works, and Corepack is never required.
+
 The command is explicit, idempotent, package-manager-neutral, and reversible
-with `npx oxc-tsrx remove`. It never edits `package.json`, never runs from an
+with `oxc-tsrx remove`. It never edits `package.json`, never runs from an
 install lifecycle script, preserves and restores transitive official packages
 already occupying those exact slots, and refuses to replace direct or
 unrecognized packages. Because `node_modules` is disposable, it has to be run

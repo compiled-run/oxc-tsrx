@@ -7,12 +7,12 @@
         {
           "comment": "Lint .tsrx and ordinary JS/TS with real OXC rules",
           "command": "npx oxlint src/Counter.tsrx src/View.tsx",
-          "output": "src/Counter.tsrx:4:3: warning eslint(no-debugger) `debugger` statement is not allowed\nsrc/View.tsx:2:7: warning eslint(no-unused-vars) Variable 'seen' is declared but never used. Unused variables should start with a '_'.\nFound 0 error(s) and 2 warning(s).\n"
+          "output": "src/Counter.tsrx:4:3: warning eslint(no-debugger): `debugger` statement is not allowed\nsrc/View.tsx:2:7: warning eslint(no-unused-vars): Variable 'seen' is declared but never used. Unused variables should start with a '_'. help: Consider removing this declaration.\nFound 0 error(s) and 2 warning(s).\n"
         },
         {
           "comment": "Format .tsrx and ordinary JS/TS with real Oxfmt layout",
           "command": "npx oxfmt --check src/Counter.tsrx src/View.tsx",
-          "output": "Checking formatting...\n\nsrc/View.tsx (0ms)\n\nFormat issues found in above 1 files. Run without `--check` to fix.\nFinished in 65ms on 1 files using 18 threads.\nsrc/Counter.tsrx\nNo config found, using defaults. Please add a config file or try `oxfmt --init` if needed.\n"
+          "output": "Checking formatting...\n\nsrc/View.tsx (0ms)\n\nFormat issues found in above 1 files. Run without `--check` to fix.\nFinished in 66ms on 1 files using 18 threads.\nsrc/Counter.tsrx\nNo config found, using defaults. Please add a config file or try `oxfmt --init` if needed.\n"
         }
       ]
     },
@@ -153,6 +153,76 @@
           "comment": "Stdin mode prints the formatted source, single quotes and all",
           "command": "oxc-tsrx-fmt --stdin-filepath=src/View.tsrx < src/View.tsrx",
           "output": "/// <reference path=\"./jsx.d.ts\" />\nimport { loadItems } from './service.tsrx'\n\nexport function View({ label }: { label: string }) @{\n  const version: number = '0.1.0'\n  console.log('render', label)\n  debugger\n  loadItems()\n\n  ;<section class=\"view\">\n    <h2>{label}</h2>\n    <p>v{version}</p>\n  </section>\n}\n"
+        }
+      ]
+    },
+    "custom-plugins-first-run": {
+      "caption": "Real output, captured at build time. The whole sample project is one src/TaskList.tsrx and an install of oxc-tsrx. There is no configuration file yet.",
+      "transcript": [
+        {
+          "comment": "The oxlint that oxc-tsrx installs already reads .tsrx",
+          "command": "npx oxlint src/TaskList.tsrx",
+          "output": "src/TaskList.tsrx:4:3: warning eslint(no-debugger): `debugger` statement is not allowed\nFound 0 error(s) and 1 warning(s).\n"
+        }
+      ]
+    },
+    "custom-plugins-explore": {
+      "caption": "Real output, captured at build time, from the explore-tsrx-ast.mjs script above run against src/TaskList.tsrx.",
+      "transcript": [
+        {
+          "comment": "Print the node type of every TSRX control block in the file",
+          "command": "node explore-tsrx-ast.mjs",
+          "output": "JSXIfExpression\nJSXForExpression\n"
+        }
+      ]
+    },
+    "custom-plugins-oxlint-plugin": {
+      "caption": "Real output, captured at build time. The sample project now has the .oxlintrc.json and oxlint-demo-plugin.mjs from above, plus the ordinary src/TaskRow.tsx.",
+      "transcript": [
+        {
+          "comment": "Your own JavaScript rule, running inside the oxlint you installed",
+          "command": "npx oxlint src/TaskRow.tsx",
+          "output": "src/TaskRow.tsx:11:9: error tsrx-demo(require-keyed-map): JSX returned from .map() should declare a `key` prop.\n"
+        }
+      ]
+    },
+    "custom-plugins-tsrx-wall": {
+      "caption": "Real output, captured at build time, from the same project and the same .oxlintrc.json, pointed at the .tsrx file instead.",
+      "transcript": [
+        {
+          "comment": "Same plugin, same config, one .tsrx file: this is the wall",
+          "command": "npx oxlint src/TaskList.tsrx",
+          "output": "oxc-tsrx: JavaScript plugins are not supported by the native TSRX path yet: OXC's public package does not expose its zero-copy plugin host, and OXC for TSRX will not silently add a second parse\n"
+        }
+      ]
+    },
+    "custom-plugins-mixed-directory": {
+      "caption": "Real output, captured at build time, from the same project with one command run over the whole src directory.",
+      "transcript": [
+        {
+          "comment": "Both file types at once: the ordinary half still reports normally",
+          "command": "npx oxlint src",
+          "output": "src/TaskRow.tsx:11:9: error tsrx-demo(require-keyed-map): JSX returned from .map() should declare a `key` prop.\nFound 1 error(s) and 0 warning(s).\noxc-tsrx: JavaScript plugins are not supported by the native TSRX path yet: OXC's public package does not expose its zero-copy plugin host, and OXC for TSRX will not silently add a second parse\n"
+        }
+      ]
+    },
+    "custom-plugins-eslint": {
+      "caption": "Real output, captured at build time by running ESLint 10.7.0 against src/TaskList.tsrx with the adapter, plugin, and config above.",
+      "transcript": [
+        {
+          "comment": "Both rules fire, on the @if and the @for you authored",
+          "command": "npx eslint src/TaskList.tsrx",
+          "output": "\nsrc/TaskList.tsrx\n  6:3  warning  Demo rule: prefer a declarative component over this TSRX @if block  tsrx-demo/no-tsrx-if\n  8:7  error    TSRX @for blocks should declare `key <expression>`                  tsrx-demo/require-keyed-for\n\n✖ 2 problems (1 error, 1 warning)\n\n"
+        }
+      ]
+    },
+    "custom-plugins-eslint-fixed": {
+      "caption": "Real output, captured at build time from the same project after the @for block was given its key expression.",
+      "transcript": [
+        {
+          "comment": "The error is gone; the warning you asked for stays",
+          "command": "npx eslint src/TaskList.tsrx",
+          "output": "\nsrc/TaskList.tsrx\n  6:3  warning  Demo rule: prefer a declarative component over this TSRX @if block  tsrx-demo/no-tsrx-if\n\n✖ 1 problem (0 errors, 1 warning)\n\n"
         }
       ]
     },

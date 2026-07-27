@@ -18,6 +18,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from 'node:fs'
+import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -30,6 +31,18 @@ const formatBin = path.join(repoRoot, 'target', 'release', 'oxc-tsrx')
 const npmLintBin = path.join(repoRoot, 'packages', 'toolchain', 'bin', 'oxlint')
 const npmFormatBin = path.join(repoRoot, 'packages', 'toolchain', 'bin', 'oxfmt')
 const tsgolintBin = resolveTsgolintExecutable(repoRoot)
+const toolchainPackage = path.join(repoRoot, 'packages', 'toolchain')
+// ESLint is already an exact-pinned fixture dependency of tests/package.json.
+// The custom-plugin walkthrough drives that same CLI; nothing new is installed.
+const eslintBin = path.join(
+  path.dirname(
+    createRequire(import.meta.url).resolve('eslint/package.json', {
+      paths: [path.join(repoRoot, 'tests')],
+    }),
+  ),
+  'bin',
+  'eslint.js',
+)
 
 const baseEnv = {
   ...process.env,
@@ -282,6 +295,52 @@ for (const error of result.errors) {
 }
 `
 
+// ---------- custom JavaScript plugin sample project ----------
+// integrations/custom-js-plugins.md is a tutorial, so its sample project is the
+// real examples/custom-js-plugins/ directory rather than a retyped copy. The
+// page prints these same files, and tests/plugins/custom-js-plugins-doc.test.mjs
+// fails if a fence on the page and the file here ever disagree.
+
+const pluginExamples = path.join(repoRoot, 'examples', 'custom-js-plugins')
+const readPluginExample = (name) => readFileSync(path.join(pluginExamples, name), 'utf8')
+
+const taskListTsrx = readPluginExample('src/TaskList.tsrx')
+const taskRowTsx = readPluginExample('src/TaskRow.tsx')
+const exploreTsrxAst = readPluginExample('explore-tsrx-ast.mjs')
+const oxlintDemoPlugin = readPluginExample('oxlint-demo-plugin.mjs')
+const oxlintDemoConfig = readPluginExample('.oxlintrc.json')
+const eslintDemoConfig = readPluginExample('eslint.config.mjs')
+const eslintDemoPlugin = readPluginExample('demo-lint-plugin.mjs')
+
+// The in-repo adapter imports the parser by relative path so the plugin tests
+// can load it straight from the source tree. A reader who ran
+// `npm install oxc-tsrx` uses the public subpath instead, which is what the page
+// says, so swap exactly that one specifier and nothing else.
+const relativeParserImport = '"../../packages/toolchain/dist/parser.js"'
+const tsrxEslintParser = readPluginExample('tsrx-eslint-parser.mjs').replace(
+  relativeParserImport,
+  '"oxc-tsrx/parser"',
+)
+if (tsrxEslintParser.includes(relativeParserImport)) {
+  throw new Error(
+    'examples/custom-js-plugins/tsrx-eslint-parser.mjs no longer imports the parser by the expected relative path',
+  )
+}
+
+// Step "make it pass": the same fixture with the key the rule asked for.
+const unkeyedForBlock = '@for (const task of tasks) {'
+const keyedTaskListTsrx = taskListTsrx.replace(
+  unkeyedForBlock,
+  '@for (const task of tasks; key task.id) {',
+)
+if (keyedTaskListTsrx === taskListTsrx) {
+  throw new Error(
+    `examples/custom-js-plugins/src/TaskList.tsrx no longer contains "${unkeyedForBlock}"`,
+  )
+}
+
+const installedToolchain = { 'node_modules/oxc-tsrx': toolchainPackage }
+
 // ---------- runners ----------
 
 const runners = {
@@ -290,6 +349,7 @@ const runners = {
   fmt: { bin: formatBin, prefix: ['fmt'] },
   npxLint: { bin: process.execPath, prefix: [npmLintBin] },
   npxFmt: { bin: process.execPath, prefix: [npmFormatBin] },
+  eslint: { bin: process.execPath, prefix: [eslintBin] },
   cat: { bin: '/bin/cat' },
   // Plain Node scripts (used by the parser API demo).
   node: { bin: process.execPath },
@@ -638,6 +698,141 @@ const demos = {
         runner: 'fmt',
         args: ['--stdin-filepath=src/View.tsrx'],
         stdinFile: 'src/View.tsrx',
+        expectExit: 0,
+      },
+    ],
+  },
+
+  'custom-plugins-first-run': {
+    caption:
+      'Real output, captured at build time. The whole sample project is one src/TaskList.tsrx and an install of oxc-tsrx. There is no configuration file yet.',
+    files: { 'src/TaskList.tsrx': taskListTsrx },
+    entries: [
+      {
+        comment: 'The oxlint that oxc-tsrx installs already reads .tsrx',
+        command: 'npx oxlint src/TaskList.tsrx',
+        runner: 'npxLint',
+        args: ['src/TaskList.tsrx'],
+        expectExit: 0,
+      },
+    ],
+  },
+
+  'custom-plugins-explore': {
+    caption:
+      'Real output, captured at build time, from the explore-tsrx-ast.mjs script above run against src/TaskList.tsrx.',
+    files: {
+      'src/TaskList.tsrx': taskListTsrx,
+      'explore-tsrx-ast.mjs': exploreTsrxAst,
+    },
+    links: installedToolchain,
+    entries: [
+      {
+        comment: 'Print the node type of every TSRX control block in the file',
+        command: 'node explore-tsrx-ast.mjs',
+        runner: 'node',
+        args: ['explore-tsrx-ast.mjs'],
+        expectExit: 0,
+      },
+    ],
+  },
+
+  'custom-plugins-oxlint-plugin': {
+    caption:
+      'Real output, captured at build time. The sample project now has the .oxlintrc.json and oxlint-demo-plugin.mjs from above, plus the ordinary src/TaskRow.tsx.',
+    files: {
+      'src/TaskRow.tsx': taskRowTsx,
+      'oxlint-demo-plugin.mjs': oxlintDemoPlugin,
+      '.oxlintrc.json': oxlintDemoConfig,
+    },
+    entries: [
+      {
+        comment: 'Your own JavaScript rule, running inside the oxlint you installed',
+        command: 'npx oxlint src/TaskRow.tsx',
+        runner: 'npxLint',
+        args: ['src/TaskRow.tsx'],
+        expectExit: 1,
+      },
+    ],
+  },
+
+  'custom-plugins-tsrx-wall': {
+    caption:
+      'Real output, captured at build time, from the same project and the same .oxlintrc.json, pointed at the .tsrx file instead.',
+    files: {
+      'src/TaskList.tsrx': taskListTsrx,
+      'src/TaskRow.tsx': taskRowTsx,
+      'oxlint-demo-plugin.mjs': oxlintDemoPlugin,
+      '.oxlintrc.json': oxlintDemoConfig,
+    },
+    entries: [
+      {
+        comment: 'Same plugin, same config, one .tsrx file: this is the wall',
+        command: 'npx oxlint src/TaskList.tsrx',
+        runner: 'npxLint',
+        args: ['src/TaskList.tsrx'],
+        expectExit: 2,
+      },
+    ],
+  },
+
+  'custom-plugins-mixed-directory': {
+    caption:
+      'Real output, captured at build time, from the same project with one command run over the whole src directory.',
+    files: {
+      'src/TaskList.tsrx': taskListTsrx,
+      'src/TaskRow.tsx': taskRowTsx,
+      'oxlint-demo-plugin.mjs': oxlintDemoPlugin,
+      '.oxlintrc.json': oxlintDemoConfig,
+    },
+    entries: [
+      {
+        comment: 'Both file types at once: the ordinary half still reports normally',
+        command: 'npx oxlint src',
+        runner: 'npxLint',
+        args: ['src'],
+        expectExit: 2,
+      },
+    ],
+  },
+
+  'custom-plugins-eslint': {
+    caption:
+      'Real output, captured at build time by running ESLint 10.7.0 against src/TaskList.tsrx with the adapter, plugin, and config above.',
+    files: {
+      'src/TaskList.tsrx': taskListTsrx,
+      'eslint.config.mjs': eslintDemoConfig,
+      'demo-lint-plugin.mjs': eslintDemoPlugin,
+      'tsrx-eslint-parser.mjs': tsrxEslintParser,
+    },
+    links: installedToolchain,
+    entries: [
+      {
+        comment: 'Both rules fire, on the @if and the @for you authored',
+        command: 'npx eslint src/TaskList.tsrx',
+        runner: 'eslint',
+        args: ['src/TaskList.tsrx'],
+        expectExit: 1,
+      },
+    ],
+  },
+
+  'custom-plugins-eslint-fixed': {
+    caption:
+      'Real output, captured at build time from the same project after the @for block was given its key expression.',
+    files: {
+      'src/TaskList.tsrx': keyedTaskListTsrx,
+      'eslint.config.mjs': eslintDemoConfig,
+      'demo-lint-plugin.mjs': eslintDemoPlugin,
+      'tsrx-eslint-parser.mjs': tsrxEslintParser,
+    },
+    links: installedToolchain,
+    entries: [
+      {
+        comment: 'The error is gone; the warning you asked for stays',
+        command: 'npx eslint src/TaskList.tsrx',
+        runner: 'eslint',
+        args: ['src/TaskList.tsrx'],
         expectExit: 0,
       },
     ],

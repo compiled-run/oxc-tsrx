@@ -8,6 +8,33 @@ description: What OXC for TSRX does not support yet, and why each gap fails loud
 Everything on this page fails loudly: you get a clear error, never a silently
 skipped file or a wrong-but-plausible result.
 
+## You cannot build or run a `.tsrx` file yet
+
+This is the largest limitation on the page, so it goes first.
+
+`oxc-tsrx` is a lint, format, parse, and editor toolchain for `.tsrx`. It is not
+a compiler you can ship an application with. There is no Vite plugin, no Rollup
+or Rolldown plugin, and no loader. Import a `.tsrx` module from your application
+and the bundler parses it as ordinary TypeScript and fails on the first `@{`:
+
+```text
+$ vp build
+✗ `,` or `)` expected
+```
+
+Measured with Vite+ 0.2.6 and `oxc-tsrx` 0.1.0. Nothing is wrong with your
+install when you see this.
+
+You cannot fill the gap yourself from the public API either. The legal-TSX
+projection that makes linting and formatting work happens inside Rust and is
+never returned as source, and no export hands it back. `oxc-tsrx/parser` gives
+you an AST, `oxc-tsrx/format` gives you formatted TSRX, and neither is code a
+bundler can consume.
+
+So the supported loop today is: author `.tsrx`, check it with `oxlint`/`oxfmt`
+(or `vp lint` and `vp fmt`), and edit it with diagnostics and quick fixes in
+your editor. Running the result in a browser is not part of this project yet.
+
 ## Formatting
 
 - **CSS inside `<style>` is never reformatted.** The surrounding TSRX/JSX
@@ -105,7 +132,7 @@ skipped file or a wrong-but-plausible result.
   lint/format tools by the literal *package* names `oxlint` and `oxfmt`, and it
   pins its own `oxlint@=1.72.0`. A bin name cannot answer a package resolution,
   and `oxc-tsrx` cannot legitimately publish a package under either name, so
-  `npx oxc-tsrx setup` writes those project-local slots instead.
+  `oxc-tsrx setup` writes those project-local slots instead.
 
   Because `setup` works inside `node_modules`, a clean install wipes it and you
   run it again. That rerun is real and it is not scheduled to go away.

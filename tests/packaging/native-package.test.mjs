@@ -179,6 +179,9 @@ async function packWithStubbedNpm(response) {
         binaries,
         "--out-dir",
         artifacts,
+        // These cases assert binary-staging failures, so they must reach the
+        // staging code rather than stopping at the addon requirement.
+        "--allow-missing-parser-addon",
       ],
       { env: { ...process.env, npm_execpath: entry } },
     ),
@@ -190,7 +193,7 @@ function packedEntry(target) {
   return {
     id: `${nativePackageName(target)}@0.1.0`,
     name: nativePackageName(target),
-    version: "0.1.0",
+    version: "0.1.1",
     size: 6426070,
     unpackedSize: 14097905,
     shasum: "62e463f312886399ada17ae8cbbc6b0288856690",
@@ -261,9 +264,12 @@ test("current native release stages a complete, checksummed, npm-installable pla
     "target/release",
     "--out-dir",
     artifacts,
+    // This case covers executable staging only. The addon-bearing package is
+    // asserted by the canonical parser packaging test below.
+    "--allow-missing-parser-addon",
   ]);
   const packaged = JSON.parse(stdout);
-  assert.equal(packaged.version, "0.1.0");
+  assert.equal(packaged.version, "0.1.1");
   assert.equal(packaged.target, hostTarget());
   assert.match(packaged.packageName, /^@oxc-tsrx\/native-/);
   assert.equal(resolve(packaged.tarball).startsWith(resolve(artifacts)), true);
@@ -284,7 +290,7 @@ test("current native release stages a complete, checksummed, npm-installable pla
   const packageRoot = join(consumer, "node_modules", ...packaged.packageName.split("/"));
   assert.equal((await realpath(packageRoot)).startsWith(await realpath(consumer)), true);
   const manifest = JSON.parse(await readFile(join(packageRoot, "package.json"), "utf8"));
-  assert.equal(manifest.version, "0.1.0");
+  assert.equal(manifest.version, "0.1.1");
   assert.equal(manifest.oxcTsrx.target, hostTarget());
   assert.equal(manifest.oxcTsrx.oxcRevision, "8e0ed2ebb96137fb1611cdbd5742d5cb46037d40");
   assert.equal(manifest.scripts, undefined);
@@ -319,8 +325,31 @@ test("current native release stages a complete, checksummed, npm-installable pla
   assert.ok((await readdir(packageRoot)).includes("THIRD_PARTY_NOTICES.md"));
   assert.equal(
     basename(packaged.tarball),
-    `${packaged.packageName.slice(1).replace("/", "-")}-0.1.0.tgz`,
+    `${packaged.packageName.slice(1).replace("/", "-")}-${packaged.version}.tgz`,
   );
+});
+
+test("packaging refuses to build a native package without the parser addon", async () => {
+  // 0.1.0 published all eight native packages with no parser.node: the addon
+  // was optional, the release never passed it, npm honoured the generated
+  // `files` list and dropped it from every tarball, and `oxc-tsrx/parser` then
+  // threw ERR_TSRX_NATIVE_INTEGRITY on every consumer. Nothing failed at build
+  // time, so the only defence is refusing to produce such a package at all.
+  const artifacts = await mkdtemp(join(tmpdir(), "oxc-tsrx-native-noaddon-"));
+  await assert.rejects(
+    () =>
+      run(process.execPath, [
+        "scripts/package-native.mjs",
+        "--target",
+        hostTarget(),
+        "--bin-dir",
+        "target/release",
+        "--out-dir",
+        artifacts,
+      ]),
+    /--parser-addon is required/,
+  );
+  assert.deepEqual(await readdir(artifacts), []);
 });
 
 test("canonical parser packaging adds one verified schema-2 addon without changing the executable family", async () => {
@@ -377,7 +406,7 @@ test("canonical parser packaging adds one verified schema-2 addon without changi
   assert.equal(record.apiVersion, 1);
   assert.equal(record.transportAbi, 1);
   assert.equal(record.nodeApi, 8);
-  assert.equal(record.packageVersion, "0.1.0");
+  assert.equal(record.packageVersion, "0.1.1");
   assert.equal(record.target, hostTarget());
   assert.equal(record.oxcRevision, "8e0ed2ebb96137fb1611cdbd5742d5cb46037d40");
   assert.deepEqual(record.capabilities, {
@@ -404,6 +433,7 @@ test("native packaging rejects current-host object files labeled as another arch
   await assert.rejects(
     run(process.execPath, [
       "scripts/package-native.mjs",
+      "--allow-missing-parser-addon",
       "--target",
       differentArchitectureTarget(),
       "--bin-dir",
@@ -427,6 +457,7 @@ test("cross-package verification recognizes Mach-O, ELF, and PE headers without 
     await writeExecutableFixtures(binaries, target, format);
     const { stdout } = await run(process.execPath, [
       "scripts/package-native.mjs",
+      "--allow-missing-parser-addon",
       "--target",
       target,
       "--bin-dir",
@@ -451,6 +482,7 @@ test("all supported packages reject 32-bit executable headers", async () => {
     await assert.rejects(
       run(process.execPath, [
         "scripts/package-native.mjs",
+        "--allow-missing-parser-addon",
         "--target",
         target,
         "--bin-dir",

@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import test from "node:test";
 import {
   nativePackageName,
@@ -12,6 +13,17 @@ import { parseNpmPackResponse } from "../../scripts/npm-pack-response.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 const npm = process.platform === "win32" ? "npm.cmd" : "npm";
+
+// pnpm does not hoist transitive dependencies to the repository root, so
+// `<root>/node_modules/@oxc-project/types` does not exist here. Spawning npm
+// with a cwd that is not there fails as `spawn npm ENOENT`, which reads like a
+// missing npm rather than a missing directory. Resolve it from the workspace
+// package that actually declares the dependency instead.
+const typesDirectory = dirname(
+  createRequire(import.meta.url).resolve("@oxc-project/types/package.json", {
+    paths: [join(root, "packages/toolchain")],
+  }),
+);
 
 const CASES = Object.freeze([
   { id: "missing-manifest", code: "ERR_TSRX_NATIVE_INTEGRITY" },
@@ -137,7 +149,6 @@ test("the packed parser loader rejects every frozen identity and integrity mutat
     const npmEnvironment = {
       ...process.env,
       npm_config_cache: npmCache,
-      npm_config_offline: "true",
     };
     delete npmEnvironment.OXC_TSRX_PARSER_ADDON;
 
@@ -175,7 +186,7 @@ test("the packed parser loader rejects every frozen identity and integrity mutat
     const typesPack = parseNpmPackResponse(
       (
         await run(npm, ["pack", "--json", "--pack-destination", artifacts], {
-          cwd: join(root, "node_modules/@oxc-project/types"),
+          cwd: typesDirectory,
           env: npmEnvironment,
         })
       ).stdout,
@@ -185,7 +196,6 @@ test("the packed parser loader rejects every frozen identity and integrity mutat
       npm,
       [
         "install",
-        "--offline",
         "--ignore-scripts",
         "--no-audit",
         "--no-fund",

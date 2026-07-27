@@ -104,11 +104,14 @@ Obtain this exact approval:
 > Approve Vercel production deployment of OXC for TSRX 0.1.0 from COMMIT_SHA
 > and website artifact run SITE_RUN_ID.
 
-There is deliberately no credential-bearing deploy workflow in this repository.
-After approval, deploy the reviewed directory through the owner-controlled
-Vercel project that owns the canonical URL. Stop if the project identity,
-production-domain assignment, artifact digest, source SHA, or deployment
-credential does not match the approved operation.
+After approval, deploy through the `production` GitHub environment on that same
+website-artifact run. The deploy job is deliberately separate from the build
+job: it checks the repository out at no point and runs no build, it only
+downloads the artifact the build already proved and hands those exact bytes to
+Vercel, so the deploy credential is never present in the runner that executed
+pnpm postinstalls, cargo, and the docs scripts. Approve the environment only
+once the artifact digest and source SHA match the approved operation, and stop
+if the project identity or production-domain assignment does not.
 
 After deployment, verify `Cross-Origin-Opener-Policy: same-origin` and
 `Cross-Origin-Embedder-Policy: require-corp` on the canonical URL. Then run the
@@ -118,9 +121,11 @@ TSRX projection, and record zero `/api` engine requests. Also verify canonical
 tags, the social card, sitemap, and the honest unavailable type-aware lint and
 completion capabilities.
 
-The artifact workflow has no push or automatic trigger and cannot mutate
-Vercel. Project setup, credentials, deployment, domain assignment, and rollback
-remain separately approval-gated external actions.
+The workflow builds on a push to `main` and on dispatch, but building is all it
+does on its own: reaching Vercel requires the `production` environment, so
+deployment stays a reviewed step rather than an automatic consequence of a
+push. Project setup, credentials, domain assignment, and rollback remain
+separately approval-gated external actions.
 
 ## 6. Social announcement
 

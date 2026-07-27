@@ -122,6 +122,11 @@ jobs:
         run: |
           pnpm run build:editor
           pnpm run licenses:vscode:check
+          # The parser addon is built --offline further down, and cc is a
+          # build-dependency of napi-build rather than of oxc_tsrx_cli, so
+          # building the CLI alone never populates it. Fetch the whole
+          # workspace first or that offline build fails on a clean runner.
+          cargo fetch --locked
           cargo build --release --locked --target "$TARGET" -p oxc_tsrx_cli --bins
 
       - name: Smoke the companion CLIs on this host
@@ -166,6 +171,17 @@ jobs:
             done
           fi
 
+      - name: Build the parser addon for this target
+        shell: bash
+        run: |
+          # Ships inside the same native package as the binaries. Without it npm
+          # drops parser.node from the tarball and `oxc-tsrx/parser` fails its
+          # integrity check on every consumer, which is exactly what 0.1.0 did.
+          node scripts/build-parser-native.mjs \
+            --target "$TARGET" \
+            --out "release/addon/parser.node" \
+            --record "release/addon/parser-addon-$PACKAGE_SUFFIX.json"
+
       - name: Package the native npm artifact and target VSIX
         shell: bash
         run: |
@@ -175,6 +191,7 @@ jobs:
           node scripts/package-native.mjs \
             --target "$TARGET" \
             --bin-dir "target/$TARGET/release" \
+            --parser-addon "release/addon/parser.node" \
             --out-dir "release/$PACKAGE_SUFFIX" \
             | tee "release/$PACKAGE_SUFFIX/native-package-$PACKAGE_SUFFIX.json"
           node scripts/package-vscode.mjs \

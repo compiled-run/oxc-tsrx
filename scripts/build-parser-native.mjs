@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import { copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve } from "node:path";
-import { nativeTargetForHost } from "../packages/toolchain/dist/native-targets.js";
+import { NATIVE_TARGETS, nativeTargetForHost } from "../packages/toolchain/dist/native-targets.js";
 
 const root = resolve(import.meta.dirname, "..");
 const OXC_REVISION = "8e0ed2ebb96137fb1611cdbd5742d5cb46037d40";
@@ -14,6 +14,9 @@ function parseArguments(argv) {
     record: null,
     "target-dir": "target",
     "skip-build": false,
+    // Defaults to the host. The release matrix cross-compiles, so it passes an
+    // explicit triple and the addon must follow the binary it ships beside.
+    target: null,
   };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
@@ -21,7 +24,7 @@ function parseArguments(argv) {
       options["skip-build"] = true;
       continue;
     }
-    if (argument !== "--out" && argument !== "--record" && argument !== "--target-dir") {
+    if (!["--out", "--record", "--target-dir", "--target"].includes(argument)) {
       throw new Error(`unsupported option: ${argument}`);
     }
     const value = argv[++index];
@@ -45,11 +48,11 @@ function run(executable, args) {
   });
 }
 
-function releaseLibrary() {
-  if (process.platform === "darwin") return "libparser_napi_binding.dylib";
-  if (process.platform === "linux") return "libparser_napi_binding.so";
-  if (process.platform === "win32") return "parser_napi_binding.dll";
-  throw new Error(`unsupported parser addon build host ${process.platform}-${process.arch}`);
+function releaseLibrary(os) {
+  if (os === "darwin") return "libparser_napi_binding.dylib";
+  if (os === "linux") return "libparser_napi_binding.so";
+  if (os === "win32") return "parser_napi_binding.dll";
+  throw new Error(`unsupported parser addon target os ${os}`);
 }
 
 function linuxLibc() {
@@ -71,6 +74,16 @@ function expectedObject(target) {
 const options = parseArguments(process.argv.slice(2));
 if (!options.out.endsWith(".node")) throw new Error("--out must end in .node");
 
+// An explicit --target must name a triple this project actually publishes,
+// otherwise the addon would be built for a platform no native package exists
+// for and the mismatch would only surface at require() time on a user machine.
+const target = options.target === null
+  ? nativeTargetForHost(process.platform, process.arch, linuxLibc())
+  : NATIVE_TARGETS.find((candidate) => candidate.target === options.target);
+if (target === undefined) {
+  throw new Error(`unsupported parser addon target: ${options.target}`);
+}
+
 if (!options["skip-build"]) {
   await run("cargo", [
     "build",
@@ -79,13 +92,20 @@ if (!options["skip-build"]) {
     "--offline",
     "-p",
     "parser_napi_binding",
+    ...(options.target === null ? [] : ["--target", options.target]),
   ]);
 }
 
 const targetDirectory = isAbsolute(options["target-dir"])
   ? options["target-dir"]
   : resolve(root, options["target-dir"]);
-const source = join(targetDirectory, "release", releaseLibrary());
+// Cargo nests cross-compiled output under the triple; a host build does not.
+const source = join(
+  targetDirectory,
+  ...(options.target === null ? [] : [options.target]),
+  "release",
+  releaseLibrary(target.os),
+);
 const sourceStat = await stat(source).catch(() => null);
 if (!sourceStat?.isFile()) {
   throw new Error(`release parser addon is missing: ${source}`);
@@ -98,7 +118,6 @@ const contents = await readFile(destination);
 const parserManifest = JSON.parse(
   await readFile(resolve(root, "packages/toolchain/package.json"), "utf8"),
 );
-const target = nativeTargetForHost(process.platform, process.arch, linuxLibc());
 const record = {
   packageVersion: parserManifest.version,
   target: target.target,

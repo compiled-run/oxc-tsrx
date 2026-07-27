@@ -42,7 +42,7 @@ project on darwin-arm64.
 | --- | --- | --- |
 | Command line (`oxlint`, `oxfmt`) | 1 | `npm install --save-dev oxc-tsrx` |
 | Editor, through released `oxc.oxc-vscode` | 1 | the same install, and nothing else |
-| [Vite+](/integrations/vite-plus) (`vp lint`, `vp fmt`) | 2 | the same install, then `npx oxc-tsrx setup` |
+| [Vite+](/integrations/vite-plus) (`vp lint`, `vp fmt`) | 2 | the same install, then `oxc-tsrx setup` |
 
 The Vite+ second step is permanent, and you run it again after every clean
 dependency install. Vite+ resolves a *package* named `oxlint` and pins
@@ -127,7 +127,7 @@ Released [Vite+](/integrations/vite-plus) does not discover providers. It finds
 its lint and format tools through project-local *packages* named literally
 `oxlint` and `oxfmt`. A command name cannot satisfy that, and this project
 cannot legitimately publish a package under either name, so Vite+ needs the
-project-local slots that `npx oxc-tsrx setup` writes:
+project-local slots that `oxc-tsrx setup` writes:
 
 <!-- pm-install -->
 ```sh
@@ -135,11 +135,24 @@ npm install --save-dev vite-plus oxc-tsrx
 npx oxc-tsrx setup
 ```
 
+Pick your own package manager in the tabs above and run both lines with it.
+`npx` belongs to the npm tab only: `vp create` writes a
+`devEngines.packageManager` block into `package.json`, and npm refuses to run
+in a project that names a different manager, exiting with `EBADDEVENGINES`.
+Any modern version of your package manager works, and Corepack is not required.
+
 `setup` is explicit, idempotent, reversible, and never edits `package.json`.
 Run it again after a clean dependency install, because `node_modules` is
-disposable. After that, `vp lint`, `vp fmt`, and `vp check --fix` handle `.tsrx`
-files automatically. The [Vite and Vite+ page](/integrations/vite-plus) has the
-full quick start.
+disposable.
+
+After that, `vp lint`, `vp fmt`, and `vp check --fix` handle `.tsrx` files, with
+one config edit first: a project scaffolded by `vp create` enables `jsPlugins`
+and `options.typeAware`/`typeCheck` in the `lint` block of `vite.config.ts`, and
+the native TSRX path refuses both, failing the run before anything is linted.
+Delete those two keys, plus the `vite-plus/prefer-vite-plus-imports` rule that
+came from the plugin you just removed, and keep the rest.
+The [Vite and Vite+ page](/integrations/vite-plus#three-template-defaults-you-have-to-turn-off-first)
+explains why and shows the before and after.
 
 Vite+ is the only place an install alone is not enough. Every other route in
 this guide works with no command at all.

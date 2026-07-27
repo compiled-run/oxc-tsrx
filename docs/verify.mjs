@@ -467,10 +467,10 @@ if (liveDemo) {
   await page.waitForFunction(() => document.querySelectorAll('.demo-diag').length === 0)
   check(true, 'demo: "Clean" chip restores the converged snippet')
 
-  // The home hero's "Type error" chip must do something visible in EVERY mode.
-  // The type lane needs tsgolint, which the in-browser wasm engine does not
-  // ship, so on the published site the chip replays the pre-generated report
-  // instead of going quiet.
+  // The home hero's "Type-aware lint" chip must do something visible in EVERY
+  // mode. The type lane needs tsgolint, which the in-browser wasm engine does
+  // not ship, so on the published site the chip replays the pre-generated
+  // report instead of going quiet.
   const beforeTypes = await page.inputValue('#demo-input')
   await page.locator('#pg-scenario-types').click()
   await page.waitForFunction(
@@ -480,8 +480,8 @@ if (liveDemo) {
   )
   const typesSource = await page.inputValue('#demo-input')
   check(
-    typesSource.includes('titel'),
-    'demo: "Type error" chip loads the snippet carrying the deliberate typo',
+    typesSource.includes('saveTask(task);'),
+    'demo: "Type-aware lint" chip loads the snippet with the unawaited Promise',
   )
   await page.waitForSelector('.demo-diag', { timeout: 20000 })
   const typesDiagCount = await page.locator('.demo-diag').count()
@@ -492,15 +492,17 @@ if (liveDemo) {
   )
   await page.waitForSelector('.demo-tooltip:not([hidden])', { timeout: 5000 })
   const typesTip = (await page.locator('.demo-tooltip').textContent()).trim()
+  // A tsgolint rule finding, not a bare compiler error: the latter is what an
+  // editor's language server already reports, so it would prove nothing here.
   check(
-    /titel/.test(typesTip) && /TS\d+|typescript/i.test(typesTip),
-    'demo: "Type error" chip underlines the typo with the TypeScript diagnostic',
+    /no-floating-promises/.test(typesTip) && !/TS\d{4}/.test(typesTip),
+    'demo: "Type-aware lint" chip underlines the call with a tsgolint rule finding',
     `${typesDiagCount} underlines · ${typesTip.slice(0, 90)}`,
   )
   // Every chip has to explain itself on the hero, not just on the playground.
   const heroNote = (await page.locator('#pg-scenario-note').textContent()).trim()
   check(
-    heroNote.length > 0 && /titel|type/i.test(heroNote),
+    heroNote.length > 0 && /promise|type-aware/i.test(heroNote),
     'demo: the home hero shows the scenario note',
     heroNote.slice(0, 90),
   )
@@ -508,7 +510,7 @@ if (liveDemo) {
     const typesMeta = (await page.locator('#demo-meta').textContent()).trim()
     check(
       /pre-generated/i.test(typesMeta),
-      'wasm: the "Type error" chip labels the replayed report as pre-generated',
+      'wasm: the "Type-aware lint" chip labels the replayed report as pre-generated',
       typesMeta,
     )
   }
@@ -941,7 +943,7 @@ if (liveDemo) {
       () => document.getElementById('demo-meta').textContent.includes('type-aware'),
       { timeout: 20000 },
     )
-    check(true, 'playground: "Type error" example runs the TypeScript-Go lane')
+    check(true, 'playground: "Type-aware lint" example runs the TypeScript-Go lane')
   } else {
     check(true, 'playground: type-aware unavailable on this host (skipped)', 'tsgolint missing')
   }

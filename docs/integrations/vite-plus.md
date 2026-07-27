@@ -30,24 +30,120 @@ packages named literally `oxlint` and `oxfmt`
 project-local facades after installation:
 
 ```sh
-npx oxc-tsrx setup
+pnpm exec oxc-tsrx setup   # pnpm
+yarn oxc-tsrx setup        # yarn
+bunx oxc-tsrx setup        # bun
+npx oxc-tsrx setup         # npm
 ```
+
+Run it with your own package manager, not with `npx`, unless npm *is* your
+package manager. `vp create` writes a `devEngines.packageManager` block into
+`package.json`, and npm refuses to run in a project that declares a different
+manager:
+
+```text
+npm error code EBADDEVENGINES
+npm error Invalid name "pnpm" does not match "npm"
+```
+
+That is npm enforcing your own project's declaration, not an `oxc-tsrx`
+failure. Any modern version of your package manager works; nothing here needs
+Corepack.
 
 The command never edits `package.json`, never runs as an install lifecycle
 script, refuses direct or unrecognized package collisions, and is idempotent.
-Use `npx oxc-tsrx status` to inspect it and `npx oxc-tsrx remove` to restore
-transitive official packages. Run `setup` again after a clean dependency
-install.
+Use `oxc-tsrx status` to inspect it and `oxc-tsrx remove` to restore transitive
+official packages. Run `setup` again after a clean dependency install.
 
 So Vite+ is two steps: the install, then `setup`. Every other host is one step,
 the install on its own. The table of all three is in
 [Getting Started](/guide/getting-started#the-minimum-steps-per-host).
 
+### Three template defaults you have to turn off first
+
+Measured against Vite+ 0.2.6 and `oxc-tsrx` 0.1.0. A project scaffolded by
+`vp create` writes a `lint` block into `vite.config.ts` that asks for things the
+native TSRX path refuses, and each one fails the whole run before a single file
+is linted:
+
+```ts
+lint: {
+  plugins: ["react", "typescript", "oxc"],   // keep
+  rules: {
+    "react/rules-of-hooks": "error",         // keep
+    "vite-plus/prefer-vite-plus-imports": "error",   // remove, see below
+  },
+  options: { typeAware: true, typeCheck: true },     // remove
+  jsPlugins: [
+    { name: "vite-plus", specifier: "vite-plus/oxlint-plugin" },   // remove
+  ],
+}
+```
+
+The third one is a consequence of the second: `vite-plus/prefer-vite-plus-imports`
+is a rule *from* the plugin you just removed, so leaving it behind orphans it and
+the config fails to parse at all:
+
+```text
+oxlint (oxc-tsrx): canonical Oxlint returned non-JSON output while composing diagnostics:
+Failed to parse oxlint configuration file.
+  x Plugin 'vite-plus' not found
+```
+
+Leave either in place and `vp lint` prints one line and lints nothing, not even
+your ordinary `.tsx` files:
+
+```text
+$ vp lint src/Counter.tsrx
+oxc-tsrx: JavaScript plugins are not supported by the native TSRX path yet: ...
+$ echo $?
+2
+```
+
+```text
+$ vp lint src/Counter.tsrx
+oxc-tsrx: unsupported tsgolint version 7.0.2001; OXC for TSRX requires oxlint-tsgolint 0.24.0 for protocol v2
+```
+
+Both are deliberate fail-closed refusals rather than crashes. `jsPlugins` needs
+a zero-copy plugin host that OXC's public package does not expose, and running
+the plugins anyway would mean a second, silent parse. The type-aware lane needs
+protocol v2 from `oxlint-tsgolint` 0.24.0, and Vite+ 0.2.6 carries tsgolint
+7.0.2001, so there is no version of that handshake both sides can speak.
+
+Delete both keys and the same command works, with the diagnostic mapped back to
+its original TSRX byte span:
+
+```text
+$ vp lint src/Counter.tsrx
+src/Counter.tsrx:2:3: warning eslint(no-debugger) `debugger` statement is not allowed
+Found 0 error(s) and 1 warning(s).
+```
+
+You keep the `plugins: ["react", "typescript", "oxc"]` list and every `rules`
+entry. Those are native Oxlint rule sets and they work. Only the JavaScript
+plugin host and the type-aware lane are unavailable.
+
+### `oxlint` and `oxfmt` on the command line belong to Vite+ here
+
+In a Vite+ project, `node_modules/.bin/oxlint` is Vite+'s own wrapper, not this
+package's, and it refuses to lint:
+
+```text
+$ pnpm exec oxlint src/Counter.tsrx
+This oxlint wrapper is for IDE extension use only (--lsp mode).
+To lint your code, run: vp lint
+```
+
+That is Vite+ telling you to go through `vp`, and it is correct. Use `vp lint`
+and `vp fmt` in a Vite+ project. The direct `oxlint` and `oxfmt` commands
+described elsewhere in these docs are for projects that do not use Vite+.
+
 `status` is about these facades and nothing else, which matters if you read it
 before running `setup` or in a project that does not use Vite+ at all:
 
 ```text
-$ npx oxc-tsrx status
+$ pnpm exec oxc-tsrx status
 oxc-tsrx 0.1.0 compatibility (npm)
 - oxc-parser: missing
 - oxlint: missing
@@ -57,7 +153,7 @@ oxc-tsrx 0.1.0 compatibility (npm)
 Three `missing` lines with exit code 0 mean the facades are not installed. On
 this page that is the state `setup` is about to change. Anywhere else it is the
 correct, healthy state and there is nothing to fix. To confirm that TSRX support
-itself is wired up, run `npx oxc-tsrx providers` and look for
+itself is wired up, run `oxc-tsrx providers` and look for
 `routed extensions: .tsrx -> oxc-tsrx`.
 
 **This step is permanent.** It is not a shim waiting to be deleted, and it is

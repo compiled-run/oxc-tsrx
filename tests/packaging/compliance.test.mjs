@@ -182,6 +182,7 @@ test("native npm artifact ships the exact legal tree and independent-project not
     (
       await run(process.execPath, [
         "scripts/package-native.mjs",
+        "--allow-missing-parser-addon",
         "--target",
         hostTarget(),
         "--bin-dir",

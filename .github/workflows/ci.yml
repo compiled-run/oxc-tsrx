@@ -112,6 +112,10 @@ jobs:
         run: |
           pnpm test
           pnpm run test:packaging:unit
+          # The parser addon's own suite. It packs and installs the real
+          # tarballs, so it is the only lane that would have caught 0.1.0
+          # shipping every native package without parser.node.
+          pnpm run test:parser-api
 
   install-arbitration:
     # The install-only route reaches a released host through `node_modules/.bin`,

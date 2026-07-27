@@ -12,13 +12,10 @@ const escapeHtml = (text) =>
     .replaceAll("'", '&#39;')
 const validRuleName = (rule) => typeof rule === 'string' && /^[\w@/-]+$/u.test(rule)
 
-// The "Type error" example: a self-contained snippet plus the real
-// --type-check report for it, from docs/type-error-example.json. The type lane
-// needs tsgolint, which the in-browser wasm engine cannot host, so there the
-// example replays this committed report instead of going silently dead.
-// Carrying its own snippet (rather than patching whatever source the page
-// shows) is what keeps it working on both the hero and the playground.
-// Fetched on click, so the budgeted home page pays nothing for it at load.
+// Self-contained snippet plus its real --type-aware report, from
+// docs/type-error-example.json. tsgolint cannot run in the browser, so the
+// wasm build replays the committed report rather than going silently dead.
+// Fetched on click: the budgeted home page pays nothing for it at load.
 const typeExampleUrl = new URL('../type-error-example.json', import.meta.url)
 let typeExamplePromise = null
 const loadTypeExample = () =>
@@ -135,9 +132,8 @@ export async function initDemo(panel) {
   const shareButton = panel.querySelector('#demo-share')
   const sidePanel = document.getElementById('pg-side')
   const original = pre.textContent
-  // A committed report standing in for a result the live engine cannot
-  // produce. Applies only to the exact source it was generated from, so any
-  // edit falls straight back to the engine.
+  // A committed report standing in for what the live engine cannot produce.
+  // Bound to the exact source it came from, so any edit re-runs the engine.
   let pinnedReport = null
 
   if (wasmMode) {
@@ -638,7 +634,7 @@ export async function initDemo(panel) {
             const bits = [`${result.parseCount} canonical parse`]
             if (result.ruleCount) bits.push(`${result.ruleCount} rules`)
             bits.push(result.typeAware ? 'type-aware' : 'diagnostics on original bytes')
-            if (result.pregenerated) bits.push('--type-check', 'pre-generated report')
+            if (result.pregenerated) bits.push('--type-aware', 'pre-generated report')
             else if (engineState.typeCheck) bits.push('--type-check')
             else if (engineState.typeAware) bits.push('--type-aware')
             if (engineState.config) bits.push('--config')
@@ -1223,15 +1219,13 @@ export async function initDemo(panel) {
       autoFormat: true,
     },
     types: {
-      // Not derived from `original`: the hero snippet has no task.label to
-      // patch, and references components it never declares, so type-checking
-      // it buries the real error under "Cannot find name".
+      // Carries its own snippet: the hero's references undeclared components,
+      // which would bury the finding under "Cannot find name". --type-aware,
+      // not --type-check, so this shows a tsgolint rule and not the compiler
+      // errors an editor already reports.
       typeLane: true,
-      state: { typeAware: true, typeCheck: true },
-      note: 'task.titel is a typo. Ran with --type-check: the real TypeScript compiler flags it.',
-      // Shown when the live engine has no type lane (the published wasm build).
-      pregeneratedNote:
-        'task.titel is a typo. tsgolint cannot run in the browser, so this is the real --type-check report, replayed from the build.',
+      state: { typeAware: true },
+      // note / pregeneratedNote travel with the fetched example.
     },
     silence: {
       make: lintVariant,
@@ -1278,12 +1272,13 @@ export async function initDemo(panel) {
           return
         }
         source = example.tsrx
+        note = example.note
         if (health.typeAware) {
           Object.assign(engineState, scenario.state)
         } else {
-          // No live type lane here. Replay the committed real report so the
-          // example still shows the underline it promises.
-          note = scenario.pregeneratedNote
+          // No live type lane: replay the committed report so the example
+          // still shows the underline it promises.
+          note = example.pregeneratedNote
           pinnedReport = {
             source: example.tsrx,
             result: {

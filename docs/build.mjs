@@ -19,7 +19,7 @@ import {
 } from './benchmarks-data.mjs'
 import { getDocsHighlighter, highlightWith } from './highlight.mjs'
 import config from './site.config.mjs'
-import { heroCode, playgroundCode, typeErrorCode } from './demo-sources.mjs'
+import { heroCode, playgroundCode, typeAwareCode } from './demo-sources.mjs'
 
 const docsDir = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(docsDir, '..')
@@ -1163,6 +1163,18 @@ const PM_INSTALL_VARIANTS = [
     bun: 'bun add',
   },
 ]
+
+// A pm-install block may carry follow-up `npx` lines, and those have to move to
+// the reader's package manager too. `npx` is not a universal runner: a project
+// scaffolded by `vp create` declares devEngines.packageManager, and npm exits
+// with EBADDEVENGINES when that block names someone else. Leaving `npx` in the
+// pnpm tab hands pnpm users a command that cannot run.
+const PM_EXEC_PREFIXES = {
+  npm: 'npx',
+  pnpm: 'pnpm exec',
+  yarn: 'yarn',
+  bun: 'bunx',
+}
 const PM_INSTALL_PATTERN = /<!-- pm-install -->\r?\n```sh\r?\n([\s\S]*?)\r?\n```/g
 
 function pmInstallTabsHtml(npmCommand, groupId) {
@@ -1184,7 +1196,11 @@ function pmInstallTabsHtml(npmCommand, groupId) {
   const panels = managers
     .map((pm, index) => {
       const command =
-        pm === 'npm' ? npmCommand : npmCommand.replace(PM_INSTALL_PREFIXES.npm, PM_INSTALL_PREFIXES[pm])
+        pm === 'npm'
+          ? npmCommand
+          : npmCommand
+              .replace(PM_INSTALL_PREFIXES.npm, PM_INSTALL_PREFIXES[pm])
+              .replace(/^npx(?= )/gm, PM_EXEC_PREFIXES[pm])
       return `<div role="tabpanel" id="pm-panel-${groupId}-${pm}" aria-labelledby="pm-tab-${groupId}-${pm}" data-pm="${pm}"${index === 0 ? '' : ' hidden'}><div class="code-block" data-lang="sh">${highlightHtml(command, 'sh')}</div></div>`
     })
     .join('')
@@ -1345,7 +1361,7 @@ function renderDocPage({ page, article, headings, pageIndex, flat }) {
 // The demo snippets live in docs/demo-sources.mjs so the clickable examples
 // that derive variants from them cannot drift out of sync.
 
-// Pre-generated real --type-check output for the "Type error" example. The
+// Pre-generated real --type-aware output for the "Type-aware lint" example. The
 // browser wasm engine cannot host tsgolint, so the published site replays this
 // committed report instead of leaving the example dead. It ships as its own
 // asset, fetched only when the example is clicked, because the home page is
@@ -1356,13 +1372,15 @@ const typeErrorExample = JSON.parse(
 // The report's byte offsets only line up with the snippet it was generated
 // from, so a snippet edit without a regenerate would underline the wrong
 // bytes. Fail the build instead of shipping that.
-if (typeErrorExample.tsrx !== typeErrorCode) {
+if (typeErrorExample.tsrx !== typeAwareCode) {
   throw new Error(
     'docs/type-error-example.json is stale: the demo snippet changed. Re-run node docs/generate-type-error.mjs',
   )
 }
 const typeErrorAsset = JSON.stringify({
   tsrx: typeErrorExample.tsrx,
+  note: typeErrorExample.note,
+  pregeneratedNote: typeErrorExample.pregeneratedNote,
   ruleCount: typeErrorExample.ruleCount,
   parseCount: typeErrorExample.parseCount,
   diagnostics: typeErrorExample.diagnostics,
@@ -1396,7 +1414,7 @@ async function renderHomePage({ description }) {
           <button type="button" class="demo-button" id="pg-scenario-clean">Clean</button>
           <button type="button" class="demo-button" id="pg-scenario-lint">Lint findings</button>
           <button type="button" class="demo-button" id="pg-scenario-messy">Messy → Format</button>
-          <button type="button" class="demo-button" id="pg-scenario-types">Type error</button>
+          <button type="button" class="demo-button" id="pg-scenario-types">Type-aware lint</button>
         </span>
       </div>
       <div class="code-panel-editor" id="demo-editor">
@@ -1467,7 +1485,7 @@ function renderPlaygroundPage() {
         <button type="button" class="demo-button" id="pg-scenario-clean">Clean</button>
         <button type="button" class="demo-button" id="pg-scenario-lint">Lint findings</button>
         <button type="button" class="demo-button" id="pg-scenario-messy">Messy → Format</button>
-        <button type="button" class="demo-button" id="pg-scenario-types">Type error</button>
+        <button type="button" class="demo-button" id="pg-scenario-types">Type-aware lint</button>
         <button type="button" class="demo-button" id="pg-scenario-silence">Silence a rule</button>
         <button type="button" class="demo-button" id="pg-scenario-config">Custom config</button>
       </div>

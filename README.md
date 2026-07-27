@@ -76,7 +76,7 @@ a clean project on darwin-arm64:
 | --- | --- | --- |
 | Command line (`oxlint`, `oxfmt`) | 1 | `npm install --save-dev oxc-tsrx` |
 | Editor, through released `oxc.oxc-vscode` | 1 | the same install, and nothing else |
-| Vite+ (`vp lint`, `vp fmt`) | 2 | the same install, then `npx oxc-tsrx setup` |
+| Vite+ (`vp lint`, `vp fmt`) | 2 | the same install, then `oxc-tsrx setup` |
 
 The Vite+ second step repeats after every clean dependency install. No row asks
 for a config file, an ignore file, or a lifecycle script.
@@ -171,17 +171,22 @@ diagnostics that refresh on unsaved edits, formatting, and applied native quick
 fixes, while ordinary TypeScript stays on canonical Oxlint. Measured on
 darwin-arm64 in a real editor session.
 
-**`npx oxc-tsrx setup` is only for Vite+.** Vite+ resolves the *package* name
+**`oxc-tsrx setup` is only for Vite+.** Vite+ resolves the *package* name
 `oxlint`, not a command, and a bin cannot satisfy that. This project cannot
 legitimately publish a package under that name, so Vite+ users install normally
 and then run one explicit command:
 
 ```sh
-npm install --save-dev vite-plus oxc-tsrx
-npx oxc-tsrx setup
+pnpm add -D vite-plus oxc-tsrx
+pnpm exec oxc-tsrx setup
 ```
 
-`setup` is explicit, idempotent, reversible with `npx oxc-tsrx remove`, and
+Run both lines with your own package manager. `npx` is right only when npm *is*
+your package manager, because `vp create` writes a `devEngines.packageManager`
+block and npm exits with `EBADDEVENGINES` in a project that names a different
+one. Any modern package manager version works; Corepack is not required.
+
+`setup` is explicit, idempotent, reversible with `oxc-tsrx remove`, and
 never edits `package.json`. Because `node_modules` is disposable, run it again
 after a clean dependency install. This one command is a real limitation of the
 Vite+ path, and it is the only place an install alone is not enough.
@@ -346,7 +351,7 @@ plugin.
 
 Vite+ is the one integration an install alone cannot serve. Released Vite+
 resolves its lint and format tools by literal *package* name and reads no
-`oxc.provider` metadata, so `npx oxc-tsrx setup` creates exact, reversible
+`oxc.provider` metadata, so `oxc-tsrx setup` creates exact, reversible
 project-local facades for its current `oxlint` and `oxfmt` resolvers. Vite+ then
 routes ordinary files to canonical Oxlint/Oxfmt and `.tsrx` to the native Rust
 commands. Rerun `setup` after a clean dependency install, because `node_modules`

@@ -124,10 +124,29 @@ test("launch manifest names every byte set and keeps external actions approval-g
   assert.match(workflow, /actions\/upload-artifact@[0-9a-f]{40}/u);
   assert.match(workflow, /name: oxc-tsrx-docs-\$\{\{ github\.sha \}\}/u);
   assert.match(workflow, /path: docs\/dist/u);
-  assert.doesNotMatch(workflow, /^\s+push:/mu);
+  // The website now deploys from the same run that proved the artifact, so a
+  // blanket ban on deployment no longer describes this workflow. What still has
+  // to hold is where the credential may live and what gates it.
+  const [buildJob, deployJob] = workflow.split(/^  deploy:$/mu);
+  assert.ok(deployJob, "the website workflow must still have a separate deploy job");
+
+  // The build job runs the whole dependency graph: pnpm postinstalls, cargo, and
+  // every docs script. The deploy credential must never be in that runner.
+  assert.doesNotMatch(buildJob, /VERCEL_TOKEN|vercel deploy/iu);
+
+  // Deployment stays behind a GitHub environment, which is where the approval
+  // and the credential are configured.
+  assert.match(deployJob, /environment:\n\s+name: production/u);
+  assert.match(deployJob, /VERCEL_TOKEN: \$\{\{ secrets\.VERCEL_TOKEN \}\}/u);
+  // It only ever ships bytes the build job already proved, never a fresh build.
+  assert.match(deployJob, /actions\/download-artifact@[0-9a-f]{40}/u);
+  assert.doesNotMatch(deployJob, /actions\/checkout|pnpm run docs:build/u);
+
+  // GitHub Pages was never the target, and no workflow publishes packages or
+  // posts the announcement.
   assert.doesNotMatch(
     workflow,
-    /configure-pages|upload-pages-artifact|deploy-pages|github-pages|VERCEL_TOKEN|vercel deploy/iu,
+    /configure-pages|upload-pages-artifact|deploy-pages|github-pages/iu,
   );
   assert.doesNotMatch(workflow, /npm publish|vsce publish|git push|curl .*social/iu);
 });

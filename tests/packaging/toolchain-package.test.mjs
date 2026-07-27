@@ -245,7 +245,7 @@ test("an isolated consumer resolves every public export and bin from the package
         name: "clean-oxc-tsrx-consumer",
         private: true,
         type: "module",
-        devDependencies: { "oxc-tsrx": "0.1.0" },
+        devDependencies: { "oxc-tsrx": "0.1.1" },
       }, null, 2)}\n`,
     );
 
@@ -516,7 +516,7 @@ test("the canonical command names arbitrate from the project manifest alone", as
   try {
     // Nothing declared: the launcher keeps the name, which is the only reason a
     // plain install reaches a released host at all.
-    const plain = await project("plain", { "oxc-tsrx": "0.1.0" });
+    const plain = await project("plain", { "oxc-tsrx": "0.1.1" });
     assert.deepEqual(await decideCanonicalCommand("oxlint", { cwd: plain }), {
       command: "oxlint",
       owner: "oxc-tsrx",
@@ -527,13 +527,13 @@ test("the canonical command names arbitrate from the project manifest alone", as
     // A transitive official package is not a statement about the command name,
     // so an installed-but-undeclared `oxlint` changes nothing. This is the case
     // every Vite+ project is in.
-    const transitive = await project("transitive", { "oxc-tsrx": "0.1.0" }, { oxlint: officialOxlint });
+    const transitive = await project("transitive", { "oxc-tsrx": "0.1.1" }, { oxlint: officialOxlint });
     assert.equal((await decideCanonicalCommand("oxlint", { cwd: transitive })).owner, "oxc-tsrx");
 
     // A direct declaration is such a statement, and it wins outright.
     const pinned = await project(
       "pinned",
-      { "oxc-tsrx": "0.1.0", oxlint: "1.72.0" },
+      { "oxc-tsrx": "0.1.1", oxlint: "1.72.0" },
       { oxlint: officialOxlint },
     );
     const deferred = await decideCanonicalCommand("oxlint", { cwd: pinned });
@@ -554,7 +554,7 @@ test("the canonical command names arbitrate from the project manifest alone", as
     // nearest project root, so a nested directory inherits it.
     const development = await project(
       "development",
-      { "oxc-tsrx": "0.1.0" },
+      { "oxc-tsrx": "0.1.1" },
       { oxlint: officialOxlint },
     );
     const developmentManifest = JSON.parse(
@@ -574,17 +574,17 @@ test("the canonical command names arbitrate from the project manifest alone", as
     // Deferring to it would re-enter this launcher without bound, so it does not.
     const bridged = await project(
       "bridged",
-      { "oxc-tsrx": "0.1.0", oxlint: "1.72.0" },
+      { "oxc-tsrx": "0.1.1", oxlint: "1.72.0" },
       {
         oxlint: {
           manifest: {
             name: "oxlint",
-            version: "0.1.0",
+            version: "0.1.1",
             bin: { oxlint: "./bin/oxlint" },
             oxcTsrxCompatibility: {
               schemaVersion: 1,
               provider: "oxc-tsrx",
-              providerVersion: "0.1.0",
+              providerVersion: "0.1.1",
               capability: "lint",
             },
           },
@@ -599,7 +599,7 @@ test("the canonical command names arbitrate from the project manifest alone", as
     // Genuinely ambiguous: the project named a package that is not there. There
     // is no safe guess, so it refuses instead of quietly linting with the wrong
     // tool.
-    const missing = await project("missing", { "oxc-tsrx": "0.1.0", oxfmt: "0.44.0" });
+    const missing = await project("missing", { "oxc-tsrx": "0.1.1", oxfmt: "0.44.0" });
     await assert.rejects(
       () => decideCanonicalCommand("oxfmt", { cwd: missing }),
       /declares the official oxfmt package in dependencies.*not installed/su,

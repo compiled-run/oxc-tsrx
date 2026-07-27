@@ -1,6 +1,6 @@
 {
   "name": "oxc-for-tsrx",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Rust-native Oxlint and Oxfmt integration for TSRX",
   "private": true,
   "keywords": [
@@ -24,14 +24,14 @@
   "scripts": {
     "build:native": "node scripts/build-native.mjs",
     "build:parser-native": "node scripts/build-parser-native.mjs",
-    "test": "node --test tests/native-lint.test.mjs tests/native-control-lint.test.mjs tests/native-format.test.mjs tests/native-control-format.test.mjs tests/config/native-lint-config.test.mjs tests/config/native-format-config.test.mjs tests/vite/package-seam.test.mjs tests/vite/framework-chain.test.mjs tests/vite/vite-plus-commands.test.mjs tests/type-aware/type-aware.test.mjs tests/editor/lsp.test.mjs tests/editor/demo-workspace.test.mjs tests/editor/package.test.mjs tests/editor/provider-client.test.mjs tests/plugins/parser-integrations.test.mjs",
+    "test": "node --test tests/native-lint.test.mjs tests/native-control-lint.test.mjs tests/native-format.test.mjs tests/native-control-format.test.mjs tests/config/native-lint-config.test.mjs tests/config/native-format-config.test.mjs tests/vite/package-seam.test.mjs tests/vite/framework-chain.test.mjs tests/vite/vite-plus-commands.test.mjs tests/type-aware/type-aware.test.mjs tests/editor/lsp.test.mjs tests/editor/demo-workspace.test.mjs tests/editor/package.test.mjs tests/editor/provider-client.test.mjs tests/plugins/parser-integrations.test.mjs tests/plugins/custom-js-plugins-doc.test.mjs",
     "test:config": "node --test tests/config/native-lint-config.test.mjs tests/config/native-format-config.test.mjs",
     "test:native-format": "node --test tests/native-format.test.mjs",
     "test:native-lint": "node --test tests/native-lint.test.mjs",
     "test:vite": "node --test tests/vite/package-seam.test.mjs tests/vite/framework-chain.test.mjs tests/vite/vite-plus-commands.test.mjs",
     "test:type-aware": "node --test tests/type-aware/type-aware.test.mjs",
     "test:editor": "node --test tests/editor/lsp.test.mjs tests/editor/demo-workspace.test.mjs tests/editor/package.test.mjs tests/editor/provider-client.test.mjs",
-    "test:plugins": "node --test tests/plugins/parser-integrations.test.mjs",
+    "test:plugins": "node --test tests/plugins/parser-integrations.test.mjs tests/plugins/custom-js-plugins-doc.test.mjs",
     "test:editor:vscode": "node tests/editor/vscode-run.mjs",
     "test:editor:js-plugins": "node tests/editor/official-oxc-js-plugins-run.mjs",
     "test:editor:official-toolchain": "node tests/editor/official-oxc-toolchain-run.mjs",
@@ -70,7 +70,8 @@
     "benchmark:native-lint": "cargo run --release --locked -p oxc_tsrx_benchmark -- --assert benchmarks/native-lint/budgets.json",
     "benchmark:type-aware": "node benchmarks/type-aware/run.mjs",
     "benchmark:editor": "node benchmarks/editor/run.mjs",
-    "benchmark:comparative": "node benchmarks/comparative/run.mjs --assert"
+    "benchmark:comparative": "node benchmarks/comparative/run.mjs --assert",
+    "test:parser-api": "node --test tests/parser-api/bulk-transfer.test.mjs tests/parser-api/bundle-safety.test.mjs tests/parser-api/host-product.test.mjs tests/parser-api/loader-integrity.test.mjs tests/parser-api/stack-safety.test.mjs tests/parser-api/utf16-lazy.test.mjs"
   },
   "devDependencies": {
     "@napi-rs/cli": "^3.7.3",

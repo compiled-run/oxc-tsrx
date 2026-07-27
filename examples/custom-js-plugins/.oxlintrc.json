@@ -1,0 +1,6 @@
+{
+  "jsPlugins": ["./oxlint-demo-plugin.mjs"],
+  "rules": {
+    "tsrx-demo/require-keyed-map": "error"
+  }
+}

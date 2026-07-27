@@ -259,6 +259,7 @@ async function installArtifacts(artifacts, environment) {
     process.execPath,
     [
       "scripts/package-native.mjs",
+      "--allow-missing-parser-addon",
       "--target",
       hostTarget(),
       "--bin-dir",
@@ -284,7 +285,7 @@ async function exerciseLane(lane, artifacts, environment) {
       type: "module",
       dependencies: {
         "@tsrx/vite-plugin-react": "0.0.72",
-        "oxc-tsrx": "0.1.0",
+        "oxc-tsrx": "0.1.1",
         react: "19.2.7",
         "react-dom": "19.2.7",
         "vite-plus": lane.vitePlusVersion,

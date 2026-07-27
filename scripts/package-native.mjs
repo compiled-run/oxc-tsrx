@@ -35,9 +35,13 @@ const tools = [
 ];
 
 function parseArguments(argv) {
-  const options = {};
+  const options = { "allow-missing-parser-addon": false };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
+    if (argument === "--allow-missing-parser-addon") {
+      options["allow-missing-parser-addon"] = true;
+      continue;
+    }
     if (!["--target", "--bin-dir", "--out-dir", "--parser-addon"].includes(argument)) {
       throw new Error(`unsupported option: ${argument}`);
     }
@@ -47,6 +51,19 @@ function parseArguments(argv) {
   }
   for (const name of ["target", "bin-dir", "out-dir"]) {
     if (!options[name]) throw new Error(`--${name} is required`);
+  }
+  // 0.1.0 shipped every native package without parser.node because this was
+  // optional and the release never passed it. npm honoured the generated
+  // `files` list, dropped the addon from the tarball, and `oxc-tsrx/parser`
+  // then failed ERR_TSRX_NATIVE_INTEGRITY on every consumer machine. A package
+  // missing the addon is not installable, so refuse to build one by default.
+  if (!options["parser-addon"] && !options["allow-missing-parser-addon"]) {
+    throw new Error(
+      "--parser-addon is required: a native package without parser.node fails " +
+        "the loader's integrity check on every consumer. Pass " +
+        "--allow-missing-parser-addon only for local binary-only experiments, " +
+        "never for anything published.",
+    );
   }
   return options;
 }

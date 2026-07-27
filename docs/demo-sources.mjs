@@ -1,7 +1,7 @@
 // The canonical TSRX snippets the demo surfaces use. They live here, in one
 // module, because the clickable examples derive variants from them by string
 // replacement: when a snippet and its anchor drift apart the derived variant
-// silently becomes a no-op, which is exactly how the hero's "Type error"
+// silently becomes a no-op, which is exactly how the hero's "Type-aware lint"
 // example went dead. The assertions below turn that drift into a build error.
 
 // Real TSRX hero snippet, highlighted with the actual TSRX grammar. This is
@@ -49,19 +49,36 @@ export function TaskList({ tasks }: { tasks: Task[] }) @{
   </section>;
 }`
 
-// The "Type error" example. It has to be the self-contained snippet rather
-// than the hero one: the hero references Props/TaskRow/AllDone/SignIn without
-// declaring them, so type-checking it buries the interesting error under five
-// "Cannot find name" ones. Here the typo is the only thing TypeScript can
-// complain about.
-const TYPE_ERROR_ANCHOR = '{task.label}'
-const TYPE_ERROR_TYPO = '{task.titel}'
-if (!playgroundCode.includes(TYPE_ERROR_ANCHOR)) {
-  throw new Error(
-    `demo-sources: playgroundCode no longer contains ${TYPE_ERROR_ANCHOR}, so the "Type error" example would load unmodified source`,
-  )
+// The "Type-aware lint" example. The point is a finding only tsgolint can
+// reach: oxlint alone sees `saveTask(task);` as an ordinary call, and only
+// type information reveals it returns a Promise nobody awaits. A plain
+// compiler error (a misspelled property, say) would prove nothing here, since
+// any editor's TypeScript server already reports those.
+//
+// Self-contained on purpose: it declares its own Task and saveTask so the run
+// produces this one finding instead of a pile of "Cannot find name".
+export const typeAwareCode = `type Task = { id: string; label: string; done: boolean };
+
+async function saveTask(task: Task): Promise<void> {
+  await Promise.resolve(task.id);
 }
-export const typeErrorCode = playgroundCode.replace(TYPE_ERROR_ANCHOR, TYPE_ERROR_TYPO)
+
+export function TaskRow({ task }: { task: Task }) @{
+  function toggle() {
+    saveTask(task);
+  }
+
+  <li>
+    <button onClick={toggle}>{task.label}</button>
+  </li>;
+}`
+
+// The unawaited call is the whole example; without it the run comes back clean
+// and the chip goes quiet again.
+export const TYPE_AWARE_ANCHOR = 'saveTask(task);'
+if (!typeAwareCode.includes(TYPE_AWARE_ANCHOR)) {
+  throw new Error('demo-sources: typeAwareCode no longer contains the unawaited call')
+}
 
 // The lint scenario's anchor lives in both snippets; assert it so the shared
 // "Lint findings" and "Custom config" examples cannot go quiet either.
