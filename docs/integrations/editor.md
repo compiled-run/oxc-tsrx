@@ -163,7 +163,10 @@ nothing extra:
 
 Open a `.tsrx` file and your rule is a squiggle, next to the built-in Rust ones.
 The [custom JavaScript plugins guide](/integrations/custom-js-plugins) is the
-tutorial; this section is only what is different inside an editor.
+tutorial; this section is only what is different inside an editor. If you are
+starting from a `vp create` scaffold, its
+[walkthrough](/integrations/custom-js-plugins#the-whole-path-on-a-fresh-vite-project)
+is the complete sequence, `setup` included.
 
 ### It costs one extra parse per linted file
 

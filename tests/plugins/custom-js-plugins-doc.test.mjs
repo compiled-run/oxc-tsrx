@@ -10,8 +10,9 @@ import { cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/pr
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import test from "node:test";
+import { LspClient, pathToFileUri } from "../editor/lsp-client.mjs";
 
 const require = createRequire(import.meta.url);
 const root = resolve(import.meta.dirname, "../..");
@@ -177,19 +178,87 @@ test("every terminal-demo marker on the page resolves to a captured transcript",
   }
 });
 
-test("every file the page tells you to save matches examples/custom-js-plugins", async () => {
+// The page carries two sample projects: the plain one at the top, mirrored by
+// examples/custom-js-plugins, and the `vp create` walkthrough, mirrored by
+// examples/custom-js-plugins/vite-plus. Both use the same "Save this as" wording
+// and both name a `.oxlintrc.json`, so a name alone cannot say which directory
+// it belongs to. The walkthrough's heading is the boundary.
+const WALKTHROUGH_HEADING = "## The whole path, on a fresh Vite+ project";
+const walkthroughStart = page.indexOf(WALKTHROUGH_HEADING);
+const walkthroughEnd = page.indexOf("\n## ", walkthroughStart + 1);
+
+test("the page still carries the fresh-scaffold walkthrough", () => {
+  assert.ok(walkthroughStart >= 0, `the page lost its "${WALKTHROUGH_HEADING}" section`);
+  assert.ok(walkthroughEnd > walkthroughStart, "the walkthrough section never ends");
+  const section = page.slice(walkthroughStart, walkthroughEnd);
+  // The five facts that make this route work rather than nearly work. Each one
+  // was measured on a scaffold, and each was wrong on this page at some point.
+  assert.match(section, /tsconfig\.app\.json/u, "the walkthrough stopped naming the app tsconfig");
+  assert.match(
+    section,
+    /solution-style/u,
+    "the walkthrough no longer warns that the root tsconfig is inert",
+  );
+  assert.match(
+    section,
+    /@tsrx\/typescript-plugin/u,
+    "the walkthrough stopped naming the TSRX toolchain package setup will not install",
+  );
+  assert.match(
+    section,
+    /vite\.config\.ts/u,
+    "the walkthrough stopped saying where vp lint reads its configuration",
+  );
+  assert.match(
+    section,
+    /No `overrides` block was needed/u,
+    "the walkthrough stopped answering the overrides question it was written to settle",
+  );
+});
+
+test("every file the page tells you to save matches its examples directory", async () => {
   // Tolerate the sentence wrapping across lines. A single-line-only pattern
   // silently drops coverage for any instruction that reflows.
-  const instructions = [...page.matchAll(/Save\s+this\s+as\s+`([^`]+)`:\r?\n\r?\n```/g)];
+  const instructions = [...page.matchAll(/[Ss]ave\s+this\s+as\s+`([^`]+)`:\r?\n\r?\n```/g)];
   assert.ok(instructions.length >= 7, "the page stopped telling readers to save files");
+  let walkthroughInstructions = 0;
   for (const instruction of instructions) {
     const name = instruction[1];
+    const inWalkthrough =
+      instruction.index > walkthroughStart && instruction.index < walkthroughEnd;
+    if (inWalkthrough) walkthroughInstructions += 1;
+    const directory = inWalkthrough ? join(examples, "vite-plus") : examples;
     const fence = fences(page).find((entry) => entry.index > instruction.index);
-    const expected = await readFile(join(examples, name), "utf8");
+    const expected = await readFile(join(directory, name), "utf8");
     assert.equal(
       fence.body,
       expected,
-      `the fence for ${name} differs from examples/custom-js-plugins/${name}`,
+      `the fence for ${name} differs from ${relative(root, join(directory, name))}`,
+    );
+  }
+  assert.ok(
+    walkthroughInstructions >= 4,
+    "the walkthrough stopped printing the files it tells you to write",
+  );
+});
+
+// This page told readers twice that a plugin declared in the root tsconfig would
+// work, and once that TypeScript 6 hangs the language service. The first was
+// wrong, the second did not reproduce, and both were published from memory. The
+// wording below is the retracted claim, kept here so it cannot come back.
+test("no page reintroduces the retracted TypeScript 6 failure claim", async () => {
+  for (const path of [
+    pagePath,
+    editorPagePath,
+    join(root, "docs/integrations/vite-plus.md"),
+    join(root, "docs/guide/getting-started.md"),
+    join(root, "docs/reference/limitations.md"),
+  ]) {
+    const text = await readFile(path, "utf8");
+    assert.doesNotMatch(
+      text,
+      /hangs? silently on TypeScript 6/u,
+      `${path} reintroduced the retracted TypeScript 6 failure claim`,
     );
   }
 });
@@ -200,8 +269,29 @@ test("the page prints no hand-typed terminal output", () => {
       (match) => match.index + match[0].length,
     ),
   );
+  // Not every command a reader types can be captured here. `vp create` needs
+  // Vite+ and the network, so the walkthrough's first step is typed rather than
+  // recorded. That is allowed only behind an explicit marker, and only for a
+  // fence that is commands and nothing else: the moment a line looks like a
+  // program's answer, it is output nobody ran and the guard fails.
+  const typedCommands = new Set(
+    [...page.matchAll(/<!-- typed-commands -->\r?\n```sh\r?\n/g)].map(
+      (match) => match.index + match[0].length,
+    ),
+  );
   for (const fence of fences(page)) {
     if (fence.lang === "sh") {
+      if (typedCommands.has(fence.bodyIndex)) {
+        for (const line of fence.body.split("\n")) {
+          if (line.trim() === "" || line.startsWith("#")) continue;
+          assert.match(
+            line,
+            /^(vp|cd|npm|npx|node|pnpm|yarn|bun) /u,
+            `a typed-commands fence line is not a command:\n${line}`,
+          );
+        }
+        continue;
+      }
       assert.ok(
         pmInstall.has(fence.bodyIndex),
         `a shell fence on the page is not an install block:\n${fence.body}`,
@@ -325,6 +415,130 @@ test("the pages that describe the .tsrx lint boundary no longer wall off plugins
       /jsPluginsOnTsrx|extra parse|once more/u,
       `${path} describes the lane without its cost`,
     );
+  }
+});
+
+// The walkthrough exists because two instructions on this page were published
+// from memory and were wrong. So its project is built from the files the page
+// prints and driven on both surfaces it promises: the command line, and the
+// `--lsp` mode the official OXC extension speaks. A position that disagrees
+// between the two is the failure this catches.
+async function makeWalkthroughProject() {
+  const project = await mkdtemp(join(tmpdir(), "oxc-tsrx-walkthrough-doc-"));
+  await cp(join(examples, "vite-plus"), project, { recursive: true });
+  // vite.config.ts is the `vp lint` half. It needs Vite+ to run, which this
+  // suite does not install, so it ships as a printed file and is checked for
+  // byte equality with the page above rather than executed here.
+  await rm(join(project, "vite.config.ts"));
+  // Provider discovery walks up looking for a package.json, and the language
+  // server needs it to find this package at all. A scaffold always has one.
+  await writeFile(
+    join(project, "package.json"),
+    `${JSON.stringify(
+      { name: "my-app", private: true, type: "module", devDependencies: { "oxc-tsrx": "^0.1.3" } },
+      null,
+      2,
+    )}\n`,
+  );
+  await mkdir(join(project, "node_modules"), { recursive: true });
+  await symlink(toolchain, join(project, "node_modules/oxc-tsrx"), "dir");
+  return project;
+}
+
+test("the fresh-scaffold walkthrough reports on both file types, at the printed positions", async (t) => {
+  if (!existsSync(binary)) {
+    assert.fail(
+      `missing ${binary}. Build it with: cargo build --release --locked -p oxc_tsrx_cli --bins`,
+    );
+  }
+  const project = await makeWalkthroughProject();
+  // The page prints these two positions in prose, so they are the contract.
+  const tsrx = { file: "src/Greeting.tsrx", line: 5, column: 9 };
+  const tsx = { file: "src/Panel.tsx", line: 2, column: 19 };
+  try {
+    await t.test("one command, one top-level jsPlugins, both halves", async () => {
+      const result = await oxlint(project, ["src"]);
+      assert.equal(result.code, 0, result.stdout + result.stderr);
+      for (const { file, line, column } of [tsrx, tsx]) {
+        assert.match(
+          result.stdout + result.stderr,
+          diagnosticPattern(composedReporter, {
+            file,
+            line,
+            column,
+            severity: "warning",
+            code: "house-rules(no-inline-style-object)",
+          }),
+          `${file} did not report at ${line}:${column}\n${result.stdout}${result.stderr}`,
+        );
+      }
+      assert.match(
+        result.stderr,
+        /^oxlint \(oxc-tsrx\): running JS plugins on 1 \.tsrx file\(s\)/mu,
+        `expected the extra-parse disclosure on stderr, got:\n${result.stderr}`,
+      );
+    });
+
+    await t.test("the same rule, at the same position, from the language server", async () => {
+      const source = await readFile(join(project, tsrx.file), "utf8");
+      const uri = pathToFileUri(join(project, tsrx.file));
+      const client = new LspClient(process.execPath, {
+        args: [companion, "--lsp"],
+        cwd: project,
+        // In a reader's project both of these are the installed native package.
+        // This repository builds it, so the two source-development overrides
+        // point the multiplexer's lint and server halves at that build.
+        env: { ...process.env, OXC_TSRX_LINT_BIN: binary, OXC_TSRX_LSP_BIN: binary },
+      });
+      try {
+        await client.initialize(pathToFileUri(project));
+        client.notify("textDocument/didOpen", {
+          textDocument: { uri, languageId: "typescriptreact", version: 1, text: source },
+        });
+        const published = await client.waitFor(
+          (message) =>
+            message.method === "textDocument/publishDiagnostics" &&
+            message.params.uri === uri &&
+            message.params.diagnostics.some((diagnostic) =>
+              String(diagnostic.code ?? "").startsWith("house-rules("),
+            ),
+          30000,
+          "the editor's house-rules diagnostic",
+        );
+        const mine = published.params.diagnostics.filter((diagnostic) =>
+          String(diagnostic.code ?? "").startsWith("house-rules("),
+        );
+        assert.equal(mine.length, 1, JSON.stringify(published.params.diagnostics, null, 2));
+        assert.deepEqual(
+          mine[0].range.start,
+          { line: tsrx.line - 1, character: tsrx.column - 1 },
+          "the editor and the command line disagree about where the rule fired",
+        );
+        await client.close();
+      } finally {
+        client.terminate();
+      }
+    });
+
+    await t.test("the template's typeAware default is what refuses, and it says so", async () => {
+      // The page blames `lint.options` in vite.config.ts for `vp lint` exiting 2.
+      // The same option in a plain config reaches the same refusal, which is the
+      // transcript the page prints, so this is the claim under test.
+      const config = JSON.parse(await readFile(join(project, ".oxlintrc.json"), "utf8"));
+      await writeFile(
+        join(project, ".oxlintrc.json"),
+        `${JSON.stringify({ ...config, options: { typeAware: true } }, null, 2)}\n`,
+      );
+      const result = await oxlint(project, ["src"]);
+      assert.equal(result.code, 2, result.stdout + result.stderr);
+      assert.match(
+        result.stderr,
+        /type-aware tsgolint\/type-check mode requires the explicit --type-aware or --type-check opt-in/u,
+        result.stderr,
+      );
+    });
+  } finally {
+    await rm(project, { recursive: true, force: true });
   }
 });
 

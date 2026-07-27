@@ -23,6 +23,14 @@ needs to see TSRX control syntax as its own node types rather than as the
 JavaScript it compiles to, read [what your rule sees on
 `.tsrx`](#what-your-rule-sees-on-tsrx) before you write it.
 
+Two ways to read this page. The sections below build the idea up from an empty
+directory, one command at a time, and they are the shortest route to
+understanding what runs where. If you already have a Vite+ app from `vp create`,
+or you want the complete configured project rather than the explanation, skip to
+[the whole path on a fresh Vite+
+project](#the-whole-path-on-a-fresh-vite-project), which is the same route with
+every scaffold-specific step filled in.
+
 ## Set up the project
 
 You need Node.js 20.19 or newer, and one install:
@@ -274,6 +282,288 @@ Three practical consequences:
 
 [Editor integration](/integrations/editor#your-own-javascript-rules-in-the-editor)
 has the rest, including the one activation step the official extension needs.
+
+## The whole path, on a fresh Vite+ project
+
+Everything above assumed a plain project: one install, a file, a config. A real
+TSRX app is usually a [Vite+](/integrations/vite-plus) project scaffolded by
+`vp create`, and that route has more moving parts. Three of them belong to the
+TSRX toolchain rather than to this package, and `setup` tells you so instead of
+doing them.
+
+This section is that whole route, in order, with nothing left out. It was run
+end to end on a scaffold created for it: Node.js 24.15.0, pnpm 11.17.0,
+Vite+ 0.2.6, `oxc-tsrx` 0.1.3, `@tsrx/typescript-plugin` 0.3.112,
+`@tsrx/react` 0.2.50, TypeScript 6.0.3, on macOS arm64.
+
+### 1. Scaffold, and install this package
+
+<!-- typed-commands -->
+```sh
+vp create vite -- my-app --template react-ts
+cd my-app
+```
+
+<!-- pm-install -->
+```sh
+npm install --save-dev oxc-tsrx
+npx oxc-tsrx setup
+```
+
+### 2. Read what `setup` says it will not do
+
+<!-- terminal-demo:custom-plugins-vp-setup -->
+
+The first four lines are the slots `setup` owns. Three are packages inside
+`node_modules` that Vite+ resolves by name; the fourth is one key merged into
+your own `.vscode/settings.json`, which is the only file `setup` writes outside
+`node_modules`. [The Vite+ page](/integrations/vite-plus#setup-writes-one-file-in-your-tree-and-it-says-so)
+has the rules it follows there.
+
+The lines marked `!` are the boundary. `setup` never installs a package, never
+edits `package.json`, and never edits a `tsconfig.json`, so TSRX *language*
+support is reported and left alone. The next step is you doing those four
+things.
+
+### 3. Do the part `setup` will not do
+
+Install the TypeScript plugin that teaches an editor what `.tsrx` is, plus one
+framework binding. `@tsrx/react` is the React one; `@tsrx/vue`, `@tsrx/solid`,
+`@tsrx/preact`, `@tsrx/ripple`, and `octane` are the others.
+
+<!-- pm-install -->
+```sh
+npm install --save-dev @tsrx/typescript-plugin @tsrx/react
+```
+
+Then declare the plugin **in the tsconfig that owns your source**. In a Vite+
+scaffold that is `tsconfig.app.json`, the project whose `include` names `src`.
+Add one key to the `compilerOptions` block already there; leave everything else
+alone:
+
+```json
+{
+  "compilerOptions": {
+    "plugins": [{ "name": "@tsrx/typescript-plugin" }]
+  },
+  "include": ["src"]
+}
+```
+
+Not the root `tsconfig.json`. A `vp create` scaffold writes a solution-style
+root, `{ "files": [], "references": [...] }`, which owns no files at all, so a
+`plugins` entry there applies to nothing and fails by doing nothing. That is the
+single most expensive way to get this wrong, and it is why `setup` names the
+referenced project by path rather than saying "your tsconfig".
+
+One expected warning: `vp create` scaffolds TypeScript 6, and
+`@tsrx/typescript-plugin` declares `peerDependencies.typescript: ^5.9.3`, so a
+stock scaffold is outside the declared range and your package manager will say
+so. That is a support statement, not a failure. A stock scaffold on TypeScript
+6.0.3 was measured working while this page was written. If the language service
+does misbehave, pinning TypeScript into the declared range is the first thing to
+try.
+
+### 4. Check the boundary is closed
+
+<!-- terminal-demo:custom-plugins-vp-status -->
+
+Three of the four `!` lines are gone, because you did them. The remaining one is
+the TypeScript range from the previous step, and it stays until you pin
+TypeScript yourself.
+
+### 5. Write the rule
+
+Save this as `house-rules.mjs`:
+
+```js
+// A house rule: an ordinary Oxlint JavaScript plugin. The default export is
+// `{ meta, rules }`, and each rule's `create(context)` returns a visitor keyed
+// by AST node type. Nothing here is TSRX-specific.
+
+const noInlineStyleObject = {
+  meta: {
+    type: "suggestion",
+    docs: { description: "Prefer a class over an inline style object" },
+    messages: { inline: "Inline `style={{ ... }}` object. Use a class instead." },
+    schema: [],
+  },
+  create(context) {
+    return {
+      JSXAttribute(node) {
+        if (node.name?.name !== "style") return;
+        if (node.value?.type !== "JSXExpressionContainer") return;
+        if (node.value.expression?.type !== "ObjectExpression") return;
+        context.report({ node, messageId: "inline" });
+      },
+    };
+  },
+};
+
+export default {
+  meta: { name: "house-rules", version: "1.0.0" },
+  rules: { "no-inline-style-object": noInlineStyleObject },
+};
+```
+
+Save this as `.oxlintrc.json`:
+
+```json
+{
+  "jsPlugins": ["./house-rules.mjs"],
+  "rules": {
+    "house-rules/no-inline-style-object": "warn"
+  }
+}
+```
+
+One **top-level** `jsPlugins`, with no `overrides` block. That is deliberate: a
+single top-level declaration serves a mixed batch correctly, and the next step
+is the measurement that says so.
+
+Now give the rule one of each file type to find. Save this as
+`src/Greeting.tsrx`:
+
+```tsrx
+type Guest = { id: string; name: string };
+
+export function Greeting({ guests, ready }: { guests: Guest[]; ready: boolean }) @{
+  @if (ready) {
+    <ul style={{ padding: 0 }}>
+      @for (const guest of guests; key guest.id) {
+        <li>{guest.name}</li>;
+      }
+    </ul>;
+  } @else {
+    <p>Loading</p>;
+  }
+}
+```
+
+And save this as `src/Panel.tsx`:
+
+```tsx
+export function Panel({ label }: { label: string }) {
+  return <section style={{ margin: 0 }}>{label}</section>;
+}
+```
+
+### 6. Run it on both halves at once
+
+The command is a path rather than `npx oxlint`, because in a Vite+ project that
+name belongs to Vite+; step 7 is about that. This is the `oxlint` this package
+installed, at the same path `setup` just wrote into `.vscode/settings.json`.
+
+<!-- terminal-demo:custom-plugins-vp-cli -->
+
+One command, one plugin, one top-level `jsPlugins`, both file types, and both
+diagnostics at the positions in the files you wrote. `src/Greeting.tsrx:5:9` is
+the `style` attribute on the `<ul>`, and `src/Panel.tsx:2:19` is the one on the
+`<section>`.
+
+**No `overrides` block was needed for that.** An earlier version of this page
+suggested scoping `jsPlugins` under `overrides` in a Vite+ project to keep a
+mixed batch from being poisoned. Re-measured on the scaffold above, a top-level
+declaration handles the mixed batch, so the extra scoping is not part of this
+route. Reach for `overrides` when you actually want different rules on the two
+halves, not as a workaround.
+
+### 7. In a Vite+ project, the `oxlint` on your PATH is Vite+'s
+
+This is the one command that does not behave the way it does elsewhere in these
+docs, which is why step 6 spells out a path instead of typing `npx oxlint`. In a
+Vite+ project `node_modules/.bin/oxlint` belongs to Vite+, and running it prints
+`This oxlint wrapper is for IDE extension use only (--lsp mode). To lint your
+code, run: vp lint` and exits 1 without linting anything.
+
+That is Vite+ being correct about its own project. Your two working commands are
+`node_modules/oxc-tsrx/bin/oxlint`, which is this package's own and the same path
+`setup` wrote into `.vscode/settings.json`, and `vp lint`, which needs one more
+edit; see step 9. [The Vite+ page](/integrations/vite-plus#oxlint-and-oxfmt-on-the-command-line-belong-to-vite-here)
+has the shim in full.
+
+### 8. The same rule in your editor
+
+Open `src/Greeting.tsrx` with the official OXC extension installed and the rule
+is a squiggle, beside the built-in Rust ones. There is nothing further to
+configure: `setup` already pointed the extension at this package's `oxlint`, and
+the language server reads the same `.oxlintrc.json` the command line just used.
+
+The position is the same one step 6 printed. That is not a hope; the language
+server and `oxlint` are held to it by `pnpm run test:plugins`, which drives one
+real user plugin over one real `.tsrx` file through both surfaces and fails if
+they disagree about a position.
+[Editor integration](/integrations/editor#your-own-javascript-rules-in-the-editor)
+covers the editor half, including the one-line extra-parse disclosure the server
+writes to its output log and what happens when a plugin fails to load.
+
+### 9. If you also want `vp lint` to run it
+
+`vp lint` does not read `.oxlintrc.json`. Vite+ owns lint configuration in the
+`lint` block of `vite.config.ts`, and `vp create` folds any scaffolded
+`.oxlintrc.json` into that block on the way out. Measured on the project above:
+a plugin declared only in `.oxlintrc.json` produces nothing from `vp lint`, and
+a plugin declared only in `vite.config.ts` produces nothing in the editor. If
+you want both surfaces, declare it in both places.
+
+The `vite.config.ts` half is a `{ name, specifier }` entry in `lint.jsPlugins`
+plus a `lint.rules` entry, and one deletion:
+
+```ts
+import { defineConfig, lazyPlugins } from "vite-plus";
+import react from "@vitejs/plugin-react";
+
+// https://vite.dev/config/
+export default defineConfig({
+  staged: {
+    "*": "vp check --fix",
+  },
+  fmt: {},
+  lint: {
+    plugins: ["react", "typescript", "oxc"],
+    rules: {
+      "react/rules-of-hooks": "error",
+      "react/only-export-components": [
+        "warn",
+        {
+          allowConstantExport: true,
+        },
+      ],
+      "vite-plus/prefer-vite-plus-imports": "error",
+      "house-rules/no-inline-style-object": "warn",
+    },
+    jsPlugins: [
+      {
+        name: "vite-plus",
+        specifier: "vite-plus/oxlint-plugin",
+      },
+      {
+        name: "house-rules",
+        specifier: "./house-rules.mjs",
+      },
+    ],
+  },
+  plugins: lazyPlugins(() => [react()]),
+});
+```
+
+The deletion is `lint.options`. A `vp create` scaffold writes
+`options: { typeAware: true, typeCheck: true }`, and either key on its own is
+enough to make `vp lint` exit 2 the moment one `.tsrx` file is in the batch. It
+is the same refusal you get from a plain `.oxlintrc.json` carrying the same
+option, which is capturable here:
+
+<!-- terminal-demo:custom-plugins-typeaware -->
+
+`vp lint` prints that message under one more line of its own, `the native TSRX
+projection needed for JS plugins failed`, and stops before reporting anything at
+all. Passing `--type-aware` on the command line does not satisfy it either; both
+were measured. A batch with no `.tsrx` file in it is unaffected, which is why a
+stock scaffold lints fine until you add your first TSRX component. Delete
+`lint.options` and the same `vp lint` reports both files at the same positions
+the CLI did. You lose the type-aware lane in exchange, and
+[the Vite+ page](/integrations/vite-plus#one-template-default-you-have-to-turn-off-first)
+has the rest of that trade.
 
 ## How it runs, and what it costs
 
@@ -621,19 +911,23 @@ example rather than an installable API; see
 Oxlint's `jsPlugins` in its `lint` block, and those plugins reach both halves of
 the project the same way they do from a plain `.oxlintrc.json`.
 
-The runnable version of everything above lives in
-`examples/custom-js-plugins`. Its tests use the real parser, ESLint 10.7.0,
-Vite 8.1.5, and `@tsrx/vite-plugin-react` 0.0.72. Oxlint in this repository is
-pinned and tested at 1.74.0; public releases may have moved past that.
+The runnable version of everything above lives in `examples/custom-js-plugins`,
+with the fresh-scaffold walkthrough's own files in
+`examples/custom-js-plugins/vite-plus`. Its tests use the real parser,
+ESLint 10.7.0, Vite 8.1.5, and `@tsrx/vite-plugin-react` 0.0.72. Oxlint in this
+repository is pinned and tested at 1.74.0; public releases may have moved past
+that.
 
 ## Status and what is coming
 
 Running your rule on `.tsrx` works today, on the command line and in the editor,
-from published packages only, using the projection route described above. It
-does not depend on any unmerged upstream change. It was last proved from a
-clean project built out of `npm pack` tarballs: the user's rule reported at the
-authored positions from `oxlint`, the language server published the same rule at
-the same positions, and the built-in Rust rules kept reporting in both.
+using the projection route described above. It does not depend on any unmerged
+upstream change. It was last proved on a scaffold created by `vp create` and
+configured by following the walkthrough on this page and nothing else: the
+reader's rule reported at the authored positions from `oxlint`, the language
+server published the same rule at the same position, the ordinary `.tsx` half
+reported from the same command, and the built-in Rust rules kept reporting
+throughout.
 
 What is still upstream is running a JavaScript rule against the *authored* TSRX
 tree inside Oxlint, which is what would make `JSXIfExpression` and

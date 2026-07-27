@@ -1,11 +1,12 @@
 # Custom JavaScript plugins: the runnable copy
 
-This directory is the project that
+This directory holds the two projects that
 [Custom JavaScript plugins](../../docs/integrations/custom-js-plugins.md)
-walks you through. Every code fence on that page which says "Save this as
-`<name>`" is compared to the file of the same name here, byte for byte, by
-`tests/plugins/custom-js-plugins-doc.test.mjs`. If the two ever disagree, that
-test fails.
+walks you through: the plain one here at the top level, and the `vp create`
+walkthrough in `vite-plus/`. Every code fence on that page which says "Save this
+as `<name>`" is compared to the file of the same name in whichever of the two it
+belongs to, byte for byte, by `tests/plugins/custom-js-plugins-doc.test.mjs`. If
+the two ever disagree, that test fails.
 
 ## The sample project
 
@@ -43,6 +44,36 @@ ones, at the positions `oxlint` reports. Your rule sees `context.filename` as
 the mirror path there too, and the language server logs the extra parse once per
 session. [Editor integration](../../docs/integrations/editor.md#your-own-javascript-rules-in-the-editor)
 covers that half.
+
+## `vite-plus/`: the fresh-scaffold walkthrough
+
+`vite-plus/` is the second sample project on that page, the one its
+[walkthrough](../../docs/integrations/custom-js-plugins.md#the-whole-path-on-a-fresh-vite-project)
+builds from a `vp create` React scaffold. It is the same Oxlint route as above,
+in the shape a real Vite+ app has.
+
+| File | What it is |
+| --- | --- |
+| `house-rules.mjs` | The plugin. One rule, `no-inline-style-object`, keyed on `JSXAttribute`. |
+| `.oxlintrc.json` | One **top-level** `jsPlugins` entry and one rule. No `overrides` block, on purpose. |
+| `src/Greeting.tsrx` | A TSRX component with an inline `style` object on line 5, column 9. |
+| `src/Panel.tsx` | An ordinary React component with the same problem on line 2, column 19. |
+| `vite.config.ts` | The scaffold's config after the two edits `vp lint` needs: the plugin added to `lint.jsPlugins` and `lint.rules`, and `lint.options` deleted. |
+
+`tests/plugins/custom-js-plugins-doc.test.mjs` runs the first four of these:
+one `oxlint` over `src/` reporting both files at those positions, the same rule
+at the same position from the language server, and the exit-2 refusal you get if
+the scaffold's `lint.options` type-aware default survives. `vite.config.ts` is
+checked for byte equality with the page but not executed, because running it
+needs Vite+ installed.
+
+Two facts that walkthrough settles by measurement rather than by memory:
+
+- **No `overrides` block is needed.** One top-level `jsPlugins` declaration
+  serves a mixed batch of `.tsrx` and `.tsx` correctly.
+- **The `plugins` entry goes in `tsconfig.app.json`, not the root.** A `vp create`
+  scaffold's root tsconfig is solution-style and owns no files, so a plugin
+  declared there is inert.
 
 ## ESLint: for a rule that must visit authored TSRX nodes
 

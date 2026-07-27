@@ -35,15 +35,23 @@ CI blocks postinstall scripts, this install still works.
 
 ### The minimum steps, per host
 
-This is the complete list of things you have to run. Each row was measured
-against the published `oxc-tsrx` 0.1.0 installed from the registry into a clean
-project on darwin-arm64.
+This is the complete list of things you have to run to lint and format `.tsrx`.
+Each row was measured against published `oxc-tsrx` installed from the registry
+into a clean project on darwin-arm64.
 
 | Where you use it | Steps | What you run |
 | --- | --- | --- |
 | Command line (`oxlint`, `oxfmt`) | 1 | `npm install --save-dev oxc-tsrx` |
 | Editor, through released `oxc.oxc-vscode` | 1 | the same install, and nothing else |
 | [Vite+](/integrations/vite-plus) (`vp lint`, `vp fmt`) | 2 | the same install, then `oxc-tsrx setup` |
+
+TSRX as a *language* in your editor is a separate matter, and it is the TSRX
+toolchain's rather than this package's: it needs `@tsrx/typescript-plugin`, a
+framework binding, and a `plugins` entry in the tsconfig that owns your source.
+`setup` reports all three and installs none of them.
+[Custom JavaScript plugins](/integrations/custom-js-plugins#the-whole-path-on-a-fresh-vite-project)
+walks the complete sequence on a fresh `vp create` scaffold, ending at a rule
+you wrote reporting on a `.tsrx` file.
 
 The Vite+ second step is permanent, and you run it again after every clean
 dependency install. Vite+ resolves a *package* named `oxlint` and pins
@@ -64,6 +72,14 @@ A clean install links seven commands. Only the first three are ones you type:
 | `oxc-tsrx` | `providers`, `status`, `setup`, and `remove`. See the [CLI reference](/reference/cli) |
 | `oxc-tsrx-lint`, `oxc-tsrx-fmt`, `oxc-tsrx-lsp` | the native leaf commands `oxlint` and `oxfmt` dispatch to. Useful directly only if your project pins official `oxlint` |
 | `tsgolint` | not part of this project. It comes from the `oxlint-tsgolint` dependency, the official type-aware runner behind `--type-aware`. You never call it yourself, and calling it prints its own "unsupported entrypoint" warning |
+
+One exception: in a project that also installs Vite+, `node_modules/.bin/oxlint`
+and `node_modules/.bin/oxfmt` belong to Vite+ rather than to this package, and
+the `oxlint` one refuses to lint and tells you to run `vp lint`. There, use
+`vp lint` and `vp fmt`, or call this package's own
+`node_modules/oxc-tsrx/bin/oxlint` directly. [Vite and
+Vite+](/integrations/vite-plus#oxlint-and-oxfmt-on-the-command-line-belong-to-vite-here)
+has the detail.
 
 ### Installing is the activation step
 
@@ -165,21 +181,31 @@ explains why and shows the before and after.
 Vite+ is the only place an install alone is not enough. Every other route in
 this guide works with no command at all.
 
-#### `oxc-tsrx status` is about those facades only
+#### `oxc-tsrx status` says `missing` in a healthy project
 
-`status` reports on the Vite+ compatibility facades and on nothing else. In a
-command-line or editor project it prints this, exit code 0:
+`status` reports on four compatibility slots, and then on the TSRX editor
+prerequisites it deliberately does not own. In a command-line or editor project
+the slot half prints this, exit code 0:
 
 ```text
-oxc-tsrx 0.1.2 compatibility (npm)
+oxc-tsrx 0.1.3 compatibility (npm)
 - oxc-parser: missing
 - oxlint: missing
 - oxfmt: missing
+- oxc.path.oxlint: unnecessary (editor)
+  …/node_modules/.bin/oxlint already resolves into this package, so the editor
+  needs no setting and none was written.
 ```
 
-Three `missing` lines are the correct result there. They mean the Vite+ facades
-are not installed, which is what you want when you do not use Vite+. Nothing is
-broken and there is nothing to fix.
+Three `missing` lines and one `unnecessary` are the correct result there. The
+`missing` ones mean the Vite+ facades are not installed, which is what you want
+when you do not use Vite+, and `unnecessary` means the editor's ordinary lookup
+already reaches this package. Nothing is broken and there is nothing to fix.
+
+Below that, `status` lists any of `@tsrx/typescript-plugin`, a framework
+binding, the tsconfig `plugins` entry, and the TypeScript peer range that are
+not in place, each with one `!` line saying what to do. Those belong to the TSRX
+toolchain and `status` only reports them.
 
 To check that your install is working, run `npx oxc-tsrx providers` instead. The
 line to look for is `routed extensions: .tsrx -> oxc-tsrx`.

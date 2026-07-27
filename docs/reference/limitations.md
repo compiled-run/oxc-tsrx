@@ -97,6 +97,23 @@ your editor. Running the result in a browser is not part of this project yet.
   mismatched tooling fails instead of silently downgrading. The editor
   analyzes each requested document; cross-document unsaved project semantics
   are not claimed.
+- **Type-aware linting and JavaScript plugins on `.tsrx` are mutually exclusive
+  in a Vite+ project today.** A `vp create` scaffold writes
+  `lint.options: { typeAware: true, typeCheck: true }` into `vite.config.ts`,
+  and either key on its own makes `vp lint` exit 2 the moment one `.tsrx` file
+  is in the batch, with the type-aware opt-in refusal above. Passing
+  `--type-aware` does not satisfy it, because the opt-in is not forwarded to the
+  projection lane. Deleting `lint.options` restores the run and gives up the
+  type-aware lane; a batch with no `.tsrx` file in it is unaffected. Measured on
+  a fresh Vite+ 0.2.6 scaffold with `oxc-tsrx` 0.1.3.
+- **`vp lint` and your editor read different config files.** Vite+ owns lint
+  configuration in the `lint` block of `vite.config.ts` and folds any scaffolded
+  `.oxlintrc.json` into it, while the language server reads `.oxlintrc.json`.
+  Measured on a fresh scaffold: a `jsPlugins` entry present only in
+  `.oxlintrc.json` produced nothing from `vp lint`, and the same entry present
+  only in `vite.config.ts` produced nothing in the editor. A rule you want on
+  both surfaces has to be declared twice, in the two different shapes those
+  files use.
 - Not every OXC rule is guaranteed to behave identically around the TSRX
   placeholders. The tested guarantee covers the standard rules in the test
   matrix; anything that would report inside placeholder code is suppressed.
@@ -123,10 +140,18 @@ your editor. Running the result in a browser is not part of this project yet.
   path you own, or make sure `node_modules` is ignored first. `oxfmt` is not
   affected; it skips `node_modules` unless you pass `--with-node-modules`.
 - **`npx oxc-tsrx status` reports `missing` three times in a healthy project.**
-  It only inspects the Vite+ compatibility facades, so `oxc-parser: missing`,
-  `oxlint: missing`, and `oxfmt: missing` are the correct state for every
-  command-line and editor user. It exits 0. Use `npx oxc-tsrx providers` to
-  check that TSRX support is wired up.
+  The first three of its four slots are the Vite+ compatibility facades, so
+  `oxc-parser: missing`, `oxlint: missing`, and `oxfmt: missing` are the correct
+  state for every command-line and editor user, and the fourth reads
+  `oxc.path.oxlint: unnecessary` because the ordinary lookup already reaches
+  this package. It exits 0. Use `npx oxc-tsrx providers` to check that TSRX
+  support is wired up.
+- **`setup` reports the TSRX editor prerequisites and never acts on them.** It
+  does not install `@tsrx/typescript-plugin` or a framework binding, does not
+  edit `package.json`, and does not edit any `tsconfig.json`, so the four `!`
+  lines it prints are work left for you. That ceiling is deliberate: this
+  package owns lint and format for `.tsrx`, and TSRX language support in the
+  editor belongs to the TSRX toolchain.
 - **A seventh command, `tsgolint`, appears in `node_modules/.bin`.** It is not
   part of this project. It comes from the `oxlint-tsgolint` dependency, which is
   the official type-aware runner behind `--type-aware` and `--type-check`. You

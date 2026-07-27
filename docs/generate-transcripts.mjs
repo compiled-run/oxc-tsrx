@@ -30,6 +30,7 @@ const lintBin = path.join(repoRoot, 'target', 'release', 'oxc-tsrx')
 const formatBin = path.join(repoRoot, 'target', 'release', 'oxc-tsrx')
 const npmLintBin = path.join(repoRoot, 'packages', 'toolchain', 'bin', 'oxlint')
 const npmFormatBin = path.join(repoRoot, 'packages', 'toolchain', 'bin', 'oxfmt')
+const npmCompatBin = path.join(repoRoot, 'packages', 'toolchain', 'bin', 'oxc-tsrx')
 const tsgolintBin = resolveTsgolintExecutable(repoRoot)
 const toolchainPackage = path.join(repoRoot, 'packages', 'toolchain')
 // ESLint is already an exact-pinned fixture dependency of tests/package.json.
@@ -367,6 +368,91 @@ const optedOutDemoConfig = `${JSON.stringify(
 
 const installedToolchain = { 'node_modules/oxc-tsrx': toolchainPackage }
 
+// ---------- the Vite+ walkthrough sample project ----------
+// The page's step-by-step route from a `vp create` scaffold. Its four files live
+// in examples/custom-js-plugins/vite-plus/ for the same reason the files above
+// live in examples/custom-js-plugins/: the page prints them, and the docs test
+// compares each fence to the file byte for byte.
+
+const vitePlusExamples = path.join(pluginExamples, 'vite-plus')
+const readVitePlusExample = (name) => readFileSync(path.join(vitePlusExamples, name), 'utf8')
+
+const houseRulesPlugin = readVitePlusExample('house-rules.mjs')
+const houseRulesConfig = readVitePlusExample('.oxlintrc.json')
+const greetingTsrx = readVitePlusExample('src/Greeting.tsrx')
+const panelTsx = readVitePlusExample('src/Panel.tsx')
+
+// The same config carrying the one `vp create` template default the page tells
+// you to delete, so the refusal is captured from the example rather than typed.
+const typeAwareConfig = `${JSON.stringify(
+  { ...JSON.parse(houseRulesConfig), options: { typeAware: true } },
+  null,
+  2,
+)}\n`
+
+// `oxc-tsrx setup` and `status` report on the project around them, so the
+// fixture below reproduces the shape a `vp create` React scaffold has: a
+// solution-style root tsconfig that owns no files, a referenced tsconfig.app.json
+// that owns `src`, a `node_modules/.bin/oxlint` belonging to Vite+, a pnpm
+// lockfile, and TypeScript 6. Every line these two demos print was checked
+// against a real `vp create` scaffold, where it is identical.
+const scaffoldPackageJson = `${JSON.stringify(
+  {
+    name: 'my-app',
+    version: '0.0.0',
+    private: true,
+    type: 'module',
+    devDependencies: {
+      '@types/react': '^19.2.17',
+      'oxc-tsrx': '^0.1.3',
+      typescript: '~6.0.2',
+      'vite-plus': '^0.2.6',
+    },
+  },
+  null,
+  2,
+)}\n`
+
+const scaffoldRootTsconfig = `${JSON.stringify(
+  { files: [], references: [{ path: './tsconfig.app.json' }, { path: './tsconfig.node.json' }] },
+  null,
+  2,
+)}\n`
+
+const scaffoldAppTsconfig = (withPlugin) =>
+  `${JSON.stringify(
+    {
+      compilerOptions: {
+        ...(withPlugin ? { plugins: [{ name: '@tsrx/typescript-plugin' }] } : {}),
+        jsx: 'react-jsx',
+        moduleResolution: 'bundler',
+        noEmit: true,
+      },
+      include: ['src'],
+    },
+    null,
+    2,
+  )}\n`
+
+const stubPackage = (name, version) => `${JSON.stringify({ name, version }, null, 2)}\n`
+
+// Vite+'s own `node_modules/.bin/oxlint`. `setup` only asks where that shim
+// resolves to, so a stand-in that resolves nowhere near this package is enough
+// to reproduce what a Vite+ project does to the editor's lookup.
+const vitePlusOxlintShim = `#!/bin/sh
+echo "This oxlint wrapper is for IDE extension use only (--lsp mode)."
+echo "To lint your code, run: vp lint"
+exit 1
+`
+
+const scaffoldBaseFiles = {
+  'package.json': scaffoldPackageJson,
+  'pnpm-lock.yaml': '',
+  'tsconfig.json': scaffoldRootTsconfig,
+  'node_modules/.bin/oxlint': vitePlusOxlintShim,
+  'node_modules/typescript/package.json': stubPackage('typescript', '6.0.3'),
+}
+
 // ---------- runners ----------
 
 const runners = {
@@ -375,6 +461,7 @@ const runners = {
   fmt: { bin: formatBin, prefix: ['fmt'] },
   npxLint: { bin: process.execPath, prefix: [npmLintBin] },
   npxFmt: { bin: process.execPath, prefix: [npmFormatBin] },
+  npxCompat: { bin: process.execPath, prefix: [npmCompatBin] },
   eslint: { bin: process.execPath, prefix: [eslintBin] },
   cat: { bin: '/bin/cat' },
   // Plain Node scripts (used by the parser API demo).
@@ -429,6 +516,10 @@ function captureDemo(demo) {
       mkdirSync(path.dirname(absolute), { recursive: true })
       symlinkSync(target, absolute)
     }
+    // A demo whose starting state is what an earlier command produced runs that
+    // command here rather than hand-writing its effects into `files`. The output
+    // is discarded: only the entries below are printed on the page.
+    for (const entry of demo.prelude ?? []) runEntry(workspace, entry)
     return {
       caption: demo.caption,
       transcript: demo.entries.map((entry) => ({
@@ -840,6 +931,94 @@ const demos = {
         runner: 'npxLint',
         args: ['src'],
         expectExit: 1,
+      },
+    ],
+  },
+
+  'custom-plugins-vp-setup': {
+    caption:
+      'Real output, captured at build time, from a project shaped like a fresh vp create React scaffold with oxc-tsrx installed and none of the TSRX toolchain packages yet. Every line was checked against a real scaffold, where it is identical.',
+    files: {
+      ...scaffoldBaseFiles,
+      'tsconfig.app.json': scaffoldAppTsconfig(false),
+      'src/Greeting.tsrx': greetingTsrx,
+    },
+    links: installedToolchain,
+    entries: [
+      {
+        comment: 'Four slots this package owns, then four things it will not touch',
+        command: 'npx oxc-tsrx setup',
+        runner: 'npxCompat',
+        args: ['setup'],
+        expectExit: 0,
+      },
+    ],
+  },
+
+  'custom-plugins-vp-status': {
+    caption:
+      'Real output, captured at build time, from the same project after the TSRX toolchain packages were installed and tsconfig.app.json declared the plugin.',
+    files: {
+      ...scaffoldBaseFiles,
+      'tsconfig.app.json': scaffoldAppTsconfig(true),
+      'src/Greeting.tsrx': greetingTsrx,
+      'node_modules/@tsrx/typescript-plugin/package.json': stubPackage(
+        '@tsrx/typescript-plugin',
+        '0.3.112',
+      ),
+      'node_modules/@tsrx/react/package.json': stubPackage('@tsrx/react', '0.2.50'),
+    },
+    links: installedToolchain,
+    // The three package slots and the editor key are `setup`'s own work, so the
+    // demo runs it rather than faking the state it leaves behind.
+    prelude: [{ command: 'npx oxc-tsrx setup', runner: 'npxCompat', args: ['setup'], expectExit: 0 }],
+    entries: [
+      {
+        comment: 'Three of the four unowned prerequisites are done; one is left',
+        command: 'npx oxc-tsrx status',
+        runner: 'npxCompat',
+        args: ['status'],
+        expectExit: 0,
+      },
+    ],
+  },
+
+  'custom-plugins-vp-cli': {
+    caption:
+      'Real output, captured at build time, from the walkthrough project with house-rules.mjs, .oxlintrc.json, src/Greeting.tsrx, and src/Panel.tsx in place.',
+    files: {
+      'house-rules.mjs': houseRulesPlugin,
+      '.oxlintrc.json': houseRulesConfig,
+      'src/Greeting.tsrx': greetingTsrx,
+      'src/Panel.tsx': panelTsx,
+    },
+    entries: [
+      {
+        comment: 'One command, one top-level jsPlugins, both file types',
+        command: 'node_modules/oxc-tsrx/bin/oxlint src',
+        runner: 'npxLint',
+        args: ['src'],
+        expectExit: 0,
+      },
+    ],
+  },
+
+  'custom-plugins-typeaware': {
+    caption:
+      'Real output, captured at build time, from the same project after options.typeAware was added to .oxlintrc.json. That is the option a vp create scaffold sets in vite.config.ts.',
+    files: {
+      'house-rules.mjs': houseRulesPlugin,
+      '.oxlintrc.json': typeAwareConfig,
+      'src/Greeting.tsrx': greetingTsrx,
+      'src/Panel.tsx': panelTsx,
+    },
+    entries: [
+      {
+        comment: 'The .tsrx half refuses; exit 2 is the configuration refusal',
+        command: 'node_modules/oxc-tsrx/bin/oxlint src',
+        runner: 'npxLint',
+        args: ['src'],
+        expectExit: 2,
       },
     ],
   },

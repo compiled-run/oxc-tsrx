@@ -102,13 +102,34 @@ missing item gets one line telling you what to do:
 - `@tsrx/typescript-plugin` resolvable from the project;
 - a framework binding: `@tsrx/react`, `@tsrx/vue`, `@tsrx/solid`,
   `@tsrx/preact`, `@tsrx/ripple`, or `octane`;
-- the nearest `tsconfig.json` declaring
+- the tsconfig that owns your source declaring
   `"plugins": [{ "name": "@tsrx/typescript-plugin" }]`; and
-- TypeScript at `>=5.9 <6`. `@tsrx/typescript-plugin` pins `^5.9.3` and hangs
-  silently on TypeScript 6, which is what `vp create` scaffolds, so this one
-  looks like nothing being wrong rather than like a failure.
+- TypeScript inside `@tsrx/typescript-plugin`'s declared peer range,
+  `>=5.9 <6`.
 
 Nothing on that list is installed, edited, or upgraded for you.
+
+Two of those four are worth stating precisely, because guessing at them is
+expensive.
+
+The tsconfig is **the referenced project, not the root**. A `vp create` scaffold
+writes a solution-style root, `{ "files": [], "references": [...] }`, which owns
+no files, so a plugin declared there applies to nothing and fails by doing
+nothing. In a React scaffold the one that owns `src` is `tsconfig.app.json`, and
+`setup` prints that path rather than saying "your tsconfig" for exactly this
+reason.
+
+The TypeScript line is **a declared range, not a known failure**.
+`@tsrx/typescript-plugin` declares `peerDependencies.typescript: ^5.9.3` and
+`vp create` scaffolds TypeScript 6, so a stock project sits outside the declared
+range and your package manager will say so. A stock scaffold on TypeScript 6.0.3
+was measured working, so treat it as unsupported rather than broken; if the
+language service does misbehave, pinning TypeScript into the declared range is
+the first thing to try.
+
+[Custom JavaScript plugins](/integrations/custom-js-plugins#the-whole-path-on-a-fresh-vite-project)
+walks that whole sequence, from `vp create` to your own rule reporting on a
+`.tsrx` file.
 
 See [the editor page](/integrations/editor#in-a-vite-project-setup-writes-oxcpathoxlint)
 for what the lookup actually resolves to.
@@ -119,8 +140,8 @@ the install on its own. The table of all three is in
 
 ### One template default you have to turn off first
 
-Measured against Vite+ 0.2.6 and `oxc-tsrx` 0.1.1. A project scaffolded by
-`vp create` writes a `lint` block into `vite.config.ts` like this:
+Measured against Vite+ 0.2.6 and `oxc-tsrx` 0.1.3 on a fresh `vp create` React
+scaffold. That scaffold writes a `lint` block into `vite.config.ts` like this:
 
 ```ts
 lint: {
@@ -143,18 +164,23 @@ JavaScript plugins](/integrations/custom-js-plugins) explains that route and
 the `settings.oxcTsrx.jsPluginsOnTsrx` key that switches it off.
 
 `options: { typeAware, typeCheck }` is the one you still have to delete. Leave
-it in place and `vp lint` prints one line and lints nothing, not even your
-ordinary `.tsx` files:
+it in place and `vp lint` refuses with exit 2 as soon as one `.tsrx` file is in
+the batch, before reporting anything at all:
 
 ```text
 $ vp lint src/Counter.tsrx
-oxc-tsrx: unsupported tsgolint version 7.0.2001; OXC for TSRX requires oxlint-tsgolint 0.24.0 for protocol v2
+oxlint (oxc-tsrx): the native TSRX projection needed for JS plugins failed:
+oxc-tsrx: type-aware tsgolint/type-check mode requires the explicit --type-aware or --type-check opt-in; it is never started or silently disabled by config alone
 ```
 
-That is a deliberate fail-closed refusal rather than a crash. The type-aware
-lane needs protocol v2 from `oxlint-tsgolint` 0.24.0, and Vite+ 0.2.6 carries
-tsgolint 7.0.2001, so there is no version of that handshake both sides can
-speak.
+Either key on its own is enough, and passing `--type-aware` on the command line
+does not satisfy it; all three were measured. That is a deliberate fail-closed
+refusal rather than a crash: the type-aware lane needs an explicit opt-in that
+this path cannot forward, so it stops rather than lint with the option silently
+dropped.
+
+A batch with no `.tsrx` file in it is unaffected, which is why a stock scaffold
+lints cleanly until you add your first TSRX component.
 
 Delete that key and the same command works, with the diagnostic mapped back to
 its original TSRX byte span:
@@ -167,6 +193,23 @@ Found 0 error(s) and 1 warning(s).
 
 You keep the `plugins: ["react", "typescript", "oxc"]` list, every `rules`
 entry, and your `jsPlugins`. Only the type-aware lane is unavailable.
+
+### `vp lint` reads `vite.config.ts`, and the editor reads `.oxlintrc.json`
+
+These are two different config files, and a plugin declared in one is invisible
+to the other. `vp create` folds any scaffolded `.oxlintrc.json` into the `lint`
+block of `vite.config.ts` on the way out, and from then on `vp lint` reads that
+block and nothing else. The language server the official OXC extension talks to
+reads `.oxlintrc.json`, because that is what Oxlint reads everywhere else.
+
+Measured on a fresh scaffold: a `jsPlugins` entry present only in
+`.oxlintrc.json` produced no diagnostics from `vp lint`, and the same entry
+present only in `vite.config.ts` produced none in the editor. If you want your
+own rule on both surfaces, declare it in both files. The `vite.config.ts` form
+is a `{ name, specifier }` object in `lint.jsPlugins`; the `.oxlintrc.json` form
+is a path string in `jsPlugins`.
+[Custom JavaScript plugins](/integrations/custom-js-plugins#the-whole-path-on-a-fresh-vite-project)
+shows both, filled in.
 
 ### `oxlint` and `oxfmt` on the command line belong to Vite+ here
 

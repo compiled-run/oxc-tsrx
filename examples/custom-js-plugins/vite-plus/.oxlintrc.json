@@ -1,0 +1,6 @@
+{
+  "jsPlugins": ["./house-rules.mjs"],
+  "rules": {
+    "house-rules/no-inline-style-object": "warn"
+  }
+}
