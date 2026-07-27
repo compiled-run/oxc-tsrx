@@ -13,4 +13,4 @@ pub use report::{
     DiagnosticOutput, EditorFix, FileCounts, FixOutput, LabelOutput, Metadata, Output, SpanOutput,
     TimingOutput,
 };
-pub use session::{LintSession, Options, lint_file, lint_text};
+pub use session::LintSession;

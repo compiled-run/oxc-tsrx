@@ -4,9 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use oxc_adapter::{
-    EngineDiagnostic, LintEngine, LintEngineOptions, RuleFilter, RuleSeverity, TypeBatchFile,
-};
+use oxc_adapter::{EngineDiagnostic, LintEngine, LintEngineOptions, RuleFilter, TypeBatchFile};
 use tsrx_syntax::TypeProjection;
 
 use crate::{
@@ -19,12 +17,6 @@ use crate::{
     report::{EditorFix, Output, aggregate_outputs, projection_failure_output},
     translate::{translate_diagnostics, translate_type_diagnostics},
 };
-
-#[derive(Debug, Clone)]
-pub struct Options {
-    pub rules: Vec<String>,
-    pub fix: bool,
-}
 
 /// One compiled configuration reused across every file in a lint command/editor batch.
 pub struct LintSession {
@@ -282,44 +274,6 @@ impl LintSession {
     pub fn aggregate(&self, outputs: Vec<Output>) -> Output {
         aggregate_outputs(self, outputs)
     }
-}
-
-/// Lints one explicit JavaScript, TypeScript, TSX, or TSRX file with canonical OXC.
-///
-/// # Errors
-///
-/// Returns an error without writing when the file cannot be read, projected, parsed, analyzed,
-/// linted, fix-validated, or written.
-pub fn lint_file(path: &Path, options: &Options) -> Result<Output, LintError> {
-    let session = legacy_session(path, options)?;
-    session.lint_file(path)
-}
-
-/// Lints source already owned by a caller without filesystem I/O.
-///
-/// This is the native library/editor boundary and the benchmarkable hot path. Fixes are rejected
-/// here because an in-memory caller must choose how to apply edits; [`lint_file`] remains the
-/// write-capable boundary for the current native CLI.
-///
-/// # Errors
-///
-/// Returns an error when fixes are requested or the source cannot be projected, parsed, analyzed,
-/// or linted.
-pub fn lint_text(path: &Path, source: &str, options: &Options) -> Result<Output, LintError> {
-    if options.fix {
-        return Err(LintError::FreeTextLintWithFixes);
-    }
-    let session = legacy_session(path, options)?;
-    lint_loaded_source(&session, path, source, false)
-}
-
-fn legacy_session(path: &Path, options: &Options) -> Result<LintSession, LintError> {
-    let filters = options
-        .rules
-        .iter()
-        .map(|name| RuleFilter { severity: RuleSeverity::Deny, name: name.clone() })
-        .collect::<Vec<_>>();
-    LintSession::new(path.parent().unwrap_or_else(|| Path::new(".")), None, &filters, options.fix)
 }
 
 #[cfg(test)]

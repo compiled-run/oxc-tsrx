@@ -25,7 +25,7 @@ fn no_linter_source_file_exceeds_the_layout_cap() {
 }
 
 /// The crate root is the only place a public path may be minted. Every module under it is
-/// private, so `cargo public-api` renders the whole 207-item surface at `tsrx_lint::<Item>` no
+/// private, so `cargo public-api` renders the whole 231-item surface at `tsrx_lint::<Item>` no
 /// matter which file defines the item, and a submodule that grew a bare `pub` would be invisible
 /// in the API diff while still being reachable from a future `pub mod`.
 #[test]
