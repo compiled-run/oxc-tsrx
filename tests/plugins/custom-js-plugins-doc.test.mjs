@@ -28,7 +28,7 @@ const eslintCli = join(
 );
 
 // The single source of truth for the refusal the page documents.
-const rejectionSource = join(root, "crates/oxc_adapter/src/toolchain.rs");
+const rejectionSource = join(root, "crates/oxc_adapter/src/toolchain/config.rs");
 
 const page = await readFile(pagePath, "utf8");
 const transcripts = JSON.parse(await readFile(transcriptsPath, "utf8"));
@@ -214,7 +214,7 @@ test("the page prints the native refusal exactly as the source writes it", async
   const quoted = rust.match(
     /"(JavaScript plugins are not supported by the native TSRX path yet:[^"]*)"/,
   );
-  assert.ok(quoted, "the rejection message moved out of crates/oxc_adapter/src/toolchain.rs");
+  assert.ok(quoted, "the rejection message moved out of crates/oxc_adapter/src/toolchain/config.rs");
   const message = quoted[1];
 
   const wall = transcripts.demos?.["custom-plugins-tsrx-wall"];
