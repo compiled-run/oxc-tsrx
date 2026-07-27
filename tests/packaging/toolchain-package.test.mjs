@@ -969,9 +969,12 @@ test("setup reports the TSRX editor prerequisites it deliberately does not own",
       assert.ok(support.notes.some((note) => expected.test(note)), String(expected));
     }
 
-    // TypeScript 6 is the trap `vp create` scaffolds: the plugin pins ^5.9.3 and
-    // hangs silently rather than failing. Everything else present, that one line
-    // is still reported, and the version on disk is not changed.
+    // `vp create` scaffolds TypeScript 6 while the plugin declares ^5.9.3, so a
+    // stock project sits outside the supported range. A stock scaffold on 6.0.3
+    // was measured answering correctly three times out of three, so the note
+    // must report an unsupported combination and must NOT claim a failure.
+    // Everything else present, that one line is still reported, and the version
+    // on disk is not changed.
     const scaffolded = await providerFixture(temporary, "scaffolded", {
       ownsLinterShim: false,
     });
@@ -1005,10 +1008,13 @@ test("setup reports the TSRX editor prerequisites it deliberately does not own",
     assert.equal(trapped.languageSupport.tsconfig.declaresPlugin, true);
     assert.equal(trapped.languageSupport.typescript.version, "6.0.3");
     assert.equal(trapped.languageSupport.typescript.supported, false);
-    assert.deepEqual(
-      trapped.languageSupport.notes.map((note) => note.includes("hangs silently")),
-      [true],
-    );
+    assert.equal(trapped.languageSupport.notes.length, 1);
+    const [typescriptNote] = trapped.languageSupport.notes;
+    assert.match(typescriptNote, /outside .*declared peer range/u);
+    assert.match(typescriptNote, /6\.0\.3/u);
+    assert.match(typescriptNote, /may still work/u);
+    // The wording must not assert a failure this project has not reproduced.
+    assert.doesNotMatch(typescriptNote, /hangs|broken|fails/iu);
     assert.equal(await readFile(tsconfig, "utf8"), authoredTsconfig);
 
     // The supported version, and the report goes quiet.

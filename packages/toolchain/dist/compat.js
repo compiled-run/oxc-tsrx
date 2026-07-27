@@ -79,9 +79,14 @@ const TSRX_FRAMEWORK_BINDINGS = Object.freeze([
   "octane",
 ]);
 /**
- * `@tsrx/typescript-plugin` pins `^5.9.3` and hangs silently on TypeScript 6,
- * which is what `vp create` scaffolds. Nothing here changes the version; the
- * report says which one is installed and which one the plugin needs.
+ * `@tsrx/typescript-plugin` declares `peerDependencies.typescript: ^5.9.3`, and
+ * `vp create` scaffolds TypeScript 6, so a stock Vite+ project sits outside the
+ * plugin's supported range. That is a fact from the plugin's own manifest.
+ *
+ * What that mismatch actually causes is NOT asserted here. A stock scaffold with
+ * TypeScript 6.0.3 was measured answering `hover: const legacy: number` three
+ * times out of three, so this is reported as an unsupported combination rather
+ * than as a known failure. Nothing here changes the version.
  */
 const TYPESCRIPT_REQUIREMENT = ">=5.9 <6";
 
@@ -966,7 +971,7 @@ async function inspectLanguageSupport(projectRoot, modules) {
     );
   } else if (!supported) {
     report.notes.push(
-      `pin typescript to ${TYPESCRIPT_REQUIREMENT} yourself (found ${typescriptVersion}); ${TSRX_TYPESCRIPT_PLUGIN} pins ^5.9.3 and hangs silently on TypeScript 6, which vp create scaffolds`,
+      `typescript ${typescriptVersion} is outside ${TSRX_TYPESCRIPT_PLUGIN}'s declared peer range (${TYPESCRIPT_REQUIREMENT}). It may still work; if the editor misbehaves, pinning typescript into that range is the first thing to try. oxc-tsrx never changes your typescript version`,
     );
   }
   report.ok = report.notes.length === 0;

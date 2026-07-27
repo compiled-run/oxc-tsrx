@@ -279,11 +279,27 @@ and `status` reports the slot as `unnecessary`.
 
 `setup` also reports the TSRX editor prerequisites it deliberately does not own:
 `@tsrx/typescript-plugin`, a framework binding, the `tsconfig.json` plugins
-entry, and TypeScript at `>=5.9 <6`. That last one matters here because
-`@tsrx/typescript-plugin` pins `^5.9.3` and hangs silently on TypeScript 6,
-which is what `vp create` scaffolds, so a dead TSRX language service looks like
-nothing being wrong. `setup` installs and changes none of it; those pieces are
-the TSRX toolchain's, not this package's.
+entry, and TypeScript inside the plugin's declared peer range. `setup` installs
+and changes none of it; those pieces are the TSRX toolchain's, not this
+package's.
+
+Two details are worth stating precisely, because guessing at them costs hours.
+
+**The `plugins` entry must go in the project that owns your source.** A Vite+
+scaffold's root `tsconfig.json` is solution-style, `{ "files": [], "references":
+[...] }`, and owns no files, so a plugin declared there never applies to
+anything. Measured on a stock scaffold, same file and same plugin: declared in
+the root, `hover` returns `any`; declared in `tsconfig.app.json`, it returns
+`const legacy: number`. `setup` names the referenced project rather than the
+root for this reason.
+
+**The TypeScript range is a declared peer, not a known failure.**
+`@tsrx/typescript-plugin` declares `^5.9.3` while `vp create` scaffolds
+TypeScript 6, so a stock project is outside the supported range. That is worth
+knowing, but a stock scaffold on TypeScript 6.0.3 was measured answering
+correctly three times out of three, so treat the mismatch as unsupported rather
+than broken. If the language service does misbehave, pinning TypeScript into
+that range is the first thing to try.
 
 ## Optional legacy client
 
