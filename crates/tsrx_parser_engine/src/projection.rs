@@ -125,19 +125,15 @@ fn validate_dynamic_overlay(view: OverlayView<'_>) -> Result<(), TsrxParseError>
     let mut opened = vec![false; view.dynamic_tags.len()];
     let mut closed = vec![false; view.dynamic_tags.len()];
     let mut active = Vec::with_capacity(8);
-    let mut previous_dynamic_end = 0_u32;
     let mut previous_style_end = 0_u32;
     for token in view.embedded {
         match token.kind {
             tsrx_syntax::EmbeddedKind::DynamicOpen => {
-                if token.span.is_empty()
-                    || (view.parser_dynamic.is_empty() && token.span.start < previous_dynamic_end)
-                {
+                if token.span.is_empty() {
                     return Err(TsrxParseError::Unsupported(
                         "dynamic embedded tokens are unordered",
                     ));
                 }
-                previous_dynamic_end = token.span.end;
                 let index = usize::try_from(token.owner)
                     .map_err(|_| TsrxParseError::Unsupported("dynamic owner index overflow"))?;
                 let tag = view
@@ -161,14 +157,11 @@ fn validate_dynamic_overlay(view: OverlayView<'_>) -> Result<(), TsrxParseError>
                 }
             }
             tsrx_syntax::EmbeddedKind::DynamicClose => {
-                if token.span.is_empty()
-                    || (view.parser_dynamic.is_empty() && token.span.start < previous_dynamic_end)
-                {
+                if token.span.is_empty() {
                     return Err(TsrxParseError::Unsupported(
                         "dynamic embedded tokens are unordered",
                     ));
                 }
-                previous_dynamic_end = token.span.end;
                 let index = usize::try_from(token.owner)
                     .map_err(|_| TsrxParseError::Unsupported("dynamic owner index overflow"))?;
                 let tag = view
@@ -207,18 +200,7 @@ fn validate_dynamic_overlay(view: OverlayView<'_>) -> Result<(), TsrxParseError>
     if !active.is_empty() {
         return Err(TsrxParseError::Unsupported("dynamic projection nesting is incomplete"));
     }
-    if view.parser_dynamic.is_empty() {
-        if view
-            .dynamic_tags
-            .iter()
-            .enumerate()
-            .any(|(index, tag)| !opened[index] || closed[index] == tag.self_closing)
-        {
-            return Err(TsrxParseError::Unsupported("incomplete dynamic embedded token set"));
-        }
-    } else {
-        validate_parser_dynamic_boundaries(view)?;
-    }
+    validate_parser_dynamic_boundaries(view)?;
     let mut comments_seen = vec![false; view.dynamic_comments.len()];
     for tag in view.dynamic_tags {
         if tag.opening.is_empty()
@@ -744,34 +726,9 @@ fn build_allowed_gaps(
             clause_index = clause.next;
         }
     }
-    let mut dynamic_gaps = Vec::with_capacity(if overlay.parser_dynamic.is_empty() {
-        overlay.embedded.len().saturating_mul(2)
-    } else {
-        overlay.parser_dynamic.len()
-    });
-    if overlay.parser_dynamic.is_empty() {
-        for token in overlay.embedded {
-            let expression = match token.kind {
-                tsrx_syntax::EmbeddedKind::DynamicOpen
-                | tsrx_syntax::EmbeddedKind::DynamicClose => {
-                    let tag = usize::try_from(token.owner)
-                        .ok()
-                        .and_then(|index| overlay.dynamic_tags.get(index))
-                        .ok_or(TsrxParseError::Unsupported("dynamic gap has no owner"))?;
-                    if token.kind == tsrx_syntax::EmbeddedKind::DynamicOpen {
-                        tag.expression
-                    } else {
-                        tag.closing_expression
-                    }
-                }
-                tsrx_syntax::EmbeddedKind::StyleContent => continue,
-            };
-            add_dynamic_gaps(source, source_len, token.span, expression, &mut dynamic_gaps)?;
-        }
-    } else {
-        for token in overlay.parser_dynamic {
-            add_parser_dynamic_gap(source, source_len, overlay, *token, &mut dynamic_gaps)?;
-        }
+    let mut dynamic_gaps = Vec::with_capacity(overlay.parser_dynamic.len());
+    for token in overlay.parser_dynamic {
+        add_parser_dynamic_gap(source, source_len, overlay, *token, &mut dynamic_gaps)?;
     }
 
     // Style owners are preorder identities, while payload tokens are naturally emitted in source
@@ -914,48 +871,6 @@ fn add_parser_dynamic_gap(
         return Err(TsrxParseError::Unsupported("parser dynamic boundary gap is malformed"));
     }
     gaps.push(gap);
-    Ok(())
-}
-
-fn add_dynamic_gaps(
-    source: &str,
-    source_len: u32,
-    syntax: ByteSpan,
-    expression: ByteSpan,
-    gaps: &mut Vec<ByteSpan>,
-) -> Result<(), TsrxParseError> {
-    if syntax.start >= expression.start
-        || expression.start >= expression.end
-        || expression.end >= syntax.end
-        || syntax.end > source_len
-    {
-        return Err(TsrxParseError::Unsupported("invalid dynamic projection gap"));
-    }
-    let suffix_start = usize::try_from(expression.end)
-        .map_err(|_| TsrxParseError::Unsupported("dynamic suffix overflow"))?;
-    let suffix_end = usize::try_from(syntax.end)
-        .map_err(|_| TsrxParseError::Unsupported("dynamic suffix overflow"))?;
-    let suffix = source
-        .as_bytes()
-        .get(suffix_start..suffix_end)
-        .ok_or(TsrxParseError::Unsupported("dynamic suffix lies outside source"))?;
-    if suffix.first() != Some(&b'}') {
-        return Err(TsrxParseError::Unsupported("dynamic suffix has no closing brace"));
-    }
-    if source.as_bytes().get(syntax.start as usize..expression.start as usize)
-        != Some(if syntax.start.saturating_add(2) == expression.start {
-            b"<{".as_slice()
-        } else {
-            b"</{".as_slice()
-        })
-        || suffix.len() > 1
-            && (suffix.last() != Some(&b'>')
-                || !suffix[1..suffix.len() - 1].iter().all(u8::is_ascii_whitespace))
-    {
-        return Err(TsrxParseError::Unsupported("dynamic syntax contains unsupported trivia"));
-    }
-    gaps.push(ByteSpan::new(syntax.start, expression.start));
-    gaps.push(ByteSpan::new(expression.end, syntax.end));
     Ok(())
 }
 
