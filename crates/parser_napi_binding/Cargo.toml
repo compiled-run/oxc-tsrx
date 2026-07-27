@@ -45,3 +45,6 @@ unsafe_code = "deny"
 [lints.clippy]
 all = { level = "deny", priority = -1 }
 pedantic = { level = "deny", priority = -1 }
+# The one `allow` this crate still needs is wrapped in an `expect` that names why an `expect`
+# cannot replace it, so the restriction lint can be denied here as it is workspace-wide.
+allow_attributes = "deny"

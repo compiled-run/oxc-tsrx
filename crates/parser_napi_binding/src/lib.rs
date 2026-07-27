@@ -651,6 +651,11 @@ pub fn reset_ordinary_counters() {
 ///
 /// Returns a stable operational error when arguments, resources, or native materialization fail.
 // Node-API owns the JavaScript string at this boundary even though synchronous parsing borrows it.
+#[expect(
+    clippy::allow_attributes,
+    reason = "napi-derive copies this attribute list onto the generated parse_sync_c_callback \
+              shim, whose raw napi_env/napi_callback_info parameters can never fulfil an expect"
+)]
 #[allow(clippy::needless_pass_by_value)]
 #[napi]
 pub fn parse_sync(
