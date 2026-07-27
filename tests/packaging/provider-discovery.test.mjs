@@ -14,6 +14,7 @@ import {
 import { basename, extname, isAbsolute, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
+import { NATIVE_TARGETS } from "../../packages/toolchain/dist/native-targets.js";
 import {
   resolveCommandInvocation,
   spawnCommand,
@@ -272,10 +273,35 @@ test(
       await rm(temporary, { recursive: true, force: true });
     });
 
-    // The published toolchain tarball, plus third-party dependency stubs so the
-    // fixture needs no network and executes no native artifact. Nothing
-    // first-party is stubbed: `oxc-tsrx` has no first-party dependency.
+    // The published toolchain tarball, plus dependency stubs so the fixture
+    // needs no network and executes no native artifact.
+    //
+    // The eight `@oxc-tsrx/native-*` optional dependencies are stubbed for the
+    // same reason the third-party packages are, and the reason is easy to miss:
+    // without them `npm` falls through to the public registry, which only ever
+    // has *already published* versions. That worked by accident while the
+    // candidate version happened to be published, and turned into eight
+    // unresolved optional entries in `package-lock.json` the moment the version
+    // was bumped, which `npm ci` then refuses. Each stub carries the real
+    // `os`/`cpu`/`libc`, so npm's platform selection behaves exactly as it does
+    // against the registry.
+    const toolchainVersion = JSON.parse(
+      await readFile(join(toolchainRoot, "package.json"), "utf8"),
+    ).version;
     const stubSources = await Promise.all([
+      ...NATIVE_TARGETS.map((target) =>
+        writePackage(
+          join(sources, `native-${target.packageSuffix}`),
+          {
+            name: `@oxc-tsrx/native-${target.packageSuffix}`,
+            version: toolchainVersion,
+            os: [target.os],
+            cpu: [target.cpu],
+            ...(target.libc === undefined ? {} : { libc: [target.libc] }),
+          },
+          { "placeholder.txt": "no native artifact is executed by this fixture\n" },
+        ),
+      ),
       ...[
         ["oxlint-current", "oxlint", "1.74.0"],
         ["oxfmt-current", "oxfmt", "0.59.0"],
@@ -343,7 +369,7 @@ test(
     };
 
     await context.test("npm: one declared dependency and no activation step", async () => {
-      const app = await consumer("npm-consumer", { "oxc-tsrx": "0.1.1" });
+      const app = await consumer("npm-consumer", { "oxc-tsrx": "0.1.2" });
       await mustRun(
         npm,
         ["install", "--ignore-scripts", "--no-audit", "--no-fund", `--registry=${registry.url}`],
@@ -440,7 +466,7 @@ test(
         subtest.skip("pnpm is not installed");
         return;
       }
-      const app = await consumer("pnpm-consumer", { "oxc-tsrx": "0.1.1" });
+      const app = await consumer("pnpm-consumer", { "oxc-tsrx": "0.1.2" });
       await mustRun(
         pnpm,
         ["install", "--ignore-scripts", `--registry=${registry.url}`],
@@ -479,7 +505,7 @@ test(
       async () => {
         const app = await consumer("mixed-consumer", {
           "demo-language-provider": "1.0.0",
-          "oxc-tsrx": "0.1.1",
+          "oxc-tsrx": "0.1.2",
         });
         await mustRun(
           npm,
@@ -580,7 +606,7 @@ test("the providers report is a read-only audit that fails loudly", async (conte
   };
 
   await context.test("a clean project reports every declared capability", async () => {
-    const project = await fixture("solo", { "oxc-tsrx": "0.1.1" }, {});
+    const project = await fixture("solo", { "oxc-tsrx": "0.1.2" }, {});
     const before = await snapshot(project);
     const result = await run(process.execPath, [cli, "providers", "--json", "--project", project]);
     assert.equal(result.status, 0, result.stderr);
@@ -595,7 +621,7 @@ test("the providers report is a read-only audit that fails loudly", async (conte
 
     const text = await run(process.execPath, [cli, "providers", "--project", project]);
     assert.equal(text.status, 0, text.stderr);
-    assert.match(text.stdout, /oxc-tsrx@0\.1\.1 \(provider tsrx, protocol 1\)/u);
+    assert.match(text.stdout, /oxc-tsrx@0\.1\.2 \(provider tsrx, protocol 1\)/u);
     assert.match(text.stdout, /language tsrx: \.tsrx/u);
     assert.match(text.stdout, /routed extensions: \.tsrx -> oxc-tsrx/u);
   });
@@ -603,7 +629,7 @@ test("the providers report is a read-only audit that fails loudly", async (conte
   await context.test("two providers claiming one extension fail loudly", async () => {
     const project = await fixture(
       "conflict",
-      { "oxc-tsrx": "0.1.1", "rival-language-provider": "1.0.0" },
+      { "oxc-tsrx": "0.1.2", "rival-language-provider": "1.0.0" },
       { "rival-language-provider": providerStub("rival-language-provider", "rival", ".tsrx") },
     );
     const result = await run(process.execPath, [cli, "providers", "--json", "--project", project]);

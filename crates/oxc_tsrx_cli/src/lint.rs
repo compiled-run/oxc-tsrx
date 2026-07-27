@@ -35,10 +35,14 @@ JavaScript plugin lane (driven by the `oxlint` command, not by hand):
                                 over. Honours the same ignore rules as a lint run
     --map-plugin-diagnostics    Read {files:[{path,diagnostics}]} on stdin and
                                 print it back with every label span moved from
-                                projection bytes to authored bytes. A diagnostic
-                                whose labels do not all map is dropped, because a
-                                position the user did not write is worse than no
-                                diagnostic
+                                projection bytes to authored bytes. A label
+                                covering the whole projection is a whole-file
+                                report and maps to the whole authored file. Any
+                                other diagnostic whose labels do not all map is
+                                dropped, because a position the user did not
+                                write is worse than no diagnostic, and each file
+                                carries an `unmapped` count of how many were
+                                dropped so the loss is never silent
 
 This is the internal capability target the oxc.provider metadata names for
 linting .tsrx files. It takes explicit file paths only, never a directory or a
@@ -222,9 +226,15 @@ fn map_plugin_diagnostics() -> Result<u8, String> {
             .get("diagnostics")
             .and_then(Value::as_array)
             .map_or_else(Vec::new, Clone::clone);
+        let requested = diagnostics.len();
+        let mapped = map_file_diagnostics(Path::new(path), diagnostics);
         mapped_files.push(json!({
             "path": path,
-            "diagnostics": map_file_diagnostics(Path::new(path), diagnostics),
+            "diagnostics": mapped,
+            // What the projection could not place. A dropped diagnostic is invisible to the
+            // developer by design, so the count of them is part of this mode's answer rather than
+            // something a caller has to infer by comparing lengths.
+            "unmapped": requested.saturating_sub(mapped.len()),
         }));
     }
     print_json(&json!({ "files": mapped_files }))
@@ -238,17 +248,33 @@ fn map_file_diagnostics(path: &Path, diagnostics: Vec<Value>) -> Vec<Value> {
     let Ok(projection) = PluginProjection::new(&source) else {
         return Vec::new();
     };
+    let Ok(authored_length) = u32::try_from(source.len()) else {
+        return Vec::new();
+    };
     diagnostics
         .into_iter()
-        .filter_map(|diagnostic| map_one_diagnostic(&projection, diagnostic))
+        .filter_map(|diagnostic| map_one_diagnostic(&projection, authored_length, diagnostic))
         .collect()
 }
 
-fn map_one_diagnostic(projection: &PluginProjection, mut diagnostic: Value) -> Option<Value> {
+fn map_one_diagnostic(
+    projection: &PluginProjection,
+    authored_length: u32,
+    mut diagnostic: Value,
+) -> Option<Value> {
     let object = diagnostic.as_object_mut()?;
     let labels = object.get("labels")?.as_array()?.clone();
     let spans = labels.iter().map(label_span).collect::<Option<Vec<_>>>()?;
-    let authored = projection.map_labels(&spans)?;
+    // A diagnostic with no labels points at nothing, and mapping an empty list
+    // succeeds vacuously, so the emptiness is rejected here rather than left to
+    // the per-label mapping below.
+    if spans.is_empty() {
+        return None;
+    }
+    let authored = spans
+        .iter()
+        .map(|span| map_label(projection, authored_length, *span))
+        .collect::<Option<Vec<_>>>()?;
 
     let mut mapped_labels = Vec::with_capacity(labels.len());
     for (label, span) in labels.into_iter().zip(&authored) {
@@ -280,6 +306,40 @@ fn map_one_diagnostic(projection: &PluginProjection, mut diagnostic: Value) -> O
         object.remove("related");
     }
     Some(diagnostic)
+}
+
+/// Move one label from projection bytes to authored bytes.
+///
+/// Every label goes through [`PluginProjection::map_labels`] one at a time, which is the same
+/// all-or-nothing rejection the native lane applies, except for one shape that rejection gets
+/// wrong. A rule that reports on the whole `Program` gets a span covering everything Oxlint
+/// linted, and what Oxlint linted for a `.tsrx` file is the projection, markers and synthetic
+/// wrappers included. That range can never lie entirely inside authored text, so such a rule used
+/// to fire at `1:1` on an ordinary `.tsx` and vanish without a trace on a `.tsrx`. A whole-file
+/// report has an obvious authored position: the whole authored file. It is mapped there instead of
+/// being dropped.
+pub(crate) fn map_label(
+    projection: &PluginProjection,
+    authored_length: u32,
+    label: PluginLabel,
+) -> Option<PluginLabel> {
+    if spans_whole_projection(projection, label) {
+        return Some(PluginLabel {
+            offset: 0,
+            length: authored_length,
+        });
+    }
+    projection
+        .map_labels(&[label])
+        .and_then(|mut mapped| mapped.pop())
+}
+
+/// Whether a label covers the entire projected source.
+fn spans_whole_projection(projection: &PluginProjection, label: PluginLabel) -> bool {
+    let Ok(projected_length) = u32::try_from(projection.source().len()) else {
+        return false;
+    };
+    label.offset == 0 && label.offset.saturating_add(label.length) >= projected_length
 }
 
 fn label_span(label: &Value) -> Option<PluginLabel> {

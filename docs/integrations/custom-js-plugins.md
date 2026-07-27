@@ -321,8 +321,21 @@ the editor as well, with a different throwaway directory per session.
 **A diagnostic that lands on projected-only text is dropped.** The projection
 inserts markers and wrappers that correspond to nothing you typed. If a rule
 reports on one of those, there is no authored position to point at, so the
-diagnostic is discarded rather than reported at an invented location. Reports on
-code you wrote are unaffected.
+diagnostic is discarded rather than reported at an invented location.
+
+There is one shape you would not guess is projected-only: a report on the whole
+`Program`. Its span covers the entire file Oxlint linted, which on this route is
+the projection, markers and all. Whole-file reports are not dropped; they are
+mapped to your whole authored file, so they arrive at line 1, column 1 of your
+`.tsrx`, the same place they land on an ordinary `.tsx`.
+
+What is still dropped is a report whose span sits partly on a marker and partly
+on code you wrote, which happens when a rule reports on a node the projection
+rewrote rather than on one of your own tokens. The run does not tell you when
+that happens. If a rule fires on a `.tsx` file and stays quiet on a `.tsrx` one,
+this is the first thing to suspect, and
+[the ESLint route](#when-your-rule-must-see-authored-tsrx-nodes-eslint) parses
+your file directly if you need that rule to run.
 
 **An `overrides` glob written for `.tsrx` is matched for you, in your own config
 only.** The projection is named `View.tsrx.tsx`, which `**/*.tsrx` does not

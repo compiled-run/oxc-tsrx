@@ -1,6 +1,6 @@
 {
   "name": "oxc-for-tsrx",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Rust-native Oxlint and Oxfmt integration for TSRX",
   "private": true,
   "keywords": [
@@ -37,12 +37,13 @@
     "test:editor:official-toolchain": "node tests/editor/official-oxc-toolchain-run.mjs",
     "test:packaging:unit": "node --test tests/packaging/native-version.test.mjs tests/packaging/native-package.test.mjs tests/packaging/runtime-contract.test.mjs tests/packaging/public-package-metadata.test.mjs tests/packaging/provider-resolve.test.mjs tests/packaging/provider-discovery.test.mjs tests/packaging/toolchain-package.test.mjs tests/packaging/boundary.test.mjs tests/packaging/css-boundary.test.mjs tests/packaging/compliance.test.mjs tests/packaging/vscode-build-freshness.test.mjs tests/packaging/vsix-archive.test.mjs tests/packaging/vscode-artifact.test.mjs",
     "test:packaging:clean": "node --test tests/packaging/clean-install.test.mjs",
+    "test:packaging:js-plugins": "node --test tests/packaging/js-plugin-clean-install.test.mjs",
     "test:packaging:released-hosts": "node --test tests/packaging/released-host-install.test.mjs",
     "test:packaging:matrix": "node --test tests/packaging/vite-plus-matrix.test.mjs",
     "test:packaging:providers": "node --test tests/packaging/provider-matrix.test.mjs",
     "test:packaging:vite-plus-provider": "node --test tests/packaging/vite-plus-provider.test.mjs",
     "test:packaging:vscode": "node tests/packaging/vscode-installed-run.mjs",
-    "test:packaging": "pnpm run test:packaging:unit && pnpm run test:packaging:clean && pnpm run test:packaging:released-hosts && pnpm run test:packaging:matrix && pnpm run test:packaging:providers && pnpm run test:packaging:vite-plus-provider",
+    "test:packaging": "pnpm run test:packaging:unit && pnpm run test:packaging:clean && pnpm run test:packaging:js-plugins && pnpm run test:packaging:released-hosts && pnpm run test:packaging:matrix && pnpm run test:packaging:providers && pnpm run test:packaging:vite-plus-provider",
     "package:native": "node scripts/package-native.mjs",
     "package:vscode": "node scripts/package-vscode.mjs",
     "licenses:rust:generate": "node scripts/generate-rust-license-inventory.mjs",

@@ -842,7 +842,16 @@ fn authored_plugin_diagnostic(
     source: &str,
     diagnostic: LanePluginDiagnostic,
 ) -> Option<EditorDiagnostic> {
-    let authored = projection.map_labels(&diagnostic.labels)?;
+    // Same mapping the CLI uses, including its whole-file case. A rule that reports on the
+    // whole `Program` spans the entire projection, markers and synthetic wrappers included, so
+    // an all-or-nothing mapping can never place it inside authored text and it used to vanish
+    // here while firing at 1:1 on an ordinary .tsx. Sharing the helper is what keeps the editor
+    // and the CLI reporting the same rule at the same place.
+    let authored_length = u32::try_from(source.len()).ok()?;
+    let mut authored = Vec::with_capacity(diagnostic.labels.len());
+    for label in &diagnostic.labels {
+        authored.push(crate::lint::map_label(projection, authored_length, *label)?);
+    }
     let primary = authored.first()?;
     let start = usize::try_from(primary.offset).ok()?;
     let end = start.checked_add(usize::try_from(primary.length).ok()?)?;

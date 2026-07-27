@@ -234,6 +234,13 @@ jobs:
           OXC_TSRX_RETAIN_CLEAN_INSTALL_REPORT: "1"
         run: node --test tests/packaging/clean-install.test.mjs
 
+      - name: Prove the JS plugin lane survives packaging
+        # The lane is JavaScript that only ships if `files` lists it, and two
+        # native modes that only exist if the binary was rebuilt. Both can be
+        # dropped from a tarball without any other test noticing, which is
+        # exactly how parser.node went missing from every 0.1.0 package.
+        run: node --test tests/packaging/js-plugin-clean-install.test.mjs
+
       - name: Exercise the supported Vite+ minimum and current lanes
         env:
           OXC_TSRX_RETAIN_MATRIX_REPORT: "1"
