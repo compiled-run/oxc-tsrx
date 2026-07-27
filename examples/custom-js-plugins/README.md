@@ -37,6 +37,13 @@ costs one extra parse per `.tsrx` file and says so on stderr each time.
 Set `settings.oxcTsrx.jsPluginsOnTsrx` to `false` and the `.tsrx` half refuses
 out loud with exit 2 instead, rather than dropping your rule quietly.
 
+The same config also runs the same plugin in an editor. Open one of these files
+with the official OXC extension and your rule is a squiggle beside the built-in
+ones, at the positions `oxlint` reports. Your rule sees `context.filename` as
+the mirror path there too, and the language server logs the extra parse once per
+session. [Editor integration](../../docs/integrations/editor.md#your-own-javascript-rules-in-the-editor)
+covers that half.
+
 ## ESLint: for a rule that must visit authored TSRX nodes
 
 Your rule sees the projection above, in which `@if` and `@for` have already
@@ -124,8 +131,10 @@ broader [Oxlint language-plugins RFC](https://github.com/oxc-project/oxc/discuss
 is the production-grade destination for cached parsing, typed visitor schemas,
 faithful virtual TS, source mappings, and type-aware rules.
 
-The native `oxc-tsrx-lsp` remains an in-process Rust host and does not execute
-JavaScript. Running your Oxlint plugin on `.tsrx` from the command line ships
-today, through the projection route above; what still waits on released upstream
-custom-parser support is a rule that visits authored TSRX node types inside
-Oxlint itself.
+Running your Oxlint plugin on `.tsrx` ships today, through the projection route
+above, and it ships in the editor as well as on the command line. The native
+`oxc-tsrx-lsp` is still Rust and still executes no JavaScript itself: it
+projects the buffer and borrows one Node.js host per workspace, started only
+when the config declares `jsPlugins`, to run the published Oxlint binary over
+that projection. What still waits on released upstream custom-parser support is
+a rule that visits authored TSRX node types inside Oxlint itself.

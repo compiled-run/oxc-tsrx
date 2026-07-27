@@ -339,6 +339,32 @@ if (keyedTaskListTsrx === taskListTsrx) {
   )
 }
 
+// src/TaskFeed.tsrx is the one file on the page that examples/custom-js-plugins
+// does not carry: the page tells the reader to add it inline. So the page's own
+// fence is the source of truth, and the transcript below is captured from
+// exactly those bytes rather than from a retyped copy that could drift.
+const customPluginsPage = readFileSync(
+  path.join(docsDir, 'integrations', 'custom-js-plugins.md'),
+  'utf8',
+)
+const taskFeedFence = customPluginsPage.match(
+  /Add this as `src\/TaskFeed\.tsrx`:\r?\n\r?\n```tsrx\r?\n([\s\S]*?)^```/mu,
+)
+if (!taskFeedFence) {
+  throw new Error(
+    'docs/integrations/custom-js-plugins.md no longer tells the reader to add src/TaskFeed.tsrx',
+  )
+}
+const taskFeedTsrx = taskFeedFence[1]
+
+// The same config with the extra-parse opt-out the page documents. Built from
+// the example config rather than retyped, so it cannot drift from it.
+const optedOutDemoConfig = `${JSON.stringify(
+  { ...JSON.parse(oxlintDemoConfig), settings: { oxcTsrx: { jsPluginsOnTsrx: false } } },
+  null,
+  2,
+)}\n`
+
 const installedToolchain = { 'node_modules/oxc-tsrx': toolchainPackage }
 
 // ---------- runners ----------
@@ -457,7 +483,7 @@ const demos = {
         expectExit: 0,
       },
       {
-        comment: 'Rewrite the file in place; printing nothing means it worked',
+        comment: 'Rewrite the file in place; a summary line and no file list means it worked',
         command: 'npx oxfmt --write src/Cart.tsrx',
         runner: 'npxFmt',
         args: ['--write', 'src/Cart.tsrx'],
@@ -572,7 +598,7 @@ const demos = {
         expectExit: 1,
       },
       {
-        comment: 'Format and write files (silent on success)',
+        comment: 'Format and write files; success prints only the summary line',
         command: 'oxc-tsrx-fmt --write src/Counter.tsrx src/View.tsx',
         runner: 'fmt',
         args: ['--write', 'src/Counter.tsrx', 'src/View.tsx'],
@@ -686,7 +712,7 @@ const demos = {
         expectExit: 1,
       },
       {
-        comment: 'Rewrite one file with the explicit config; silent means success',
+        comment: 'Rewrite one file with the explicit config; no file list means success',
         command: 'oxc-tsrx-fmt --write --config config/format.json src/View.tsrx',
         runner: 'fmt',
         args: ['--write', '--config', 'config/format.json', 'src/View.tsrx'],
@@ -756,7 +782,7 @@ const demos = {
     ],
   },
 
-  'custom-plugins-tsrx-wall': {
+  'custom-plugins-tsrx-plugin': {
     caption:
       'Real output, captured at build time, from the same project and the same .oxlintrc.json, pointed at the .tsrx file instead.',
     files: {
@@ -767,11 +793,32 @@ const demos = {
     },
     entries: [
       {
-        comment: 'Same plugin, same config, one .tsrx file: this is the wall',
+        comment: 'Same plugin, same config, one .tsrx file',
         command: 'npx oxlint src/TaskList.tsrx',
         runner: 'npxLint',
         args: ['src/TaskList.tsrx'],
-        expectExit: 2,
+        // The rule looks for a `.map()` call and this file has an `@for` block,
+        // so it runs and finds nothing. Only the built-in warning reports.
+        expectExit: 0,
+      },
+    ],
+  },
+
+  'custom-plugins-tsrx-map': {
+    caption:
+      'Real output, captured at build time, after src/TaskFeed.tsrx was added to the same project.',
+    files: {
+      'src/TaskFeed.tsrx': taskFeedTsrx,
+      'oxlint-demo-plugin.mjs': oxlintDemoPlugin,
+      '.oxlintrc.json': oxlintDemoConfig,
+    },
+    entries: [
+      {
+        comment: 'Your own rule, reporting on the .tsrx file you wrote',
+        command: 'npx oxlint src/TaskFeed.tsrx',
+        runner: 'npxLint',
+        args: ['src/TaskFeed.tsrx'],
+        expectExit: 1,
       },
     ],
   },
@@ -781,16 +828,37 @@ const demos = {
       'Real output, captured at build time, from the same project with one command run over the whole src directory.',
     files: {
       'src/TaskList.tsrx': taskListTsrx,
+      'src/TaskFeed.tsrx': taskFeedTsrx,
       'src/TaskRow.tsx': taskRowTsx,
       'oxlint-demo-plugin.mjs': oxlintDemoPlugin,
       '.oxlintrc.json': oxlintDemoConfig,
     },
     entries: [
       {
-        comment: 'Both file types at once: the ordinary half still reports normally',
+        comment: 'Both file types at once, one plugin, one command',
         command: 'npx oxlint src',
         runner: 'npxLint',
         args: ['src'],
+        expectExit: 1,
+      },
+    ],
+  },
+
+  'custom-plugins-tsrx-opt-out': {
+    caption:
+      'Real output, captured at build time, from the same project after settings.oxcTsrx.jsPluginsOnTsrx was set to false.',
+    files: {
+      'src/TaskFeed.tsrx': taskFeedTsrx,
+      'oxlint-demo-plugin.mjs': oxlintDemoPlugin,
+      '.oxlintrc.json': optedOutDemoConfig,
+    },
+    entries: [
+      {
+        comment: 'With the lane switched off, the .tsrx half refuses out loud',
+        command: 'npx oxlint src/TaskFeed.tsrx',
+        runner: 'npxLint',
+        args: ['src/TaskFeed.tsrx'],
+        // Exit 2 is the configuration refusal, not a lint failure.
         expectExit: 2,
       },
     ],

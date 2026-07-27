@@ -12,7 +12,7 @@
         {
           "comment": "Format .tsrx and ordinary JS/TS with real Oxfmt layout",
           "command": "npx oxfmt --check src/Counter.tsrx src/View.tsx",
-          "output": "Checking formatting...\n\nsrc/View.tsx (0ms)\n\nFormat issues found in above 1 files. Run without `--check` to fix.\nFinished in 66ms on 1 files using 18 threads.\nsrc/Counter.tsrx\nNo config found, using defaults. Please add a config file or try `oxfmt --init` if needed.\n"
+          "output": "Checking formatting...\n\nsrc/View.tsx (0ms)\nsrc/Counter.tsrx (0ms)\n\nFormat issues found in above 2 files. Run without `--check` to fix.\nFinished in 72ms on 2 files using 18 threads.\nNo config found, using defaults. Please add a config file or try `oxfmt --init` if needed.\n"
         }
       ]
     },
@@ -25,9 +25,9 @@
           "output": "export function Cart({items}:Props) @{\n  <section   class=\"cart\">\n      @if (items.length>0) {\n      @for (const item of items; key item.id) {\n          <Row item={item}/>\n      }\n      } @else {\n        <Empty/>\n      }\n  </section>\n}\n"
         },
         {
-          "comment": "Rewrite the file in place; printing nothing means it worked",
+          "comment": "Rewrite the file in place; a summary line and no file list means it worked",
           "command": "npx oxfmt --write src/Cart.tsrx",
-          "output": ""
+          "output": "Finished in 0ms on 1 files using 18 threads.\n"
         },
         {
           "comment": "Same file, now in canonical Oxfmt layout",
@@ -87,12 +87,12 @@
         {
           "comment": "Check without modifying files; exits 1 and lists files that differ",
           "command": "oxc-tsrx-fmt --check src/Counter.tsrx",
-          "output": "src/Counter.tsrx\n"
+          "output": "Checking formatting...\n\nsrc/Counter.tsrx (0ms)\n\nFormat issues found in above 1 files. Run without `--check` to fix.\nFinished in 0ms on 1 files using 18 threads.\n"
         },
         {
-          "comment": "Format and write files (silent on success)",
+          "comment": "Format and write files; success prints only the summary line",
           "command": "oxc-tsrx-fmt --write src/Counter.tsrx src/View.tsx",
-          "output": ""
+          "output": "Finished in 0ms on 2 files using 18 threads.\n"
         },
         {
           "comment": "Editor/stdin mode: formatted source goes to stdout",
@@ -102,7 +102,7 @@
         {
           "comment": "Explicit config and worker count",
           "command": "oxc-tsrx-fmt --write --config config/format.json --threads=4 src/Counter.tsrx",
-          "output": ""
+          "output": "Finished in 0ms on 1 files using 4 threads.\n"
         },
         {
           "comment": "The explicit config switched the file to single quotes, no semicolons",
@@ -142,12 +142,12 @@
         {
           "comment": "Both sample files differ from the configured single-quote layout",
           "command": "oxc-tsrx-fmt --check src/View.tsrx src/View.tsx",
-          "output": "src/View.tsrx\nsrc/View.tsx\n"
+          "output": "Checking formatting...\n\nsrc/View.tsrx (0ms)\nsrc/View.tsx (0ms)\n\nFormat issues found in above 2 files. Run without `--check` to fix.\nFinished in 0ms on 2 files using 18 threads.\n"
         },
         {
-          "comment": "Rewrite one file with the explicit config; silent means success",
+          "comment": "Rewrite one file with the explicit config; no file list means success",
           "command": "oxc-tsrx-fmt --write --config config/format.json src/View.tsrx",
-          "output": ""
+          "output": "Finished in 0ms on 1 files using 18 threads.\n"
         },
         {
           "comment": "Stdin mode prints the formatted source, single quotes and all",
@@ -186,6 +186,26 @@
         }
       ]
     },
+    "custom-plugins-tsrx-plugin": {
+      "caption": "Real output, captured at build time, from the same project and the same .oxlintrc.json, pointed at the .tsrx file instead.",
+      "transcript": [
+        {
+          "comment": "Same plugin, same config, one .tsrx file",
+          "command": "npx oxlint src/TaskList.tsrx",
+          "output": "src/TaskList.tsrx:4:3: warning eslint(no-debugger): `debugger` statement is not allowed\nFound 0 error(s) and 1 warning(s).\noxlint (oxc-tsrx): running JS plugins on 1 .tsrx file(s) by linting the TSX projection; this parses each of those files once more. Disable with \"settings\": { \"oxcTsrx\": { \"jsPluginsOnTsrx\": false } }.\n"
+        }
+      ]
+    },
+    "custom-plugins-tsrx-map": {
+      "caption": "Real output, captured at build time, after src/TaskFeed.tsrx was added to the same project.",
+      "transcript": [
+        {
+          "comment": "Your own rule, reporting on the .tsrx file you wrote",
+          "command": "npx oxlint src/TaskFeed.tsrx",
+          "output": "src/TaskFeed.tsrx:4:36: error tsrx-demo(require-keyed-map): JSX returned from .map() should declare a `key` prop.\nFound 1 error(s) and 0 warning(s).\noxlint (oxc-tsrx): running JS plugins on 1 .tsrx file(s) by linting the TSX projection; this parses each of those files once more. Disable with \"settings\": { \"oxcTsrx\": { \"jsPluginsOnTsrx\": false } }.\n"
+        }
+      ]
+    },
     "custom-plugins-mixed-directory": {
       "caption": "Real output, captured at build time, from the same project with one command run over the whole src directory.",
       "transcript": [
@@ -193,6 +213,16 @@
           "comment": "Both file types at once, one plugin, one command",
           "command": "npx oxlint src",
           "output": "src/TaskFeed.tsrx:4:36: error tsrx-demo(require-keyed-map): JSX returned from .map() should declare a `key` prop.\nsrc/TaskList.tsrx:4:3: warning eslint(no-debugger): `debugger` statement is not allowed\nsrc/TaskRow.tsx:11:9: error tsrx-demo(require-keyed-map): JSX returned from .map() should declare a `key` prop.\nFound 2 error(s) and 1 warning(s).\noxlint (oxc-tsrx): running JS plugins on 2 .tsrx file(s) by linting the TSX projection; this parses each of those files once more. Disable with \"settings\": { \"oxcTsrx\": { \"jsPluginsOnTsrx\": false } }.\n"
+        }
+      ]
+    },
+    "custom-plugins-tsrx-opt-out": {
+      "caption": "Real output, captured at build time, from the same project after settings.oxcTsrx.jsPluginsOnTsrx was set to false.",
+      "transcript": [
+        {
+          "comment": "With the lane switched off, the .tsrx half refuses out loud",
+          "command": "npx oxlint src/TaskFeed.tsrx",
+          "output": "oxlint (oxc-tsrx): JavaScript plugins are not hosted by the native TSRX lint target itself: it is a Rust process with no Node runtime. The `oxlint` command OXC for TSRX installs runs them on .tsrx for you, by linting the TSX projection with the published Oxlint binary and mapping every diagnostic back to your authored source. Run `oxlint` instead of this target, or remove the settings.oxcTsrx.jsPluginsOnTsrx false opt-out that turned that lane off\n"
         }
       ]
     },
@@ -228,36 +258,6 @@
           "comment": "Parse errors land in result.errors and point at your file",
           "command": "node parse-broken.mjs",
           "output": "Error: unterminated JSX closing tag starting at byte 30\n\n  x unterminated JSX closing tag starting at byte 30\n   ,-[src/Broken.tsrx:2:3]\n 1 | export function Broken() @{\n 2 |   <p>hello</p\n   :   ^\n 3 | }\n   `----\n\n"
-        }
-      ]
-    },
-    "custom-plugins-tsrx-plugin": {
-      "caption": "Real output, captured at build time, from the same project and the same .oxlintrc.json, pointed at the .tsrx file instead.",
-      "transcript": [
-        {
-          "comment": "Same plugin, same config, one .tsrx file",
-          "command": "npx oxlint src/TaskList.tsrx",
-          "output": "src/TaskList.tsrx:4:3: warning eslint(no-debugger): `debugger` statement is not allowed\nFound 0 error(s) and 1 warning(s).\noxlint (oxc-tsrx): running JS plugins on 1 .tsrx file(s) by linting the TSX projection; this parses each of those files once more. Disable with \"settings\": { \"oxcTsrx\": { \"jsPluginsOnTsrx\": false } }.\n"
-        }
-      ]
-    },
-    "custom-plugins-tsrx-map": {
-      "caption": "Real output, captured at build time, after src/TaskFeed.tsrx was added to the same project.",
-      "transcript": [
-        {
-          "comment": "Your own rule, reporting on the .tsrx file you wrote",
-          "command": "npx oxlint src/TaskFeed.tsrx",
-          "output": "src/TaskFeed.tsrx:4:36: error tsrx-demo(require-keyed-map): JSX returned from .map() should declare a `key` prop.\nFound 1 error(s) and 0 warning(s).\noxlint (oxc-tsrx): running JS plugins on 1 .tsrx file(s) by linting the TSX projection; this parses each of those files once more. Disable with \"settings\": { \"oxcTsrx\": { \"jsPluginsOnTsrx\": false } }.\n"
-        }
-      ]
-    },
-    "custom-plugins-tsrx-opt-out": {
-      "caption": "Real output, captured at build time, from the same project after settings.oxcTsrx.jsPluginsOnTsrx was set to false.",
-      "transcript": [
-        {
-          "comment": "With the lane switched off, the .tsrx half refuses out loud",
-          "command": "npx oxlint src/TaskFeed.tsrx",
-          "output": "oxlint (oxc-tsrx): JavaScript plugins are not hosted by the native TSRX lint target itself: it is a Rust process with no Node runtime. The `oxlint` command OXC for TSRX installs runs them on .tsrx for you, by linting the TSX projection with the published Oxlint binary and mapping every diagnostic back to your authored source. Run `oxlint` instead of this target, or remove the settings.oxcTsrx.jsPluginsOnTsrx false opt-out that turned that lane off\n"
         }
       ]
     }

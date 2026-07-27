@@ -94,14 +94,16 @@ These are the exact committed fixtures in [tests/fixtures/control](tests/fixture
 
 - **You cannot build or run a `.tsrx` file with this package.** It lints, formats, parses, and powers your editor. It compiles nothing, so importing a `.tsrx` file into your app makes the bundler read it as ordinary TypeScript and fail on the first `@{`. Building and running one is [your framework's Vite plugin's job](#vite-and-vite).
 - Bytes inside a raw `<style>` element are preserved exactly. They are not CSS-formatted and not CSS-validated.
-- Custom JavaScript lint plugins run on your ordinary files. On `.tsrx` they fail loudly with an explicit error instead of being silently ignored.
+- Custom JavaScript lint plugins run on `.tsrx` too, in the command line and in the editor, but through the TSX projection of your file. That costs one extra parse per linted `.tsrx` file, which is announced every time, and your rule sees `if` and `for` where you wrote `@if` and `@for`.
 - A dynamic tag whose name expression contains more dynamic JSX is not supported yet.
 
 The complete list is in [limitations](https://oxc-tsrx-docs.vercel.app/reference/limitations), and every supported block is in [TSRX syntax](https://oxc-tsrx-docs.vercel.app/guide/tsrx-syntax).
 
 ## Editor setup
 
-Install the released official OXC extension, `oxc.oxc-vscode`. With `oxc-tsrx` in the project there is no other step. You get `.tsrx` diagnostics, formatting, and quick fixes, while ordinary TypeScript stays on canonical Oxlint. One thing to know: the official extension does not list `.tsrx` in its activation events. In a workspace that contains only `.tsrx` files, open any JavaScript, TypeScript, or JSON file once to wake it up. Settings and the rest of the path are in the [editor guide](https://oxc-tsrx-docs.vercel.app/integrations/editor).
+Install the released official OXC extension, `oxc.oxc-vscode`. With `oxc-tsrx` in the project there is nothing else to install or configure. You get `.tsrx` diagnostics, formatting, quick fixes, and your own Oxlint JavaScript plugin rules, while ordinary TypeScript stays on canonical Oxlint. The extension starts your project's `oxlint --lsp`, and `oxc-tsrx` uses that process to route `.tsrx` traffic to its native server.
+
+One thing to know, and it is not optional: the official extension's activation events are 21 `onLanguage:` entries and none of them is `.tsrx`'s language. Ripple's own extension contributes `.tsrx` as the language id `ripple`, so opening a `.tsrx` file activates that extension and not OXC's. Open any JavaScript, TypeScript, or JSON file in the workspace once first, and `.tsrx` is served for the rest of the session. Settings, the plugin lane's extra parse, and the rest of the path are in the [editor guide](https://oxc-tsrx-docs.vercel.app/integrations/editor).
 
 ## Vite and Vite+
 

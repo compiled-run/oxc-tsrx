@@ -57,23 +57,30 @@ your editor. Running the result in a browser is not part of this project yet.
 
 ## Linting
 
-- **JavaScript lint plugins do not run in the native TSRX CLI or native
-  language server.** The native Rust path does not embed Oxlint's Node host, so
-  it runs no JavaScript rules. Which limits apply depends on which layer you
-  mean:
-  - *Released Oxlint* (tested/pinned 1.74.0) runs JS plugins on ordinary
-    `.js`/`.ts`, but its released docs list custom parsers/file formats as
-    unsupported, so it cannot read `.tsrx` at all.
-  - *The local ESLint adapter* is AST-only: the public parser v1 exposes no
-    token stream, so `SourceCode` token rules cannot be correct, and there is
-    no full framework scope contract.
-  - *The upstream custom-parser draft* is broader (it does provide `SourceCode`
-    and forces token/range/location options), but it is unmerged and built
-    locally, so it is not a released product path.
+- **JavaScript lint plugins on `.tsrx` see the projection, not your authored
+  tree.** Your `jsPlugins` rules do run on `.tsrx`, from the `oxlint` command
+  and in the editor, but neither runs your module against the TSRX AST. The
+  native path is Rust with no Node.js runtime, so the legal-TSX projection of
+  your file is linted by the published Oxlint binary instead, and diagnostics
+  are mapped back to your bytes. Four consequences:
+  - `@if`, `@for`, `@switch`, and `@try` reach your rule as the ordinary `if`,
+    `for`, and `switch` statements they project to. A rule keyed on
+    `JSXForExpression` never fires on this route.
+  - `context.filename` is the mirror path, ending in `.tsrx.tsx`, not your
+    authored path.
+  - Each linted `.tsrx` file is parsed once more. The cost is announced on
+    stderr by the CLI and in the server log by the editor, and
+    `settings.oxcTsrx.jsPluginsOnTsrx: false` turns the lane off.
+  - A diagnostic whose position falls on projected-only text is dropped rather
+    than reported at an invented location.
 
-  A source-only VS Code experiment runs a JS rule on `.tsrx` through the
-  official OXC extension, a small LSP launcher, and that Node-enabled draft
-  build; it is tested but not shipped. See [Custom JavaScript
+  For a rule that must see authored TSRX nodes there is still no released
+  Oxlint route. *The local ESLint adapter* is one escape hatch and is AST-only:
+  the public parser v1 exposes no token stream, so `SourceCode` token rules
+  cannot be correct, and there is no full framework scope contract. *The
+  upstream custom-parser draft* is broader (it does provide `SourceCode` and
+  forces token/range/location options), but it is unmerged and built locally,
+  so it is not a released product path. See [Custom JavaScript
   plugins](/integrations/custom-js-plugins).
 - **Type-aware rules** require an explicit `--type-aware` or `--type-check`
   opt-in and the exact supported `oxlint-tsgolint` executable. Missing or
@@ -192,4 +199,10 @@ your editor. Running the result in a browser is not part of this project yet.
   separate axes, not one combined guarantee.
 - A disposable-copy editor walkthrough proves automatic activation, live
   diagnostics, real format-on-save, and one validated safe action without
-  changing the external worktree.
+  changing the external worktree. Automatic activation there is the optional
+  legacy VSIX's, which declares `.tsrx` itself. The released official OXC
+  extension does not: its activation events are 21 `onLanguage:` entries and
+  none of them is `.tsrx`'s language, so a `.tsrx` file opened first in a
+  session does not start it. Open an ordinary JavaScript, TypeScript, or JSON
+  file once and the rest of the session works. See
+  [Editor integration](/integrations/editor#what-a-plain-install-actually-covers).

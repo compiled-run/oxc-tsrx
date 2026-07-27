@@ -12,7 +12,13 @@ That name selection is how this path works, and it is what ships.
 
 No TSRX-specific or forked extension is required, and no setup command is
 either. Rust owns TSRX parsing, linting, formatting, source mapping, and fix
-validation.
+validation, and your own Oxlint JavaScript plugin rules show up as squiggles
+too. See [your own JavaScript rules in the editor](#your-own-javascript-rules-in-the-editor).
+
+One thing to get straight before the setup steps: the extension does not wake
+up on a `.tsrx` file by itself. [What "a plain install" actually
+covers](#what-a-plain-install-actually-covers) explains what that means in a
+workspace where a framework extension already owns `.tsrx`.
 
 ## How the official extension gains TSRX
 
@@ -27,11 +33,32 @@ The released official client starts project-local `oxlint --lsp`.
 - both client-request and server-request IDs are isolated, so responses cannot
   cross streams.
 
-The official extension currently hard-codes its document selectors. It exposes no public API;
-its activation events still omit `.tsrx`. In a TSRX-only workspace, open any
-JavaScript, TypeScript, or JSON file once before opening `.tsrx`; after
-activation, the LSP's dynamic registrations apply. OXC's
-[Language Plugins RFC](https://github.com/oxc-project/oxc/discussions/21936)
+Those dynamic registrations are written as `{ scheme: "file", pattern:
+"**/*.tsrx" }`. They match on the file name, not on the language id, so it does
+not matter what another extension calls the language. What does matter is
+whether the official extension is running at all.
+
+## What "a plain install" actually covers
+
+The official extension exposes no public API, it hard-codes its document selectors,
+and its activation events do not include `.tsrx`. Read from
+`oxc.oxc-vscode` 1.59.0 itself, `activationEvents` is 21 `onLanguage:` entries
+(`astro`, `css`, `graphql`, `handlebars`, `html`, `javascript`,
+`javascriptreact`, `json`, `json5`, `jsonc`, `less`, `markdown`, `mdx`, `mjml`,
+`scss`, `svelte`, `toml`, `typescript`, `typescriptreact`, `vue`, `yaml`), and
+none of them is `tsrx`, `ripple`, or `markless-tsrx`.
+
+That matters most in the workspace you are most likely to have. Ripple's own
+extension (`ripple-ts.ripple-ts-vscode-plugin`, read from 2.0.63) contributes
+`.tsrx` as the language id `ripple`. So opening a `.tsrx` file there activates
+Ripple's extension and not OXC's, and until something else activates OXC's
+extension there is no client to route `.tsrx` traffic to. **`.tsrx` diagnostics
+therefore do not appear from installing the two packages and opening a `.tsrx`
+file.** Open any JavaScript, TypeScript, or JSON file in the workspace once
+first. After that the dynamic registrations above apply and `.tsrx` is served
+for the rest of the session, whatever language id it was given.
+
+OXC's [Language Plugins RFC](https://github.com/oxc-project/oxc/discussions/21936)
 could eventually remove both this activation caveat and the multiplexer.
 The [source-backed upstream seam audit](../architecture/upstreaming-to-oxc.md)
 separates that proposed runtime contract from OXC's current compile-time
@@ -68,7 +95,11 @@ That harsh setup exists to isolate discovery, so do not read it as the install
 you get. An ordinary install, with `node_modules/.bin` left alone, `PATH`
 untouched, and `oxc-tsrx setup` never run, was measured separately in a real
 `oxc.oxc-vscode` 1.59.0 session and served `.tsrx` with no pointer and no extra
-command. That measurement is darwin-arm64 only.
+command. Read that measurement with the activation step included: the session
+opened an ordinary TypeScript file first, waited for the extension to become
+active, and only then opened the `.tsrx` file. Nothing in that run made the
+extension activate on `.tsrx` itself, and nothing can, because that is fixed in
+the extension's manifest. That measurement is darwin-arm64 only.
 
 Of the four declared capabilities, only the language server has a host. The
 parser, lint, and format targets resolve, but nothing runs them through
@@ -96,7 +127,9 @@ One long-lived native process provides:
 - Oxfmt-backed whole-document formatting;
 - `quickfix` actions, only with an exact authored mapping and a clean reparse;
 - UTF-8 byte to editor UTF-16 position conversion, including astral Unicode;
-- one lint, one fix-enabled lint, and one format session per workspace; and
+- one lint, one fix-enabled lint, and one format session per workspace;
+- your own Oxlint JavaScript plugin rules, when `.oxlintrc.json` declares
+  `jsPlugins`; and
 - opt-in type-aware or type-check diagnostics through TypeScript-Go.
 
 The server does not advertise fix-all, suggestion, or dangerous actions.
@@ -109,6 +142,79 @@ Everything runs on the in-memory buffer, and code actions never touch disk.
 Malformed input publishes an authored `parse-error` diagnostic instead of
 stale lint results, formatting malformed input returns no edit, and a later
 valid edit restores normal diagnostics.
+
+## Your own JavaScript rules in the editor
+
+If your `.oxlintrc.json` declares `jsPlugins`, those rules run on `.tsrx` in the
+editor as well as on the command line, at the same positions. You configure
+nothing extra:
+
+```json
+{
+  "jsPlugins": ["./oxlint-demo-plugin.mjs"],
+  "rules": {
+    "tsrx-demo/require-keyed-map": "error"
+  }
+}
+```
+
+Open a `.tsrx` file and your rule is a squiggle, next to the built-in Rust ones.
+The [custom JavaScript plugins guide](/integrations/custom-js-plugins) is the
+tutorial; this section is only what is different inside an editor.
+
+### It costs one extra parse per linted file
+
+The native server is a Rust process with no Node.js runtime, so it cannot run
+your module itself. What it does instead is build the same legal-TSX
+*projection* of your buffer that the built-in rules already use, hand that to a
+small Node.js host, and run the published Oxlint binary over it. Every
+diagnostic comes back through the byte map that turns projection positions into
+positions in the file you wrote.
+
+That means **one extra parse of each `.tsrx` file the server lints**, on open,
+on change, and on save. The Node.js host is started once per workspace, and
+only when your config declares `jsPlugins`. The server says so once, in its
+output log:
+
+```text
+oxc-tsrx-lsp: running this project's Oxlint JS plugins on .tsrx by linting each
+file's TSX projection; this parses every linted .tsrx file once more. Disable
+with "settings": { "oxcTsrx": { "jsPluginsOnTsrx": false } }.
+```
+
+To turn the lane off, use the key that message names:
+
+```json
+{
+  "settings": {
+    "oxcTsrx": {
+      "jsPluginsOnTsrx": false
+    }
+  }
+}
+```
+
+With that set, your plugins keep running on ordinary files, and `.tsrx`
+publishes a single `lint-unavailable` diagnostic explaining why there are no
+`.tsrx` results, rather than going quiet.
+
+### Two differences worth knowing
+
+**`context.filename` is the mirror path, not yours.** Your rule is handed the
+projection, which lives in a throwaway directory and is named `<name>.tsrx.tsx`,
+so a `src/View.tsrx` reaches the rule as
+`<temporary directory>/src/View.tsrx.tsx`. The path relative to the project is
+preserved, so a rule that checks for `src/` still works. The squiggle itself
+still lands on `src/View.tsrx`. This is the same known difference the command
+line has, and [what your rule sees on
+`.tsrx`](/integrations/custom-js-plugins#what-your-rule-sees-on-tsrx) covers the
+rest of it, including the fact that `@if` and `@for` reach your rule already
+compiled to ordinary `if` and `for`.
+
+**A failing plugin is reported, not hidden.** If the lane cannot start, the
+Node.js host dies, or one of your rules throws, the built-in Rust diagnostics
+still publish and you additionally get a `js-plugins-unavailable` warning
+carrying the reason. Fewer rules running is never silent.
 
 ## Visual Studio Code setup
 
@@ -163,7 +269,10 @@ The current, native path (ships today):
 Official OXC extension
   -> project oxlint --lsp multiplexer
      -> canonical Oxlint for JS/TS
-     -> native oxc-tsrx-lsp for TSRX   (Rust; runs no JavaScript rules)
+     -> native oxc-tsrx-lsp for TSRX   (Rust; built-in rules)
+        -> TSX projection of the buffer
+           -> published Oxlint binary, in a Node host
+              -> your JavaScript plugin rule
 ```
 
 The source-only, upstream-draft path (a local proof, not a release):
@@ -176,9 +285,11 @@ Official OXC extension
         -> your JavaScript plugin rule
 ```
 
-The first uses the native Rust server, which cannot run JavaScript lint
-plugins. The second is how a *JavaScript* rule can see `.tsrx` at all, but it
-depends on an unmerged Oxlint draft built locally, so it is not a product path.
+The difference is what your rule is handed. The first stack ships, needs no
+build, and gives your rule the TSX projection, where `@if` and `@for` have
+already become `if` and `for`. The second gives your rule the authored TSRX
+tree, with `JSXIfExpression` and `JSXForExpression` intact, but it depends on an
+unmerged Oxlint draft built locally, so it is not a product path.
 
 This second stack is the `tsrx-demo(no-tsrx-if)` experiment on an authored
 `@if … @else` block. Open `examples/vscode-lints` as its own workspace with the
@@ -202,12 +313,17 @@ alias that the format benchmark resolves by file name.
 ```sh
 pnpm run build:native
 pnpm run test:editor
+pnpm run test:plugins
 pnpm run test:editor:official-toolchain
 pnpm run build:editor
 pnpm run test:editor:vscode
 pnpm run test:packaging:vscode
 pnpm run benchmark:editor
 ```
+
+`test:plugins` is the one that covers the JavaScript plugin lane. It drives a
+real user plugin over a real `.tsrx` file twice, once through `oxlint` and once
+through the language server, and fails if the two disagree about a position.
 
 Retained evidence lives in `tests/editor/markless-vscode-walkthrough.json`
 and `tests/packaging/installed-vsix-report.json`, both recording

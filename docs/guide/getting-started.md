@@ -7,9 +7,10 @@ description: Install oxc-tsrx, then parse, lint, format, and edit your first TSR
 
 OXC for TSRX is prepared as one public package, `oxc-tsrx`. It gives you the
 `oxlint` and `oxfmt` commands you may already know, an OXC-shaped parser API,
-helpers for *authoring* custom JavaScript lint plugins (helpers to write one,
-not a host that runs one on `.tsrx`), and a native language server. It plugs
-into [Vite+](/integrations/vite-plus) and the released
+support for your own [custom JavaScript lint
+plugins](/integrations/custom-js-plugins) on `.tsrx` as well as on ordinary
+files, and a native language server. It plugs into
+[Vite+](/integrations/vite-plus) and the released
 [official OXC extension](/integrations/editor).
 
 > The package is built and tested, but public npm availability is only claimed
@@ -111,15 +112,22 @@ Of the four capabilities declared in the block, only the language server has a
 host today. The parser, lint, and format targets are declared and resolve, but
 nothing runs them through discovery yet.
 
-### Editors need no extra step
+### Editors need no extra install
 
-Install `oxc-tsrx` and do nothing else, and the released official OXC extension
-(measured at `oxc.oxc-vscode` 1.59.0) gives you `.tsrx` diagnostics that refresh
-as you type, formatting, and quick fixes you can apply, while ordinary
-TypeScript files keep going to canonical Oxlint. This was measured in a real
-editor session on darwin-arm64. See
-[the editor integration page](/integrations/editor) for what that session
-covered.
+Install `oxc-tsrx` and install nothing else, and the released official OXC
+extension (measured at `oxc.oxc-vscode` 1.59.0) gives you `.tsrx` diagnostics
+that refresh as you type, formatting, quick fixes you can apply, and your own
+Oxlint JavaScript plugin rules, while ordinary TypeScript files keep going to
+canonical Oxlint. This was measured in a real editor session on darwin-arm64.
+
+There is one step in that session that is not an install, and skipping it looks
+like the integration is broken. The official extension's activation events
+never mention `.tsrx`, and Ripple's extension contributes `.tsrx` as the
+language id `ripple`, so opening a `.tsrx` file first does not start OXC's
+extension. Open any JavaScript, TypeScript, or JSON file in the workspace once,
+and `.tsrx` is served for the rest of the session. See
+[the editor integration page](/integrations/editor#what-a-plain-install-actually-covers)
+for what that session covered.
 
 ### Using Vite+? (compatibility step)
 
@@ -146,12 +154,12 @@ Run it again after a clean dependency install, because `node_modules` is
 disposable.
 
 After that, `vp lint`, `vp fmt`, and `vp check --fix` handle `.tsrx` files, with
-one config edit first: a project scaffolded by `vp create` enables `jsPlugins`
-and `options.typeAware`/`typeCheck` in the `lint` block of `vite.config.ts`, and
-the native TSRX path refuses both, failing the run before anything is linted.
-Delete those two keys, plus the `vite-plus/prefer-vite-plus-imports` rule that
-came from the plugin you just removed, and keep the rest.
-The [Vite and Vite+ page](/integrations/vite-plus#three-template-defaults-you-have-to-turn-off-first)
+one config edit first: a project scaffolded by `vp create` enables
+`options.typeAware`/`typeCheck` in the `lint` block of `vite.config.ts`, and the
+native TSRX path refuses that lane, failing the run before anything is linted.
+Delete that one key and keep the rest, including the template's `jsPlugins`
+entry, which runs on both halves of the project.
+The [Vite and Vite+ page](/integrations/vite-plus#one-template-default-you-have-to-turn-off-first)
 explains why and shows the before and after.
 
 Vite+ is the only place an install alone is not enough. Every other route in

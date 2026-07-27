@@ -33,6 +33,12 @@ const rejectionSource = join(root, "crates/oxc_adapter/src/toolchain.rs");
 const page = await readFile(pagePath, "utf8");
 const transcripts = JSON.parse(await readFile(transcriptsPath, "utf8"));
 
+// The lane has an editor half, and it was documented one page late. These are
+// the pages a reader lands on before the tutorial, so they are held to the same
+// standard as the tutorial itself.
+const editorPagePath = join(root, "docs/integrations/editor.md");
+const readmePath = join(root, "README.md");
+
 function fences(markdown) {
   const found = [];
   const pattern = /^```([\w-]*)\r?\n([\s\S]*?)^```[ \t]*$/gm;
@@ -253,6 +259,70 @@ test("the page no longer claims a JavaScript plugin cannot run on .tsrx", async 
     transcripts.demos?.["custom-plugins-tsrx-wall"] === undefined,
     "the captured wall transcript outlived the wall",
   );
+});
+
+test("the editor page documents the editor half of the lane", async () => {
+  const editor = await readFile(editorPagePath, "utf8");
+
+  // The four facts a reader needs before their own rule surprises them.
+  assert.match(editor, /jsPlugins/u, "the editor page never mentions jsPlugins");
+  assert.match(
+    editor,
+    /parses every linted \.tsrx file once more|extra parse of each `\.tsrx` file/u,
+    "the editor page does not disclose the extra parse",
+  );
+  assert.match(editor, /jsPluginsOnTsrx/u, "the editor page omits the opt-out key");
+  assert.match(
+    editor,
+    /context\.filename/u,
+    "the editor page omits the mirror-path difference",
+  );
+  assert.match(
+    editor,
+    /js-plugins-unavailable/u,
+    "the editor page does not say a failing plugin is surfaced",
+  );
+
+  // The stale claim this lane disproved, in the words the page used to use.
+  assert.doesNotMatch(
+    editor,
+    /runs no JavaScript rules\)/u,
+    "the editor page still says the native path runs no JavaScript rules",
+  );
+});
+
+test("no page still claims a plain install serves .tsrx before activation", async () => {
+  for (const path of [editorPagePath, readmePath]) {
+    const text = await readFile(path, "utf8");
+    // Every page that promises editor diagnostics has to name the activation
+    // step in the same breath, because Ripple's extension owns `.tsrx` as the
+    // language id `ripple` and the official OXC extension activates on neither.
+    assert.match(
+      text,
+      /activation event|activationEvents|onLanguage/u,
+      `${path} promises editor diagnostics without naming the activation step`,
+    );
+    assert.match(text, /ripple/iu, `${path} does not name the extension that owns .tsrx`);
+  }
+});
+
+test("the pages that describe the .tsrx lint boundary no longer wall off plugins", async () => {
+  const claims = [
+    // Each entry is a page and a phrase that was true before this lane shipped.
+    [join(root, "docs/reference/limitations.md"), /JavaScript lint plugins do not run in the native TSRX CLI/u],
+    [join(root, "docs/integrations/configuration.md"), /JavaScript plugins \(`jsPlugins`\) on the `\.tsrx` lane\./u],
+    [join(root, "packages/toolchain/README.md"), /They are not a\s+host that executes one against `\.tsrx`/u],
+    [readmePath, /On `\.tsrx` they fail loudly/u],
+  ];
+  for (const [path, stale] of claims) {
+    const text = await readFile(path, "utf8");
+    assert.doesNotMatch(text, stale, `${path} still describes the removed wall`);
+    assert.match(
+      text,
+      /jsPluginsOnTsrx|extra parse|once more/u,
+      `${path} describes the lane without its cost`,
+    );
+  }
 });
 
 test("the page's commands really do what the page says", async (t) => {
