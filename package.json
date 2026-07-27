@@ -74,6 +74,8 @@
     "test:parser-api": "node --test tests/parser-api/bulk-transfer.test.mjs tests/parser-api/bundle-safety.test.mjs tests/parser-api/host-product.test.mjs tests/parser-api/loader-integrity.test.mjs tests/parser-api/stack-safety.test.mjs tests/parser-api/utf16-lazy.test.mjs"
   },
   "devDependencies": {
+    "@emnapi/core": "1.11.2",
+    "@emnapi/runtime": "1.11.2",
     "@napi-rs/cli": "^3.7.3",
     "@napi-rs/wasm-runtime": "^1.1.6",
     "@terrastruct/d2": "^0.1.33",
