@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { cp, mkdir, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
+import {
+  cp,
+  mkdir,
+  readFile,
+  readdir,
+  realpath,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
@@ -735,4 +744,282 @@ test("the official binary is executed the way each host requires", async (contex
     () => runOfficialCommand({ command: "oxlint", binPath: unrunnable, officialRoot: temporary }),
     /could not execute .*not-runnable.*oxlint binary/su,
   );
+});
+
+/**
+ * The fourth compatibility slot: one key in the project's own
+ * `.vscode/settings.json`.
+ *
+ * `setup` writing the `oxlint` *package* facade is what makes `vp lint` work. It
+ * does nothing for the editor, because the official OXC extension finds its
+ * linter through `node_modules/.bin/oxlint`, and in a Vite+ project that shim
+ * belongs to Vite+, which knows nothing about `.tsrx`. The observed result was an
+ * editor with no diagnostics and no message anywhere saying why.
+ *
+ * These fixtures stand in a published `oxc-tsrx` so the assertions are about the
+ * slot rather than about this repository's install layout; the real installed
+ * shape, under npm, pnpm, and Bun, is `toolchain-compat.test.mjs`.
+ */
+async function providerFixture(temporary, name, { ownsLinterShim }) {
+  const project = join(temporary, name);
+  const modules = join(project, "node_modules");
+  const provider = join(modules, "oxc-tsrx");
+  await mkdir(join(provider, "bin"), { recursive: true });
+  await mkdir(join(modules, ".bin"), { recursive: true });
+  await writeFile(
+    join(project, "package.json"),
+    `${JSON.stringify(
+      { name, private: true, type: "module", devDependencies: { "oxc-tsrx": "0.1.3" } },
+      null,
+      2,
+    )}\n`,
+  );
+  await writeFile(
+    join(provider, "package.json"),
+    `${JSON.stringify({ name: "oxc-tsrx", version: "0.1.3", bin: { oxlint: "./bin/oxlint" } }, null, 2)}\n`,
+  );
+  await writeFile(join(provider, "bin", "oxlint"), "#!/usr/bin/env node\n");
+
+  // Vite+'s own wrapper, in the slot the extension reads.
+  const foreign = join(modules, "vite-plus", "bin", "oxlint");
+  await mkdir(join(modules, "vite-plus", "bin"), { recursive: true });
+  await writeFile(foreign, "#!/usr/bin/env node\n");
+
+  const target = ownsLinterShim ? join(provider, "bin", "oxlint") : foreign;
+  const shim = join(modules, ".bin", "oxlint");
+  try {
+    await symlink(target, shim);
+  } catch {
+    // Windows writes text shims that name their target inline, which is the
+    // other resolution this detection has to read.
+    await writeFile(shim, `@"%~dp0\\..\\${relative(modules, target)}" %*\r\n`);
+  }
+  return { project, modules, settings: join(project, ".vscode", "settings.json") };
+}
+
+test("the editor slot is written only when another tool owns the linter lookup", async () => {
+  const { compatibilityStatus, removeCompatibility, setupCompatibility } = await import(
+    pathToFileURL(join(packageRoot, "dist/compat.js"))
+  );
+  const temporary = await temporaryDirectory("oxc-tsrx-editor-slot-");
+  try {
+    // A plain install: this package already owns `.bin/oxlint`, so the setting
+    // would be noise. Nothing is written and the slot says so rather than
+    // reporting itself active.
+    const plain = await providerFixture(temporary, "plain", { ownsLinterShim: true });
+    const plainSetup = await setupCompatibility({ projectRoot: plain.project });
+    assert.equal(plainSetup.editorSlot.state, "unnecessary");
+    assert.equal(plainSetup.editorSlot.linterShim.owner, "oxc-tsrx");
+    assert.equal(plainSetup.changed.includes("oxc.path.oxlint"), false);
+    assert.deepEqual(await readdir(plain.project), ["node_modules", "package.json"]);
+
+    // A Vite+ shaped project: another tool owns the lookup, so the setting is
+    // the only thing that reaches the editor.
+    const bridged = await providerFixture(temporary, "bridged", { ownsLinterShim: false });
+    const before = await compatibilityStatus({ projectRoot: bridged.project });
+    assert.equal(before.editorSlot.state, "missing");
+    assert.equal(before.editorSlot.linterShim.owner, "other");
+
+    const preview = await setupCompatibility({ projectRoot: bridged.project, dryRun: true });
+    assert.equal(preview.changed.includes("oxc.path.oxlint"), true);
+    assert.equal(await readdir(bridged.project).then((names) => names.includes(".vscode")), false);
+
+    const written = await setupCompatibility({ projectRoot: bridged.project });
+    assert.equal(written.editorSlot.state, "active");
+    assert.equal(written.changed.includes("oxc.path.oxlint"), true);
+    assert.deepEqual(JSON.parse(await readFile(bridged.settings, "utf8")), {
+      "oxc.path.oxlint": "node_modules/oxc-tsrx/bin/oxlint",
+    });
+
+    // Twice changes nothing, byte for byte.
+    const first = await readFile(bridged.settings, "utf8");
+    const again = await setupCompatibility({ projectRoot: bridged.project });
+    assert.deepEqual(again.changed, []);
+    assert.equal(again.editorSlot.state, "active");
+    assert.equal(await readFile(bridged.settings, "utf8"), first);
+
+    // `remove` takes the key back, and the file and directory with it, because
+    // `setup` created both and left nothing else in them.
+    const removed = await removeCompatibility({ projectRoot: bridged.project });
+    assert.equal(removed.removed.includes("oxc.path.oxlint"), true);
+    assert.equal(removed.editorSlot.state, "missing");
+    assert.equal((await readdir(bridged.project)).includes(".vscode"), false);
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
+});
+
+test("the editor slot merges into the user's settings and gives back only its own key", async () => {
+  const { removeCompatibility, setupCompatibility } = await import(
+    pathToFileURL(join(packageRoot, "dist/compat.js"))
+  );
+  const temporary = await temporaryDirectory("oxc-tsrx-editor-merge-");
+  try {
+    // `.vscode/settings.json` is the user's file. VS Code accepts comments and
+    // trailing commas there, this repository has no JSON5/JSONC dependency, and
+    // acquiring one to rewrite a user's file would be the wrong trade. The key
+    // is spliced in and out by byte offset instead, so everything this package
+    // does not own survives exactly as written.
+    const authored = [
+      "{",
+      "  // Formatting for TSRX files, contributed by the framework extension.",
+      '  "[markless-tsrx]": {',
+      '    "editor.defaultFormatter": "oxc.oxc-vscode"',
+      "  },",
+      "  /* team-wide */",
+      '  "editor.tabSize": 2,',
+      "}",
+      "",
+    ].join("\n");
+
+    const merged = await providerFixture(temporary, "merged", { ownsLinterShim: false });
+    await mkdir(join(merged.project, ".vscode"), { recursive: true });
+    await writeFile(merged.settings, authored);
+    await setupCompatibility({ projectRoot: merged.project });
+    const written = await readFile(merged.settings, "utf8");
+    assert.match(written, /"oxc\.path\.oxlint": "node_modules\/oxc-tsrx\/bin\/oxlint"/u);
+    for (const preserved of [
+      "// Formatting for TSRX files, contributed by the framework extension.",
+      "/* team-wide */",
+      '"editor.tabSize": 2,',
+      '"editor.defaultFormatter": "oxc.oxc-vscode"',
+    ]) {
+      assert.ok(written.includes(preserved), preserved);
+    }
+    await removeCompatibility({ projectRoot: merged.project });
+    // The user's file is theirs again, byte for byte, and it was not deleted
+    // because this package did not create it.
+    assert.equal(await readFile(merged.settings, "utf8"), authored);
+
+    // An `oxc.path.oxlint` the user already set is a statement. It is reported
+    // and left, the same refusal the package slots make for a direct or
+    // unrecognized collision, and `remove` does not take it either.
+    const owned = [
+      "{",
+      '  "editor.tabSize": 2,',
+      '  "oxc.path.oxlint": "/opt/homebrew/bin/oxlint",',
+      '  "search.exclude": { "**/dist": true }',
+      "}",
+      "",
+    ].join("\n");
+    const conflicting = await providerFixture(temporary, "conflicting", {
+      ownsLinterShim: false,
+    });
+    await mkdir(join(conflicting.project, ".vscode"), { recursive: true });
+    await writeFile(conflicting.settings, owned);
+    const collided = await setupCompatibility({ projectRoot: conflicting.project });
+    assert.equal(collided.editorSlot.state, "collision");
+    assert.equal(collided.editorSlot.currentValue, "/opt/homebrew/bin/oxlint");
+    assert.equal(collided.changed.includes("oxc.path.oxlint"), false);
+    assert.equal(await readFile(conflicting.settings, "utf8"), owned);
+    await removeCompatibility({ projectRoot: conflicting.project });
+    assert.equal(await readFile(conflicting.settings, "utf8"), owned);
+
+    // Removing a last entry has to take the previous entry's comma with it, or
+    // a file that was strict JSON stops being strict JSON.
+    const last = await providerFixture(temporary, "last-entry", { ownsLinterShim: false });
+    await mkdir(join(last.project, ".vscode"), { recursive: true });
+    await writeFile(
+      last.settings,
+      '{\n  "editor.tabSize": 2,\n  "oxc.path.oxlint": "node_modules/oxc-tsrx/bin/oxlint"\n}\n',
+    );
+    await removeCompatibility({ projectRoot: last.project });
+    assert.equal(
+      await readFile(last.settings, "utf8"),
+      '{\n  "editor.tabSize": 2\n}\n',
+    );
+
+    // A settings file this package cannot read as one top-level object is not a
+    // file it will guess at. It reports and writes nothing.
+    const opaque = await providerFixture(temporary, "opaque", { ownsLinterShim: false });
+    await mkdir(join(opaque.project, ".vscode"), { recursive: true });
+    await writeFile(opaque.settings, "[1, 2, 3]\n");
+    const refused = await setupCompatibility({ projectRoot: opaque.project });
+    assert.equal(refused.editorSlot.state, "unreadable");
+    assert.equal(refused.changed.includes("oxc.path.oxlint"), false);
+    assert.equal(await readFile(opaque.settings, "utf8"), "[1, 2, 3]\n");
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
+});
+
+test("setup reports the TSRX editor prerequisites it deliberately does not own", async () => {
+  const { setupCompatibility } = await import(pathToFileURL(join(packageRoot, "dist/compat.js")));
+  const temporary = await temporaryDirectory("oxc-tsrx-editor-support-");
+  try {
+    // `.tsrx` as a language belongs to the TSRX toolchain, so none of this is
+    // installed, edited, or configured here. It is still detected, because a
+    // green bridge plus a dead editor otherwise leaves a user no way to tell
+    // which half is missing.
+    const bare = await providerFixture(temporary, "bare", { ownsLinterShim: false });
+    const missing = await setupCompatibility({ projectRoot: bare.project });
+    const support = missing.languageSupport;
+    assert.equal(support.ok, false);
+    assert.equal(support.typescriptPlugin.present, false);
+    assert.equal(support.frameworkBinding.present, false);
+    assert.equal(support.tsconfig.path, null);
+    assert.equal(support.typescript.requirement, ">=5.9 <6");
+    assert.equal(support.notes.length, 4, support.notes.join("\n"));
+    for (const expected of [
+      /@tsrx\/typescript-plugin/u,
+      /@tsrx\/react.*octane/u,
+      /tsconfig\.json/u,
+      /typescript/u,
+    ]) {
+      assert.ok(support.notes.some((note) => expected.test(note)), String(expected));
+    }
+
+    // TypeScript 6 is the trap `vp create` scaffolds: the plugin pins ^5.9.3 and
+    // hangs silently rather than failing. Everything else present, that one line
+    // is still reported, and the version on disk is not changed.
+    const scaffolded = await providerFixture(temporary, "scaffolded", {
+      ownsLinterShim: false,
+    });
+    await writePackage(
+      join(scaffolded.modules, "@tsrx", "typescript-plugin"),
+      { name: "@tsrx/typescript-plugin", version: "0.4.0" },
+      {},
+    );
+    await writePackage(join(scaffolded.modules, "@tsrx", "react"), {
+      name: "@tsrx/react",
+      version: "0.9.0",
+    }, {});
+    await writePackage(join(scaffolded.modules, "typescript"), {
+      name: "typescript",
+      version: "6.0.3",
+    }, {});
+    const tsconfig = join(scaffolded.project, "tsconfig.json");
+    const authoredTsconfig = [
+      "{",
+      '  "compilerOptions": {',
+      "    // the TSRX language service",
+      '    "plugins": [{ "name": "@tsrx/typescript-plugin" }],',
+      "  }",
+      "}",
+      "",
+    ].join("\n");
+    await writeFile(tsconfig, authoredTsconfig);
+    const trapped = await setupCompatibility({ projectRoot: scaffolded.project });
+    assert.equal(trapped.languageSupport.typescriptPlugin.present, true);
+    assert.equal(trapped.languageSupport.frameworkBinding.name, "@tsrx/react");
+    assert.equal(trapped.languageSupport.tsconfig.declaresPlugin, true);
+    assert.equal(trapped.languageSupport.typescript.version, "6.0.3");
+    assert.equal(trapped.languageSupport.typescript.supported, false);
+    assert.deepEqual(
+      trapped.languageSupport.notes.map((note) => note.includes("hangs silently")),
+      [true],
+    );
+    assert.equal(await readFile(tsconfig, "utf8"), authoredTsconfig);
+
+    // The supported version, and the report goes quiet.
+    await writeFile(
+      join(scaffolded.modules, "typescript", "package.json"),
+      `${JSON.stringify({ name: "typescript", version: "5.9.3" }, null, 2)}\n`,
+    );
+    const ready = await setupCompatibility({ projectRoot: scaffolded.project });
+    assert.deepEqual(ready.languageSupport.notes, []);
+    assert.equal(ready.languageSupport.ok, true);
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
 });

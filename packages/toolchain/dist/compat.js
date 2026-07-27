@@ -5,11 +5,14 @@ import {
   lstat,
   mkdir,
   readFile,
+  readdir,
+  realpath,
   rename,
   rm,
+  rmdir,
   writeFile,
 } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 const COMPATIBILITY_SCHEMA = 1;
 const PROVIDER = "oxc-tsrx";
@@ -39,6 +42,49 @@ const SLOTS = Object.freeze([
   }),
 ]);
 
+/**
+ * The fourth slot. It is not a package: it is one key in the user's own
+ * `.vscode/settings.json`, and it exists because `setup` fixing *package*
+ * resolution does not fix the editor. The official OXC extension finds its
+ * linter through `node_modules/.bin/oxlint`, and in a Vite+ project that shim
+ * belongs to Vite+, which knows nothing about `.tsrx`. The result is an editor
+ * with no diagnostics and nothing anywhere saying why.
+ *
+ * This is the one place `setup` writes outside `node_modules`, so every report
+ * names the file it touched.
+ */
+const EDITOR_SLOT = Object.freeze({
+  name: "oxc.path.oxlint",
+  capability: "editor",
+  key: "oxc.path.oxlint",
+  directory: ".vscode",
+  file: "settings.json",
+});
+
+/** Where `setup` records what it did to the user's settings file. */
+const EDITOR_RECEIPT = [".oxc-tsrx-compat", "editor-slot.json"];
+
+/**
+ * TSRX editor support that this package deliberately does not own. `.tsrx` as a
+ * *language* belongs to the TSRX toolchain, so `setup` detects and reports these
+ * and changes none of them.
+ */
+const TSRX_TYPESCRIPT_PLUGIN = "@tsrx/typescript-plugin";
+const TSRX_FRAMEWORK_BINDINGS = Object.freeze([
+  "@tsrx/react",
+  "@tsrx/vue",
+  "@tsrx/solid",
+  "@tsrx/preact",
+  "@tsrx/ripple",
+  "octane",
+]);
+/**
+ * `@tsrx/typescript-plugin` pins `^5.9.3` and hangs silently on TypeScript 6,
+ * which is what `vp create` scaffolds. Nothing here changes the version; the
+ * report says which one is installed and which one the plugin needs.
+ */
+const TYPESCRIPT_REQUIREMENT = ">=5.9 <6";
+
 async function exists(path) {
   try {
     await access(path);
@@ -50,6 +96,241 @@ async function exists(path) {
 
 async function readJson(path) {
   return JSON.parse(await readFile(path, "utf8"));
+}
+
+function toPosix(path) {
+  return sep === "/" ? path : path.replaceAll(sep, "/");
+}
+
+function within(root, candidate) {
+  const offset = relative(root, candidate);
+  return offset !== ".." && !offset.startsWith(`..${sep}`) && !isAbsolute(offset);
+}
+
+async function realPathOrNull(path) {
+  try {
+    return await realpath(path);
+  } catch {
+    return null;
+  }
+}
+
+// --- A tolerant reader for the user's own JSON --------------------------------
+//
+// `.vscode/settings.json` and `tsconfig.json` are JSON with comments, and VS
+// Code also accepts trailing commas. This repository has no JSON5/JSONC
+// dependency and this file must not acquire one, so the scanner below is the
+// smallest thing that reads those two shapes: it knows strings, `//` and `/* */`
+// comments, and structural punctuation, and nothing else. It is used two ways:
+// to locate a top-level key by byte offset, so the settings file can be edited
+// surgically and keep every comment and every byte this package does not own,
+// and to strip comments and trailing commas before `JSON.parse` when only a
+// value is wanted. Anything it cannot classify makes it return `null`, and every
+// caller treats `null` as "refuse to touch this file".
+
+const JSONC_PUNCTUATION = new Set(["{", "}", "[", "]", ",", ":"]);
+
+function tokenizeJsonc(text) {
+  const tokens = [];
+  let index = 0;
+  while (index < text.length) {
+    const character = text[index];
+    if (character === '"') {
+      let cursor = index + 1;
+      let closed = false;
+      while (cursor < text.length) {
+        if (text[cursor] === "\\") {
+          cursor += 2;
+          continue;
+        }
+        if (text[cursor] === '"') {
+          closed = true;
+          break;
+        }
+        if (text[cursor] === "\n") break;
+        cursor += 1;
+      }
+      if (!closed) return null;
+      tokens.push({
+        kind: "string",
+        start: index,
+        end: cursor + 1,
+        text: text.slice(index, cursor + 1),
+      });
+      index = cursor + 1;
+      continue;
+    }
+    if (character === "/" && text[index + 1] === "/") {
+      const newline = text.indexOf("\n", index);
+      index = newline === -1 ? text.length : newline;
+      continue;
+    }
+    if (character === "/" && text[index + 1] === "*") {
+      const close = text.indexOf("*/", index + 2);
+      if (close === -1) return null;
+      index = close + 2;
+      continue;
+    }
+    if (JSONC_PUNCTUATION.has(character)) {
+      tokens.push({ kind: character, start: index, end: index + 1, text: character });
+      index += 1;
+      continue;
+    }
+    if (/\s/u.test(character)) {
+      index += 1;
+      continue;
+    }
+    let cursor = index;
+    while (
+      cursor < text.length &&
+      !/[\s{}[\],:"]/u.test(text[cursor]) &&
+      !(text[cursor] === "/" && (text[cursor + 1] === "/" || text[cursor + 1] === "*"))
+    ) {
+      cursor += 1;
+    }
+    if (cursor === index) return null;
+    tokens.push({
+      kind: "literal",
+      start: index,
+      end: cursor,
+      text: text.slice(index, cursor),
+    });
+    index = cursor;
+  }
+  return tokens;
+}
+
+/** Comments and trailing commas removed, so `JSON.parse` can read the rest. */
+function stripJsonc(text) {
+  const tokens = tokenizeJsonc(text);
+  if (!tokens) return null;
+  let output = "";
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (token.kind === ",") {
+      const next = tokens[index + 1];
+      if (next && (next.kind === "}" || next.kind === "]")) continue;
+    }
+    output += token.text;
+  }
+  return output;
+}
+
+function parseJsoncValue(text) {
+  const stripped = stripJsonc(text);
+  if (stripped === null) return null;
+  try {
+    return JSON.parse(stripped);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Every top-level entry of the document's object, with byte offsets. Returns
+ * `null` for anything that is not a single top-level object, which is the shape
+ * both settings files always have and the only shape this package will edit.
+ */
+function readTopLevelObject(text) {
+  const tokens = tokenizeJsonc(text);
+  if (!tokens || tokens.length === 0 || tokens[0].kind !== "{") return null;
+  const entries = [];
+  let position = 1;
+  while (position < tokens.length && tokens[position].kind !== "}") {
+    const key = tokens[position];
+    if (key.kind !== "string" || tokens[position + 1]?.kind !== ":") return null;
+    const valueStart = position + 2;
+    if (valueStart >= tokens.length) return null;
+    let depth = 0;
+    let valueEnd = -1;
+    for (let scan = valueStart; scan < tokens.length; scan += 1) {
+      const token = tokens[scan];
+      if (token.kind === "{" || token.kind === "[") depth += 1;
+      else if (token.kind === "}" || token.kind === "]") {
+        depth -= 1;
+        if (depth < 0) return null;
+      }
+      if (depth === 0) {
+        valueEnd = scan;
+        break;
+      }
+    }
+    if (valueEnd === -1) return null;
+    const comma = tokens[valueEnd + 1]?.kind === "," ? tokens[valueEnd + 1] : null;
+    if (!comma && tokens[valueEnd + 1]?.kind !== "}") return null;
+    let name;
+    try {
+      name = JSON.parse(key.text);
+    } catch {
+      return null;
+    }
+    entries.push({
+      key: name,
+      keyStart: key.start,
+      valueStart: tokens[valueStart].start,
+      valueEnd: tokens[valueEnd].end,
+      valueTokens: tokens.slice(valueStart, valueEnd + 1),
+      commaEnd: comma ? comma.end : null,
+    });
+    position = comma ? valueEnd + 2 : valueEnd + 1;
+  }
+  if (tokens[position]?.kind !== "}" || position !== tokens.length - 1) return null;
+  return { entries, openEnd: tokens[0].end, closeStart: tokens[position].start };
+}
+
+function stringEntryValue(entry) {
+  if (entry.valueTokens.length !== 1 || entry.valueTokens[0].kind !== "string") return null;
+  try {
+    return JSON.parse(entry.valueTokens[0].text);
+  } catch {
+    return null;
+  }
+}
+
+function detectIndent(text, structure) {
+  const anchor = structure.entries[0]?.keyStart;
+  if (anchor === undefined) return "  ";
+  const lineStart = text.lastIndexOf("\n", anchor - 1) + 1;
+  const prefix = text.slice(lineStart, anchor);
+  return prefix.length > 0 && /^[\t ]*$/u.test(prefix) ? prefix : "  ";
+}
+
+function insertTopLevelEntry(text, structure, key, value) {
+  const indent = detectIndent(text, structure);
+  const literal = `${JSON.stringify(key)}: ${JSON.stringify(value)}`;
+  if (structure.entries.length === 0) {
+    const inner = text.slice(structure.openEnd, structure.closeStart);
+    if (inner.trim().length === 0) {
+      return `${text.slice(0, structure.openEnd)}\n${indent}${literal}\n${text.slice(structure.closeStart)}`;
+    }
+  }
+  const separator = structure.entries.length > 0 ? "," : "";
+  return `${text.slice(0, structure.openEnd)}\n${indent}${literal}${separator}${text.slice(structure.openEnd)}`;
+}
+
+function removeTopLevelEntry(text, structure, key) {
+  const index = structure.entries.findIndex((entry) => entry.key === key);
+  if (index === -1) return text;
+  const entry = structure.entries[index];
+  let start = entry.keyStart;
+  let end = entry.commaEnd ?? entry.valueEnd;
+  const lineStart = text.lastIndexOf("\n", start - 1) + 1;
+  if (/^[\t ]*$/u.test(text.slice(lineStart, start))) start = lineStart;
+  while (end < text.length && (text[end] === " " || text[end] === "\t")) end += 1;
+  if (text[end] === "\r") end += 1;
+  if (text[end] === "\n") end += 1;
+  const output = text.slice(0, start) + text.slice(end);
+  // A last entry carries no comma of its own, so the previous entry's comma has
+  // to go with it or the document gains a trailing comma it did not have. That
+  // one character is deleted on its own rather than as part of the span, so any
+  // comment written between the two entries survives.
+  if (entry.commaEnd === null && index > 0) {
+    const comma = structure.entries[index - 1].commaEnd;
+    if (comma !== null && comma <= start) {
+      return output.slice(0, comma - 1) + output.slice(comma);
+    }
+  }
+  return output;
 }
 
 export async function findProjectRoot(start = process.cwd()) {
@@ -310,6 +591,334 @@ async function replaceOwnedFacade(status, providerVersion, modules) {
   }
 }
 
+// --- Does this package already win the editor's lookup? ----------------------
+
+/**
+ * The official OXC extension resolves its linter through
+ * `node_modules/.bin/oxlint`. If that shim already lands inside this package
+ * there is nothing to write and the slot is reported `unnecessary`; if another
+ * tool owns it — Vite+ is the case this exists for — the setting is the only
+ * thing that reaches the editor.
+ *
+ * Resolution differs per package manager, so this reads the shim three ways.
+ * npm, pnpm, Yarn (node-modules linker) and Bun all publish a POSIX symlink,
+ * which `realpath` answers directly. npm and pnpm on Windows publish `.cmd` and
+ * `.ps1` text shims that name their target inline, which the text check reads.
+ * Anything that classifies as neither is reported `unknown` and treated as *not*
+ * ours, because writing the setting when it was not needed still points the
+ * extension at the right binary, while skipping it when it was needed is the
+ * silent dead editor this slot exists to prevent.
+ */
+async function inspectLinterShim(modules, providerRoot) {
+  const binDirectory = join(modules, ".bin");
+  const names = process.platform === "win32"
+    ? ["oxlint.cmd", "oxlint.ps1", "oxlint"]
+    : ["oxlint"];
+  const providerReal = (await realPathOrNull(providerRoot)) ?? providerRoot;
+  const facadeReal = await realPathOrNull(join(modules, "oxlint"));
+  const facadeIsOurs = facadeReal
+    ? Boolean(
+        compatibilityMetadata(
+          await readJson(join(modules, "oxlint", "package.json")).catch(() => null),
+        ),
+      )
+    : false;
+  for (const name of names) {
+    const shim = join(binDirectory, name);
+    const info = await lstat(shim).catch(() => null);
+    if (!info) continue;
+    const target = await realPathOrNull(shim);
+    if (target && within(providerReal, target)) {
+      return { path: shim, target, owner: PROVIDER, resolvedBy: "symlink" };
+    }
+    if (target && facadeIsOurs && facadeReal && within(facadeReal, target)) {
+      return { path: shim, target, owner: PROVIDER, resolvedBy: "compatibility-facade" };
+    }
+    if (info.isFile() && !info.isSymbolicLink()) {
+      const source = await readFile(shim, "utf8").catch(() => "");
+      if (/oxc-tsrx[\\/]bin[\\/]oxlint/u.test(source)) {
+        return { path: shim, target: target ?? null, owner: PROVIDER, resolvedBy: "shim-text" };
+      }
+      return { path: shim, target: target ?? null, owner: "other", resolvedBy: "shim-text" };
+    }
+    return {
+      path: shim,
+      target: target ?? null,
+      owner: target ? "other" : "unknown",
+      resolvedBy: target ? "symlink" : "unresolved",
+    };
+  }
+  return { path: join(binDirectory, "oxlint"), target: null, owner: "none", resolvedBy: "absent" };
+}
+
+async function editorSettingValue(projectRoot, providerRoot) {
+  const linked = join(projectRoot, "node_modules", PROVIDER, "bin", "oxlint");
+  if (await exists(linked)) return `node_modules/${PROVIDER}/bin/oxlint`;
+  const offset = relative(projectRoot, join(providerRoot, "bin", "oxlint"));
+  return offset.startsWith("..") || isAbsolute(offset)
+    ? join(providerRoot, "bin", "oxlint")
+    : toPosix(offset);
+}
+
+async function readEditorReceipt(modules) {
+  const receipt = await readJson(join(modules, ...EDITOR_RECEIPT)).catch(() => null);
+  if (
+    receipt?.schemaVersion === COMPATIBILITY_SCHEMA &&
+    receipt?.provider === PROVIDER &&
+    receipt?.key === EDITOR_SLOT.key
+  ) {
+    return receipt;
+  }
+  return null;
+}
+
+async function inspectEditorSlot(projectRoot, providerRoot, modules) {
+  const directory = join(projectRoot, EDITOR_SLOT.directory);
+  const path = join(directory, EDITOR_SLOT.file);
+  const shim = await inspectLinterShim(modules, providerRoot);
+  const value = await editorSettingValue(projectRoot, providerRoot);
+  const base = {
+    name: EDITOR_SLOT.name,
+    capability: EDITOR_SLOT.capability,
+    key: EDITOR_SLOT.key,
+    path,
+    value,
+    linterShim: shim,
+  };
+  if (shim.owner === PROVIDER) {
+    // The ordinary lookup already finds this package, so the setting would be
+    // noise. Nothing is written and nothing is claimed.
+    return { ...base, state: "unnecessary" };
+  }
+  if (!(await exists(path))) return { ...base, state: "missing", currentValue: null };
+  const text = await readFile(path, "utf8").catch(() => null);
+  if (text === null) return { ...base, state: "unreadable", currentValue: null };
+  const structure = readTopLevelObject(text);
+  if (!structure) return { ...base, state: "unreadable", currentValue: null };
+  const entry = structure.entries.find((candidate) => candidate.key === EDITOR_SLOT.key);
+  if (!entry) return { ...base, state: "missing", currentValue: null };
+  const current = stringEntryValue(entry);
+  if (typeof current === "string") {
+    const resolved = await realPathOrNull(
+      isAbsolute(current) ? current : join(projectRoot, current),
+    );
+    const providerReal = (await realPathOrNull(providerRoot)) ?? providerRoot;
+    if (resolved && within(providerReal, resolved)) {
+      return { ...base, state: "active", currentValue: current };
+    }
+    const receipt = await readEditorReceipt(modules);
+    if (receipt && receipt.value === current) {
+      // This package wrote it and it no longer resolves here, which is what a
+      // clean reinstall or a hoisting change looks like. Ours to refresh.
+      return { ...base, state: "stale", currentValue: current };
+    }
+  }
+  return { ...base, state: "collision", currentValue: current };
+}
+
+async function writeEditorSlot(projectRoot, modules, slot) {
+  const directory = join(projectRoot, EDITOR_SLOT.directory);
+  const createdDirectory = !(await exists(directory));
+  if (createdDirectory) await mkdir(directory, { recursive: true });
+  const createdFile = !(await exists(slot.path));
+  const previous = createdFile ? "{}\n" : await readFile(slot.path, "utf8");
+  const structure = readTopLevelObject(previous);
+  if (!structure) {
+    throw new Error(
+      `refusing to edit ${slot.path}: its top-level JSON object could not be located`,
+    );
+  }
+  const cleaned = slot.state === "stale"
+    ? removeTopLevelEntry(previous, structure, EDITOR_SLOT.key)
+    : previous;
+  const target = slot.state === "stale" ? readTopLevelObject(cleaned) : structure;
+  if (!target) {
+    throw new Error(`refusing to edit ${slot.path}: rewriting it would not round-trip`);
+  }
+  await writeFile(
+    slot.path,
+    insertTopLevelEntry(cleaned, target, EDITOR_SLOT.key, slot.value),
+  );
+  const existing = await readEditorReceipt(modules);
+  await mkdir(join(modules, EDITOR_RECEIPT[0]), { recursive: true });
+  await writeFile(
+    join(modules, ...EDITOR_RECEIPT),
+    `${JSON.stringify(
+      {
+        schemaVersion: COMPATIBILITY_SCHEMA,
+        provider: PROVIDER,
+        key: EDITOR_SLOT.key,
+        value: slot.value,
+        settingsPath: toPosix(relative(projectRoot, slot.path)),
+        createdFile: existing?.createdFile === true ? true : createdFile,
+        createdDirectory:
+          existing?.createdDirectory === true ? true : createdDirectory,
+      },
+      null,
+      2,
+    )}\n`,
+  );
+}
+
+async function revertEditorSlot(projectRoot, modules, slot) {
+  const receipt = await readEditorReceipt(modules);
+  const text = await readFile(slot.path, "utf8").catch(() => null);
+  if (text !== null) {
+    const structure = readTopLevelObject(text);
+    if (!structure) {
+      throw new Error(
+        `refusing to edit ${slot.path}: its top-level JSON object could not be located`,
+      );
+    }
+    const next = removeTopLevelEntry(text, structure, EDITOR_SLOT.key);
+    const remaining = readTopLevelObject(next);
+    const emptied =
+      remaining !== null &&
+      remaining.entries.length === 0 &&
+      next.slice(remaining.openEnd, remaining.closeStart).trim().length === 0;
+    if (emptied && receipt?.createdFile === true) {
+      await rm(slot.path, { force: true });
+      if (receipt.createdDirectory === true) {
+        const directory = join(projectRoot, EDITOR_SLOT.directory);
+        const left = await readdir(directory).catch(() => ["keep"]);
+        if (left.length === 0) await rmdir(directory).catch(() => {});
+      }
+    } else {
+      await writeFile(slot.path, next);
+    }
+  }
+  await rm(join(modules, ...EDITOR_RECEIPT), { force: true });
+}
+
+// --- What this package deliberately does not own -----------------------------
+
+async function resolveDependencyManifest(fromRequire, modules, name) {
+  try {
+    return await readJson(fromRequire.resolve(`${name}/package.json`));
+  } catch {
+    // Not every package exports `./package.json`, and a package can be present
+    // without being importable from the project root.
+  }
+  const direct = join(modules, ...name.split("/"), "package.json");
+  return (await exists(direct)) ? readJson(direct).catch(() => null) : null;
+}
+
+async function nearestTsconfig(projectRoot) {
+  let directory = projectRoot;
+  for (;;) {
+    const candidate = join(directory, "tsconfig.json");
+    if (await exists(candidate)) return candidate;
+    const parent = dirname(directory);
+    if (parent === directory) return null;
+    directory = parent;
+  }
+}
+
+function declaresTsrxPlugin(tsconfig) {
+  const plugins = tsconfig?.compilerOptions?.plugins;
+  return (
+    Array.isArray(plugins) &&
+    plugins.some((plugin) => plugin?.name === TSRX_TYPESCRIPT_PLUGIN)
+  );
+}
+
+function typescriptSupported(version) {
+  const [major, minor] = String(version ?? "")
+    .split(".")
+    .map((part) => Number.parseInt(part, 10));
+  if (!Number.isInteger(major) || !Number.isInteger(minor)) return false;
+  return major === 5 && minor >= 9;
+}
+
+/**
+ * Read-only. `.tsrx` as a language belongs to the TSRX toolchain, and `setup`
+ * must not silently configure another project's tooling. It still has to say
+ * what is missing, because a green bridge plus a dead editor otherwise gives a
+ * user no way to tell which half is broken.
+ */
+async function inspectLanguageSupport(projectRoot, modules) {
+  const fromProject = createRequire(join(projectRoot, "package.json"));
+  const pluginManifest = await resolveDependencyManifest(
+    fromProject,
+    modules,
+    TSRX_TYPESCRIPT_PLUGIN,
+  );
+  const bindings = await Promise.all(
+    TSRX_FRAMEWORK_BINDINGS.map(async (name) => ({
+      name,
+      manifest: await resolveDependencyManifest(fromProject, modules, name),
+    })),
+  );
+  const binding = bindings.find((candidate) => candidate.manifest !== null) ?? null;
+  const tsconfigPath = await nearestTsconfig(projectRoot);
+  const tsconfigText = tsconfigPath ? await readFile(tsconfigPath, "utf8").catch(() => null) : null;
+  const tsconfig = tsconfigText === null ? null : parseJsoncValue(tsconfigText);
+  const typescriptManifest = await resolveDependencyManifest(fromProject, modules, "typescript");
+  const typescriptVersion = typescriptManifest?.version ?? null;
+  const supported = typescriptSupported(typescriptVersion);
+
+  const report = {
+    typescriptPlugin: {
+      package: TSRX_TYPESCRIPT_PLUGIN,
+      present: pluginManifest !== null,
+      version: pluginManifest?.version ?? null,
+    },
+    frameworkBinding: {
+      candidates: [...TSRX_FRAMEWORK_BINDINGS],
+      present: binding !== null,
+      name: binding?.name ?? null,
+      version: binding?.manifest?.version ?? null,
+    },
+    tsconfig: {
+      path: tsconfigPath,
+      readable: tsconfig !== null,
+      declaresPlugin: tsconfig !== null && declaresTsrxPlugin(tsconfig),
+    },
+    typescript: {
+      requirement: TYPESCRIPT_REQUIREMENT,
+      present: typescriptVersion !== null,
+      version: typescriptVersion,
+      supported,
+    },
+    notes: [],
+  };
+
+  if (!report.typescriptPlugin.present) {
+    report.notes.push(
+      `install ${TSRX_TYPESCRIPT_PLUGIN} yourself: it is what gives an editor TSRX language support, and oxc-tsrx never installs it`,
+    );
+  }
+  if (!report.frameworkBinding.present) {
+    report.notes.push(
+      `install a TSRX framework binding yourself (one of ${TSRX_FRAMEWORK_BINDINGS.join(", ")}); oxc-tsrx does not choose one for you`,
+    );
+  }
+  if (!report.tsconfig.path) {
+    report.notes.push(
+      `no tsconfig.json was found at or above ${projectRoot}; add one declaring "plugins": [{ "name": "${TSRX_TYPESCRIPT_PLUGIN}" }]`,
+    );
+  } else if (!report.tsconfig.readable) {
+    report.notes.push(
+      `${report.tsconfig.path} could not be read as JSON, so its "plugins" list was not checked; oxc-tsrx never edits it`,
+    );
+  } else if (!report.tsconfig.declaresPlugin) {
+    report.notes.push(
+      `add "plugins": [{ "name": "${TSRX_TYPESCRIPT_PLUGIN}" }] under compilerOptions in ${report.tsconfig.path} yourself; oxc-tsrx never edits tsconfig.json`,
+    );
+  }
+  if (!report.typescript.present) {
+    report.notes.push(
+      `typescript is not resolvable from ${projectRoot}; ${TSRX_TYPESCRIPT_PLUGIN} needs typescript ${TYPESCRIPT_REQUIREMENT}`,
+    );
+  } else if (!supported) {
+    report.notes.push(
+      `pin typescript to ${TYPESCRIPT_REQUIREMENT} yourself (found ${typescriptVersion}); ${TSRX_TYPESCRIPT_PLUGIN} pins ^5.9.3 and hangs silently on TypeScript 6, which vp create scaffolds`,
+    );
+  }
+  report.ok = report.notes.length === 0;
+  return report;
+}
+
 export async function compatibilityStatus(options = {}) {
   const projectRoot = await findProjectRoot(options.projectRoot);
   const provider = await installedProvider(projectRoot);
@@ -331,6 +940,8 @@ export async function compatibilityStatus(options = {}) {
       state,
       ...(replacedPackage ? { replacedPackage } : {}),
     })),
+    editorSlot: await inspectEditorSlot(projectRoot, provider.root, modules),
+    languageSupport: await inspectLanguageSupport(projectRoot, modules),
   };
 }
 
@@ -365,16 +976,34 @@ export async function setupCompatibility(options = {}) {
       );
     }
   }
+  // The editor slot is the one thing `setup` writes outside `node_modules`, so
+  // it is decided and reported separately from the package slots rather than
+  // folded into them. A collision is left exactly as the user wrote it: this
+  // refuses to overwrite the key, the same way the package slots refuse a
+  // direct or unrecognized package, and reports it instead of failing the
+  // bridge that did work.
+  const editorWritten = ["missing", "stale"].includes(status.editorSlot.state);
+  if (editorWritten) {
+    if (!options.dryRun) {
+      await writeEditorSlot(status.projectRoot, modules, status.editorSlot);
+    }
+    changed.push(status.editorSlot.name);
+  }
+  const editorSlot = editorWritten && !options.dryRun
+    ? { ...status.editorSlot, state: "active", currentValue: status.editorSlot.value }
+    : status.editorSlot;
   return {
     ...status,
     action: options.dryRun ? "preview" : "setup",
     slots: status.slots.map((slot) =>
       !options.dryRun && changed.includes(slot.name) ? { ...slot, state: "active" } : slot,
     ),
+    editorSlot,
     changed,
-    unchanged: status.slots
-      .filter((slot) => slot.state === "active")
-      .map((slot) => slot.name),
+    unchanged: [
+      ...status.slots.filter((slot) => slot.state === "active").map((slot) => slot.name),
+      ...(editorWritten ? [] : [status.editorSlot.name]),
+    ],
   };
 }
 
@@ -408,6 +1037,17 @@ export async function removeCompatibility(options = {}) {
       }
     }
   }
+  const editorRemoved = ["active", "stale"].includes(status.editorSlot.state);
+  if (editorRemoved) {
+    if (!options.dryRun) {
+      await revertEditorSlot(
+        status.projectRoot,
+        join(status.projectRoot, "node_modules"),
+        status.editorSlot,
+      );
+    }
+    removed.push(status.editorSlot.name);
+  }
   return {
     ...status,
     action: options.dryRun ? "preview-remove" : "remove",
@@ -416,6 +1056,58 @@ export async function removeCompatibility(options = {}) {
         ? { ...slot, state: slot.replacedPackage ? "replaceable" : "missing" }
         : slot,
     ),
+    editorSlot: editorRemoved && !options.dryRun
+      ? { ...status.editorSlot, state: "missing", currentValue: null }
+      : status.editorSlot,
     removed,
   };
+}
+
+const EDITOR_SLOT_EXPLANATION = Object.freeze({
+  active: (slot, projectRoot) =>
+    `${toPosix(relative(projectRoot, slot.path))} carries "${slot.key}": "${slot.value}". This is the one file setup writes outside node_modules; it merges that single key and never edits package.json or tsconfig.json.`,
+  stale: (slot, projectRoot) =>
+    `${toPosix(relative(projectRoot, slot.path))} carries a "${slot.key}" this package wrote that no longer resolves here; setup refreshes it to "${slot.value}".`,
+  missing: (slot, projectRoot) =>
+    `${slot.linterShim.path} does not resolve into this package, so the official OXC extension would find no .tsrx support and say nothing about it. setup writes "${slot.key}": "${slot.value}" into ${toPosix(relative(projectRoot, slot.path))}, which is your tree, not node_modules.`,
+  unnecessary: (slot) =>
+    `${slot.linterShim.path} already resolves into this package, so the editor needs no setting and none was written.`,
+  collision: (slot, projectRoot) =>
+    `${toPosix(relative(projectRoot, slot.path))} already sets "${slot.key}" to "${slot.currentValue}". That is yours, so it was left alone; the editor will not use this package until it reads "${slot.value}".`,
+  unreadable: (slot, projectRoot) =>
+    `${toPosix(relative(projectRoot, slot.path))} could not be read as a single top-level JSON object, so nothing was written. Set "${slot.key}": "${slot.value}" there yourself.`,
+});
+
+/**
+ * One text report for `status`, `setup`, and `remove`, so all three describe the
+ * same four slots and the same unowned editor prerequisites in the same words.
+ */
+export function formatCompatibilityReport(result) {
+  const lines = [];
+  const changes = result.changed ?? result.removed ?? null;
+  if (changes) {
+    const verb = result.action === "remove" ? "removed" : result.action;
+    lines.push(
+      `${verb} ${changes.length} compatibility slot(s) for ${PROVIDER} ${result.providerVersion} (${result.packageManager})`,
+    );
+  } else {
+    lines.push(
+      `${PROVIDER} ${result.providerVersion} compatibility (${result.packageManager})`,
+    );
+  }
+  for (const slot of result.slots) lines.push(`- ${slot.name}: ${slot.state}`);
+  const editor = result.editorSlot;
+  if (editor) {
+    lines.push(`- ${editor.name}: ${editor.state} (editor)`);
+    const explain = EDITOR_SLOT_EXPLANATION[editor.state];
+    if (explain) lines.push(`  ${explain(editor, result.projectRoot)}`);
+  }
+  const support = result.languageSupport;
+  if (support && !support.ok) {
+    lines.push(
+      "TSRX language support in the editor belongs to the TSRX toolchain, not to this package. Nothing below was installed, changed, or configured:",
+    );
+    for (const note of support.notes) lines.push(`  ! ${note}`);
+  }
+  return `${lines.join("\n")}\n`;
 }

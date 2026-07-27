@@ -62,27 +62,54 @@ Usage: oxc-tsrx providers [--project <directory>] [--json]
 | Subcommand | What it does |
 | --- | --- |
 | `providers` | Reads the `oxc.provider` block of your direct dependencies and prints the index. It writes nothing and spawns nothing. `routed extensions: .tsrx -> oxc-tsrx` is the line that proves your install works. |
-| `setup` | Writes the project-local `oxlint`, `oxfmt`, and `oxc-parser` facades that Vite+ resolves. Only Vite+ needs it. |
-| `status` | Reports whether those facades are present. |
+| `setup` | Writes the project-local `oxlint`, `oxfmt`, and `oxc-parser` facades that Vite+ resolves, plus the editor slot below. Only Vite+ needs it. |
+| `status` | Reports whether those four slots are present. |
 | `remove` | Removes them and restores any transitive official package it displaced. |
 
 Run it with no subcommand for the same usage block. A wrong subcommand names the
 bad word and exits 2. Note that `--help` and `--version` are not accepted here;
 use no arguments, or `help`.
 
-### `status` says `missing` three times in a healthy project
+### The fourth slot is one key in `.vscode/settings.json`
+
+Three of the four slots are packages in `node_modules`. The fourth is the single
+setting `oxc.path.oxlint`, and it is the one thing `setup` writes into your own
+tree.
+
+It exists because the official OXC extension finds its linter through
+`node_modules/.bin/oxlint`, and in a Vite+ project that shim belongs to Vite+,
+which knows nothing about `.tsrx`. Fixing package resolution does not fix that,
+so the editor went quiet with no error. `setup` writes
+`"oxc.path.oxlint": "node_modules/oxc-tsrx/bin/oxlint"` only when that shim does
+not already resolve into this package, merges it into whatever
+`.vscode/settings.json` you already have without disturbing another key or a
+comment, refuses to overwrite an `oxc.path.oxlint` you set yourself, and hands
+back exactly that one key on `remove`. `package.json` and `tsconfig.json` are
+never edited.
+
+`setup` and `status` additionally report four TSRX editor prerequisites that
+belong to the TSRX toolchain and are never installed or changed here:
+`@tsrx/typescript-plugin`, a framework binding (`@tsrx/react`, `@tsrx/vue`,
+`@tsrx/solid`, `@tsrx/preact`, `@tsrx/ripple`, or `octane`), the nearest
+`tsconfig.json` declaring that plugin, and TypeScript at `>=5.9 <6`.
+
+### `status` says `missing` in a healthy project
 
 ```text
 $ npx oxc-tsrx status
-oxc-tsrx 0.1.2 compatibility (npm)
+oxc-tsrx 0.1.3 compatibility (npm)
 - oxc-parser: missing
 - oxlint: missing
 - oxfmt: missing
+- oxc.path.oxlint: unnecessary (editor)
+  …/node_modules/.bin/oxlint already resolves into this package, so the editor
+  needs no setting and none was written.
 ```
 
 That output is correct, and the exit code is 0. `status` only ever talks about
-the Vite+ compatibility facades, so `missing` means "no facades installed",
-which is the right state for every command-line and editor user. There is
+the Vite+ compatibility slots, so `missing` means "not installed", which is the
+right state for every command-line and editor user, and `unnecessary` on the
+editor slot means the ordinary lookup already reaches this package. There is
 nothing to fix, and running `setup` is not the answer unless you use Vite+.
 
 Use `npx oxc-tsrx providers` to check that TSRX support is actually wired up.

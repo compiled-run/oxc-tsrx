@@ -10,10 +10,13 @@ extension (`oxc.oxc-vscode`). It selects the project-local `oxlint` command
 supplied by `oxc-tsrx` by that literal name, not by reading provider metadata.
 That name selection is how this path works, and it is what ships.
 
-No TSRX-specific or forked extension is required, and no setup command is
-either. Rust owns TSRX parsing, linting, formatting, source mapping, and fix
-validation, and your own Oxlint JavaScript plugin rules show up as squiggles
-too. See [your own JavaScript rules in the editor](#your-own-javascript-rules-in-the-editor).
+No TSRX-specific or forked extension is required, and outside Vite+ no setup
+command is either. A Vite+ project owns `node_modules/.bin/oxlint`, which is
+where the extension looks, so it needs the one command described in
+[In a Vite+ project, `setup` writes `oxc.path.oxlint`](#in-a-vite-project-setup-writes-oxcpathoxlint).
+Rust owns TSRX parsing, linting, formatting, source mapping, and fix validation,
+and your own Oxlint JavaScript plugin rules show up as squiggles too. See
+[your own JavaScript rules in the editor](#your-own-javascript-rules-in-the-editor).
 
 One thing to get straight before the setup steps: the extension does not wake
 up on a `.tsrx` file by itself. [What "a plain install" actually
@@ -240,7 +243,7 @@ Use normal `.oxlintrc.json` and `.oxfmtrc.json` files for TSRX settings. During
 source development only, `OXC_TSRX_LSP_BIN` points the harness at a release
 binary.
 
-### In a Vite+ project you must set `oxc.path.oxlint`
+### In a Vite+ project, `setup` writes `oxc.path.oxlint`
 
 The official extension finds its linter by looking for `oxlint` in
 `node_modules`. In a project that also installs Vite+, that lookup does not
@@ -251,12 +254,13 @@ execs
 node_modules/.pnpm/vite-plus@<version>/node_modules/vite-plus/bin/oxlint
 ```
 
-and knows nothing about `.tsrx`. `oxc-tsrx setup` fixes *package* resolution, so
-`vp lint` works, but it does not own the `.bin` shim the extension reads. The
-result is an editor with no `.tsrx` diagnostics at all and no error explaining
-why.
+and knows nothing about `.tsrx`. Fixing *package* resolution makes `vp lint`
+work, but it does not own the `.bin` shim the extension reads. The result used
+to be an editor with no `.tsrx` diagnostics at all and no error explaining why.
 
-Point the extension at this package explicitly:
+`oxc-tsrx setup` now handles it. It is the fourth slot the command manages, and
+the only one that is not a package: when `node_modules/.bin/oxlint` belongs to
+another tool, `setup` merges one key into your `.vscode/settings.json`:
 
 ```json
 {
@@ -264,8 +268,22 @@ Point the extension at this package explicitly:
 }
 ```
 
-Then reload the window. Outside Vite+ the ordinary lookup does find this
-package and the setting is unnecessary.
+Reload the window afterwards. Everything else in that file is preserved,
+comments included; an `oxc.path.oxlint` you already set is reported rather than
+overwritten; and `oxc-tsrx remove` takes back only that key.
+[The Vite+ page](/integrations/vite-plus#setup-writes-one-file-in-your-tree-and-it-says-so)
+has the full rules.
+
+Outside Vite+ the ordinary lookup does find this package, so nothing is written
+and `status` reports the slot as `unnecessary`.
+
+`setup` also reports the TSRX editor prerequisites it deliberately does not own:
+`@tsrx/typescript-plugin`, a framework binding, the `tsconfig.json` plugins
+entry, and TypeScript at `>=5.9 <6`. That last one matters here because
+`@tsrx/typescript-plugin` pins `^5.9.3` and hangs silently on TypeScript 6,
+which is what `vp create` scaffolds, so a dead TSRX language service looks like
+nothing being wrong. `setup` installs and changes none of it; those pieces are
+the TSRX toolchain's, not this package's.
 
 ## Optional legacy client
 

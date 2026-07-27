@@ -55,10 +55,16 @@ script, refuses direct or unrecognized package collisions, and is idempotent.
 Use `oxc-tsrx status` to inspect it and `oxc-tsrx remove` to restore transitive
 official packages. Run `setup` again after a clean dependency install.
 
-Editor diagnostics need one more setting in a Vite+ project. Vite+ owns
-`node_modules/.bin/oxlint`, which is where the official OXC extension looks, so
-`setup` alone leaves the editor with no `.tsrx` diagnostics and no error saying
-why. Add to `.vscode/settings.json`:
+### `setup` writes one file in your tree, and it says so
+
+The three facades above go into `node_modules`. The editor needs a fourth slot,
+and that one is not in `node_modules`.
+
+The official OXC extension finds its linter through
+`node_modules/.bin/oxlint`. In a Vite+ project that shim is Vite+'s own wrapper,
+which knows nothing about `.tsrx`, so fixing package resolution does nothing for
+the editor: you get no `.tsrx` diagnostics and no error saying why. The only
+thing that reaches the extension is a setting. `setup` writes it:
 
 ```json
 {
@@ -66,7 +72,45 @@ why. Add to `.vscode/settings.json`:
 }
 ```
 
-See [the editor page](/integrations/editor#in-a-vite-project-you-must-set-oxcpathoxlint)
+That file is `.vscode/settings.json`, and it is yours, not `node_modules`. This
+is the one place `setup` writes outside `node_modules`, which is why every
+`setup`, `status`, and `remove` run names the file on its own line rather than
+doing it quietly. Four rules bound it:
+
+- **Only when needed.** If `node_modules/.bin/oxlint` already resolves into this
+  package, which is every project that does not use Vite+, nothing is written
+  and the slot reports `unnecessary`.
+- **Merge, never clobber.** An existing `.vscode/settings.json` keeps every
+  other key, every comment, and its own formatting. The key is spliced in by
+  byte offset, so the rest of the file comes back byte for byte.
+- **Your value wins.** If `oxc.path.oxlint` is already set to something else,
+  `setup` reports the conflict and leaves it, exactly the way it refuses to
+  replace a package slot you own.
+- **Reversible.** `oxc-tsrx remove` takes back that one key, and deletes the
+  file or the `.vscode` directory only when `setup` created it and nothing else
+  is left in it.
+
+`package.json` and `tsconfig.json` are never edited by any of this.
+
+### What `setup` checks but will not touch
+
+`.tsrx` as a *language* in the editor belongs to the TSRX toolchain, not to this
+package, so `setup` configures none of it. It does check, because a green bridge
+plus a dead editor otherwise gives you no way to tell which half is missing. Each
+missing item gets one line telling you what to do:
+
+- `@tsrx/typescript-plugin` resolvable from the project;
+- a framework binding: `@tsrx/react`, `@tsrx/vue`, `@tsrx/solid`,
+  `@tsrx/preact`, `@tsrx/ripple`, or `octane`;
+- the nearest `tsconfig.json` declaring
+  `"plugins": [{ "name": "@tsrx/typescript-plugin" }]`; and
+- TypeScript at `>=5.9 <6`. `@tsrx/typescript-plugin` pins `^5.9.3` and hangs
+  silently on TypeScript 6, which is what `vp create` scaffolds, so this one
+  looks like nothing being wrong rather than like a failure.
+
+Nothing on that list is installed, edited, or upgraded for you.
+
+See [the editor page](/integrations/editor#in-a-vite-project-setup-writes-oxcpathoxlint)
 for what the lookup actually resolves to.
 
 So Vite+ is two steps: the install, then `setup`. Every other host is one step,
@@ -139,22 +183,25 @@ That is Vite+ telling you to go through `vp`, and it is correct. Use `vp lint`
 and `vp fmt` in a Vite+ project. The direct `oxlint` and `oxfmt` commands
 described elsewhere in these docs are for projects that do not use Vite+.
 
-`status` is about these facades and nothing else, which matters if you read it
+`status` is about these four slots and nothing else, which matters if you read it
 before running `setup` or in a project that does not use Vite+ at all:
 
 ```text
 $ pnpm exec oxc-tsrx status
-oxc-tsrx 0.1.2 compatibility (npm)
+oxc-tsrx 0.1.3 compatibility (pnpm)
 - oxc-parser: missing
 - oxlint: missing
 - oxfmt: missing
+- oxc.path.oxlint: missing (editor)
+  …/node_modules/.bin/oxlint does not resolve into this package, so the official
+  OXC extension would find no .tsrx support and say nothing about it. …
 ```
 
-Three `missing` lines with exit code 0 mean the facades are not installed. On
-this page that is the state `setup` is about to change. Anywhere else it is the
-correct, healthy state and there is nothing to fix. To confirm that TSRX support
-itself is wired up, run `oxc-tsrx providers` and look for
-`routed extensions: .tsrx -> oxc-tsrx`.
+`missing` with exit code 0 means the slot is not installed. On this page that is
+the state `setup` is about to change. Outside Vite+ the first three lines stay
+`missing` and the fourth reads `unnecessary`, and that is the correct, healthy
+state with nothing to fix. To confirm that TSRX support itself is wired up, run
+`oxc-tsrx providers` and look for `routed extensions: .tsrx -> oxc-tsrx`.
 
 **This step is permanent.** It is not a shim waiting to be deleted, and it is
 not something a future `oxc-tsrx` release removes. Two facts about Vite+ make it

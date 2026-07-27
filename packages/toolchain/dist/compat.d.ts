@@ -16,6 +16,80 @@ export interface OxcTsrxCompatibilitySlot {
   };
 }
 
+/**
+ * The editor slot is not a package. It is the single `oxc.path.oxlint` key in
+ * the project's own `.vscode/settings.json`, written only when
+ * `node_modules/.bin/oxlint` belongs to another tool.
+ *
+ * - `unnecessary` — the ordinary lookup already reaches this package.
+ * - `missing` — needed, and the key is absent.
+ * - `active` — the key points into this package.
+ * - `stale` — this package wrote the key and it no longer resolves here.
+ * - `collision` — the key is set to something else and is left untouched.
+ * - `unreadable` — the settings file is not a single top-level JSON object.
+ */
+export type OxcTsrxEditorSlotState =
+  | "unnecessary"
+  | "missing"
+  | "active"
+  | "stale"
+  | "collision"
+  | "unreadable";
+
+export interface OxcTsrxEditorSlot {
+  readonly name: "oxc.path.oxlint";
+  readonly capability: "editor";
+  readonly key: "oxc.path.oxlint";
+  /** Absolute path of the project's `.vscode/settings.json`. */
+  readonly path: string;
+  /** The value this package would write. */
+  readonly value: string;
+  readonly state: OxcTsrxEditorSlotState;
+  readonly currentValue?: string | null;
+  readonly linterShim: {
+    readonly path: string;
+    readonly target: string | null;
+    readonly owner: "oxc-tsrx" | "other" | "none" | "unknown";
+    readonly resolvedBy:
+      | "symlink"
+      | "shim-text"
+      | "compatibility-facade"
+      | "unresolved"
+      | "absent";
+  };
+}
+
+/**
+ * TSRX editor support that this package deliberately does not own. Every field
+ * is read-only reporting: nothing here is installed, edited, or configured.
+ */
+export interface OxcTsrxLanguageSupport {
+  readonly typescriptPlugin: {
+    readonly package: "@tsrx/typescript-plugin";
+    readonly present: boolean;
+    readonly version: string | null;
+  };
+  readonly frameworkBinding: {
+    readonly candidates: readonly string[];
+    readonly present: boolean;
+    readonly name: string | null;
+    readonly version: string | null;
+  };
+  readonly tsconfig: {
+    readonly path: string | null;
+    readonly readable: boolean;
+    readonly declaresPlugin: boolean;
+  };
+  readonly typescript: {
+    readonly requirement: ">=5.9 <6";
+    readonly present: boolean;
+    readonly version: string | null;
+    readonly supported: boolean;
+  };
+  readonly notes: readonly string[];
+  readonly ok: boolean;
+}
+
 export interface OxcTsrxCompatibilityOptions {
   readonly projectRoot?: string;
   readonly userAgent?: string;
@@ -28,6 +102,8 @@ export interface OxcTsrxCompatibilityStatus {
   readonly providerVersion: string;
   readonly selectedFrom: "dependencies" | "devDependencies" | "optionalDependencies";
   readonly slots: readonly OxcTsrxCompatibilitySlot[];
+  readonly editorSlot: OxcTsrxEditorSlot;
+  readonly languageSupport: OxcTsrxLanguageSupport;
 }
 
 export interface OxcTsrxSetupResult extends OxcTsrxCompatibilityStatus {
@@ -55,3 +131,9 @@ export declare function setupCompatibility(
 export declare function removeCompatibility(
   options?: OxcTsrxCompatibilityOptions,
 ): Promise<OxcTsrxRemoveResult>;
+export declare function formatCompatibilityReport(
+  result:
+    | OxcTsrxCompatibilityStatus
+    | OxcTsrxSetupResult
+    | OxcTsrxRemoveResult,
+): string;
