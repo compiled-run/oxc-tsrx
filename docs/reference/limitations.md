@@ -81,9 +81,14 @@ your editor. Running the result in a browser is not part of this project yet.
     CLI notes the count on stderr, and the editor publishes a
     `js-plugins-unmapped` warning. The exit code is unchanged, so a CI job that
     wants to fail on dropped rules has to read that field itself.
-  - **Windows is unexercised.** Both Windows targets are published and build
-    green, but nothing has driven the editor lane there, where a Rust process
-    spawns the Node host. Treat it as unverified rather than known-good.
+  - **This lane runs in CI on Linux only.** Windows and macOS are exercised on
+    every pull request now, with a real lint, a real format, live
+    `--lsp` sessions, and a parser addon load (see [platform
+    support](/reference/platform-support)), but the suites that drive
+    `jsPlugins` on `.tsrx` are not in that set. Nothing has spawned the Node
+    host from the Rust process on Windows or macOS, so treat this one lane as
+    unverified there rather than known-good, even though the platform itself is
+    Tier 1.
 
   For a rule that must see authored TSRX nodes there is still no released
   Oxlint route. *The local ESLint adapter* is one escape hatch and is AST-only:
@@ -187,10 +192,13 @@ your editor. Running the result in a browser is not part of this project yet.
 
 ## Packaging and ecosystem
 
-- **Prepared locally, not published from this repository state.** The eight
-  native npm targets and the hosted release workflow are ready, and the host
-  target has local build, install, and execution proof. npm availability is
-  only claimed after an explicitly approved publication.
+- **Prepared, not published from this repository state.** The eight native npm
+  targets and the hosted release workflow are ready. Three of the eight are
+  built and executed on every pull request, and the other five are
+  built, packaged, and smoked only when a release candidate is built by hand.
+  [Platform support](/reference/platform-support) is the per-target split, and
+  it names what the two musl packages never get. npm availability is only
+  claimed after an explicitly approved publication.
 - **Vite+ needs one command after install, permanently.** Vite+ finds its
   lint/format tools by the literal *package* names `oxlint` and `oxfmt`, and it
   pins its own `oxlint@=1.72.0`. A bin name cannot answer a package resolution,
@@ -235,15 +243,28 @@ your editor. Running the result in a browser is not part of this project yet.
   would put permanent rewrites in your own manifest to satisfy one host's
   resolution, which is worse than one explicit, reversible command. That design
   is superseded, not pending.
-- The native language server and released-official-extension integration are
-  proven locally. The optional legacy VSIX is also proven, but its Marketplace
-  availability is a separate approval-gated action and it is not required for
-  the primary editor workflow.
+- The language server has two different levels of proof. Its protocol suite
+  runs in CI on Linux, and every pull request also starts real
+  `oxlint --lsp` and `oxfmt --lsp` stdio sessions on Linux, Windows, and macOS.
+  The released-official-extension integration, which drives a real extension
+  host, is proven locally only, on darwin-arm64. The optional legacy VSIX is
+  also proven that way, and its Marketplace availability is a separate
+  approval-gated action that the primary editor workflow does not need.
 - OXC upgrades are manual: bump the adapter crate and lockfile, then pass the
   full behavior and performance suites.
 
 ## What the test suites do and do not prove
 
+- **A published platform is not a tested platform, and the two lists differ.**
+  Eight targets are published. Three of them (`linux-x64-gnu`,
+  `win32-x64-msvc`, `darwin-arm64`) run a real lint, a real format, live
+  `--lsp` sessions, and a parser addon load on every pull request and on every
+  commit that lands on `main`. Three more get the same work only when a release
+  candidate is built by hand.
+  The two musl targets have never been run on a musl system at all, and their
+  parser addon has never been loaded anywhere, which is a limit of the runners
+  available rather than an oversight. The whole matrix, with the job behind
+  each row, is in [platform support](/reference/platform-support).
 - The pinned read-only Markless corpus proves the formatter contract on real
   code: 179/179 valid files format, re-parse, and converge; 12/12
   known-invalid fixtures are rejected; every `<style>` payload survives

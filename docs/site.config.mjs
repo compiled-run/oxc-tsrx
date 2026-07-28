@@ -48,6 +48,7 @@ export default {
       items: [
         { text: 'CLI', link: '/reference/cli' },
         { text: 'Benchmarks', link: '/reference/benchmarks' },
+        { text: 'Platform Support', link: '/reference/platform-support' },
         { text: 'Limitations', link: '/reference/limitations' },
       ],
     },

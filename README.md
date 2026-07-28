@@ -36,6 +36,8 @@ The version is named on purpose. pnpm 11 holds a new release back for its first 
 
 You need Node.js 20.19 or newer in the 20.x line, or 22.12 or newer. Node 21 and Node 22.0 through 22.11 are not supported. The prebuilt binaries cover macOS, Linux (both glibc and musl), and Windows, on x64 and arm64. There is no JavaScript or WebAssembly fallback, so a platform outside that list has to [build from source](https://oxc-tsrx-docs.vercel.app/guide/getting-started).
 
+Those eight targets are not equally exercised, and the split is published rather than implied. `linux-x64-gnu`, `win32-x64-msvc`, and `darwin-arm64` are Tier 1: every pull request, and every commit that lands on `main`, runs a real lint, a real format, live language-server sessions, and a parser addon load on that platform. The other five are Tier 2, built and packaged for every release and smoked when a release candidate is built, but not tested continuously. The two musl targets have never been run on a musl system, and their parser addon has never been loaded anywhere. [Platform support](https://oxc-tsrx-docs.vercel.app/reference/platform-support) is the per-target matrix.
+
 ## Usage
 
 Save this as `src/Cart.tsrx`. `Props`, `Row`, and `Empty` are placeholders for your own type and components. The `var total` and `debugger` lines are there on purpose, because they give the linter something to catch.
@@ -123,6 +125,7 @@ pnpm exec oxc-tsrx setup
 - [Getting started](https://oxc-tsrx-docs.vercel.app/guide/getting-started): install, first file, first run.
 - [TSRX syntax](https://oxc-tsrx-docs.vercel.app/guide/tsrx-syntax): every supported block.
 - [CLI reference](https://oxc-tsrx-docs.vercel.app/reference/cli): commands, flags, and exit codes.
+- [Platform support](https://oxc-tsrx-docs.vercel.app/reference/platform-support): which of the eight published platforms are tested on every change.
 - [Limitations](https://oxc-tsrx-docs.vercel.app/reference/limitations): what is not claimed yet.
 - [Configuration](https://oxc-tsrx-docs.vercel.app/integrations/configuration): the exact supported matrix.
 - [Acceptance matrix](docs/acceptance/matrix.md): the benchmark reports behind the numbers above.

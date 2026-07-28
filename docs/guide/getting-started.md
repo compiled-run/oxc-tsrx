@@ -28,6 +28,11 @@ this normal install. You do not need Rust on your machine, the package runs
 no install scripts, and the commands never download anything later. If your
 CI blocks postinstall scripts, this install still works.
 
+There is a binary for eight platforms, and three of them are exercised on every
+pull request while the rest are only built and smoked at release time.
+[Platform Support](/reference/platform-support) says which yours is, and what
+the two musl builds never get.
+
 ### Why every install command here names a version
 
 Some resolvers hold back a release for its first day or so. pnpm 11 does this by

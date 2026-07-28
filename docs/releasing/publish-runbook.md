@@ -5,8 +5,12 @@ publishing. This is the operator checklist for putting `oxc-tsrx` and its eight
 platform packages on npm. It records the traps that are specific to shipping
 per-platform native packages, because most of them fail quietly.
 
-Nothing has been published yet. Nothing in this file has been executed against
-the real registry.
+**This has been executed.** All nine names exist on npm at 0.1.0 through 0.1.4,
+`latest` points at 0.1.4, and `oxc-tsrx@0.1.4` carries a SLSA provenance
+attestation, which only a trusted publish from CI produces. Checked against the
+registry on 2026-07-28. Sections written for a first publish of a name that
+does not exist yet are marked below; they are history now, and they stay
+because the next new package name will need them again.
 
 An earlier version of this runbook described thirteen packages. Four of them
 (`@oxc-tsrx/runtime`, `@oxc-tsrx/parser`, `oxlint-tsrx`, `oxfmt-tsrx`) were
@@ -108,9 +112,12 @@ and no `NPM_TOKEN`.
 
 ## The one-time setup only the owner can do
 
-**Publishing is not fully hands-off yet, and it cannot be for version 0.1.0.**
-This section is the honest part of the runbook. Read it before scheduling an
-announcement.
+**Already done for the nine names that ship today, and a template for the next
+one.** All nine exist on the registry and `oxc-tsrx@0.1.4` carries a provenance
+attestation, which a laptop publish cannot produce, so the trusted publisher is
+configured and working. Read on only if you are adding a new package name: a
+name that has never been published cannot be configured as a trusted publisher,
+and that is the trap this section exists for.
 
 npm configures a trusted publisher **on a package that already exists**. Both
 the [npm trust CLI docs](https://docs.npmjs.com/cli/v11/commands/npm-trust)
@@ -276,39 +283,31 @@ workflow can perform. After they are done, every later release is a workflow
 dispatch with no token and no laptop publish. Anyone who says the first release
 is fully automated has not tried it against a name that does not exist yet.
 
-## Still undecided: the dist-tag
+## The dist-tag, decided
 
-`docs/releasing/v0.1.0-launch.json` says:
+`docs/releasing/v0.1.0-launch.json` now says `"distTag": "latest"` next to
+`"installPreview": "npm install -D oxc-tsrx"`, and those agree: the advertised
+command resolves `latest`. On the registry today `latest` is 0.1.4.
 
-```json
-"distTag": "next",
-"installPreview": "npm install -D oxc-tsrx"
-```
+The trap is worth keeping in mind if anyone proposes `next` again. `npm install
+-D oxc-tsrx` resolves `latest`, so publishing under `next` only makes the
+advertised command fail with E404, which is the first thing anyone reading an
+announcement will run. Either publish to `latest`, or change every piece of
+launch copy to say `oxc-tsrx@next`. There is no third option.
 
-Those disagree. `npm install -D oxc-tsrx` resolves the `latest` tag. Published
-under `next` only, the advertised command fails with E404, which is the first
-thing anyone reading the announcement will run.
-
-Pick one before publishing:
-
-- Publish to `latest`. The advertised command works and no launch copy changes.
-- Stay on `next`. Then every piece of launch copy has to say
-  `npm install -D oxc-tsrx@next`, including the README, the site, and the
-  announcement.
-
-There is no third option where the short command works and the tag is `next`.
 The publish workflow uses the launch contract's tag by default, prints a loud
 warning when the resolved tag is not `latest`, and accepts a `dist_tag` input if
 you want to override it for one run. It does not make the decision for you.
 
 ## Before you publish
 
-| Check | How | Result 2026-07-25 |
+| Check | How | Result 2026-07-28 |
 | --- | --- | --- |
-| All nine names available | `npm view <name> version` | Recheck. The last name audit predates the nine-package collapse. |
+| The version you are about to publish is free | `npm view <name>@<version> version` on any of the nine | All nine are published at 0.1.0 through 0.1.4. npm versions are immutable, so a republish of an existing version fails at the rehearsal step. |
 | `access: public` on every package | manifest `publishConfig` | Present. The publish workflow re-checks each tarball. |
-| Versions in lockstep | every manifest at the same version | All at `0.1.0` |
+| Versions in lockstep | every manifest at the same version | All at `0.1.4` |
 | Candidate built | **Build release candidate** run is green | Required. The publish workflow refuses any other run. |
+| Packages contain what they promise | the gate, below | Automated. Runs in both modes and blocks everything after it. |
 
 Scoped packages default to **restricted** on first publish. `access: public` is
 set everywhere, so this is covered, but a newly added scoped package needs the
@@ -348,9 +347,49 @@ What the workflow checks before it writes anything:
 - every tarball's manifest carries the version you typed, `access: public`, and
   `provenance: true`;
 - `oxc-tsrx`'s `optionalDependencies` are exactly the eight platform packages,
-  each pinned to that version.
+  each pinned to that version;
+- **the gate**, `scripts/check-publish-artifacts.mjs`, over all nine tarballs.
 
 Then it dry-runs all nine, and only then publishes all nine in order.
+
+### The gate
+
+This is the step that replaced "publish it and then look". It runs in both
+`dry-run` and `publish` mode, nothing below it runs if it fails, and it writes
+`release-gate-report.json` as a workflow artifact you can read afterwards.
+
+For every one of the nine tarballs it asks, in this order:
+
+1. **Is every path the package promises really inside it?** Each manifest's
+   `files` array is compared against the tarball's actual contents. This is the
+   shape oxc uses in
+   [`check-npm-packages.js`](https://github.com/oxc-project/oxc/blob/main/.github/scripts/check-npm-packages.js),
+   with two additions, because self-consistent is not the same as correct:
+   - a platform package that declares no parser addon is rejected outright,
+     since that is exactly what 0.1.0 published, and
+   - the packed binary and `parser.node` bytes are cross-checked against that
+     package's own `checksums.json`.
+2. **Does it install?** The platform package for the runner plus the public
+   package go into an empty project created outside this workspace, with none
+   of this repository's environment overrides.
+3. **Does the installed copy do real work?** A real lint has to produce a real
+   diagnostic, and `oxc-tsrx/parser` has to produce a real AST through the
+   installed addon. A lint on its own is not enough: 0.1.0 broke the parser and
+   left the linter working.
+4. **Would npm accept it?** `npm publish --dry-run`, rehearsed against a local
+   stand-in registry so the check can run at any version at any time.
+
+The same gate runs on every pull request, in `ci.yml`, on all three Tier 1
+platforms, with `--pack-host` so it packs and exercises whatever that runner
+just built. That is what makes a packaging mistake fail on the pull request
+that caused it rather than on release day. See
+[platform support](../reference/platform-support.md) for which platforms those
+are.
+
+One known limit: in `dry-run` mode at a version that is already on npm, the
+separate "Rehearse the publish" step against npmjs.com fails with `You cannot
+publish over the previously published versions`. That is the check working. Use
+an unpublished version if you want a clean dry run end to end.
 
 ### If the publish fails with ENEEDAUTH or E404
 
@@ -371,36 +410,48 @@ npm's own troubleshooting notes that these errors are reported as generic 404 /
 ENEEDAUTH rather than as a trusted-publishing diagnostic, so do not read the
 message too literally.
 
-## After you publish, verify from outside
+## After you publish
 
-Do not trust the local tree. Verify against the real registry, ideally on a
-machine that has never built this project.
+The workflow does the round trip itself now. There used to be a manual `npm
+view` checklist here; `npm view` resolving a version string is how 0.1.0 was
+called verified while every platform package was missing `parser.node`, so it is
+no longer the last word on anything.
+
+The last step of a `publish` run is `scripts/verify-published-release.mjs`, and
+it is a **backstop, not the gate**. npm versions are immutable and unpublish is
+restricted, so nothing after the publish can prevent a bad release. It can only
+notice one, and the only remedy is deprecate and patch. Prevention lives in the
+gate above.
+
+What it does, on `linux-x64-gnu` only, because this is detection rather than
+coverage:
+
+1. waits for all nine names to be visible at the published version, retrying,
+   because a registry read can hit a replica that has not caught up with the
+   write that just succeeded;
+2. installs `oxc-tsrx@<version>` from the registry into a project outside the
+   workspace, so the platform package is resolved through the published
+   `optionalDependencies` the way a consumer's first install resolves it;
+3. lints a real file and parses one through the installed addon.
+
+Step 2 is the reason a post-publish check survives at all: it is the only place
+that sees npm's own handling of the upload, which no pre-publish check can
+reach.
+
+The same script runs in `dry-run` mode with `--allow-unpublished`, so the code
+path the release depends on is exercised by a rehearsal rather than only by an
+irreversible publish. If the version is not on the registry it says so and
+exits 0.
+
+### What is still yours to check by hand
+
+The automation covers the install and the run. These are not automated:
 
 ```sh
-# 1. The advertised command actually works
-mkdir /tmp/oxc-tsrx-smoke && cd /tmp/oxc-tsrx-smoke
-npm init -y
-npm install -D oxc-tsrx        # add @next if you published to the next tag
-
-# 2. Exactly one platform package arrived
-ls node_modules/@oxc-tsrx/     # expect native-<your-platform> and nothing else
-
-# 3. The bins exist and run
-npx oxlint --version
-npx oxfmt --version
-
-# 4. It actually handles .tsrx
-printf 'let x = 1\n' > a.tsrx
-npx oxlint a.tsrx
-
-# 5. Provenance really landed
+# Provenance really landed
 npm view oxc-tsrx@0.1.0 dist.attestations
-```
 
-Then the case that matters most for not breaking people:
-
-```sh
-# 6. A project that already pins official oxlint must keep its version
+# A project that already pins official oxlint must keep its version
 mkdir /tmp/oxc-tsrx-collision && cd /tmp/oxc-tsrx-collision
 npm init -y
 npm install -D oxlint@1.72.0
@@ -409,10 +460,13 @@ npm install -D oxc-tsrx
 npx oxlint --version           # MUST still report 1.72.0
 ```
 
-Step 6 is the regression that `tests/packaging/released-host-install.test.mjs`
-guards. Before that fix, npm silently upgraded a pinned 1.72.0 to 1.74.0, and
-pnpm behaved differently again. Confirm it against the published artifacts, not
-just locally.
+The collision case is the regression that
+`tests/packaging/released-host-install.test.mjs` guards, and that suite runs on
+all three Tier 1 platforms on every pull request. Before that fix, npm silently
+upgraded a pinned 1.72.0 to 1.74.0, and pnpm behaved differently again. Confirm
+it against the published artifacts once, on a machine that has never built this
+project, because the suite runs against locally packed tarballs rather than
+against the registry.
 
 ## Edge cases specific to per-platform native packages
 
@@ -450,23 +504,33 @@ just locally.
 
 ## What is verified and what is not
 
+Verified in CI on every pull request and every commit that lands on `main`, on
+`ubuntu-24.04`, `windows-latest`, and `macos-latest`:
+
+- install-only behavior for `npx oxlint` and `npx oxfmt`, the pinned-version
+  collision case, and provider discovery across npm, pnpm, Bun, Yarn Berry
+  node-modules, and Yarn Berry Plug'n'Play
+  (`test:packaging:released-hosts` and `test:packaging:providers`);
+- the pre-publish gate, against packages packed on that runner;
+- a real lint, a real format, live `--lsp` sessions, and a parser addon load.
+
+Verified at release-candidate time only, on a runner matching each target:
+`darwin-x64`, `linux-arm64-gnu`, and `win32-arm64-msvc`. Never executed on a
+musl system at all: `linux-x64-musl` and `linux-arm64-musl`. The per-target
+detail is in [platform support](../reference/platform-support.md).
+
 Verified on darwin-arm64 only:
 
-- install-only behavior for `npx oxlint`, `npx oxfmt`, and the released
-  `oxc.oxc-vscode` 1.59.0 extension with no setup step;
-- the pinned-version collision case under npm and pnpm;
-- provider discovery across npm, pnpm, Bun, Yarn Berry node-modules, and Yarn
-  Berry Plug'n'Play.
+- the released `oxc.oxc-vscode` extension driven with no setup step, which needs
+  a real extension host.
 
 Not verified anywhere:
 
 - **Any part of the trusted publishing flow.** No publish, dry run, or `npm
-  trust` call in this runbook has been executed. The workflow's YAML parses and
-  its checks are readable, and that is the whole of the evidence.
-- **Windows and Linux behavior.** The `install-arbitration` CI job covering
-  `windows-latest` and `ubuntu-24.04` exists but has not run. Windows
-  correctness for command arbitration is argued from source, not observed.
-  macOS has no CI job at all.
+  trust` call in this runbook has been executed against the real registry. The
+  gate and the backstop have both run end to end, the gate over the nine real
+  0.1.4 candidate tarballs and on all three Tier 1 CI lanes, but the publish
+  itself has not happened.
 - Vite+ cannot be served by a plain install. It resolves the *package* name
   `oxlint`, which a bin cannot satisfy and which this project cannot legitimately
   publish. `npx oxc-tsrx setup` remains the one command that fixes it. Say that
