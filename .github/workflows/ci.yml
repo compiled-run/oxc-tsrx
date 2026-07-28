@@ -130,6 +130,11 @@ jobs:
     # that execution existed, every non-Linux claim in this repository rested on
     # release-candidate.yml, which only fires on workflow_dispatch: real
     # coverage at release time and none on the change that broke it.
+    #
+    # macos-latest is an arm64 image, so this is where darwin-arm64 stops being
+    # a claim backed by the machine the code was written on. Every step below is
+    # keyed on `matrix.expected_platform` rather than on a runner name, so a row
+    # is the whole cost of covering a platform.
     name: Install and arbitration (${{ matrix.runner }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
@@ -141,6 +146,8 @@ jobs:
             expected_platform: linux
           - runner: windows-latest
             expected_platform: win32
+          - runner: macos-latest
+            expected_platform: darwin
     steps:
       - name: Check out the exact source revision
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
