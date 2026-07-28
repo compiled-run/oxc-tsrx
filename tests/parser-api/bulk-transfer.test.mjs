@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { createRequire } from "node:module";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
 
 import { parseTsrxProgram } from "../../packages/toolchain/dist/tsrx-transfer.js";
+import { removeAddonFixture } from "./addon-fixture.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 const require = createRequire(import.meta.url);
@@ -78,7 +79,7 @@ test("TSRX crosses Node-API as one versioned Program payload", async () => {
   } finally {
     if (previous === undefined) delete process.env.OXC_TSRX_PARSER_ADDON;
     else process.env.OXC_TSRX_PARSER_ADDON = previous;
-    await rm(temporary, { recursive: true, force: true });
+    await removeAddonFixture(temporary);
   }
 });
 

@@ -9,10 +9,10 @@ import {
   nativePackageName,
   nativeTargetForHost,
 } from "../../packages/toolchain/dist/native-targets.js";
+import { resolveNpmInvocation } from "../../scripts/npm-invocation.mjs";
 import { parseNpmPackResponse } from "../../scripts/npm-pack-response.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
-const npm = process.platform === "win32" ? "npm.cmd" : "npm";
 
 // pnpm does not hoist transitive dependencies to the repository root, so
 // `<root>/node_modules/@oxc-project/types` does not exist here. Spawning npm
@@ -68,6 +68,20 @@ function run(executable, args, options = {}) {
       },
     );
   });
+}
+
+// npm is reached the way the product reaches it: through the JavaScript entry
+// its own manifest declares, run by Node. Naming `npm.cmd` on Windows is not
+// only the shim this repository's boundary forbids, it cannot run at all, because
+// Node refuses to spawn a `.cmd` file without `shell: true`. This suite spelled
+// it that way and nothing noticed until the addon lanes first ran on a Windows
+// runner and every npm call here died with `spawn EINVAL`.
+function runNpm(args, options = {}) {
+  const invocation = resolveNpmInvocation(args, {
+    env: options.env ?? process.env,
+    cwd: options.cwd ?? root,
+  });
+  return run(invocation.executable, invocation.args, options);
 }
 
 function runOutcome(executable, args, options = {}) {
@@ -176,7 +190,7 @@ test("the packed parser loader rejects every frozen identity and integrity mutat
     );
     const parserPack = parseNpmPackResponse(
       (
-        await run(npm, ["pack", "--json", "--pack-destination", artifacts], {
+        await runNpm(["pack", "--json", "--pack-destination", artifacts], {
           cwd: join(root, "packages/toolchain"),
           env: npmEnvironment,
         })
@@ -185,15 +199,14 @@ test("the packed parser loader rejects every frozen identity and integrity mutat
     const parserTarball = join(artifacts, parserPack.filename);
     const typesPack = parseNpmPackResponse(
       (
-        await run(npm, ["pack", "--json", "--pack-destination", artifacts], {
+        await runNpm(["pack", "--json", "--pack-destination", artifacts], {
           cwd: typesDirectory,
           env: npmEnvironment,
         })
       ).stdout,
     );
     const typesTarball = join(artifacts, typesPack.filename);
-    await run(
-      npm,
+    await runNpm(
       [
         "install",
         "--ignore-scripts",

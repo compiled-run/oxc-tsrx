@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
+
+import { removeAddonFixture } from "./addon-fixture.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 
@@ -38,7 +40,7 @@ async function withParser(callback) {
   } finally {
     if (previous === undefined) delete process.env.OXC_TSRX_PARSER_ADDON;
     else process.env.OXC_TSRX_PARSER_ADDON = previous;
-    await rm(temporary, { recursive: true, force: true });
+    await removeAddonFixture(temporary);
   }
 }
 
