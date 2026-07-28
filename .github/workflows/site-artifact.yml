@@ -33,6 +33,16 @@ jobs:
   # both suites were confirmed green against a build with no wasm artifact at
   # all. The full artifact-and-deploy path stays on push and dispatch, where the
   # bytes it produces are actually used.
+  #
+  # The one thing a pull request does not get: the checks that need the real
+  # engine. "generated WebAssembly executes the real lint, format, and
+  # projection engines" self-skips without the artifact, and the static
+  # verifier runs 113 checks here against 151 on `main`. Everything that binds
+  # the docs to this repository's own source, including the platform-support
+  # drift test, runs in both.
+  #
+  # Cost, measured on this branch: 2m01s here (run 30339461008) against 6m05s
+  # for the build job plus 31s to deploy (run 30338110699).
   site-tests:
     name: Site tests
     if: github.event_name == 'pull_request'

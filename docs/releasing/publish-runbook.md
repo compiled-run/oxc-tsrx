@@ -571,11 +571,33 @@ Verified on darwin-arm64 only:
 
 Not verified anywhere:
 
-- **Any part of the trusted publishing flow.** No publish, dry run, or `npm
-  trust` call in this runbook has been executed against the real registry. The
-  gate and the backstop have both run end to end, the gate over the nine real
-  0.1.4 candidate tarballs and on all three Tier 1 CI lanes, but the publish
-  itself has not happened.
+- **The gate and the backstop in `publish` mode.** Both have run end to end, but
+  neither has run on the same job as a real publish, because both landed after
+  0.1.4 shipped. The gate has run over the nine real 0.1.4 candidate tarballs on
+  the publish runner and on all three Tier 1 CI lanes. The backstop script ran
+  against npmjs.com in dry run
+  [30339428030](https://github.com/markless-dev/oxc-tsrx/actions/runs/30339428030),
+  installing `oxc-tsrx@0.1.4` from the registry and linting and parsing through
+  it. What is still unexercised is the two `if: inputs.mode == 'publish'` steps
+  themselves, which are one condition away from what did run.
+- **The `--rehearsal` retargeting branch, in CI.** Proven locally only. A dry run
+  can only be dispatched at the version the candidate artifacts carry, and that
+  version is currently published, so CI takes the direct path rather than the
+  retarget. The retarget is what the next release's dry run will take, since its
+  version will not be published yet.
+
+Verified, contrary to what earlier revisions of this page said:
+
+- **Trusted publishing.** `oxc-tsrx@0.1.4` was published by
+  `.github/workflows/publish.yml` on `refs/heads/main` in run
+  [30314008255](https://github.com/markless-dev/oxc-tsrx/actions/runs/30314008255),
+  and says so itself: `npm view oxc-tsrx@0.1.4 dist.attestations` resolves a
+  SLSA provenance attestation naming that workflow, that ref, and that run. No
+  laptop publish can produce one. What that run used as its final check was the
+  old `npm view` loop, which is why the backstop exists.
+
+And one thing that is not a gap but reads like one:
+
 - Vite+ cannot be served by a plain install. It resolves the *package* name
   `oxlint`, which a bin cannot satisfy and which this project cannot legitimately
   publish. `npx oxc-tsrx setup` remains the one command that fixes it. Say that
