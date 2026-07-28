@@ -7,14 +7,12 @@ toolchain:
 
 <!-- pm-install -->
 ```sh
-npm install --save-dev vite-plus oxc-tsrx@0.1.4
+npm install --save-dev vite-plus oxc-tsrx@latest
 ```
 
-`oxc-tsrx@0.1.4` names a version on purpose. An unpinned install can hand you an
-early release that a resolver considers safer because it is older; [why every
-install command here names a
-version](/guide/getting-started#why-every-install-command-here-names-a-version)
-has the measurement.
+`oxc-tsrx` names a version on purpose. A resolver that holds new releases
+back for their first day can otherwise install an older one, report success, and
+leave you with a build whose parser export throws.
 
 ### Getting the `vp` command in the first place
 
@@ -376,10 +374,11 @@ untouched because linting and formatting sit outside the build pipeline.
 ## Architecture
 
 OXC for TSRX does not compile application modules for Vite. Your framework's
-official TSRX Vite plugin (for example `@tsrx/vite-plugin-react` or
-Markless's plugin) still owns runtime semantics, CSS extraction, source maps,
-and HMR, so `vp build` and `vp dev` flow through that plugin into
-Vite/Rolldown exactly as before.
+official TSRX plugin (for example `@tsrx/vite-plugin-react`, installed per
+[tsrx.dev/getting-started](https://tsrx.dev/getting-started), or Markless's
+plugin) still owns runtime semantics, CSS extraction, source maps, and HMR, so
+`vp build` and `vp dev` flow through that plugin into Vite/Rolldown exactly as
+before.
 
 The integration uses Vite+'s public project-local tool resolution. The explicit
 setup command provides exact `oxlint` and `oxfmt` facades backed by

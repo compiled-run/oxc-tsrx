@@ -7,8 +7,8 @@ description: How oxc-tsrx-fmt formats .tsrx files with real Oxfmt layout and con
 
 `oxc-tsrx-fmt` formats `.tsrx` files with Oxfmt, OXC's formatter, and then
 converts the result back into TSRX. Ordinary JS/TS files are formatted by
-Oxfmt directly, with a byte-for-byte-identical-output guarantee versus the
-stock tool.
+Oxfmt directly, with a byte-for-byte-identical-output guarantee versus
+running `oxfmt` yourself.
 
 ## How a format run works
 

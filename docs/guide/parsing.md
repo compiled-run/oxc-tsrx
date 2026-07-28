@@ -21,7 +21,7 @@ You need Node.js 20.19 or newer:
 
 <!-- pm-install -->
 ```sh
-npm install oxc-tsrx@0.1.4
+npm install oxc-tsrx@latest
 ```
 
 Like the CLI tools, the parser is native Rust code. Your package manager
@@ -105,8 +105,8 @@ Step by step, for a `.tsrx` file:
    original source.
 
 Ordinary `.js`, `.jsx`, `.ts`, and `.tsx` files skip steps 1, 2, and 4
-entirely: the file goes straight to OXC, exactly like calling stock
-`oxc-parser`.
+entirely: the file goes straight to OXC, exactly like calling `oxc-parser`
+yourself.
 
 ## The tree is the code you wrote
 

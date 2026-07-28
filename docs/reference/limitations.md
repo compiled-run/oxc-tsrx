@@ -8,33 +8,48 @@ description: What OXC for TSRX does not support yet, and why each gap fails loud
 Everything on this page fails loudly: you get a clear error, never a silently
 skipped file or a wrong-but-plausible result.
 
-## You cannot build or run a `.tsrx` file yet
+## This package does not compile `.tsrx`
 
-This is the largest limitation on the page, so it goes first.
+`oxc-tsrx` lints, formats, parses, and powers your editor. Turning `.tsrx` into
+something a browser runs is a separate job, and it belongs to your framework's
+TSRX plugin. That plugin already exists: the TSRX toolchain ships one for React,
+Preact, Solid, Vue, Ripple, and Octane, across Vite, Rspack, Turbopack, and Bun.
+For React on Vite it is two packages and three lines of config:
 
-`oxc-tsrx` is a lint, format, parse, and editor toolchain for `.tsrx`. It is not
-a compiler you can ship an application with. There is no Vite plugin, no Rollup
-or Rolldown plugin, and no loader. Import a `.tsrx` module from your application
-and the bundler parses it as ordinary TypeScript and fails on the first `@{`:
+```sh
+npm install @tsrx/react @tsrx/vite-plugin-react
+```
+
+```js
+import tsrxReact from '@tsrx/vite-plugin-react'
+
+export default defineConfig({ plugins: [tsrxReact()] })
+```
+
+The [TSRX getting started guide](https://tsrx.dev/getting-started) has the other
+framework and bundler combinations. Install one and `.tsrx` imports build and
+run like any other module.
+
+Without a TSRX plugin, your bundler reads `.tsrx` as ordinary TypeScript and
+fails on the first `@{`:
 
 ```text
 $ vp build
 ✗ `,` or `)` expected
 ```
 
-Re-measured with Vite+ 0.2.6 and published `oxc-tsrx` 0.1.4, on a `vp create`
-React scaffold whose `App.tsx` imports one `.tsrx` component. Nothing is wrong
-with your install when you see this.
+That error means no TSRX plugin is installed. It does not mean anything is wrong
+with `oxc-tsrx`, and installing `oxc-tsrx` will not fix it. The two sit on
+different sides of your project: the framework plugin owns compilation, CSS,
+source maps, and HMR, and this package owns lint, format, parse, and editor
+support.
 
-You cannot fill the gap yourself from the public API either. The legal-TSX
-projection that makes linting and formatting work happens inside Rust and is
-never returned as source, and no export hands it back. `oxc-tsrx/parser` gives
-you an AST, `oxc-tsrx/format` gives you formatted TSRX, and neither is code a
-bundler can consume.
-
-So the supported loop today is: author `.tsrx`, check it with `oxlint`/`oxfmt`
-(or `vp lint` and `vp fmt`), and edit it with diagnostics and quick fixes in
-your editor. Running the result in a browser is not part of this project yet.
+`oxc-tsrx` cannot stand in for that plugin, and neither can its public API.
+`oxc-tsrx/parser` gives you an AST and `oxc-tsrx/format` gives you formatted
+TSRX, and neither is code a bundler can consume. The legal-TSX projection that
+makes linting and formatting work is lint scaffolding, not a build output:
+`<style>` payloads are replaced with `null` and control flow is rewritten to
+plain `if`, so running it would not run your component.
 
 ## Formatting
 
@@ -143,16 +158,18 @@ your editor. Running the result in a browser is not part of this project yet.
 - Not every OXC rule is guaranteed to behave identically around the TSRX
   placeholders. The tested guarantee covers the standard rules in the test
   matrix; anything that would report inside placeholder code is suppressed.
-- Alternate report formats and per-directory nested configs are not done.
+- Lint output comes out as `default`, `agent`, `github`, or `json`. Any other
+  Oxlint format is refused on a run that includes `.tsrx`.
+- `--disable-nested-config` is not supported for `.tsrx` formatting.
 
 ## CLI and configuration
 
 - **A bare `npx oxlint` lints `node_modules` too, and that is upstream
   behavior.** With no path argument and nothing else narrowing the run, Oxlint
-  walks the whole current directory. Measured in a scratch project created with
-  `npm init -y`: 9260 warnings, 9257 of them from `node_modules`. Official
-  Oxlint from the same install reproduces it, so this is parity with canonical
-  Oxlint and not something the TSRX drop-in adds.
+  walks the whole current directory. In a scratch project created with
+  `npm init -y` that is thousands of warnings, nearly all of them from
+  `node_modules`. Official Oxlint from the same install reproduces it, so this
+  is parity with canonical Oxlint and not something the TSRX drop-in adds.
 
   A `.gitignore` containing `node_modules` removes it completely, and no git
   repository is needed for that file to count. Naming a path
@@ -160,24 +177,26 @@ your editor. Running the result in a browser is not part of this project yet.
   default config, and no postinstall that would write one for you, so an empty
   scratch folder is the one place you will meet it.
 - **`npx oxlint --fix` will rewrite files inside `node_modules` if they are in
-  scope.** Measured in a project with no source files of its own: 15 files
-  changed under `node_modules`, exit code 0, no warning. Official Oxlint changed
-  13 in the same folder, so again this is upstream parity. Point `--fix` at a
+  scope.** Measured in a project with no source files of its own: files changed
+  under `node_modules`, exit code 0, no warning. Official Oxlint does the same
+  thing in the same folder, so again this is upstream parity. Point `--fix` at a
   path you own, or make sure `node_modules` is ignored first. `oxfmt` is not
   affected; it skips `node_modules` unless you pass `--with-node-modules`.
 - **`npx oxc-tsrx status` reports `missing` three times in a healthy project.**
   The first three of its four slots are the Vite+ compatibility facades, so
   `oxc-parser: missing`, `oxlint: missing`, and `oxfmt: missing` are the correct
   state for every command-line and editor user, and the fourth reads
-  `oxc.path.oxlint: unnecessary` because the ordinary lookup already reaches
-  this package. It exits 0. Use `npx oxc-tsrx providers` to check that TSRX
-  support is wired up.
+  `oxc.path.oxlint: unnecessary (editor)` because the ordinary lookup already
+  reaches this package. It exits 0. Use `npx oxc-tsrx providers` to check that
+  TSRX support is wired up.
 - **`setup` reports the TSRX editor prerequisites and never acts on them.** It
   does not install `@tsrx/typescript-plugin` or a framework binding, does not
-  edit `package.json`, and does not edit any `tsconfig.json`, so the four `!`
-  lines it prints are work left for you. That ceiling is deliberate: this
-  package owns lint and format for `.tsrx`, and TSRX language support in the
-  editor belongs to the TSRX toolchain.
+  edit `package.json`, and does not edit any `tsconfig.json`, so every `!` line
+  it prints is work left for you. That ceiling is deliberate: this package owns
+  lint and format for `.tsrx`, and TSRX language support in the editor belongs
+  to the TSRX toolchain. The one thing `setup` does write outside
+  `node_modules` is the `oxc.path.oxlint` key in your `.vscode/settings.json`,
+  and only when the ordinary lookup cannot reach this package.
 - **A seventh command, `tsgolint`, appears in `node_modules/.bin`.** It is not
   part of this project. It comes from the `oxlint-tsgolint` dependency, which is
   the official type-aware runner behind `--type-aware` and `--type-check`. You
@@ -221,7 +240,7 @@ your editor. Running the result in a browser is not part of this project yet.
   `package.json`, and a host that reads that block can find TSRX from the
   install alone. Three separate facts hold at once here, and they are easy to
   blur:
-  - discovery is implemented and proven locally from clean consumers on npm,
+  - discovery is implemented and proven in CI from clean consumers on npm,
     pnpm, Bun, and both Yarn Berry linkers;
   - no released Oxlint, Oxfmt, Vite+, or `oxc.oxc-vscode` build reads
     `oxc.provider`. Nothing has been submitted upstream, nothing has been
@@ -278,8 +297,8 @@ your editor. Running the result in a browser is not part of this project yet.
   diagnostics, real format-on-save, and one validated safe action without
   changing the external worktree. Automatic activation there is the optional
   legacy VSIX's, which declares `.tsrx` itself. The released official OXC
-  extension does not: its activation events are 21 `onLanguage:` entries and
-  none of them is `.tsrx`'s language, so a `.tsrx` file opened first in a
-  session does not start it. Open an ordinary JavaScript, TypeScript, or JSON
+  extension does not: every one of its activation events is an `onLanguage:`
+  entry and none of them is `.tsrx`'s language, so a `.tsrx` file opened first
+  in a session does not start it. Open an ordinary JavaScript, TypeScript, or JSON
   file once and the rest of the session works. See
   [Editor integration](/integrations/editor#what-a-plain-install-actually-covers).

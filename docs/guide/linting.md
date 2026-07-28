@@ -26,7 +26,7 @@ Step by step:
    error you see points at the right line and column in your `.tsrx` file.
 
 Ordinary `.js`, `.jsx`, `.ts`, and `.tsx` files skip steps 1–2 entirely: the
-file goes straight to OXC, exactly like running stock Oxlint.
+file goes straight to OXC, exactly like running `oxlint` yourself.
 
 ## See the projection for yourself
 

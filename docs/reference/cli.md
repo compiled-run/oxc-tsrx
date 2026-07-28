@@ -11,7 +11,7 @@ unsupported option is rejected with an actionable error rather than ignored.
 
 ## What a plain install puts on your path
 
-`npm install --save-dev oxc-tsrx@0.1.4` is the whole setup for the command line and
+`npm install --save-dev oxc-tsrx@latest` is the whole setup for the command line and
 for the editor. Vite+ needs one more command; see
 [the minimum steps per host](/guide/getting-started#the-minimum-steps-per-host).
 

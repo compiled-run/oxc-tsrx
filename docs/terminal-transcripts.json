@@ -12,7 +12,7 @@
         {
           "comment": "Format .tsrx and ordinary JS/TS with real Oxfmt layout",
           "command": "npx oxfmt --check src/Counter.tsrx src/View.tsx",
-          "output": "Checking formatting...\n\nsrc/View.tsx (0ms)\nsrc/Counter.tsrx (0ms)\n\nFormat issues found in above 2 files. Run without `--check` to fix.\nFinished in 74ms on 2 files using 18 threads.\nNo config found, using defaults. Please add a config file or try `oxfmt --init` if needed.\n"
+          "output": "Checking formatting...\n\nsrc/View.tsx (0ms)\nsrc/Counter.tsrx (1ms)\n\nFormat issues found in above 2 files. Run without `--check` to fix.\nFinished in 86ms on 2 files using 18 threads.\nNo config found, using defaults. Please add a config file or try `oxfmt --init` if needed.\n"
         }
       ]
     },

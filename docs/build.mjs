@@ -1112,7 +1112,7 @@ async function howItWorksHtml() {
     {
       id: 'scan',
       label: 'Scan',
-      text: 'One pass finds the TSRX-only lines, highlighted on the left. Stock OXC cannot parse them.',
+      text: 'One pass finds the TSRX-only lines, highlighted on the left. OXC on its own cannot parse them.',
     },
     {
       id: 'project',
@@ -1122,7 +1122,7 @@ async function howItWorksHtml() {
     {
       id: 'lint',
       label: 'Run the real OXC',
-      text: `Stock OXC runs on the copy, exactly once, and flags the highlighted lines: ${diagCodes}.`,
+      text: `The real, unmodified OXC runs on the copy, exactly once, and flags the highlighted lines: ${diagCodes}.`,
     },
     {
       id: 'map',

@@ -763,7 +763,7 @@ const HOME_PICKS = [
     emoji: '⚖️',
     hue: 'violet',
     unit: '×',
-    note: 'Median ordinary-TSX latency through the product direct path versus the same-build canonical OXC adapter control. 1.00× is parity; this is not the stock Oxlint npm/CLI boundary.',
+    note: 'Median ordinary-TSX latency through the product direct path versus the same-build canonical OXC adapter control. 1.00× is parity; this is not the official Oxlint npm/CLI boundary.',
   },
   {
     family: 'native-format',

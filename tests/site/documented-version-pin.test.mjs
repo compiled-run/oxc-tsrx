@@ -1,15 +1,23 @@
-// Every install command a reader copies names an exact version, because an
-// unpinned `pnpm add -D oxc-tsrx` on pnpm 11 resolves whatever version has
-// aged past its release-age hold and reports success. When that hold last
-// mattered the answer was 0.1.0, the one release whose parser export throws on
-// every platform and whose `setup` silently skips the editor slot.
+// Install commands in the documentation are deliberately unpinned. `npm
+// install --save-dev oxc-tsrx` is what every comparable project prints, and it
+// is what a reader expects to copy.
 //
-// The pin fixes that and creates a maintenance trap in its place: thirteen
-// literal version strings across six reader-facing files, none of which any
-// build step touches. Ship 0.1.5 and every one of them quietly keeps sending
-// readers to the previous release. Nothing about a stale pin looks wrong in
-// review, and the docs build cannot tell a deliberate pin from a forgotten
-// one. So assert it here, against the version the repository actually ships.
+// Pinning was tried and reverted. It was added when an unpinned install on
+// pnpm 11 could resolve the broken 0.1.0, because that resolver holds a new
+// release back for its first day and 0.1.0 was the only version old enough to
+// clear the bar. That hazard aged out: the fallback is now a working version.
+// What the pin left behind was thirteen literal version strings across six
+// files that no build step touches, all of which quietly point at the previous
+// release the moment a new one ships.
+//
+// `@latest` is not a fix for the same problem. pnpm 11 applies its release-age
+// hold to the `latest` tag too, so `oxc-tsrx@latest` resolves to exactly what
+// writing nothing resolves to, while looking like a guarantee it does not make.
+//
+// So no pin is required. But a pin that someone adds on purpose, in a
+// migration note or a reproduction, must still name a version that exists and
+// agree with what this repository ships. That is what is asserted here, and it
+// costs nothing when there are no pins at all.
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
@@ -17,9 +25,6 @@ import test from "node:test";
 
 const root = resolve(import.meta.dirname, "../..");
 
-// The pages a reader is sent to. Archived and generated material is excluded on
-// purpose: `docs/archive/` records what was true when it was written, and
-// `docs/dist/` is rebuilt from these sources.
 const readerFacingSources = [
   "README.md",
   "docs/guide/getting-started.md",
@@ -33,15 +38,13 @@ const readerFacingSources = [
   "docs/terminal-transcripts.json",
 ];
 
-test("every documented oxc-tsrx version pin names the version this repository ships", async () => {
+test("any documented oxc-tsrx version pin names the version this repository ships", async () => {
   const shipped = JSON.parse(await readFile(join(root, "package.json"), "utf8")).version;
   assert.match(shipped, /^\d+\.\d+\.\d+$/, "the package must declare a plain semver version");
 
-  let pins = 0;
   for (const relativePath of readerFacingSources) {
     const source = await readFile(join(root, relativePath), "utf8");
     for (const match of source.matchAll(/oxc-tsrx@(\d+\.\d+\.\d+)/g)) {
-      pins += 1;
       assert.equal(
         match[1],
         shipped,
@@ -49,11 +52,27 @@ test("every documented oxc-tsrx version pin names the version this repository sh
       );
     }
   }
+});
 
-  // A version bump that deletes the pins would otherwise pass silently, which
-  // is the failure this whole test exists to prevent.
-  assert.ok(
-    pins >= 10,
-    `expected the documented install commands to stay pinned, found only ${pins}`,
-  );
+test("the documented install commands use a dist-tag, never a frozen version", async () => {
+  // `@latest` is fine and `oxc-tsrx` on its own is fine. Both keep working
+  // when a new version ships. `oxc-tsrx@0.1.4` does not: it is the form that
+  // quietly points every reader at the previous release the moment you publish.
+  //
+  // Worth knowing about `@latest`, because it looks stronger than it is: pnpm
+  // 11 applies its release-age hold to the `latest` tag as well, so on that
+  // resolver `oxc-tsrx@latest` and a bare `oxc-tsrx` land on exactly the same
+  // version. The tag is a statement of intent that survives a release, not a
+  // guarantee of freshness.
+  const installLine = /(?:npm install|pnpm add|yarn add|bun add)[^\n`]*\boxc-tsrx@(\S+)/g;
+  for (const relativePath of readerFacingSources) {
+    const source = await readFile(join(root, relativePath), "utf8");
+    for (const match of source.matchAll(installLine)) {
+      assert.doesNotMatch(
+        match[1],
+        /^\d+\.\d+\.\d+/,
+        `${relativePath} freezes an install command at oxc-tsrx@${match[1]}; use a dist-tag so it survives the next release`,
+      );
+    }
+  }
 });

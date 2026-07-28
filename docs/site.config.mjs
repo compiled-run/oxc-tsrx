@@ -2,7 +2,7 @@
 export default {
   title: 'OXC for TSRX',
   description:
-    'Rust-native parsing, linting, and formatting for .tsrx source through canonical OXC. No fork, no patches, one parse.',
+    'Rust-native parsing, linting, formatting, and editor support for .tsrx source through canonical OXC. No fork, no patches, one parse.',
   origin: 'https://oxc-tsrx-docs.vercel.app',
   // Root-absolute base path the site is served under, with trailing slash.
   base: '/',
@@ -55,9 +55,9 @@ export default {
   ],
   hero: {
     name: 'OXC for TSRX',
-    text: 'Native OXC lint and format across the Vite toolchain',
+    text: 'A parser, linter, formatter, and language server for .tsrx',
     tagline:
-      'Real Oxlint rules, real Oxfmt formatting, and a real parser API for your .tsrx files. No fork, no patches, one parse.',
+      'One install, and your .tsrx files lint and format like .tsx does.',
     actions: [
       { theme: 'brand', text: 'Get Started', link: '/guide/getting-started' },
       { theme: 'alt', text: 'What is OXC for TSRX?', link: '/guide/introduction' },
@@ -66,39 +66,39 @@ export default {
   features: [
     {
       icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8.5v7a2 2 0 0 1-1 1.73l-6 3.5a2 2 0 0 1-2 0l-6-3.5A2 2 0 0 1 5 15.5v-7a2 2 0 0 1 1-1.73l6-3.5a2 2 0 0 1 2 0l6 3.5a2 2 0 0 1 1 1.73Z"/><path d="m5.3 7.3 7.7 4.5 7.7-4.5M13 21.5V11.8"/></svg>',
-      title: 'Non-fork by construction',
+      title: 'Built on OXC, not a copy',
       details:
-        'One adapter crate pins canonical OXC at an exact commit. No source snapshot, no Cargo patch, no downstream patch queue.',
+        'Nothing is snapshotted and nothing is patched. Every OXC call lives in one small adapter crate.',
     },
     {
-      icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M10 9.5 12.5 8v8"/></svg>',
-      title: 'Exactly one parse',
+      icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3.5H7a2 2 0 0 0-2 2V10a2 2 0 0 1-2 2 2 2 0 0 1 2 2v4.5a2 2 0 0 0 2 2h1"/><path d="M16 20.5h1a2 2 0 0 0 2-2V14a2 2 0 0 1 2-2 2 2 0 0 1-2-2V5.5a2 2 0 0 0-2-2h-1"/></svg>',
+      title: 'A real parser you can call',
       details:
-        'A byte-oriented scan, one legal-TSX projection allocation, and a single canonical OXC parse. That same parse is yours to call as a library through <code>oxc-tsrx/parser</code>.',
+        'Same API shape as official <code>oxc-parser</code>, plus <code>.tsrx</code>, for codemods, bundler plugins, and analysis tools.',
     },
     {
       icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="0.5" fill="currentColor"/></svg>',
-      title: 'Diagnostics on your bytes',
+      title: 'Squiggles where you typed',
       details:
-        'Real OXC lint diagnostics run on a temporary in-memory TSX copy, then map back to the exact lines you wrote. Labels that would touch scaffolding are suppressed, never faked.',
+        'Real OXC rules run on a temporary in-memory TSX copy, but what you see is anchored to your authored source.',
     },
     {
       icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 20V8m0 0L3.5 11.5M7 8l3.5 3.5M17 4v12m0 0 3.5-3.5M17 16l-3.5-3.5"/></svg>',
-      title: 'Checked formatting lift',
+      title: 'Formatting that checks itself',
       details:
-        'Canonical Oxfmt layout is lifted back to TSRX in one indexed forward pass, then rescanned to the same structural fingerprint before any write.',
+        'Oxfmt layout is carried back into your TSRX, then reparsed and compared before anything reaches disk.',
     },
     {
       icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 4.5 13.5H11L9.5 22 19 10h-6.5L13 2Z"/></svg>',
-      title: 'Fast by contract',
+      title: 'Speed you can check',
       details:
-        'Every headline number above is rebuilt from a committed, identity-checked benchmark report. The applicable frozen ratio and absolute-budget gates fail the release when performance regresses.',
+        'Every number on this page is read from a committed benchmark report when the site is built.',
     },
     {
-      icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.5 20 6v5.5c0 4.7-3.2 8.6-8 10-4.8-1.4-8-5.3-8-10V6l8-3.5Z"/><path d="M12 8v4.5m0 3.5v.01"/></svg>',
-      title: 'Fail-closed honesty',
+      icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="3.5" width="19" height="13.5" rx="2"/><path d="M8.5 21h7M12 17v4"/><path d="M7 11c.9-1.3 1.8-1.3 2.7 0s1.8 1.3 2.6 0 1.8-1.3 2.7 0"/></svg>',
+      title: 'Your editor already knows',
       details:
-        'Unimplemented grammar and unsupported configuration fail loudly before any parse or write. Nothing is silently dropped to look fast.',
+        'The released official OXC VS Code extension picks up the project-local <code>oxlint</code> that <code>oxc-tsrx</code> installs, then gets live <code>.tsrx</code> diagnostics, formatting, and validated quick fixes.',
     },
   ],
   footer: {

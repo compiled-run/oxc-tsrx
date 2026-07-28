@@ -5,13 +5,15 @@ description: Install oxc-tsrx, then parse, lint, format, and edit your first TSR
 
 # Getting Started
 
-OXC for TSRX is prepared as one public package, `oxc-tsrx`. It gives you the
-`oxlint` and `oxfmt` commands you may already know, an OXC-shaped parser API,
-support for your own [custom JavaScript lint
-plugins](/integrations/custom-js-plugins) on `.tsrx` as well as on ordinary
-files, and a native language server. It plugs into
-[Vite+](/integrations/vite-plus) and the released
-[official OXC extension](/integrations/editor).
+Everything ships in one package, `oxc-tsrx`. It gives you the `oxlint` and
+`oxfmt` commands you already know, now handling `.tsrx` files, plus a parser
+API, a language server, and support for your own
+[custom JavaScript lint plugins](/integrations/custom-js-plugins).
+
+It does not compile anything. Building and running `.tsrx` is your framework's
+TSRX plugin's job, and you install that separately from
+[tsrx.dev/getting-started](https://tsrx.dev/getting-started). The two are
+independent: this package never touches your build or dev server.
 
 ## Install
 
@@ -19,220 +21,114 @@ You need Node.js 20.19 or newer. Install one dev dependency:
 
 <!-- pm-install -->
 ```sh
-npm install --save-dev oxc-tsrx@0.1.4
+npm install --save-dev oxc-tsrx@latest
 ```
 
-That is the whole setup. The tools are written in Rust, and your package
-manager downloads a ready-made binary for your operating system as part of
-this normal install. You do not need Rust on your machine, the package runs
-no install scripts, and the commands never download anything later. If your
-CI blocks postinstall scripts, this install still works.
+That is the whole setup. The tools are Rust, but you get a prebuilt binary for
+your platform: no Rust needed, no install scripts, nothing fetched later. It
+works on CI that blocks postinstall.
 
-There is a binary for eight platforms, and three of them are exercised on every
-pull request while the rest are only built and smoked at release time.
-[Platform Support](/reference/platform-support) says which yours is, and what
-the two musl builds never get.
-
-### Why every install command here names a version
-
-Some resolvers hold back a release for its first day or so. pnpm 11 does this by
-default, and it does it silently: `pnpm add -D oxc-tsrx` in a clean directory
-resolved `0.1.0` rather than `0.1.4`, printed `0.1.0 (0.1.4 is available)`, and
-exited 0. `0.1.0` is an early release whose `oxc-tsrx/parser` export throws and
-whose `setup` writes three of the four slots, so you get a broken install that
-looks like a successful one.
-
-Naming the version skips that entirely, on every package manager. So every
-install command on this site names one. Once the version you want has been out
-for a day this stops mattering, and an ordinary range works again; the pin costs
-you nothing either way.
+Eight platforms have binaries.
+[Platform Support](/reference/platform-support) says which is yours and how
+well tested it is.
 
 ### The minimum steps, per host
 
 This is the complete list of things you have to run to lint and format `.tsrx`.
-Each row was measured against published `oxc-tsrx` installed from the registry
-into a clean project on darwin-arm64.
 
 | Where you use it | Steps | What you run |
 | --- | --- | --- |
-| Command line (`oxlint`, `oxfmt`) | 1 | `npm install --save-dev oxc-tsrx@0.1.4` |
-| Editor, through released `oxc.oxc-vscode` | 1 | the same install, and nothing else |
+| Command line (`oxlint`, `oxfmt`) | 1 | `npm install --save-dev oxc-tsrx@latest` |
+| Editor, through the released official OXC extension | 1 | the same install, and nothing else |
 | [Vite+](/integrations/vite-plus) (`vp lint`, `vp fmt`) | 2 | the same install, then `oxc-tsrx setup` |
-
-TSRX as a *language* in your editor is a separate matter, and it is the TSRX
-toolchain's rather than this package's: it needs `@tsrx/typescript-plugin`, a
-framework binding, and a `plugins` entry in the tsconfig that owns your source.
-`setup` reports all three and installs none of them.
-[Custom JavaScript plugins](/integrations/custom-js-plugins#the-whole-path-on-a-fresh-vite-project)
-walks the complete sequence on a fresh `vp create` scaffold, ending at a rule
-you wrote reporting on a `.tsrx` file.
-
-The Vite+ second step is permanent, and you run it again after every clean
-dependency install. Vite+ resolves a *package* named `oxlint`, at an exact
-version of its own (`=1.72.0` on 0.2.4, `=1.75.0` on 0.2.6), and a command name
-cannot answer a package resolution. See
-[Vite and Vite+](/integrations/vite-plus) for the full reasoning.
 
 No row asks you to create a config file, add an ignore file, or add a lifecycle
 script. `oxc-tsrx` writes nothing into your project during install.
 
+Making TSRX a *language* in your editor belongs to the TSRX toolchain, not to
+this package. It needs `@tsrx/typescript-plugin`, a framework binding, and a
+`plugins` entry in the tsconfig that owns your source. `setup` reports all
+three and installs none.
+[Custom JavaScript plugins](/integrations/custom-js-plugins#the-whole-path-on-a-fresh-vite-project)
+walks the sequence on a fresh scaffold.
+
 ### What the install adds to `node_modules/.bin`
 
-A clean install links seven commands. Only the first three are ones you type:
+Three commands are yours to type:
 
 | Command | What it is |
 | --- | --- |
-| `oxlint` | the linter you run. Handles `.tsrx` plus ordinary files |
-| `oxfmt` | the formatter you run. Same split |
+| `oxlint` | the linter. Handles `.tsrx` plus ordinary files |
+| `oxfmt` | the formatter. Same split |
 | `oxc-tsrx` | `providers`, `status`, `setup`, and `remove`. See the [CLI reference](/reference/cli) |
-| `oxc-tsrx-lint`, `oxc-tsrx-fmt`, `oxc-tsrx-lsp` | the native leaf commands `oxlint` and `oxfmt` dispatch to. Useful directly only if your project pins official `oxlint` |
-| `tsgolint` | not part of this project. It comes from the `oxlint-tsgolint` dependency, the official type-aware runner behind `--type-aware`. You never call it yourself, and calling it prints its own "unsupported entrypoint" warning |
 
-One exception: in a project that also installs Vite+, `node_modules/.bin/oxlint`
-and `node_modules/.bin/oxfmt` belong to Vite+ rather than to this package, and
-the `oxlint` one refuses to lint and tells you to run `vp lint`. There, use
-`vp lint` and `vp fmt`, or call this package's own
-`node_modules/oxc-tsrx/bin/oxlint` directly. [Vite and
+The install also links `oxc-tsrx-lint`, `oxc-tsrx-fmt`, and `oxc-tsrx-lsp`,
+which are the native commands `oxlint` and `oxfmt` dispatch to, plus `tsgolint`,
+which comes from the `oxlint-tsgolint` dependency and is not part of this
+project. You never call any of those four yourself.
+
+One exception: in a project that also installs Vite+,
+`node_modules/.bin/oxlint` and `node_modules/.bin/oxfmt` belong to Vite+ rather
+than to this package, and the `oxlint` one refuses to lint and tells you to run
+`vp lint`. There, use `vp lint` and `vp fmt`. [Vite and
 Vite+](/integrations/vite-plus#oxlint-and-oxfmt-on-the-command-line-belong-to-vite-here)
 has the detail.
 
-### Installing is the activation step
-
-`oxc-tsrx` declares a static `oxc.provider` block in its own `package.json`. A
-host that performs provider discovery reads that JSON and learns which files
-this package owns (`.tsrx`) plus the parser, linter, formatter, and language
-server to use for them.
-
-If you have used Vite, the closest familiar shape is a preset that Vite finds
-because it is in your dependency list, not because you pasted a config snippet.
-The difference is that nothing here is executed to be discovered. A host only
-resolves and reads `package.json` files.
-
-So there is no second step: no activation command, no dependency alias, no
-`overrides` block, no install script, and nothing written into `node_modules`
-after the install finishes. Delete `node_modules`, reinstall from your lockfile,
-and it still works, because `oxc-tsrx` is still a direct dependency.
-
-To see exactly what a host would find in your project, without changing
-anything:
+To see what a host finds in your project, without changing anything:
 
 ```sh
 npx oxc-tsrx providers --json
 ```
 
-### Which hosts read that today
-
-This part decides what works for you right now, so it is worth being exact:
-
-- **Reads it today:** the `oxlint --lsp` multiplexer shipped inside `oxc-tsrx`,
-  and this repository's own VS Code client. Discovery is proven from clean
-  consumers on npm, pnpm, Bun, and Yarn Berry (both the node-modules and
-  Plug'n'Play linkers), including a frozen reinstall in every lane.
-- **Does not read it today:** every released build of Oxlint, Oxfmt, Vite+, and
-  the official OXC extension (`oxc.oxc-vscode`). `oxc.provider` is a protocol
-  *proposed* to OXC. It is a source-complete proposal: nothing has been
-  submitted upstream, and nothing has been accepted.
-- **The command names are what reach released tools, and that is the design.**
-  The `oxlint` and `oxfmt` commands this package declares are how the official
-  OXC toolchain finds TSRX from a plain install. Earlier versions of this guide
-  called them compatibility-only surfaces that would be deleted once a released
-  host discovered providers. That is not going to happen, and it is not the
-  plan: the command names are the shipped mechanism.
-
-Of the four capabilities declared in the block, only the language server has a
-host today. The parser, lint, and format targets are declared and resolve, but
-nothing runs them through discovery yet.
+The line to look for is `routed extensions: .tsrx -> oxc-tsrx`. (Don't be
+alarmed if `npx oxc-tsrx status` prints `missing` three times outside a Vite+
+project. That is the correct result, and
+[Limitations](/reference/limitations#cli-and-configuration) says why.)
 
 ### Editors need no extra install
 
-Install `oxc-tsrx` and install nothing else, and the released official OXC
-extension (measured at `oxc.oxc-vscode` 1.59.0) gives you `.tsrx` diagnostics
-that refresh as you type, formatting, quick fixes you can apply, and your own
-Oxlint JavaScript plugin rules, while ordinary TypeScript files keep going to
-canonical Oxlint. This was measured in a real editor session on darwin-arm64.
+Install `oxc-tsrx` and nothing else, and the released official OXC extension
+gives you `.tsrx` diagnostics that refresh as you type, formatting, quick fixes
+you can apply, and your own Oxlint JavaScript plugin rules. Ordinary TypeScript
+files keep going to canonical Oxlint.
 
-There is one step in that session that is not an install, and skipping it looks
-like the integration is broken. The official extension's activation events
-never mention `.tsrx`, and Ripple's extension contributes `.tsrx` as the
-language id `ripple`, so opening a `.tsrx` file first does not start OXC's
-extension. Open any JavaScript, TypeScript, or JSON file in the workspace once,
-and `.tsrx` is served for the rest of the session. See
-[the editor integration page](/integrations/editor#what-a-plain-install-actually-covers)
+One step is not an install, and skipping it looks like a broken integration.
+The official extension never activates on `.tsrx`. Open any JavaScript,
+TypeScript, or JSON file once, and `.tsrx` is served for the rest of the
+session. See
+[the editor page](/integrations/editor#what-a-plain-install-actually-covers)
 for what that session covered.
 
 ### Using Vite+? (compatibility step)
 
-Released [Vite+](/integrations/vite-plus) does not discover providers. It finds
-its lint and format tools through project-local *packages* named literally
-`oxlint` and `oxfmt`. A command name cannot satisfy that, and this project
-cannot legitimately publish a package under either name, so Vite+ needs the
-project-local slots that `oxc-tsrx setup` writes:
+Released [Vite+](/integrations/vite-plus) finds its lint and format tools
+through project-local *packages* named literally `oxlint` and `oxfmt`. A command
+name cannot satisfy that, and this project cannot legitimately publish a package
+under either name, so Vite+ needs the project-local slots that
+`oxc-tsrx setup` writes:
 
 <!-- pm-install -->
 ```sh
-npm install --save-dev vite-plus oxc-tsrx@0.1.4
+npm install --save-dev vite-plus oxc-tsrx@latest
 npx oxc-tsrx setup
 ```
 
 Pick your own package manager in the tabs above and run both lines with it. In a
 project `vp create` scaffolded, that is almost never the npm tab: `vp create`
 writes a `devEngines.packageManager` block into `package.json` naming pnpm, and
-npm then refuses to run there at all, exiting with `EBADDEVENGINES` and `Invalid
-name "pnpm" does not match "npm"`. The same block is why `npx` appears only in
-the npm tab. Any modern version of your package manager works, and Corepack is
-not required.
+npm then refuses to run there at all.
 
-`setup` is explicit, idempotent, reversible, and never edits `package.json`.
-Run it again after a clean dependency install, because `node_modules` is
-disposable.
+`setup` is explicit, idempotent, reversible, and never edits `package.json`. It
+works inside `node_modules`, so run it again after every clean dependency
+install.
 
-After that, `vp lint`, `vp fmt`, and `vp check --fix` handle `.tsrx` files. On
-Vite+ 0.2.6 there is one more dependency to add first, because the scaffold
-turns type-aware lint on and Vite+ and this package disagree about which
-`oxlint-tsgolint` runs it:
-
-<!-- pm-install -->
-```sh
-npm install --save-dev oxlint-tsgolint@0.24.0
-```
-
-That keeps the type-aware lane and the whole scaffolded `lint` block, including
-its `jsPlugins` entry, which runs on both halves of the project.
+After that, `vp lint`, `vp fmt`, and `vp check --fix` handle `.tsrx`. If your
+scaffold turns type-aware lint on, add one more dependency first: Vite+ and
+this package can disagree about which `oxlint-tsgolint` runs.
 [The type-aware template default](/integrations/vite-plus#the-type-aware-template-default)
-has the measurement, the exact failure you see without it, and the alternative
-if you would rather drop type-aware than add a dependency.
+has the failure, the fix, and the alternative.
 
-Vite+ is the only place an install alone is not enough. Every other route in
-this guide works with no command at all.
-
-#### `oxc-tsrx status` says `missing` in a healthy project
-
-`status` reports on four compatibility slots, and then on the TSRX editor
-prerequisites it deliberately does not own. In a command-line or editor project
-the slot half prints this, exit code 0:
-
-```text
-oxc-tsrx 0.1.4 compatibility (npm)
-- oxc-parser: missing
-- oxlint: missing
-- oxfmt: missing
-- oxc.path.oxlint: unnecessary (editor)
-  …/node_modules/.bin/oxlint already resolves into this package, so the editor
-  needs no setting and none was written.
-```
-
-Three `missing` lines and one `unnecessary` are the correct result there. The
-`missing` ones mean the Vite+ facades are not installed, which is what you want
-when you do not use Vite+, and `unnecessary` means the editor's ordinary lookup
-already reaches this package. Nothing is broken and there is nothing to fix.
-
-Below that, `status` lists any of `@tsrx/typescript-plugin`, a framework
-binding, the tsconfig `plugins` entry, and the TypeScript peer range that are
-not in place, each with one `!` line saying what to do. Those belong to the TSRX
-toolchain and `status` only reports them.
-
-To check that your install is working, run `npx oxc-tsrx providers` instead. The
-line to look for is `routed extensions: .tsrx -> oxc-tsrx`.
+Vite+ is the only place an install alone is not enough.
 
 ## Create a TSRX file
 
@@ -281,22 +177,19 @@ Two things to know:
 ### Give the linter a path, or an empty folder will bury you
 
 The commands above name a file on purpose. `npx oxlint` with no path at all
-lints everything it can find under the current directory, and that includes
-`node_modules`.
-
-In a scratch folder created with `mkdir demo && npm init -y`, a measured bare
-run reported **9260 warnings, 9257 of them from `node_modules`**. The three
-warnings from `src/` were the ones the user wanted.
+lints everything it can find under the current directory, including
+`node_modules`. In a scratch folder created with `mkdir demo && npm init -y`,
+that means thousands of warnings from your dependencies and a handful from your
+own `src/`.
 
 This is canonical Oxlint behavior, not something TSRX adds. Running the official
 `oxlint` binary from the same install produces the same wall. Two things keep it
 away from you:
 
 - **A `.gitignore` listing `node_modules` fixes it completely.** Oxlint honors
-  that file even when the folder is not a git repository, so the measured run
-  above drops straight to its 3 real warnings once the file exists. Almost every
-  real project already has one. A brand new scratch folder does not, and that is
-  the only place this bites.
+  that file even when the folder is not a git repository. Almost every real
+  project already has one. A brand new scratch folder does not, and that is the
+  only place this bites.
 - **Naming a path works either way.** `npx oxlint src` lints your sources and
   nothing else.
 
@@ -305,12 +198,11 @@ into your project. Your own `.gitignore` and `.oxlintrc.json` are the only
 inputs.
 
 > **Do not run `npx oxlint --fix` where `node_modules` is still in scope.** With
-> nothing narrowing the run, `--fix` rewrites files inside your dependency tree.
-> A measured run in a project with no source files at all changed 15 files under
-> `node_modules` and still exited 0. Official Oxlint changed 13 in the same
-> folder, so this is upstream parity rather than a TSRX defect, but your
-> dependency tree is modified either way. Fix a path you own
-> (`npx oxlint --fix src`), or make sure `node_modules` is ignored first.
+> nothing narrowing the run, `--fix` rewrites files inside your dependency tree
+> and still exits 0. Official Oxlint does the same, so this is upstream parity
+> rather than a TSRX defect, but your dependency tree is modified either way.
+> Fix a path you own (`npx oxlint --fix src`), or make sure `node_modules` is
+> ignored first.
 
 `oxfmt` is not affected. It skips `node_modules` unless you pass
 `--with-node-modules`.
@@ -349,14 +241,12 @@ commands, so most projects only need those. See the
 
 - See which TSRX syntax is supported in
   [TSRX Syntax](/guide/tsrx-syntax).
-- Keep using your framework's Vite build plugin as-is; `oxc-tsrx` does not
-  compile modules. See the build-vs-commands split in
-  [Vite and Vite+](/integrations/vite-plus).
-- Wire the lint/format commands into `vp lint` / `vp fmt` (a separate concern
-  from the build plugin) with
-  [Vite and Vite+](/integrations/vite-plus).
+- Keep your framework's TSRX plugin as-is. It compiles and runs `.tsrx`;
+  `oxc-tsrx` never touches your build. See
+  [tsrx.dev/getting-started](https://tsrx.dev/getting-started) for that plugin
+  and [Vite and Vite+](/integrations/vite-plus) for how the two sit side by
+  side.
 - Get live diagnostics, formatting, and quick fixes through the official OXC
-  extension with
-  [Editor integration](/integrations/editor).
+  extension with [Editor integration](/integrations/editor).
 - Curious how it works under the hood? Read
   [Architecture](/architecture/rust-oxc-core).

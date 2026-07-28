@@ -5,7 +5,7 @@ description: Write a custom lint rule with the oxlint that oxc-tsrx installs and
 
 # Custom JavaScript plugins
 
-`npm install oxc-tsrx@0.1.4` puts an `oxlint` command on your PATH, and that command
+`npm install oxc-tsrx@latest` puts an `oxlint` command on your PATH, and that command
 already lints `.tsrx`. So this page starts with the linter you have, not with a
 second one you would have to install.
 
@@ -37,12 +37,8 @@ You need Node.js 20.19 or newer, and one install:
 
 <!-- pm-install -->
 ```sh
-npm install oxc-tsrx@0.1.4
+npm install oxc-tsrx@latest
 ```
-
-The version is named on purpose; [why every install command here names a
-version](/guide/getting-started#why-every-install-command-here-names-a-version)
-explains what an unpinned one can quietly give you.
 
 Save this as `src/TaskList.tsrx`:
 
@@ -322,7 +318,7 @@ Every transcript below was captured with the pnpm tab's commands, which is why
 
 <!-- pm-install -->
 ```sh
-npm install --save-dev oxc-tsrx@0.1.4
+npm install --save-dev oxc-tsrx@latest
 npx oxc-tsrx setup
 ```
 
