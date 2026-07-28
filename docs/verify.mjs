@@ -179,8 +179,22 @@ await page.waitForFunction(() => document.querySelectorAll('.sidebar nav a').len
 const sidebarLinks = await page
   .locator('.sidebar nav a')
   .evaluateAll((anchors) => anchors.map((a) => ({ href: a.href, text: a.textContent.trim() })))
-check(sidebarLinks.length === 15, 'walkthrough: sidebar lists 15 pages', String(sidebarLinks.length))
-
+// There was an assertion here that the sidebar listed exactly fifteen pages.
+// Adding a sixteenth turned the site build red, which skipped the deploy, so
+// the platform support page existed in the repository and never reached a
+// reader. Every new documentation page would have done the same.
+//
+// Replacing the literal with a count derived from site.config.mjs was tried
+// and removed: it cannot fail. The rendered sidebar is built at runtime from
+// that same config, so the two sides always agree, and a link pointing at a
+// page that does not exist already fails docs:build long before this runs.
+// Stripping the platform-support anchor out of all seventeen built pages still
+// passed. A check that cannot fail reads as coverage without being any.
+//
+// The loop below is the real check and always was. It visits every page the
+// sidebar offers and asserts each one renders a heading, marks itself current,
+// and carries an outline and a pager. It covers a new page automatically and
+// needs no number kept in step.
 for (const link of sidebarLinks) {
   await page.goto(link.href, { waitUntil: 'load' })
   const h1 = (await page.locator('article h1').first().textContent())?.trim()
