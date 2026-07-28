@@ -110,6 +110,33 @@ function size(bytes) {
   return `${bytes} B`;
 }
 
+/**
+ * The environment for `npm publish --dry-run` against the staging registry.
+ *
+ * The publish job runs with `id-token: write`, and npm 11 notices that: it
+ * offers a GitHub OIDC token to whatever registry it is pointed at, before it
+ * knows whether the publish is a dry run. Pointing that exchange at a local
+ * stand-in is pointless at best, so the OIDC environment is removed for the
+ * rehearsal along with any token. A rehearsal needs no credential; it is
+ * reading a tarball and validating a manifest.
+ */
+function rehearsalEnvironment(registry) {
+  const environment = {
+    ...npmChildEnvironment(process.env),
+    NPM_CONFIG_PROVENANCE: "false",
+    npm_config_registry: registry,
+  };
+  for (const key of [
+    "ACTIONS_ID_TOKEN_REQUEST_URL",
+    "ACTIONS_ID_TOKEN_REQUEST_TOKEN",
+    "NODE_AUTH_TOKEN",
+    "NPM_TOKEN",
+  ]) {
+    delete environment[key];
+  }
+  return environment;
+}
+
 function run(file, args, options = {}) {
   return new Promise((resolveRun, rejectRun) => {
     const child = spawnCommand(file, args, {
@@ -546,11 +573,7 @@ async function main() {
         `--registry=${registry.url}`,
       ]);
       const rehearsal = await run(invocation.executable, invocation.args, {
-        env: {
-          ...npmChildEnvironment(process.env),
-          NPM_CONFIG_PROVENANCE: "false",
-          npm_config_registry: registry.url,
-        },
+        env: rehearsalEnvironment(registry.url),
       });
       if (rehearsal.status !== 0) {
         fail(
@@ -561,7 +584,20 @@ async function main() {
       const files = /total files:\s*(\d+)/iu.exec(rehearsal.stdout + rehearsal.stderr)?.[1] ?? "?";
       say(`  ${entry.name}@${entry.version}  npm publish --dry-run accepted ${files} files`);
     }
-    if (registry.wrote()) fail("the publish rehearsal attempted a write to the registry");
+    // Everything npm asked the stand-in registry for, so a rehearsal that
+    // starts talking to a registry in a new way is visible in the log rather
+    // than discovered by a tripwire nobody can explain.
+    const conversation = registry.requests.reduce((counts, entry) => {
+      const key = `${entry.method} ${entry.url}`;
+      return counts.set(key, (counts.get(key) ?? 0) + 1);
+    }, new Map());
+    say();
+    for (const [request, count] of conversation) {
+      say(`  registry ${request}${count > 1 ? ` (${count}x)` : ""}`);
+    }
+    for (const write of registry.writes()) {
+      fail(`the publish rehearsal attempted ${write.method} ${write.url} against the registry`);
+    }
     flushFailures("  ");
   } finally {
     await registry.close();

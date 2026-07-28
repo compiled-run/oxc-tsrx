@@ -17,13 +17,17 @@ import { createServer } from "node:http";
  * already-published check still exists where it belongs, in the publish
  * workflow's own rehearsal against npmjs.com.
  */
+/** A request that would create or change something on a real registry. */
+const WRITE_METHODS = new Set(["PUT", "PATCH", "DELETE"]);
+
 export async function startStagingRegistry() {
   const requests = [];
   const server = createServer((request, response) => {
     requests.push({ method: request.method, url: request.url });
-    // A dry run must never reach a write, so a write is a hard error rather
-    // than a 404 that npm could interpret as "create this package".
-    if (!["GET", "HEAD"].includes(request.method)) {
+    // A publish is a PUT of the packument. A dry run must never reach one, so
+    // it is refused loudly rather than 404'd, which npm could read as "this
+    // package does not exist yet, go ahead and create it".
+    if (WRITE_METHODS.has(request.method)) {
       response.statusCode = 500;
       response.end(`the publish rehearsal attempted ${request.method} ${request.url}`);
       return;
@@ -44,7 +48,7 @@ export async function startStagingRegistry() {
   return {
     url: `http://127.0.0.1:${port}/`,
     requests,
-    wrote: () => requests.some((entry) => !["GET", "HEAD"].includes(entry.method)),
+    writes: () => requests.filter((entry) => WRITE_METHODS.has(entry.method)),
     close: () =>
       new Promise((resolveClose, rejectClose) => {
         server.close((error) => (error ? rejectClose(error) : resolveClose()));
