@@ -93,9 +93,52 @@ function run(executable, args, options = {}) {
   });
 }
 
+/**
+ * NTSTATUS values a package-manager child has actually exited with on Windows.
+ *
+ * A process that dies this way reports the status itself as its exit code
+ * instead of an ordinary small number, and prints nothing on the way out, so
+ * the bare integer is the only evidence left in the log.
+ */
+const WINDOWS_FAST_FAIL_STATUS = new Map([
+  [0xc0000005, "STATUS_ACCESS_VIOLATION"],
+  [0xc000001d, "STATUS_ILLEGAL_INSTRUCTION"],
+  [0xc00000fd, "STATUS_STACK_OVERFLOW"],
+  [0xc0000142, "STATUS_DLL_INIT_FAILED"],
+  [0xc0000374, "STATUS_HEAP_CORRUPTION"],
+  [0xc0000409, "STATUS_STACK_BUFFER_OVERRUN"],
+]);
+
+/**
+ * Name the exit status when Windows reports one of its own.
+ *
+ * `STATUS_STACK_BUFFER_OVERRUN` has been measured here at roughly one install
+ * in thirty-five on `windows-2025`: the `npm` or `pnpm` process is fast-failed
+ * before it finishes installing, on an idle machine with 13 GB of free memory
+ * and 29 GB of free disk. It is not this project failing. Every install below
+ * passes `--ignore-scripts`, so no code from this repository is loaded into
+ * that process, and the same run leaves no Windows Error Reporting record, no
+ * local crash dump, and no Node fatal-error report with all three armed.
+ *
+ * Nothing here tolerates the status: the assertion still fails on it. Naming
+ * it only saves the next reader from having to rediscover which of the two
+ * possible readings of a bare `3221226505` applies.
+ */
+function describeExitStatus(status, signal) {
+  if (status === null) return `no exit code (signal ${signal})`;
+  const name = WINDOWS_FAST_FAIL_STATUS.get(status >>> 0);
+  if (name === undefined) return String(status);
+  const hexadecimal = (status >>> 0).toString(16).padStart(8, "0");
+  return `${status} (0x${hexadecimal} ${name}, a Windows fast-fail of the child's own process)`;
+}
+
 async function mustRun(executable, args, options = {}) {
   const result = await run(executable, args, options);
-  assert.equal(result.status, 0, `${executable} ${args.join(" ")}\n${result.stderr || result.stdout}`);
+  assert.equal(
+    result.status,
+    0,
+    `${executable} ${args.join(" ")} exited ${describeExitStatus(result.status, result.signal)}\n${result.stderr || result.stdout}`,
+  );
   return result;
 }
 
