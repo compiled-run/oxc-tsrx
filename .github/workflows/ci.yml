@@ -228,6 +228,20 @@ jobs:
             pnpm run test:parser-addon
           pnpm run test:parser-api
 
+      - name: Prove this host could publish what it just built
+        # The pre-publish gate, run on the artifacts this lane can produce. It
+        # packs this host's own platform package from the binaries and the addon
+        # built above, packs the public package, asserts that every path each
+        # manifest promises is really inside its tarball, installs both into a
+        # project outside the workspace, lints and parses through the installed
+        # package, and rehearses `npm publish --dry-run`.
+        #
+        # publish.yml runs the same gate across all nine release tarballs. This
+        # step is what makes it fail on the pull request that broke packaging
+        # rather than on release day, and it is the only place the gate runs on
+        # win32-x64-msvc and darwin-arm64 at all.
+        run: node scripts/check-publish-artifacts.mjs --pack-host
+
       - name: Exercise a plain install against released hosts
         run: pnpm run test:packaging:released-hosts
 

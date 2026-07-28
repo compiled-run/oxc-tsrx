@@ -278,10 +278,54 @@ jobs:
           }
           NODE
 
+      # The gate. Nothing below this step is allowed to run if it fails, in
+      # either mode, because everything below it is either a rehearsal of the
+      # publish or the publish itself.
+      #
+      # 0.1.0 published all eight platform packages with no parser.node, so
+      # `oxc-tsrx/parser` threw on every consumer machine, and this workflow
+      # called the release verified because `npm view` resolved a version
+      # string. A version string resolving says the package exists. It says
+      # nothing about what is inside it.
+      #
+      # So this reads the nine tarballs that are about to be published: every
+      # path each manifest declares in its own `files` array has to be in the
+      # tarball, every binary and the parser addon have to match the package's
+      # own checksums.json byte for byte, a platform package that declares no
+      # addon is rejected outright because that is the shape 0.1.0 shipped, and
+      # then the linux-x64-gnu pair is installed into a project outside this
+      # workspace and made to produce a real diagnostic and a real AST. The same
+      # gate runs on all three Tier 1 platforms in ci.yml on every pull request.
+      - name: Gate the candidate artifacts before anything is published
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          node scripts/check-publish-artifacts.mjs \
+            --artifacts release \
+            --version "$VERSION" \
+            --require-full-matrix \
+            --json release-gate-report.json
+
+      - name: Retain the gate report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: publish-gate-report-${{ inputs.version }}-${{ inputs.mode }}
+          path: release-gate-report.json
+          if-no-files-found: warn
+          retention-days: 90
+
       # Always rehearsed, including in publish mode. Provenance is switched off
       # for the rehearsal only: a dry run has nothing to attest, and asking
       # Sigstore for a signature it will never use adds a failure mode to the
       # step whose whole job is to be safe.
+      #
+      # This is the rehearsal against npmjs.com, so it is also the check that
+      # the version is still free. The gate above rehearses against a local
+      # registry precisely so that it can be run at any time on any version
+      # without that conflict.
       - name: Rehearse the publish
         shell: bash
         env:
@@ -321,29 +365,48 @@ jobs:
             echo "::endgroup::"
           done < publish-order.txt
 
-      - name: Verify every package landed
+      # The backstop, and only the backstop. npm versions are immutable and
+      # unpublish is restricted, so nothing after the step above can prevent a
+      # bad release; it can only find one, and the only remedy is deprecate and
+      # patch. Prevention lives in the gate.
+      #
+      # What this sees that no pre-publish check can is npm's own handling of
+      # the upload: it installs oxc-tsrx@<version> from the registry into a
+      # project outside this workspace, resolves the platform package through
+      # the published optionalDependencies the way a consumer's first install
+      # does, and then lints a real file and parses one through the installed
+      # addon. All nine names are still checked for visibility first, with the
+      # same retry the `npm view` loop needed, because a read can hit a replica
+      # that has not caught up with the write that just succeeded.
+      #
+      # One platform, linux-x64-gnu, because this is detection rather than
+      # coverage: the three Tier 1 platforms are gated before publish, in
+      # ci.yml, where a failure can still stop the release.
+      - name: Install the published release from the registry and run it
         if: inputs.mode == 'publish'
         shell: bash
         env:
           VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
-          # A read here can hit a replica that has not caught up with the write
-          # that just succeeded, so a bare `npm view` reports E404 for a package
-          # that is already published. That turned a completely successful
-          # publish into a red run, which is the worst possible false alarm on
-          # an irreversible operation. Retry before believing it.
-          while read -r name path; do
-            resolved=""
-            for attempt in 1 2 3 4 5 6; do
-              resolved="$(npm view "$name@$VERSION" version 2>/dev/null || true)"
-              [[ "$resolved" == "$VERSION" ]] && break
-              echo "$name is not visible yet (attempt $attempt), waiting for the registry"
-              sleep 10
-            done
-            if [[ "$resolved" != "$VERSION" ]]; then
-              echo "$name resolved to '${resolved:-nothing}' after retries, expected $VERSION" >&2
-              exit 1
-            fi
-            echo "$name@$resolved is on the registry"
-          done < publish-order.txt
+          node scripts/verify-published-release.mjs \
+            --version "$VERSION" \
+            --order-file publish-order.txt
+
+      # The same backstop in dry-run mode. If this version is not on the
+      # registry it has nothing to install and says so; if it is, a rehearsal
+      # verifies the release that is already out there. Either way the code path
+      # the release depends on is exercised by a dry run rather than only by an
+      # irreversible publish.
+      - name: Rehearse the backstop
+        if: inputs.mode == 'dry-run'
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          node scripts/verify-published-release.mjs \
+            --version "$VERSION" \
+            --order-file publish-order.txt \
+            --attempts 2 \
+            --allow-unpublished
