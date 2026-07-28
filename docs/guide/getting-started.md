@@ -62,22 +62,16 @@ Three commands are yours to type:
 | `oxfmt` | the formatter. Same split |
 | `oxc-tsrx` | `providers`, `status`, `setup`, and `remove`. See the [CLI reference](/reference/cli) |
 
-Four more commands get linked that you never type. Three are the native leaf
-commands the two above dispatch to, and the fourth, tsgolint, comes from a
-dependency and is not part of this project.
+Four more get linked that you never type: three native leaf commands, plus
+`tsgolint` from a dependency.
 
-`node_modules/.bin` is a convention, not a requirement. npm, pnpm, yarn, and
-bun are covered in CI; Deno installs and runs this too, though it is not.
-Only the wrapper scripts need Node. The linter and formatter themselves are one
-standalone binary, at
-`node_modules/@oxc-tsrx/native-<your-platform>/bin/oxc-tsrx`, which runs with no
-Node on the machine at all.
-
-One exception: in a Vite+ project, the oxlint and oxfmt commands are Vite+'s own
-wrappers rather than this package's. They exist for your editor, so running one
-by hand exits with a message pointing you at `vp lint` or `vp fmt`. Use those.
-[Vite and Vite+](/integrations/vite-plus#oxlint-and-oxfmt-on-the-command-line-belong-to-vite-here)
-has the detail.
+- **Not Node-only.** npm, pnpm, yarn, and bun are covered in CI, and Deno works
+  but is not. Only the wrappers need Node; the linter and formatter are one
+  standalone binary at
+  `node_modules/@oxc-tsrx/native-<your-platform>/bin/oxc-tsrx`.
+- **Except under Vite+**, where `oxlint` and `oxfmt` are Vite+'s wrappers rather
+  than ours. Use
+  [`vp lint` and `vp fmt`](/integrations/vite-plus#oxlint-and-oxfmt-on-the-command-line-belong-to-vite-here).
 
 To see what a host finds in your project, without changing anything:
 
@@ -181,26 +175,17 @@ Two things to know:
 
 ### Give the linter a path, or an empty folder will bury you
 
-The commands above name a file on purpose. `npx oxlint` with no path at all
-lints everything it can find under the current directory, including
-`node_modules`. In a scratch folder created with `mkdir demo && npm init -y`,
-that means thousands of warnings from your dependencies and a handful from your
-own `src/`.
+`npx oxlint` with no path lints everything under the current directory,
+`node_modules` included. That is canonical Oxlint behavior, not something TSRX
+adds. Two things avoid it:
 
-This is canonical Oxlint behavior, not something TSRX adds. Running the official
-`oxlint` binary from the same install produces the same wall. Two things keep it
-away from you:
-
-- **A `.gitignore` listing `node_modules` fixes it completely.** Oxlint honors
-  that file even when the folder is not a git repository. Almost every real
-  project already has one. A brand new scratch folder does not, and that is the
+- **A `.gitignore` listing `node_modules`.** Oxlint honors it even outside a git
+  repository. Real projects have one; fresh scratch folders do not, which is the
   only place this bites.
-- **Naming a path works either way.** `npx oxlint src` lints your sources and
-  nothing else.
+- **Naming a path.** `npx oxlint src` lints your sources and nothing else.
 
-`oxc-tsrx` ships no ignore file and no config of its own, and it never writes one
-into your project. Your own `.gitignore` and `.oxlintrc.json` are the only
-inputs.
+This package ships no ignore file and no config, and writes none. Your
+`.gitignore` and `.oxlintrc.json` are the only inputs.
 
 > **Do not run `npx oxlint --fix` where `node_modules` is still in scope.** With
 > nothing narrowing the run, `--fix` rewrites files inside your dependency tree
@@ -246,11 +231,9 @@ commands, so most projects only need those. See the
 
 - See which TSRX syntax is supported in
   [TSRX Syntax](/guide/tsrx-syntax).
-- Keep your framework's TSRX plugin as-is. It compiles and runs `.tsrx`;
-  `oxc-tsrx` never touches your build. See
-  [tsrx.dev/getting-started](https://tsrx.dev/getting-started) for that plugin
-  and [Vite and Vite+](/integrations/vite-plus) for how the two sit side by
-  side.
+- Keep your framework's TSRX plugin as-is; it compiles and runs `.tsrx`. See
+  [tsrx.dev](https://tsrx.dev/getting-started) for it, and
+  [Vite and Vite+](/integrations/vite-plus) for how the two sit side by side.
 - Get live diagnostics, formatting, and quick fixes through the official OXC
   extension with [Editor integration](/integrations/editor).
 - Curious how it works under the hood? Read
