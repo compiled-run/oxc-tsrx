@@ -12,7 +12,7 @@
         {
           "comment": "Format .tsrx and ordinary JS/TS with real Oxfmt layout",
           "command": "npx oxfmt --check src/Counter.tsrx src/View.tsx",
-          "output": "Checking formatting...\n\nsrc/View.tsx (0ms)\nsrc/Counter.tsrx (0ms)\n\nFormat issues found in above 2 files. Run without `--check` to fix.\nFinished in 80ms on 2 files using 18 threads.\nNo config found, using defaults. Please add a config file or try `oxfmt --init` if needed.\n"
+          "output": "Checking formatting...\n\nsrc/View.tsx (0ms)\nsrc/Counter.tsrx (0ms)\n\nFormat issues found in above 2 files. Run without `--check` to fix.\nFinished in 74ms on 2 files using 18 threads.\nNo config found, using defaults. Please add a config file or try `oxfmt --init` if needed.\n"
         }
       ]
     },
@@ -217,22 +217,22 @@
       ]
     },
     "custom-plugins-vp-setup": {
-      "caption": "Real output, captured at build time, from a project shaped like a fresh vp create React scaffold with oxc-tsrx installed and none of the TSRX toolchain packages yet. Every line was checked against a real scaffold, where it is identical.",
+      "caption": "Real output, captured at build time, from a project shaped like a fresh vp create React scaffold with oxc-tsrx installed and none of the TSRX toolchain packages yet. One difference from a real scaffold: setup names the two tsconfig files by absolute path, and the capture rewrites the throwaway project directory away, so they read as bare filenames here.",
       "transcript": [
         {
           "comment": "Four slots this package owns, then four things it will not touch",
           "command": "npx oxc-tsrx setup",
-          "output": "setup 4 compatibility slot(s) for oxc-tsrx 0.1.3 (pnpm)\n- oxc-parser: active\n- oxlint: active\n- oxfmt: active\n- oxc.path.oxlint: active (editor)\n  .vscode/settings.json carries \"oxc.path.oxlint\": \"node_modules/oxc-tsrx/bin/oxlint\". This is the one file setup writes outside node_modules; it merges that single key and never edits package.json or tsconfig.json.\nTSRX language support in the editor belongs to the TSRX toolchain, not to this package. Nothing below was installed, changed, or configured:\n  ! install @tsrx/typescript-plugin yourself: it is what gives an editor TSRX language support, and oxc-tsrx never installs it\n  ! install a TSRX framework binding yourself (one of @tsrx/react, @tsrx/vue, @tsrx/solid, @tsrx/preact, @tsrx/ripple, octane); oxc-tsrx does not choose one for you\n  ! add \"plugins\": [{ \"name\": \"@tsrx/typescript-plugin\" }] under compilerOptions in tsconfig.app.json yourself. Not tsconfig.json: that one is solution-style (\"files\": [], \"references\": [...]) and a plugin declared there is inert. oxc-tsrx never edits tsconfig.json\n  ! typescript 6.0.3 is outside @tsrx/typescript-plugin's declared peer range (>=5.9 <6). It may still work; if the editor misbehaves, pinning typescript into that range is the first thing to try. oxc-tsrx never changes your typescript version\n"
+          "output": "setup 4 compatibility slot(s) for oxc-tsrx 0.1.4 (pnpm)\n- oxc-parser: active\n- oxlint: active\n- oxfmt: active\n- oxc.path.oxlint: active (editor)\n  .vscode/settings.json carries \"oxc.path.oxlint\": \"node_modules/oxc-tsrx/bin/oxlint\". This is the one file setup writes outside node_modules; it merges that single key and never edits package.json or tsconfig.json.\nTSRX language support in the editor belongs to the TSRX toolchain, not to this package. Nothing below was installed, changed, or configured:\n  ! install @tsrx/typescript-plugin yourself: it is what gives an editor TSRX language support, and oxc-tsrx never installs it\n  ! install a TSRX framework binding yourself (one of @tsrx/react, @tsrx/vue, @tsrx/solid, @tsrx/preact, @tsrx/ripple, octane); oxc-tsrx does not choose one for you\n  ! add \"plugins\": [{ \"name\": \"@tsrx/typescript-plugin\" }] under compilerOptions in tsconfig.app.json yourself. Not tsconfig.json: that one is solution-style (\"files\": [], \"references\": [...]) and a plugin declared there is inert. oxc-tsrx never edits tsconfig.json\n  ! typescript 6.0.3 is outside @tsrx/typescript-plugin's declared peer range (>=5.9 <6). It may still work; if the editor misbehaves, pinning typescript into that range is the first thing to try. oxc-tsrx never changes your typescript version\n"
         }
       ]
     },
     "custom-plugins-vp-status": {
-      "caption": "Real output, captured at build time, from the same project after the TSRX toolchain packages were installed and tsconfig.app.json declared the plugin.",
+      "caption": "Real output, captured at build time, from the same project after the TSRX toolchain packages were installed and tsconfig.app.json declared the plugin. On a real scaffold this prints identically.",
       "transcript": [
         {
           "comment": "Three of the four unowned prerequisites are done; one is left",
           "command": "npx oxc-tsrx status",
-          "output": "oxc-tsrx 0.1.3 compatibility (pnpm)\n- oxc-parser: active\n- oxlint: active\n- oxfmt: active\n- oxc.path.oxlint: active (editor)\n  .vscode/settings.json carries \"oxc.path.oxlint\": \"node_modules/oxc-tsrx/bin/oxlint\". This is the one file setup writes outside node_modules; it merges that single key and never edits package.json or tsconfig.json.\nTSRX language support in the editor belongs to the TSRX toolchain, not to this package. Nothing below was installed, changed, or configured:\n  ! typescript 6.0.3 is outside @tsrx/typescript-plugin's declared peer range (>=5.9 <6). It may still work; if the editor misbehaves, pinning typescript into that range is the first thing to try. oxc-tsrx never changes your typescript version\n"
+          "output": "oxc-tsrx 0.1.4 compatibility (pnpm)\n- oxc-parser: active\n- oxlint: active\n- oxfmt: active\n- oxc.path.oxlint: active (editor)\n  .vscode/settings.json carries \"oxc.path.oxlint\": \"node_modules/oxc-tsrx/bin/oxlint\". This is the one file setup writes outside node_modules; it merges that single key and never edits package.json or tsconfig.json.\nTSRX language support in the editor belongs to the TSRX toolchain, not to this package. Nothing below was installed, changed, or configured:\n  ! typescript 6.0.3 is outside @tsrx/typescript-plugin's declared peer range (>=5.9 <6). It may still work; if the editor misbehaves, pinning typescript into that range is the first thing to try. oxc-tsrx never changes your typescript version\n"
         }
       ]
     },

@@ -7,8 +7,29 @@ toolchain:
 
 <!-- pm-install -->
 ```sh
-npm install --save-dev vite-plus oxc-tsrx
+npm install --save-dev vite-plus oxc-tsrx@0.1.4
 ```
+
+`oxc-tsrx@0.1.4` names a version on purpose. An unpinned install can hand you an
+early release that a resolver considers safer because it is older; [why every
+install command here names a
+version](/guide/getting-started#why-every-install-command-here-names-a-version)
+has the measurement.
+
+### Getting the `vp` command in the first place
+
+Nothing above gives you `vp`, because `vp` is what you use to create the project
+that will contain the install. There is no separate installer for it: run it
+straight from the registry, naming the Vite+ version you want.
+
+```sh
+npx --yes -p vite-plus@0.2.6 vp create vite -- my-app --template react-ts
+cd my-app
+```
+
+Inside the project, `vp` is on `node_modules/.bin`, so your package manager
+reaches it: `pnpm exec vp lint`, `yarn vp lint`, `bunx vp lint`, `npx vp lint`.
+The examples on this page write plain `vp` for readability.
 
 That install is everything a host needs in order to *discover* TSRX.
 `oxc-tsrx` declares a static `oxc.provider` block in its own `package.json`, and
@@ -138,73 +159,124 @@ So Vite+ is two steps: the install, then `setup`. Every other host is one step,
 the install on its own. The table of all three is in
 [Getting Started](/guide/getting-started#the-minimum-steps-per-host).
 
-### One template default you may have to turn off, depending on your Vite+
+### The type-aware template default
 
-Measured on a fresh `vp create` React scaffold. Whether you need this edit at
-all depends on your Vite+ version:
-
-| Vite+ | stock `lint.options`, batch contains `.tsrx` |
-| --- | --- |
-| 0.2.4 | works, no edit needed. Type-aware runs on `.tsrx` |
-| 0.2.6 | exits 2: `unsupported tsgolint version 7.0.2001`; remove `options` |
-
-Vite+ 0.2.6 depends on `oxlint-tsgolint` 7.0.2001 while this package pins
-0.24.0 and refuses any other version rather than running an unverified one. That
-is a version disagreement, not something either side can wave through, so on
-0.2.6 you choose between the type-aware lane and a working `vp lint` on `.tsrx`.
-
-That scaffold writes a `lint` block into `vite.config.ts` like this:
+A `vp create` React scaffold turns type-aware lint on, and on Vite+ 0.2.6 that
+default needs one more dependency before `vp lint` can read a `.tsrx` file. The
+scaffold writes this `lint` block into `vite.config.ts`:
 
 ```ts
 lint: {
-  plugins: ["react", "typescript", "oxc"],   // keep
+  plugins: ["react", "typescript", "oxc"],
   rules: {
-    "react/rules-of-hooks": "error",         // keep
-    "vite-plus/prefer-vite-plus-imports": "error",   // keep
+    "react/rules-of-hooks": "error",
+    "vite-plus/prefer-vite-plus-imports": "error",
   },
-  options: { typeAware: true, typeCheck: true },     // remove on Vite+ 0.2.6 only
+  options: { typeAware: true, typeCheck: true },
   jsPlugins: [
-    { name: "vite-plus", specifier: "vite-plus/oxlint-plugin" },   // keep
+    { name: "vite-plus", specifier: "vite-plus/oxlint-plugin" },
   ],
 }
 ```
 
-`jsPlugins` works on both halves of the project. Ordinary files reach canonical
-Oxlint directly; `.tsrx` files are linted through their TSX projection, which
-costs one extra parse per file and is announced on stderr each time. [Custom
-JavaScript plugins](/integrations/custom-js-plugins) explains that route and
-the `settings.oxcTsrx.jsPluginsOnTsrx` key that switches it off.
+Every line of it can stay. `jsPlugins` works on both halves of the project:
+ordinary files reach canonical Oxlint directly, and `.tsrx` files are linted
+through their TSX projection, which costs one extra parse per file and is
+announced on stderr each time. [Custom JavaScript
+plugins](/integrations/custom-js-plugins) explains that route and the
+`settings.oxcTsrx.jsPluginsOnTsrx` key that switches it off.
 
-`options: { typeAware, typeCheck }` is the one you still have to delete. Leave
-it in place and `vp lint` refuses with exit 2 as soon as one `.tsrx` file is in
-the batch, before reporting anything at all:
+What the block needs is a matching type-aware runner. Vite+ 0.2.6 depends on
+`oxlint-tsgolint` 7.0.2001; this package speaks protocol v2 and runs the lane
+only against 0.24.0, refusing any other version rather than guessing. On a stock
+scaffold Vite+ hands over its own 7.0.2001 and the `.tsrx` half stops.
+
+The three runs below share one project: a `src/Counter.tsrx` with a `debugger`
+and a `const label: string = start`, and a `src/Bad.tsx` with a
+`const n: number = label`. Each is the real output, stdout then stderr.
 
 ```text
-$ vp lint src/Counter.tsrx
-oxlint (oxc-tsrx): the native TSRX projection needed for JS plugins failed:
-oxc-tsrx: type-aware tsgolint/type-check mode requires the explicit --type-aware or --type-check opt-in; it is never started or silently disabled by config alone
+$ vp lint src
+oxlint (oxc-tsrx): running JS plugins on 1 .tsrx file(s) by linting the TSX projection; this parses each of those files once more. Disable with "settings": { "oxcTsrx": { "jsPluginsOnTsrx": false } }.
+src/Bad.tsx:2:9: error typescript(TS2322): Type 'string' is not assignable to type 'number'.
+Found 1 error(s) and 0 warning(s).
+oxlint (oxc-tsrx): unsupported tsgolint version 7.0.2001; OXC for TSRX requires oxlint-tsgolint 0.24.0 for protocol v2
 ```
 
-Either key on its own is enough, and passing `--type-aware` on the command line
-does not satisfy it; all three were measured. That is a deliberate fail-closed
-refusal rather than a crash: the type-aware lane needs an explicit opt-in that
-this path cannot forward, so it stops rather than lint with the option silently
-dropped.
-
+Exit code 2. The ordinary half of the batch reported normally; the `.tsrx` half
+reported nothing, including the `debugger` a syntax-only rule would have caught.
 A batch with no `.tsrx` file in it is unaffected, which is why a stock scaffold
 lints cleanly until you add your first TSRX component.
 
-Delete that key and the same command works, with the diagnostic mapped back to
-its original TSRX byte span:
+#### The fix that keeps type-aware
+
+Add the version this package runs as a direct dev dependency of your project:
+
+<!-- pm-install -->
+```sh
+npm install --save-dev oxlint-tsgolint@0.24.0
+```
+
+Vite+ picks the type-aware runner with
+`require.resolve("oxlint-tsgolint/bin/tsgolint", { paths: [process.cwd(), …] })`
+and passes the result to whichever `oxlint` it launches, so your project's own
+copy is the first one it finds and the one both linters then use. Same project,
+`options` left exactly as `vp create` wrote it:
 
 ```text
-$ vp lint src/Counter.tsrx
-src/Counter.tsrx:2:3: warning eslint(no-debugger) `debugger` statement is not allowed
+$ vp lint src
+oxlint (oxc-tsrx): running JS plugins on 1 .tsrx file(s) by linting the TSX projection; this parses each of those files once more. Disable with "settings": { "oxcTsrx": { "jsPluginsOnTsrx": false } }.
+src/Counter.tsrx:2:3: warning eslint(no-debugger): `debugger` statement is not allowed
+src/Counter.tsrx:3:9: error typescript(TS2322): Type 'number' is not assignable to type 'string'.
+src/Bad.tsx:2:9: error typescript(TS2322): Type 'string' is not assignable to type 'number'.
+Found 2 error(s) and 1 warning(s).
+```
+
+Exit code 1: type-aware diagnostics on both halves, at the positions you wrote.
+Vite+'s own lane accepted 0.24.0 for the `.tsx` file in that run. It is an older
+runner than the one Vite+ ships, so if you depend on a type-aware rule only
+7.0.2001 has, check that rule after making the change.
+
+#### The alternative, if you would rather not add a dependency
+
+Delete `options` from the `lint` block and leave everything else. Same project,
+no `oxlint-tsgolint` dependency:
+
+```text
+$ vp lint src
+oxlint (oxc-tsrx): running JS plugins on 1 .tsrx file(s) by linting the TSX projection; this parses each of those files once more. Disable with "settings": { "oxcTsrx": { "jsPluginsOnTsrx": false } }.
+src/Counter.tsrx:2:3: warning eslint(no-debugger): `debugger` statement is not allowed
 Found 0 error(s) and 1 warning(s).
 ```
 
-You keep the `plugins: ["react", "typescript", "oxc"]` list, every `rules`
-entry, and your `jsPlugins`. Only the type-aware lane is unavailable.
+Exit code 0. You keep the `plugins` list, every `rules` entry, and your
+`jsPlugins`, on both file types, and the `.tsrx` half is linted again. What you
+give up is type-aware lint for the whole project, ordinary files included: both
+`TS2322` errors are gone from that run. That is why it is the second choice
+rather than the first.
+
+#### Which layout you are in
+
+This is a resolution result, not a fixed property of Vite+ 0.2.6, so it is worth
+knowing which side you are on before you change anything:
+
+| Can your project root resolve `oxlint-tsgolint` 0.24.0? | `vp lint` on a batch containing `.tsrx` |
+| --- | --- |
+| No — a stock `vp create` scaffold on Vite+ 0.2.6 | exits 2, `unsupported tsgolint version 7.0.2001` |
+| Yes — you added it, or a workspace root or hoisting install layout supplies it | works, type-aware included |
+| Vite+ 0.2.4 | works: it depends on 0.24.0 itself |
+
+The check is one line, from your project root:
+
+```sh
+node -e "console.log(require.resolve('oxlint-tsgolint/bin/tsgolint',{paths:[process.cwd()]}))"
+```
+
+If that prints a path under a `0.24.0` directory, `vp lint` already works and
+you need neither edit. This is also why the same scaffold can behave differently
+on two machines: a project nested under a directory that happens to have
+`oxlint-tsgolint` 0.24.0 in an ancestor `node_modules` inherits it, and an
+earlier version of this page reported that layout's result as everyone's.
 
 ### `vp lint` reads `vite.config.ts`, and the editor reads `.oxlintrc.json`
 
@@ -243,7 +315,7 @@ before running `setup` or in a project that does not use Vite+ at all:
 
 ```text
 $ pnpm exec oxc-tsrx status
-oxc-tsrx 0.1.3 compatibility (pnpm)
+oxc-tsrx 0.1.4 compatibility (pnpm)
 - oxc-parser: missing
 - oxlint: missing
 - oxfmt: missing
@@ -265,10 +337,10 @@ structural:
 - Vite+ resolves a *package* named `oxlint`, the same way `import "oxlint"`
   resolves. A bin name cannot answer a package resolution, and `oxc-tsrx`
   cannot legitimately publish a package under that name.
-- Vite+ pins its own `oxlint@=1.72.0` dependency, so that package slot is
-  already filled at an exact version. Only a project-local package sitting in
-  that slot changes what Vite+ resolves, and writing that slot is precisely
-  what `setup` does.
+- Vite+ pins its own `oxlint` dependency exactly (`=1.72.0` on 0.2.4, `=1.75.0`
+  on 0.2.6), so that package slot is already filled. Only a project-local package
+  sitting in that slot changes what Vite+ resolves, and writing that slot is
+  precisely what `setup` does.
 
 `oxc.provider` does not change this either. It is a protocol *proposed* to OXC:
 nothing has been submitted upstream, nothing has been accepted, and upstream
@@ -321,17 +393,21 @@ are ever provider capability targets.
 
 ## Consumer shape
 
-The distributable platform layout is complete. Once the approval-gated npm
-release exists, the consumer manifest is:
+The consumer manifest is:
 
 ```json
 {
   "devDependencies": {
-    "vite-plus": "0.2.4",
-    "oxc-tsrx": "^0.1.0"
+    "vite-plus": "0.2.6",
+    "oxc-tsrx": "0.1.4",
+    "oxlint-tsgolint": "0.24.0"
   }
 }
 ```
+
+The third entry is the type-aware runner from
+[the type-aware template default](#the-type-aware-template-default), and it is
+needed only on Vite+ 0.2.6 with type-aware lint left on.
 
 The setup command does not add dependencies to this manifest. `oxc-tsrx` lists
 the eight `@oxc-tsrx/native-*` platform packages as `optionalDependencies` and

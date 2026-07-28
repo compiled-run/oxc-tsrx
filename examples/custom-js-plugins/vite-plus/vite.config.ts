@@ -20,6 +20,10 @@ export default defineConfig({
       "vite-plus/prefer-vite-plus-imports": "error",
       "house-rules/no-inline-style-object": "warn",
     },
+    options: {
+      typeAware: true,
+      typeCheck: true,
+    },
     jsPlugins: [
       {
         name: "vite-plus",

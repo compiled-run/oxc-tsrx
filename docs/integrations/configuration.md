@@ -190,7 +190,7 @@ decides whether it works at all, so it gets its own section.
   your module. It exits 2 with a message naming `oxlint` as the command that
   can. `vp lint` is not that target: it reaches this package through the
   `oxlint` command, so a Vite+ project keeps its plugins on both halves. See
-  [Vite and Vite+](/integrations/vite-plus#one-template-default-you-have-to-turn-off-first).
+  [Vite and Vite+](/integrations/vite-plus#the-type-aware-template-default).
 
 `context.filename` is the mirror path, `@if` and `@for` arrive already
 compiled, and a diagnostic that lands on projected-only text is dropped. Those

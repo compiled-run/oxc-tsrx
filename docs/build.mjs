@@ -168,10 +168,38 @@ async function validateOutputDirectory() {
   }
 }
 
+const namedEntities = {
+  amp: '&',
+  apos: "'",
+  gt: '>',
+  lt: '<',
+  nbsp: ' ',
+  quot: '"',
+  ldquo: '“',
+  rdquo: '”',
+  lsquo: '‘',
+  rsquo: '’',
+}
+
+// Headings are slugged from rendered inline HTML, so a heading that quotes a
+// phrase arrives as `&quot;…&quot;`. Stripping punctuation without decoding first
+// leaves the entity *name* in the id, which is how
+// `What "a plain install" actually covers` became
+// `what-quota-plain-installquot-actually-covers` and broke every link to it.
+// Tags go first: decoding `&lt;` before that would manufacture one.
+function decodeEntities(text) {
+  return text.replace(/&(#\d+|#x[\da-f]+|[a-z][a-z\d]*);/gi, (match, name) => {
+    if (name[0] === '#') {
+      const code = name[1] === 'x' || name[1] === 'X' ? parseInt(name.slice(2), 16) : Number(name.slice(1))
+      return Number.isFinite(code) && code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : match
+    }
+    return namedEntities[name.toLowerCase()] ?? match
+  })
+}
+
 function slugify(text) {
-  return text
+  return decodeEntities(text.replace(/<[^>]*>/g, ''))
     .toLowerCase()
-    .replace(/<[^>]*>/g, '')
     .replace(/[^\p{L}\p{N}\s-]/gu, '')
     .trim()
     .replace(/\s+/g, '-')
@@ -325,7 +353,10 @@ function createMarked(slugger, headings) {
         if (/^https?:\/\//.test(href)) {
           return `<a href="${href}" target="_blank" rel="noreferrer">${text}<span class="visually-hidden"> (opens in new tab)</span></a>`
         }
-        return `<a href="${withBase(href)}">${text}</a>`
+        // A source link may name the file (`./rust-oxc-core.md#…`) the way it
+        // reads in an editor. The site serves routes, not files, so drop the
+        // extension rather than shipping a link that lands on nothing.
+        return `<a href="${withBase(href.replace(/\.md(?=$|#)/, ''))}">${text}</a>`
       },
     },
   })

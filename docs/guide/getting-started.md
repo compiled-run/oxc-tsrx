@@ -13,18 +13,13 @@ files, and a native language server. It plugs into
 [Vite+](/integrations/vite-plus) and the released
 [official OXC extension](/integrations/editor).
 
-> The package is built and tested, but public npm availability is only claimed
-> after an approved publication. If the install command below cannot find it
-> yet, use the [build-from-source path](#build-from-source-optional) until the
-> registry launch is verified.
-
 ## Install
 
 You need Node.js 20.19 or newer. Install one dev dependency:
 
 <!-- pm-install -->
 ```sh
-npm install --save-dev oxc-tsrx
+npm install --save-dev oxc-tsrx@0.1.4
 ```
 
 That is the whole setup. The tools are written in Rust, and your package
@@ -32,6 +27,20 @@ manager downloads a ready-made binary for your operating system as part of
 this normal install. You do not need Rust on your machine, the package runs
 no install scripts, and the commands never download anything later. If your
 CI blocks postinstall scripts, this install still works.
+
+### Why every install command here names a version
+
+Some resolvers hold back a release for its first day or so. pnpm 11 does this by
+default, and it does it silently: `pnpm add -D oxc-tsrx` in a clean directory
+resolved `0.1.0` rather than `0.1.4`, printed `0.1.0 (0.1.4 is available)`, and
+exited 0. `0.1.0` is an early release whose `oxc-tsrx/parser` export throws and
+whose `setup` writes three of the four slots, so you get a broken install that
+looks like a successful one.
+
+Naming the version skips that entirely, on every package manager. So every
+install command on this site names one. Once the version you want has been out
+for a day this stops mattering, and an ordinary range works again; the pin costs
+you nothing either way.
 
 ### The minimum steps, per host
 
@@ -41,7 +50,7 @@ into a clean project on darwin-arm64.
 
 | Where you use it | Steps | What you run |
 | --- | --- | --- |
-| Command line (`oxlint`, `oxfmt`) | 1 | `npm install --save-dev oxc-tsrx` |
+| Command line (`oxlint`, `oxfmt`) | 1 | `npm install --save-dev oxc-tsrx@0.1.4` |
 | Editor, through released `oxc.oxc-vscode` | 1 | the same install, and nothing else |
 | [Vite+](/integrations/vite-plus) (`vp lint`, `vp fmt`) | 2 | the same install, then `oxc-tsrx setup` |
 
@@ -54,8 +63,9 @@ walks the complete sequence on a fresh `vp create` scaffold, ending at a rule
 you wrote reporting on a `.tsrx` file.
 
 The Vite+ second step is permanent, and you run it again after every clean
-dependency install. Vite+ resolves a *package* named `oxlint` and pins
-`oxlint@=1.72.0`, and a command name cannot answer a package resolution. See
+dependency install. Vite+ resolves a *package* named `oxlint`, at an exact
+version of its own (`=1.72.0` on 0.2.4, `=1.75.0` on 0.2.6), and a command name
+cannot answer a package resolution. See
 [Vite and Vite+](/integrations/vite-plus) for the full reasoning.
 
 No row asks you to create a config file, add an ignore file, or add a lifecycle
@@ -155,28 +165,37 @@ project-local slots that `oxc-tsrx setup` writes:
 
 <!-- pm-install -->
 ```sh
-npm install --save-dev vite-plus oxc-tsrx
+npm install --save-dev vite-plus oxc-tsrx@0.1.4
 npx oxc-tsrx setup
 ```
 
-Pick your own package manager in the tabs above and run both lines with it.
-`npx` belongs to the npm tab only: `vp create` writes a
-`devEngines.packageManager` block into `package.json`, and npm refuses to run
-in a project that names a different manager, exiting with `EBADDEVENGINES`.
-Any modern version of your package manager works, and Corepack is not required.
+Pick your own package manager in the tabs above and run both lines with it. In a
+project `vp create` scaffolded, that is almost never the npm tab: `vp create`
+writes a `devEngines.packageManager` block into `package.json` naming pnpm, and
+npm then refuses to run there at all, exiting with `EBADDEVENGINES` and `Invalid
+name "pnpm" does not match "npm"`. The same block is why `npx` appears only in
+the npm tab. Any modern version of your package manager works, and Corepack is
+not required.
 
 `setup` is explicit, idempotent, reversible, and never edits `package.json`.
 Run it again after a clean dependency install, because `node_modules` is
 disposable.
 
-After that, `vp lint`, `vp fmt`, and `vp check --fix` handle `.tsrx` files, with
-one config edit first: a project scaffolded by `vp create` enables
-`options.typeAware`/`typeCheck` in the `lint` block of `vite.config.ts`, and the
-native TSRX path refuses that lane, failing the run before anything is linted.
-Delete that one key and keep the rest, including the template's `jsPlugins`
-entry, which runs on both halves of the project.
-The [Vite and Vite+ page](/integrations/vite-plus#one-template-default-you-have-to-turn-off-first)
-explains why and shows the before and after.
+After that, `vp lint`, `vp fmt`, and `vp check --fix` handle `.tsrx` files. On
+Vite+ 0.2.6 there is one more dependency to add first, because the scaffold
+turns type-aware lint on and Vite+ and this package disagree about which
+`oxlint-tsgolint` runs it:
+
+<!-- pm-install -->
+```sh
+npm install --save-dev oxlint-tsgolint@0.24.0
+```
+
+That keeps the type-aware lane and the whole scaffolded `lint` block, including
+its `jsPlugins` entry, which runs on both halves of the project.
+[The type-aware template default](/integrations/vite-plus#the-type-aware-template-default)
+has the measurement, the exact failure you see without it, and the alternative
+if you would rather drop type-aware than add a dependency.
 
 Vite+ is the only place an install alone is not enough. Every other route in
 this guide works with no command at all.
@@ -188,7 +207,7 @@ prerequisites it deliberately does not own. In a command-line or editor project
 the slot half prints this, exit code 0:
 
 ```text
-oxc-tsrx 0.1.3 compatibility (npm)
+oxc-tsrx 0.1.4 compatibility (npm)
 - oxc-parser: missing
 - oxlint: missing
 - oxfmt: missing

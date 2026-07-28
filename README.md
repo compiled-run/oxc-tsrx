@@ -19,7 +19,7 @@ _OXC for TSRX is an independent community project. It is not affiliated with, en
 
 [**Docs**](https://oxc-tsrx-docs.vercel.app/) &nbsp;·&nbsp; [**Getting started**](https://oxc-tsrx-docs.vercel.app/guide/getting-started) &nbsp;·&nbsp; [**Playground**](https://oxc-tsrx-docs.vercel.app/playground)
 
-- **One install for the command line and your editor.** `npm install --save-dev oxc-tsrx` gives you `oxlint` and `oxfmt` commands that understand `.tsrx`. No config file, no ignore file, no install script, and nothing written into `node_modules` afterwards.
+- **One install for the command line and your editor.** `npm install --save-dev oxc-tsrx@0.1.4` gives you `oxlint` and `oxfmt` commands that understand `.tsrx`. No config file, no ignore file, no install script, and nothing written into `node_modules` afterwards.
 - **No fork, no patches, one parse.** Canonical OXC is a normal Cargo dependency, the Rust equivalent of a `package.json` dependency, pinned at one exact commit. Every call that depends on that commit lives in `crates/oxc_adapter`, and a normal lint or format is exactly one canonical OXC parse. [How that works](https://oxc-tsrx-docs.vercel.app/architecture/rust-oxc-core).
 - **Real Oxlint rules, on your bytes.** Diagnostics point at line and column numbers in your original `.tsrx` source, never at a transformed copy.
 - **Ordinary JavaScript and TypeScript are untouched.** `.js`, `.ts`, `.jsx`, and `.tsx` go straight to the official OXC code paths, measured at 45.92 ms next to official Oxlint's 40.68 ms on the same 1,000-file TSX corpus with one rule ([evidence](docs/acceptance/matrix.md)).
@@ -29,8 +29,10 @@ _OXC for TSRX is an independent community project. It is not affiliated with, en
 ## Install
 
 ```sh
-npm install --save-dev oxc-tsrx
+npm install --save-dev oxc-tsrx@0.1.4
 ```
+
+The version is named on purpose. pnpm 11 holds a new release back for its first day by default, so an unpinned `pnpm add -D oxc-tsrx` can quietly install an older version and report success. Naming the version avoids that on every package manager.
 
 You need Node.js 20.19 or newer in the 20.x line, or 22.12 or newer. Node 21 and Node 22.0 through 22.11 are not supported. The prebuilt binaries cover macOS, Linux (both glibc and musl), and Windows, on x64 and arm64. There is no JavaScript or WebAssembly fallback, so a platform outside that list has to [build from source](https://oxc-tsrx-docs.vercel.app/guide/getting-started).
 
@@ -110,7 +112,7 @@ One thing to know, and it is not optional: the official extension's activation e
 This project adds no Vite transform and no Vite parser. Your framework's own TSRX Vite plugin, a separate package such as `@tsrx/vite-plugin-react`, owns runtime compilation, CSS, source maps, and Hot Module Replacement (HMR), and your build and dev server flow through that plugin unchanged. What `oxc-tsrx` adds here is `.tsrx` linting and formatting, and Vite+ is the one place in the whole product where installing it is not enough:
 
 ```sh
-pnpm add -D vite-plus oxc-tsrx
+pnpm add -D vite-plus oxc-tsrx@0.1.4
 pnpm exec oxc-tsrx setup
 ```
 

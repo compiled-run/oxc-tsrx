@@ -435,7 +435,7 @@ async function makeWalkthroughProject() {
   await writeFile(
     join(project, "package.json"),
     `${JSON.stringify(
-      { name: "my-app", private: true, type: "module", devDependencies: { "oxc-tsrx": "^0.1.3" } },
+      { name: "my-app", private: true, type: "module", devDependencies: { "oxc-tsrx": "0.1.4" } },
       null,
       2,
     )}\n`,
@@ -520,10 +520,13 @@ test("the fresh-scaffold walkthrough reports on both file types, at the printed 
       }
     });
 
-    await t.test("the template's typeAware default is what refuses, and it says so", async () => {
-      // The page blames `lint.options` in vite.config.ts for `vp lint` exiting 2.
-      // The same option in a plain config reaches the same refusal, which is the
-      // transcript the page prints, so this is the claim under test.
+    await t.test("options.typeAware in a plain config refuses, and it says so", async () => {
+      // Not the Vite+ story. `vp lint` on a stock 0.2.6 scaffold stops on a
+      // tsgolint *version* disagreement, which needs Vite+ to reproduce and is
+      // measured on the Vite+ page. This is the other refusal the page prints:
+      // the direct `oxlint` command never starts a type process from config
+      // alone, and says so instead of dropping the option. The page keeps the
+      // two apart, so this test names only the one it can actually drive.
       const config = JSON.parse(await readFile(join(project, ".oxlintrc.json"), "utf8"));
       await writeFile(
         join(project, ".oxlintrc.json"),

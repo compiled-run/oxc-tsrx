@@ -22,8 +22,9 @@ $ vp build
 ✗ `,` or `)` expected
 ```
 
-Measured with Vite+ 0.2.6 and `oxc-tsrx` 0.1.0. Nothing is wrong with your
-install when you see this.
+Re-measured with Vite+ 0.2.6 and published `oxc-tsrx` 0.1.4, on a `vp create`
+React scaffold whose `App.tsx` imports one `.tsrx` component. Nothing is wrong
+with your install when you see this.
 
 You cannot fill the gap yourself from the public API either. The legal-TSX
 projection that makes linting and formatting work happens inside Rust and is
@@ -100,20 +101,32 @@ your editor. Running the result in a browser is not part of this project yet.
 - **The `oxlint-tsgolint` version has to match, and Vite+ 0.2.6 ships a
   different one.** This package runs the type-aware lane against
   `oxlint-tsgolint` 0.24.0 and refuses any other version rather than guess at
-  the protocol. Vite+ 0.2.4 depends on exactly that version, so a scaffold on
-  0.2.4 runs the type-aware lane on `.tsrx` normally. Vite+ 0.2.6 depends on
-  `oxlint-tsgolint` 7.0.2001, which its own `oxlint` uses happily and this
-  package will not: with `lint.options.typeAware` or `typeCheck` set, `vp lint`
-  over a batch containing a `.tsrx` file stops with `unsupported tsgolint
-  version 7.0.2001` and exits 2. A batch with no `.tsrx` file in it is
-  unaffected, because that batch never reaches this package's type-aware lane.
-  Until the supported version moves, the way through on Vite+ 0.2.6 is to
-  remove `options.typeAware`/`options.typeCheck` from the `lint` block of
-  `vite.config.ts`, which gives up the type-aware lane and leaves every other
-  rule, including your JavaScript plugins, reporting on `.tsrx`. Measured on a
-  scaffold created with `create-vite`'s `react-ts` template and migrated by
-  Vite+ itself, with `oxc-tsrx` built from this repository, on both 0.2.4 and
-  0.2.6.
+  the protocol. Vite+ 0.2.4 depends on exactly `=0.24.0`; Vite+ 0.2.6 depends on
+  `=7.0.2001`, which its own `oxlint` uses happily and this package will not.
+  Vite+ picks the runner with
+  `require.resolve("oxlint-tsgolint/bin/tsgolint", { paths: [process.cwd(), …] })`
+  and passes the result to whichever `oxlint` it launches, so the outcome is a
+  property of your install layout rather than of Vite+ 0.2.6 on its own:
+  - **Stock `vp create` scaffold on 0.2.6.** Nothing at the project root
+    resolves `oxlint-tsgolint`, so Vite+'s own 7.0.2001 wins. With
+    `lint.options.typeAware` or `typeCheck` set, `vp lint` over a batch
+    containing a `.tsrx` file reports the ordinary half, then stops with
+    `unsupported tsgolint version 7.0.2001` and exits 2.
+  - **Any layout where the project root resolves 0.24.0.** Adding
+    `oxlint-tsgolint@0.24.0` as a direct dev dependency does it, and so can a
+    workspace root, a hoisting install layout, or an ancestor `node_modules`
+    that happens to contain it. Vite+ then hands 0.24.0 to both linters and the
+    type-aware lane runs on `.tsrx` and on ordinary files alike. That last case
+    is how an earlier version of this page came to report the failure and a
+    later audit came to report the opposite: both measurements were correct
+    about the tree they ran in.
+  - **A batch with no `.tsrx` file in it** is unaffected either way, because it
+    never reaches this package's type-aware lane.
+
+  Measured on a `vp create` React scaffold with published `oxc-tsrx` 0.1.4 and
+  Vite+ 0.2.6, in a directory with no ancestor `node_modules`, on darwin-arm64;
+  all three states are printed on [the type-aware template
+  default](/integrations/vite-plus#the-type-aware-template-default).
 - **`vp lint` and your editor read different config files.** Vite+ owns lint
   configuration in the `lint` block of `vite.config.ts` and folds any scaffolded
   `.oxlintrc.json` into it, while the language server reads `.oxlintrc.json`.

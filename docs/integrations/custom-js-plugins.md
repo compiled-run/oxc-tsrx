@@ -5,7 +5,7 @@ description: Write a custom lint rule with the oxlint that oxc-tsrx installs and
 
 # Custom JavaScript plugins
 
-`npm install oxc-tsrx` puts an `oxlint` command on your PATH, and that command
+`npm install oxc-tsrx@0.1.4` puts an `oxlint` command on your PATH, and that command
 already lints `.tsrx`. So this page starts with the linter you have, not with a
 second one you would have to install.
 
@@ -37,8 +37,12 @@ You need Node.js 20.19 or newer, and one install:
 
 <!-- pm-install -->
 ```sh
-npm install oxc-tsrx
+npm install oxc-tsrx@0.1.4
 ```
+
+The version is named on purpose; [why every install command here names a
+version](/guide/getting-started#why-every-install-command-here-names-a-version)
+explains what an unpinned one can quietly give you.
 
 Save this as `src/TaskList.tsrx`:
 
@@ -293,20 +297,32 @@ doing them.
 
 This section is that whole route, in order, with nothing left out. It was run
 end to end on a scaffold created for it: Node.js 24.15.0, pnpm 11.17.0,
-Vite+ 0.2.6, `oxc-tsrx` 0.1.3, `@tsrx/typescript-plugin` 0.3.112,
-`@tsrx/react` 0.2.50, TypeScript 6.0.3, on macOS arm64.
+Vite+ 0.2.6, `oxc-tsrx` 0.1.4, `oxlint-tsgolint` 0.24.0,
+`@tsrx/typescript-plugin` 0.3.112, `@tsrx/react` 0.2.50, TypeScript 6.0.3, on
+macOS arm64.
 
 ### 1. Scaffold, and install this package
 
+You do not have `vp` yet, and there is nothing to install to get it. Run it from
+the registry, naming the Vite+ version you want:
+
 <!-- typed-commands -->
 ```sh
-vp create vite -- my-app --template react-ts
+npx --yes -p vite-plus@0.2.6 vp create vite -- my-app --template react-ts
 cd my-app
 ```
 
+**From here on, use the pnpm tab, not the npm one.** `vp create` writes a
+`devEngines.packageManager` block into `package.json` naming pnpm, and npm then
+refuses to run in that project at all, exiting with `npm error code
+EBADDEVENGINES` and `npm error Invalid name "pnpm" does not match "npm"`. That
+is npm honouring your own project's declaration, not a failure of anything here.
+Every transcript below was captured with the pnpm tab's commands, which is why
+`setup` prints `(pnpm)`. Pick whichever manager your scaffold names.
+
 <!-- pm-install -->
 ```sh
-npm install --save-dev oxc-tsrx
+npm install --save-dev oxc-tsrx@0.1.4
 npx oxc-tsrx setup
 ```
 
@@ -506,8 +522,9 @@ a plugin declared only in `.oxlintrc.json` produces nothing from `vp lint`, and
 a plugin declared only in `vite.config.ts` produces nothing in the editor. If
 you want both surfaces, declare it in both places.
 
-The `vite.config.ts` half is a `{ name, specifier }` entry in `lint.jsPlugins`
-plus a `lint.rules` entry, and one deletion:
+The `vite.config.ts` half is two additions to what `vp create` already wrote: a
+`{ name, specifier }` entry in `lint.jsPlugins`, and a `lint.rules` entry.
+Nothing is deleted, `lint.options` included:
 
 ```ts
 import { defineConfig, lazyPlugins } from "vite-plus";
@@ -532,6 +549,10 @@ export default defineConfig({
       "vite-plus/prefer-vite-plus-imports": "error",
       "house-rules/no-inline-style-object": "warn",
     },
+    options: {
+      typeAware: true,
+      typeCheck: true,
+    },
     jsPlugins: [
       {
         name: "vite-plus",
@@ -547,33 +568,34 @@ export default defineConfig({
 });
 ```
 
-The deletion is `lint.options`, and only on Vite+ 0.2.6. What that key does
-depends on which Vite+ you are on, so measure yours rather than assuming:
+`lint.options` is the scaffold's type-aware default, and on Vite+ 0.2.6 it needs
+one dependency that the scaffold does not have. Vite+ 0.2.6 depends on
+`oxlint-tsgolint` 7.0.2001; this package runs the type-aware lane only against
+0.24.0. Without a 0.24.0 in the project, `vp lint` on a batch containing `.tsrx`
+stops with `unsupported tsgolint version 7.0.2001` and exits 2, after reporting
+the ordinary half. Install the runner and the whole `lint` block works as
+written:
 
-| Vite+ | `lint.options` present, batch contains `.tsrx` |
-| --- | --- |
-| 0.2.4 | works. Type-aware runs on `.tsrx`, reporting `typescript(TS…)` at your authored positions |
-| 0.2.6 | exits 2: `unsupported tsgolint version 7.0.2001` |
+<!-- pm-install -->
+```sh
+npm install --save-dev oxlint-tsgolint@0.24.0
+```
 
-Vite+ 0.2.6 depends on `oxlint-tsgolint` 7.0.2001. This package pins 0.24.0 and
-refuses any other version rather than running an unverified one, so on 0.2.6 the
-type-aware lane cannot start. Deleting `lint.options` gives up type-aware and
-gets you a working `vp lint`; staying on Vite+ 0.2.4 keeps both.
+That was measured on this scaffold, with `options` untouched: both `.tsrx` and
+`.tsx` reported, type-aware included.
+[The type-aware template default](/integrations/vite-plus#the-type-aware-template-default)
+has all three runs, the resolution rule behind them, and the alternative if you
+would rather delete `lint.options` than add a dependency.
 
-A batch with no `.tsrx` file in it is unaffected either way, which is why a
-stock scaffold lints fine until you add your first TSRX component.
-
-This used to be a different and worse bug: any `lint.options` key killed the
-whole batch even on 0.2.4, because the projection lane built a full lint session
-and tripped the type-aware opt-in gate. That is fixed. What remains is a genuine
-version disagreement about `oxlint-tsgolint`, not a refusal this package can
-wave through. The same opt-in refusal still applies to a plain `.oxlintrc.json`
-carrying the option, which is capturable here:
+Do not confuse that with the refusal below, which is a different thing with a
+similar shape. `options.typeAware` in a plain `.oxlintrc.json` reaches the
+direct `oxlint` command, which never starts a type process from config alone and
+says so:
 
 <!-- terminal-demo:custom-plugins-typeaware -->
 
-[The Vite+ page](/integrations/vite-plus#one-template-default-you-have-to-turn-off-first)
-has the rest of that trade.
+A batch with no `.tsrx` file in it is unaffected by either, which is why a stock
+scaffold lints fine until you add your first TSRX component.
 
 ## How it runs, and what it costs
 
@@ -728,9 +750,18 @@ npm install --save-dev eslint
 
 ESLint does not know what a `.tsrx` file is. You fix that with a *parser
 adapter*: a module exporting `parseForESLint`, which ESLint calls instead of its
-own parser. Copy `examples/custom-js-plugins/tsrx-eslint-parser.mjs` from this
-repository into your project as `tsrx-eslint-parser.mjs`. It is about 120 lines,
-and most of it is offset bookkeeping. This is the part that matters:
+own parser.
+
+**The adapter is not in the `oxc-tsrx` npm package.** It lives in this project's
+repository and nowhere else, so installing `oxc-tsrx` does not give it to you.
+Download
+[`tsrx-eslint-parser.mjs`](https://raw.githubusercontent.com/markless-dev/oxc-tsrx/main/examples/custom-js-plugins/tsrx-eslint-parser.mjs)
+and save it in your project under that name. It sits at
+`examples/custom-js-plugins/tsrx-eslint-parser.mjs`
+[in the repository](https://github.com/markless-dev/oxc-tsrx/blob/main/examples/custom-js-plugins/tsrx-eslint-parser.mjs),
+and the link tracks `main` rather than a release, because the file is not
+versioned with the package. It is about 120 lines, and most of it is offset
+bookkeeping. This is the part that matters:
 
 ```js
 export function parseForESLint(sourceText, options = {}) {

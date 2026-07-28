@@ -394,8 +394,11 @@ const typeAwareConfig = `${JSON.stringify(
 // fixture below reproduces the shape a `vp create` React scaffold has: a
 // solution-style root tsconfig that owns no files, a referenced tsconfig.app.json
 // that owns `src`, a `node_modules/.bin/oxlint` belonging to Vite+, a pnpm
-// lockfile, and TypeScript 6. Every line these two demos print was checked
-// against a real `vp create` scaffold, where it is identical.
+// lockfile, and TypeScript 6. These two demos were checked line for line against
+// a real `vp create` scaffold running published oxc-tsrx 0.1.4. They match it
+// except for one thing the capture itself causes: `sanitize` strips the
+// throwaway project directory, so the two tsconfig paths `setup` prints in full
+// arrive here as bare filenames. The captions say so.
 const scaffoldPackageJson = `${JSON.stringify(
   {
     name: 'my-app',
@@ -404,7 +407,7 @@ const scaffoldPackageJson = `${JSON.stringify(
     type: 'module',
     devDependencies: {
       '@types/react': '^19.2.17',
-      'oxc-tsrx': '^0.1.3',
+      'oxc-tsrx': '0.1.4',
       typescript: '~6.0.2',
       'vite-plus': '^0.2.6',
     },
@@ -937,7 +940,7 @@ const demos = {
 
   'custom-plugins-vp-setup': {
     caption:
-      'Real output, captured at build time, from a project shaped like a fresh vp create React scaffold with oxc-tsrx installed and none of the TSRX toolchain packages yet. Every line was checked against a real scaffold, where it is identical.',
+      'Real output, captured at build time, from a project shaped like a fresh vp create React scaffold with oxc-tsrx installed and none of the TSRX toolchain packages yet. One difference from a real scaffold: setup names the two tsconfig files by absolute path, and the capture rewrites the throwaway project directory away, so they read as bare filenames here.',
     files: {
       ...scaffoldBaseFiles,
       'tsconfig.app.json': scaffoldAppTsconfig(false),
@@ -957,7 +960,7 @@ const demos = {
 
   'custom-plugins-vp-status': {
     caption:
-      'Real output, captured at build time, from the same project after the TSRX toolchain packages were installed and tsconfig.app.json declared the plugin.',
+      'Real output, captured at build time, from the same project after the TSRX toolchain packages were installed and tsconfig.app.json declared the plugin. On a real scaffold this prints identically.',
     files: {
       ...scaffoldBaseFiles,
       'tsconfig.app.json': scaffoldAppTsconfig(true),
