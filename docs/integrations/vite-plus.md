@@ -44,7 +44,7 @@ whole story. Keep reading.
 
 ### The one extra step Vite+ needs
 
-Released Vite+ 0.2.4 finds its lint and format tools through project-local
+Vite+ finds its lint and format tools through project-local
 packages named literally `oxlint` and `oxfmt`
 (`join(dirname(dirname(resolve("oxlint"))), "bin", "oxlint")`). It reads no
 `oxc.provider` metadata. Activate `oxc-tsrx`'s qualified, reversible
@@ -70,6 +70,13 @@ npm error Invalid name "pnpm" does not match "npm"
 That is npm enforcing your own project's declaration, not an `oxc-tsrx`
 failure. Any modern version of your package manager works; nothing here needs
 Corepack.
+
+One related case worth knowing, because it is also not an `oxc-tsrx` failure:
+`vp create` populates `node_modules` with a pnpm it downloads itself. If the
+pnpm on your own path is a different major version, the first command you run
+in the project stops with `ERR_PNPM_UNEXPECTED_STORE`. Run `pnpm install` once,
+which is the fix pnpm itself prints, and your pnpm takes the store over. You
+still do not need a specific pnpm version, and you still do not need Corepack.
 
 The command never edits `package.json`, never runs as an install lifecycle
 script, refuses direct or unrecognized package collisions, and is idempotent.
@@ -518,7 +525,7 @@ Yarn, or Bun for these `vp` commands. Retained tests exercise:
   with the published `@tsrx/vite-plugin-react` 0.0.72;
 - literal `vp build`, `vp dev`, mixed `vp lint`, `vp fmt --check`, and
   convergent `vp check --fix`, run with npm, on the tested minimum Vite+
-  0.1.24 and the pinned current Vite+ 0.2.4; and
+  0.1.24 and the pinned Vite+ 0.2.4; and
 - imported object `extends`, TSRX-specific overrides, rooted ignores, and
   the `options.typeAware` auto-opt-in with a real mapped
   `typescript/no-floating-promises` diagnostic.
