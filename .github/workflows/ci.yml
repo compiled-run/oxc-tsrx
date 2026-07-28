@@ -124,6 +124,12 @@ jobs:
     # executable on POSIX and not on Windows, and a drive-lettered path is not a
     # module specifier. These lanes had never run outside one developer's macOS
     # machine, so a Windows runner is what makes the claim checkable at all.
+    #
+    # It also builds the native executables and the parser addon, so it is the
+    # one job that can execute them without paying for a second build. Until
+    # that execution existed, every non-Linux claim in this repository rested on
+    # release-candidate.yml, which only fires on workflow_dispatch: real
+    # coverage at release time and none on the change that broke it.
     name: Install and arbitration (${{ matrix.runner }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
@@ -184,6 +190,36 @@ jobs:
           cargo fetch --locked
           pnpm run build:native
           pnpm run build:parser-native
+
+      - name: Run a real lint, format, and language-server session on this host
+        # Mirrors the smoke release-candidate.yml runs on all eight targets, on
+        # a lane that fires on push and pull request. The three overrides point
+        # at the one multi-call executable built above; the JavaScript launchers
+        # add the `fmt` and `lsp` subcommands themselves. Nothing here is a
+        # packaging assertion: these suites spawn the binary and read what it
+        # actually emits.
+        shell: bash
+        env:
+          EXPECTED_PLATFORM: ${{ matrix.expected_platform }}
+        run: |
+          suffix=""
+          if [[ "$EXPECTED_PLATFORM" == "win32" ]]; then suffix=".exe"; fi
+          native="$GITHUB_WORKSPACE/target/release/oxc-tsrx$suffix"
+          export OXC_TSRX_LINT_BIN="$native"
+          export OXC_TSRX_FORMAT_BIN="$native"
+          export OXC_TSRX_LSP_BIN="$native"
+          node --test tests/packaging/runtime-contract.test.mjs tests/vite/package-seam.test.mjs
+
+      - name: Load the parser addon built on this host
+        # `build:parser-native` above wrote packages/toolchain/parser.node and
+        # its identity record, and nothing opened them. The first command loads
+        # that exact file through the shipped loader; the suite after it packs
+        # and installs the real tarballs, which is the route a consumer takes.
+        shell: bash
+        run: |
+          OXC_TSRX_PARSER_ADDON="$GITHUB_WORKSPACE/packages/toolchain/parser.node" \
+            pnpm run test:parser-addon
+          pnpm run test:parser-api
 
       - name: Exercise a plain install against released hosts
         run: pnpm run test:packaging:released-hosts

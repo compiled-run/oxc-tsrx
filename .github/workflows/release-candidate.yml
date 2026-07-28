@@ -129,20 +129,6 @@ jobs:
           cargo fetch --locked
           cargo build --release --locked --target "$TARGET" -p oxc_tsrx_cli --bins
 
-      - name: Smoke the companion CLIs on this host
-        shell: bash
-        run: |
-          suffix=""
-          if [[ "$EXPECTED_PLATFORM" == "win32" ]]; then suffix=".exe"; fi
-          # One multi-call executable now carries lint, fmt, and lsp. All three
-          # overrides point at the same file; the JavaScript launchers add the
-          # `fmt` and `lsp` subcommands themselves.
-          native="$GITHUB_WORKSPACE/target/$TARGET/release/oxc-tsrx$suffix"
-          export OXC_TSRX_LINT_BIN="$native"
-          export OXC_TSRX_FORMAT_BIN="$native"
-          export OXC_TSRX_LSP_BIN="$native"
-          node --test tests/packaging/runtime-contract.test.mjs tests/vite/package-seam.test.mjs
-
       - name: Verify Linux ABI policy
         if: matrix.libc == 'gnu' || matrix.libc == 'musl'
         shell: bash
@@ -171,6 +157,9 @@ jobs:
             done
           fi
 
+      # This step used to sit below the smoke, so the addon was built after the
+      # only place that could have run it and no target but the developer's own
+      # ever loaded one. It now precedes the smoke, and the smoke opens it.
       - name: Build the parser addon for this target
         shell: bash
         run: |
@@ -181,6 +170,36 @@ jobs:
             --target "$TARGET" \
             --out "release/addon/parser.node" \
             --record "release/addon/parser-addon-$PACKAGE_SUFFIX.json"
+          # The loader reads an addon's identity record from beside the addon it
+          # is pointed at, so the load check below needs the record under the
+          # default name too. The suffixed copy stays as per-target evidence.
+          cp "release/addon/parser-addon-$PACKAGE_SUFFIX.json" "release/addon/parser.node.json"
+
+      - name: Smoke the companion CLIs on this host
+        shell: bash
+        run: |
+          suffix=""
+          if [[ "$EXPECTED_PLATFORM" == "win32" ]]; then suffix=".exe"; fi
+          # One multi-call executable now carries lint, fmt, and lsp. All three
+          # overrides point at the same file; the JavaScript launchers add the
+          # `fmt` and `lsp` subcommands themselves.
+          native="$GITHUB_WORKSPACE/target/$TARGET/release/oxc-tsrx$suffix"
+          export OXC_TSRX_LINT_BIN="$native"
+          export OXC_TSRX_FORMAT_BIN="$native"
+          export OXC_TSRX_LSP_BIN="$native"
+          node --test tests/packaging/runtime-contract.test.mjs tests/vite/package-seam.test.mjs
+
+      - name: Load the parser addon built for this target
+        # musl is excluded by decision, not for convenience. These two targets
+        # cross-compile on a glibc runner, and a musl-linked `.node` cannot be
+        # dlopen'd by a glibc Node, so there is no host here that could open it.
+        # The musl addon is built, checksummed, and packaged without ever being
+        # loaded anywhere, which is what the published support matrix labels.
+        if: matrix.libc != 'musl'
+        shell: bash
+        run: |
+          OXC_TSRX_PARSER_ADDON="$GITHUB_WORKSPACE/release/addon/parser.node" \
+            pnpm run test:parser-addon
 
       - name: Package the native npm artifact and target VSIX
         shell: bash
