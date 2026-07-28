@@ -247,3 +247,32 @@ a test:
 
 Doing both is reasonable. Doing neither means the lane keeps failing at 11% and
 the flake gradually teaches everyone to press rerun.
+
+## 6. The Vite HMR teardown race, now fixed, recorded so it is not rediscovered
+
+`tests/vite/framework-chain.test.mjs` removed its temporary project with a
+plain recursive `rm` in a `finally` block. Vite's dependency optimizer writes
+into `node_modules/.vite/deps_temp_*` from its own timers, so the removal
+sometimes raced a directory Vite was still filling and failed:
+
+```
+[Error: ENOTEMPTY: directory not empty, rmdir
+  '/tmp/oxc-tsrx-vite-react-yCW2mv/node_modules/.vite/deps_temp_4b8f356d']
+```
+
+It turned `main` red at `b3ad509` on the Rust-current lane, 157 of 158 passing,
+and it had appeared at least twice before that on other branches without being
+written down anywhere.
+
+The assertions had already passed both times. The failure was in cleanup of a
+temporary directory that was being deleted anyway, so both teardown sites now
+pass `maxRetries` and `retryDelay`, which is what Node provides for exactly this
+race. Nothing about the test's assertions changed, and the teardown still fails
+the test if the directory genuinely cannot be removed.
+
+**Why this is in this file.** It is the second unrecorded CI flake found during
+one goal, after the Windows `0xC0000409` fast-fail above. A flake that lives
+only in a rerun is indistinguishable from a real failure that nobody
+investigated, and the charter line it bears on is "do not add a CI lane whose
+failure will be ignored". If a third appears, the pattern is worth treating as
+its own piece of work rather than as three separate annoyances.

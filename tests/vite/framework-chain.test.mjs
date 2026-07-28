@@ -113,7 +113,13 @@ test("official TSRX React compiler composes through a real Vite build without an
     assert.match(output, /OXC TSRX BUILD/);
     assert.doesNotMatch(output, /@if|@\{/);
   } finally {
-    await rm(project, { recursive: true, force: true });
+    // Vite's dependency optimizer writes into node_modules/.vite/deps_temp_*
+    // from its own timers, so a tree removal that races it fails with
+    // ENOTEMPTY on a directory that is empty a moment later. This is a
+    // cleanup of a temporary project after the assertions have already
+    // passed, so retry rather than fail a green test on a directory we are
+    // deleting anyway.
+    await rm(project, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 });
 
@@ -220,7 +226,13 @@ test("real Vite dev server recompiles a changed .tsrx module through the framewo
       // failed, but it still fails the test on its own.
       if (asserted) throw error;
     } finally {
-      await rm(project, { recursive: true, force: true });
+      // Vite's dependency optimizer writes into node_modules/.vite/deps_temp_*
+    // from its own timers, so a tree removal that races it fails with
+    // ENOTEMPTY on a directory that is empty a moment later. This is a
+    // cleanup of a temporary project after the assertions have already
+    // passed, so retry rather than fail a green test on a directory we are
+    // deleting anyway.
+    await rm(project, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   }
 });
