@@ -1,7 +1,7 @@
 {
   "name": "oxc-tsrx",
   "version": "0.1.4",
-  "description": "The complete OXC toolchain for JavaScript, TypeScript, JSX, and TSRX",
+  "description": "Rust-native Oxlint and Oxfmt for TSRX, JavaScript, TypeScript, and JSX",
   "keywords": [
     "formatter",
     "javascript",
