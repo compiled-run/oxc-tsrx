@@ -28,8 +28,25 @@ import { hostPlatformPackage, installAndExerciseRelease } from "./installed-rele
  *                           (default: the eight platform packages plus oxc-tsrx)
  *   --registry <url>        default https://registry.npmjs.org/
  *   --attempts <n>          registry visibility attempts, 10s apart (default 6)
- *   --allow-unpublished     exit 0 when the version is not on the registry,
- *                           which is what a dry-run rehearsal expects
+ *   --rehearsal             dry-run mode: if the requested version is not on the
+ *                           registry, run every stage against the latest version
+ *                           that is, so the rehearsal installs and runs
+ *                           something real instead of no-opping
+ *
+ * On `--rehearsal`. A backstop that has never executed is the same shape as the
+ * `npm view` check it replaced: wired, believed, unproven. A dry run cannot
+ * install the version it is rehearsing, because that version is by definition
+ * not published yet, so a rehearsal that insists on the pending version can only
+ * ever skip. Retargeting the last published release is what makes the dry run
+ * exercise the whole path for real.
+ *
+ * What that proves: this script, the registry read, the install into a project
+ * outside the workspace, the lint and the parse all work on the publish runner
+ * as configured today. What it does not prove: anything whatsoever about the
+ * pending version's artifacts. Those are the pre-publish gate's job, and the
+ * gate runs before this step. It does mean a dry run now also answers "does the
+ * release currently on npm still install and work", which is worth knowing on
+ * its own.
  */
 
 const root = resolve(import.meta.dirname, "..");
@@ -40,12 +57,12 @@ function parseArguments(argv) {
     orderFile: null,
     registry: "https://registry.npmjs.org/",
     attempts: 6,
-    allowUnpublished: false,
+    rehearsal: false,
   };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
-    if (argument === "--allow-unpublished") {
-      options.allowUnpublished = true;
+    if (argument === "--rehearsal") {
+      options.rehearsal = true;
       continue;
     }
     const value = argv[++index];
@@ -82,24 +99,72 @@ async function publishedNames(options) {
     .filter(Boolean);
 }
 
-/** Whether `name@version` is visible, without spawning npm nine times. */
-async function visible(registry, name, version) {
+/** The abbreviated packument, or null when the name has never been published. */
+async function packument(registry, name) {
   const response = await fetch(new URL(encodeURIComponent(name).replace("%40", "@"), registry), {
     headers: { accept: "application/vnd.npm.install-v1+json" },
   });
-  if (response.status === 404) return false;
+  if (response.status === 404) return null;
   if (!response.ok) throw new Error(`${name}: registry answered ${response.status}`);
-  const packument = await response.json();
-  return Boolean(packument.versions?.[version]);
+  return await response.json();
+}
+
+/** Whether `name@version` is visible, without spawning npm nine times. */
+async function visible(registry, name, version) {
+  return Boolean((await packument(registry, name))?.versions?.[version]);
+}
+
+/** The version behind the `latest` dist-tag, or null when nothing is published. */
+async function latestPublished(registry, name) {
+  const document = await packument(registry, name);
+  const latest = document?.["dist-tags"]?.latest ?? null;
+  return latest && document.versions?.[latest] ? latest : null;
+}
+
+/** The one name in the set that consumers install; the rest are its platforms. */
+function publicPackage(names) {
+  return names.find((name) => !name.startsWith("@oxc-tsrx/native-")) ?? "oxc-tsrx";
 }
 
 async function main() {
   const options = parseArguments(process.argv.slice(2));
   const names = await publishedNames(options);
-  say("Post-publish backstop");
-  say(`  version   ${options.version}`);
+  const publicName = publicPackage(names);
+  const label = options.rehearsal ? "rehearsal" : "backstop";
+
+  // In rehearsal mode the pending version is normally not on the registry yet,
+  // and a check that stops there is a check that never runs. Retarget it at the
+  // release that IS out there, and say so in as many words: the run is proving
+  // the mechanism, not the pending artifacts.
+  let target = options.version;
+  let retargeted = false;
+  if (options.rehearsal && !(await visible(options.registry, publicName, options.version))) {
+    const latest = await latestPublished(options.registry, publicName);
+    if (!latest) {
+      say(`${publicName} has no published version at all, so there is nothing to install.`);
+      say();
+      say("rehearsal: SKIPPED  the registry holds no release of this package yet");
+      return;
+    }
+    target = latest;
+    retargeted = true;
+  }
+
+  say(options.rehearsal ? "Post-publish backstop (rehearsal)" : "Post-publish backstop");
+  say(`  version   ${target}`);
   say(`  registry  ${options.registry}`);
   say(`  packages  ${names.length}`);
+  if (retargeted) {
+    say(`  requested ${options.version}, which is not on the registry yet`);
+    say(
+      `  rehearsing against ${target}, the current \`latest\` of ${publicName}, so every stage ` +
+        "below runs for real",
+    );
+    say(
+      `  this proves the backstop mechanism and the health of ${target}. It proves nothing ` +
+        `about ${options.version}, which the pre-publish gate above already covered.`,
+    );
+  }
   say();
 
   say("[1/2] every published name resolves at this version");
@@ -109,27 +174,20 @@ async function main() {
   // check this replaces and it is still true here.
   for (let attempt = 1; attempt <= options.attempts && missing.size > 0; attempt += 1) {
     for (const name of [...missing]) {
-      if (await visible(options.registry, name, options.version)) missing.delete(name);
+      if (await visible(options.registry, name, target)) missing.delete(name);
     }
     if (missing.size === 0) break;
-    if (options.allowUnpublished && missing.size === names.length) break;
     say(`  ${missing.size} not visible yet (attempt ${attempt}), waiting for the registry`);
     if (attempt < options.attempts) await sleep(10_000);
   }
-  if (missing.size === names.length && options.allowUnpublished) {
-    say(`  ${options.version} is not on the registry, which is what a dry run expects`);
-    say();
-    say("backstop: SKIPPED  nothing is published at this version to install and run");
-    return;
-  }
   if (missing.size > 0) {
-    for (const name of missing) fail(`${name}@${options.version} is not on the registry`);
+    for (const name of missing) fail(`${name}@${target} is not on the registry`);
     say();
-    say(`backstop: FAIL  ${missing.size} of ${names.length} packages did not land`);
+    say(`${label}: FAIL  ${missing.size} of ${names.length} packages did not land at ${target}`);
     process.exitCode = 1;
     return;
   }
-  say(`  all ${names.length} names resolve at ${options.version}`);
+  say(`  all ${names.length} names resolve at ${target}`);
   say();
 
   say("[2/2] install the published release and make it do real work");
@@ -140,21 +198,31 @@ async function main() {
     // the platform package through the published optionalDependencies exactly
     // as a consumer's first install does.
     const installed = await installAndExerciseRelease({
-      specs: [`oxc-tsrx@${options.version}`],
+      specs: [`${publicName}@${target}`],
       registry: options.registry,
-      expectedVersion: options.version,
+      expectedVersion: target,
       log: (line) => say(line),
     });
     say();
     say(
-      `backstop: PASS  oxc-tsrx@${options.version} installed from the registry on ` +
+      `${label}: PASS  ${publicName}@${target} installed from the registry on ` +
         `${host.target.target}, linted ${installed.lint.diagnostics} diagnostics, and parsed through ` +
         "its own addon",
     );
+    if (retargeted) {
+      say(
+        `the code path a ${options.version} publish depends on ran end to end here; ` +
+          `${options.version} itself is gated before publish, not here`,
+      );
+    }
   } catch (error) {
     fail(`the published release does not work when installed from the registry: ${error.message}`);
     say();
-    say("backstop: FAIL  the published artifact is broken; deprecate and patch");
+    say(
+      retargeted
+        ? `rehearsal: FAIL  ${target} is already published and no longer installs and runs`
+        : `${label}: FAIL  the published artifact is broken; deprecate and patch`,
+    );
     process.exitCode = 1;
   }
 }

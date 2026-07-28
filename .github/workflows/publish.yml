@@ -317,6 +317,43 @@ jobs:
           if-no-files-found: warn
           retention-days: 90
 
+      # The backstop rehearsal, and it sits HERE, above `Rehearse the publish`,
+      # deliberately.
+      #
+      # It used to be the last step in the file. At an already-published version
+      # `Rehearse the publish` correctly fails on npm's immutable-version rule
+      # and everything after it is skipped; at an unpublished version there is
+      # nothing on the registry to install. Between the two, the backstop had
+      # never once executed. That is the same shape as the `npm view` check it
+      # replaced: wired, believed, unproven, which is how 0.1.0 shipped broken.
+      #
+      # Ordering it above that step is enough on its own to make an
+      # already-published dry run exercise it, and `--rehearsal` covers the other
+      # case by retargeting the registry's current `latest` when the requested
+      # version is not published yet. So every dry run installs a real release
+      # from npmjs.com into a project outside the workspace and makes it produce
+      # a real diagnostic and a real AST, whichever version was dispatched.
+      #
+      # Nothing here touches `Rehearse the publish`. That step still runs, still
+      # against npmjs.com, and still fails when the version is taken.
+      #
+      # What the rehearsal proves is the mechanism plus the health of whatever is
+      # already published. It proves nothing about the version being dispatched:
+      # that is the gate directly above, which asserts the nine tarballs and
+      # installs them, and which has to pass before this step is reached.
+      - name: Rehearse the backstop
+        if: inputs.mode == 'dry-run'
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          node scripts/verify-published-release.mjs \
+            --version "$VERSION" \
+            --order-file publish-order.txt \
+            --attempts 2 \
+            --rehearsal
+
       # Always rehearsed, including in publish mode. Provenance is switched off
       # for the rehearsal only: a dry run has nothing to attest, and asking
       # Sigstore for a signature it will never use adds a failure mode to the
@@ -392,21 +429,3 @@ jobs:
           node scripts/verify-published-release.mjs \
             --version "$VERSION" \
             --order-file publish-order.txt
-
-      # The same backstop in dry-run mode. If this version is not on the
-      # registry it has nothing to install and says so; if it is, a rehearsal
-      # verifies the release that is already out there. Either way the code path
-      # the release depends on is exercised by a dry run rather than only by an
-      # irreversible publish.
-      - name: Rehearse the backstop
-        if: inputs.mode == 'dry-run'
-        shell: bash
-        env:
-          VERSION: ${{ inputs.version }}
-        run: |
-          set -euo pipefail
-          node scripts/verify-published-release.mjs \
-            --version "$VERSION" \
-            --order-file publish-order.txt \
-            --attempts 2 \
-            --allow-unpublished

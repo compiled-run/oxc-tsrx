@@ -3,6 +3,7 @@ name: Build website artifact
 on:
   push:
     branches: [main]
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -10,10 +11,57 @@ permissions:
 
 concurrency:
   group: site-artifact-${{ github.ref }}
-  cancel-in-progress: false
+  # A superseded pull-request run is wasted wall clock. A superseded run on main
+  # is a deploy that never happened, so those still queue.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Pull requests get the site tests and nothing else.
+  #
+  # The drift test that binds docs/reference/platform-support.md to
+  # packages/toolchain/dist/native-targets.js lives in test:site:unit, and this
+  # workflow was the only place that ran it. Triggering on push to main meant a
+  # pull request could diverge the published support matrix from the target list
+  # this project actually builds and only find out after it landed.
+  #
+  # This job exists rather than simply letting `build` run on pull requests
+  # because `build` installs a Rust target and compiles the WebAssembly demo
+  # engine with no cargo cache in this workflow. That is minutes per pull
+  # request to prove something no pull request is asking about. Everything the
+  # site tests need is a plain `docs:build`: the site falls back to the static
+  # demo when the WebAssembly artifact is absent (docs/build.mjs:1743-1750), and
+  # both suites were confirmed green against a build with no wasm artifact at
+  # all. The full artifact-and-deploy path stays on push and dispatch, where the
+  # bytes it produces are actually used.
+  site-tests:
+    name: Site tests
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out the pull request revision
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Install the pinned pnpm
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+
+      - name: Install Node.js 24.15.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.15.0
+          cache: pnpm
+
+      - name: Install the locked documentation graph
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Prove the site still builds and its claims still hold
+        run: |
+          pnpm run docs:build
+          pnpm run test:site:unit
+          pnpm run test:site:static
+
   build:
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:

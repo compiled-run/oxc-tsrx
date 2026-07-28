@@ -350,7 +350,21 @@ What the workflow checks before it writes anything:
   each pinned to that version;
 - **the gate**, `scripts/check-publish-artifacts.mjs`, over all nine tarballs.
 
-Then it dry-runs all nine, and only then publishes all nine in order.
+Then, in this order:
+
+1. **Rehearse the backstop** (`dry-run` mode only). Installs a real published
+   release from npmjs.com and runs it. See
+   [what a dry run proves](#what-a-dry-run-proves) below.
+2. **Rehearse the publish**. `npm publish --dry-run` against npmjs.com for all
+   nine, which is also the check that the version is still free.
+3. **Publish in launch-contract order** (`publish` mode only).
+4. **Install the published release from the registry and run it** (`publish`
+   mode only). The backstop itself.
+
+The backstop rehearsal sits above the publish rehearsal on purpose. It used to
+be the last step in the file, where it was skipped whenever the publish
+rehearsal correctly refused an already-published version. That is how it reached
+0.1.4 having never executed once.
 
 ### The gate
 
@@ -389,7 +403,36 @@ are.
 One known limit: in `dry-run` mode at a version that is already on npm, the
 separate "Rehearse the publish" step against npmjs.com fails with `You cannot
 publish over the previously published versions`. That is the check working. Use
-an unpublished version if you want a clean dry run end to end.
+an unpublished version if you want a clean dry run end to end. Every step before
+it, including the backstop rehearsal, has already run by then.
+
+### What a dry run proves
+
+A dry run is the only way the post-publish backstop is ever exercised, so it is
+worth being exact about what it does and does not establish.
+
+| Step | In a dry run it | Proves |
+| --- | --- | --- |
+| The gate | runs in full over the nine tarballs you are about to publish | those exact artifacts install and work on this runner |
+| Rehearse the backstop | installs a real release from npmjs.com and lints and parses through it | the backstop mechanism works, and whatever is currently on npm still installs and works |
+| Rehearse the publish | asks npmjs.com to accept all nine | the version is free and npm accepts the tarball shape |
+
+The backstop rehearsal cannot install the version being rehearsed, because that
+version is not published yet. So `scripts/verify-published-release.mjs
+--rehearsal` retargets: if the requested version is not on the registry, it runs
+every stage against the current `latest` of `oxc-tsrx` instead, and says so in
+the log. If the requested version *is* already published, it runs against that.
+Either way the dry run installs something real from the registry into a project
+outside the workspace and makes it produce a real diagnostic and a real AST.
+
+What that does **not** prove is anything about the pending version's artifacts.
+The gate directly above it covers those, on this runner and on all three Tier 1
+platforms in `ci.yml`. Keep the two claims apart when reading the log: the gate
+speaks about the release being made, the rehearsal speaks about the mechanism
+and about the release already out there.
+
+It follows that a failing backstop rehearsal at a version that is already
+published is real news: the release on npm no longer installs and runs.
 
 ### If the publish fails with ENEEDAUTH or E404
 
@@ -438,10 +481,12 @@ Step 2 is the reason a post-publish check survives at all: it is the only place
 that sees npm's own handling of the upload, which no pre-publish check can
 reach.
 
-The same script runs in `dry-run` mode with `--allow-unpublished`, so the code
-path the release depends on is exercised by a rehearsal rather than only by an
-irreversible publish. If the version is not on the registry it says so and
-exits 0.
+The same script runs earlier in the job in `dry-run` mode with `--rehearsal`, so
+the code path the release depends on is exercised by a rehearsal rather than
+only by an irreversible publish. See
+[what a dry run proves](#what-a-dry-run-proves). The only case it skips is a
+package with no published version at all, where there is genuinely nothing to
+install.
 
 ### What is still yours to check by hand
 
@@ -536,6 +581,9 @@ Not verified anywhere:
   publish. `npx oxc-tsrx setup` remains the one command that fixes it. Say that
   plainly in launch copy rather than letting people discover it.
 
-`docs/releasing/external-prerequisites.md` still lists the pre-collapse
-thirteen-name set. It was outside the scope that produced this rewrite; treat
-the nine names above as authoritative.
+`docs/releasing/external-prerequisites.md` has since been corrected and now
+lists the same nine names, with the four folded-in wrappers called out by name.
+The two pages agree. That the eight-target list is written out by hand in ten
+places at all is recorded in
+[platform management follow-ups](platform-management-followups.md), along with
+four other pieces of release machinery nobody checks.
