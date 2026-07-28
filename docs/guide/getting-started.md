@@ -62,16 +62,21 @@ Three commands are yours to type:
 | `oxfmt` | the formatter. Same split |
 | `oxc-tsrx` | `providers`, `status`, `setup`, and `remove`. See the [CLI reference](/reference/cli) |
 
-The install also links `oxc-tsrx-lint`, `oxc-tsrx-fmt`, and `oxc-tsrx-lsp`,
-which are the native commands `oxlint` and `oxfmt` dispatch to, plus `tsgolint`,
-which comes from the `oxlint-tsgolint` dependency and is not part of this
-project. You never call any of those four yourself.
+Four more commands get linked that you never type. Three are the native leaf
+commands the two above dispatch to, and the fourth, tsgolint, comes from a
+dependency and is not part of this project.
 
-One exception: in a project that also installs Vite+,
-`node_modules/.bin/oxlint` and `node_modules/.bin/oxfmt` belong to Vite+ rather
-than to this package, and the `oxlint` one refuses to lint and tells you to run
-`vp lint`. There, use `vp lint` and `vp fmt`. [Vite and
-Vite+](/integrations/vite-plus#oxlint-and-oxfmt-on-the-command-line-belong-to-vite-here)
+`node_modules/.bin` is a convention, not a requirement. npm, pnpm, yarn, and
+bun are covered in CI; Deno installs and runs this too, though it is not.
+Only the wrapper scripts need Node. The linter and formatter themselves are one
+standalone binary, at
+`node_modules/@oxc-tsrx/native-<your-platform>/bin/oxc-tsrx`, which runs with no
+Node on the machine at all.
+
+One exception: in a Vite+ project, the oxlint and oxfmt commands are Vite+'s own
+wrappers rather than this package's. They exist for your editor, so running one
+by hand exits with a message pointing you at `vp lint` or `vp fmt`. Use those.
+[Vite and Vite+](/integrations/vite-plus#oxlint-and-oxfmt-on-the-command-line-belong-to-vite-here)
 has the detail.
 
 To see what a host finds in your project, without changing anything:
