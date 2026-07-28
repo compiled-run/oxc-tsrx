@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, realpath, rm } from "node:fs/promises";
+import { mkdir, readFile, realpath, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import test from "node:test";
 import {
@@ -11,6 +10,7 @@ import {
 } from "../../packages/toolchain/dist/native-targets.js";
 import { resolveNpmInvocation } from "../../scripts/npm-invocation.mjs";
 import { parseNpmPackResponse } from "../../scripts/npm-pack-response.mjs";
+import { temporaryDirectory } from "../packaging/temporary-directory.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 
@@ -67,7 +67,13 @@ function runNpm(args, options = {}) {
 }
 
 test("untouched packed parser and host-native tarballs load, parse, and preserve lazy identity", async () => {
-  const temporary = await mkdtemp(join(tmpdir(), "oxc-tsrx-parser-host-product-"));
+  // Anchored on its real path, not on `os.tmpdir()`. Windows reports the 8.3
+  // short form there (`C:\Users\RUNNER~1\...`), and the module resolver keeps
+  // whatever spelling it is handed while `fs/promises.realpath` asks Windows
+  // for the final name, so a fixture rooted on the short form makes the addon
+  // this test expects and the addon the child reports two different strings for
+  // the same file.
+  const temporary = await temporaryDirectory("oxc-tsrx-parser-host-product-");
   try {
     const artifacts = join(temporary, "artifacts");
     const consumer = join(temporary, "consumer");
