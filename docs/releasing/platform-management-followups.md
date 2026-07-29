@@ -18,36 +18,49 @@ number does not match, search for the quoted text instead.
 
 ---
 
-## 1. Version pins are hand-edited, and one has already drifted
+## 1. One version pin sits outside the bump script and has already drifted
 
-**What is wrong.** There is no bump script. Releasing means editing the version
-in the root manifest, in every workspace manifest, and in the eight cross-pins
-that `oxc-tsrx` uses to reach its platform packages, and then editing the test
-that asserts those pins.
+**Mostly fixed since this was written.** `scripts/sync-version.mjs` now owns the
+version surface: 73 declared locations across 25 files, driven from the root
+manifest, run by `.github/workflows/manual-release.yml`, and gated by
+`node scripts/sync-version.mjs --check`. It is not a search and replace. Each
+location declares the shape it expects and how many times that shape occurs, so a
+file that moved or changed shape fails the run and gets named instead of silently
+not being updated. `pnpm run test:release` is the backstop: it reads the root
+manifest at runtime and asserts every package manifest equals it.
+
+**What is still wrong.** One pin is outside that surface, and it is the one that
+had already drifted. The bump script deliberately does not touch the root
+manifest's `devDependencies`, so nothing derives or checks that pin, and nothing
+would notice it going stale again.
 
 The places a bump touches:
 
 | File | What is pinned |
 | --- | --- |
-| `package.json:3` | the workspace version, `0.1.4` today |
-| `package.json:86` | `@oxc-tsrx/native-darwin-arm64`, a root devDependency, **pinned at `0.1.1`** |
+| `package.json:3` | the workspace version, the source of truth every other location is derived from |
+| `package.json:89` | `@oxc-tsrx/native-darwin-arm64`, a root devDependency, **pinned at `0.1.1`**, and outside the bump script |
 | `packages/toolchain/package.json:3` | the published version of `oxc-tsrx` |
 | `packages/toolchain/package.json:119-126` | the eight `optionalDependencies`, one per platform |
 | `packages/tsrx-core-compat/package.json` | its own version |
 | `packages/vscode/package.json` | its own version |
 | `tests/packaging/public-package-metadata.test.mjs:46,67-74` | the version literal and all eight pins, asserted |
 
-`package.json:86` is the drift. It pins `@oxc-tsrx/native-darwin-arm64` at
-`0.1.1` in a workspace that is at `0.1.4`.
+`package.json:89` is the drift. It pins `@oxc-tsrx/native-darwin-arm64` at
+`0.1.1` while the workspace has moved on several releases past that. It was at
+`:86` when this was first written; two devDependencies added by the release
+tooling shifted it, which is the header's warning about line numbers in action.
 
 **Why it matters, and how much.** That particular drift is low severity and you
 should not rush to fix it in isolation: it is a root `devDependency`, nothing
 published depends on it, and the pins that consumers actually resolve are
-asserted at `0.1.4` by `tests/packaging/public-package-metadata.test.mjs`. So
-the published surface is protected. What is not protected is the process that
-produces it. The drift is the visible symptom: a pin went stale for three
-releases and no check anywhere noticed, which is the same failure mode that let
-two out-of-workspace `Cargo.lock` files go stale for two releases.
+asserted against the shipped version literal by
+`tests/packaging/public-package-metadata.test.mjs`, which
+`scripts/sync-version.mjs` rewrites on every cut. So the published surface is
+protected. What is not protected is this one pin. The drift is the visible
+symptom: a pin went stale for three releases and no check anywhere noticed, which
+is the same failure mode that let two out-of-workspace `Cargo.lock` files go
+stale for two releases.
 
 **Research finding worth keeping.** oxc and rolldown do not hand-edit these
 pins at all. Both *generate* the per-platform `optionalDependencies` with the
@@ -57,13 +70,16 @@ Hand-editing has no precedent among the projects surveyed. Both projects also
 gate the whole release on an automated version-change detector rather than on a
 human noticing.
 
-**What fixing it would involve.** Either adopt the napi CLI generation step, or
-write a bump script that derives every pin from one source of truth and a test
-that fails when any manifest disagrees with the root version. The test is the
-cheaper half and it is worth landing even without the script: it converts a
-silent drift into a red build. Note that the assertion test itself carries
-literals, so whatever generates the pins should generate its fixture too, or
-the test just becomes another thing to hand-edit.
+**What fixing the rest would involve.** The bump script and the lockstep test are
+both landed, which is the second half of the original recommendation. Two pieces
+remain. The smaller one is the `devDependency` pin above: either derive it from
+the root version like everything else, or add it to the bump script's declared
+surface so a stale value fails `--check` instead of sitting there. The larger one
+is the napi CLI route, which oxc and rolldown use: it *generates* the
+per-platform `optionalDependencies` rather than rewriting them, so the shape
+cannot drift at all. This project rewrites declared slots instead, which is a
+weaker guarantee than generation, and it is worth revisiting the next time the
+target list changes.
 
 ---
 

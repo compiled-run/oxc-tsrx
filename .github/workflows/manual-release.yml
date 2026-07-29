@@ -1,0 +1,458 @@
+# Cut a release: bump the version everywhere, regenerate what derives from it,
+# commit, tag, and publish a GitHub Release whose notes cover the whole history.
+#
+# THIS WORKFLOW DOES NOT PUBLISH TO NPM, AND MUST NOT BE MADE TO.
+#
+# npm publication goes through a deliberately strict two-workflow gate that this
+# file is not allowed to shortcut:
+#
+#   1. release-candidate.yml builds the nine tarballs on every platform and
+#      checksums them.
+#   2. publish.yml re-downloads that exact artifact, re-verifies the checksums,
+#      reads the nine manifests out of the tarballs, installs a platform pair
+#      into a project outside this workspace and makes it produce a real
+#      diagnostic and a real AST, and only then publishes over OIDC trusted
+#      publishing, in launch-contract order, behind a typed confirmation phrase.
+#
+# 0.1.0 shipped broken because a release was called verified on the strength of
+# a version string resolving. That is what the gate exists to prevent. This
+# workflow therefore stops at the GitHub Release. Publishing stays a separate,
+# human-dispatched step, and the operator runs it afterwards with the SHA this
+# workflow tagged. docs/releasing/publish-runbook.md has the sequence.
+name: Manual Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: "Version bump type. From 0.1.4, major cuts 1.0.0."
+        required: true
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+          - prerelease
+      preid:
+        description: "Prerelease id, for example rc. Only used with release_type: prerelease."
+        required: false
+        default: ""
+        type: string
+      mode:
+        description: "dry-run rehearses the whole cut and pushes nothing. release pushes the commit, the tag and the GitHub Release."
+        required: true
+        default: dry-run
+        type: choice
+        options:
+          - dry-run
+          - release
+
+# Read by default, the same posture as every other workflow here. The release
+# job raises itself to `contents: write` because it pushes a commit, a tag and a
+# Release. There is no `id-token: write` anywhere in this file: that permission
+# is what makes npm trusted publishing possible, and this workflow must never be
+# able to publish.
+permissions:
+  contents: read
+
+concurrency:
+  group: manual-release
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  npm_config_audit: "false"
+  npm_config_fund: "false"
+
+jobs:
+  release:
+    name: ${{ inputs.mode }} ${{ inputs.release_type }}
+    # A fork cannot tag or release this repository, and should not try.
+    if: github.repository == 'markless-dev/oxc-tsrx'
+    runs-on: ubuntu-24.04
+    # A cold release build of the Rust workspace is the long pole here, and the
+    # rust-cache above only helps on a second run with the same key. 60 was the
+    # budget when this job compiled nothing.
+    timeout-minutes: 90
+    permissions:
+      contents: write
+    steps:
+      # Full history, because the release notes are generated from it and a
+      # shallow clone would silently produce a shorter changelog.
+      - name: Check out the full history
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Refuse to cut a release from anywhere but the default branch
+        shell: bash
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          if [[ "$REF_NAME" != "$DEFAULT_BRANCH" ]]; then
+            echo "dispatched from $REF_NAME, but a release is only cut from $DEFAULT_BRANCH" >&2
+            exit 1
+          fi
+          if [[ -n "$(git status --porcelain)" ]]; then
+            echo "the checkout is dirty before anything has run:" >&2
+            git status --porcelain >&2
+            exit 1
+          fi
+
+      # pnpm has to be on PATH before setup-node, because `cache: pnpm` asks
+      # pnpm where its store is. The version comes from `packageManager`.
+      - name: Install the pinned pnpm
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+
+      - name: Install Node.js 24.15.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.15.0
+          cache: pnpm
+
+      # Rust is here for three jobs: `cargo update -w` and `cargo metadata
+      # --locked`, which is what the lockfile and the Rust licence inventory
+      # need, and a real release build of the CLI and the parser addon, which is
+      # what the consistency gate further down executes. 1.95.0 is the version
+      # declared by `rust-version` in Cargo.toml, the version the floor CI lanes
+      # run `cargo metadata --locked` on, and the version release-candidate.yml
+      # compiles the shipped binaries with. So generating the lockfile with
+      # anything newer risks writing a file those lanes cannot read, and the
+      # build below happens on the same toolchain the release itself uses.
+      - name: Install the pinned Rust lane
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.95.0 --profile minimal
+          rustup default 1.95.0
+          cargo -V
+
+      - name: Cache the Rust build
+        uses: Swatinem/rust-cache@f13886b937689c021905a6b90929199931d60db1 # v2.8.1
+        with:
+          key: manual-release
+
+      - name: Install the locked JavaScript graph
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      # Captured BEFORE the tag is created, because after it exists
+      # `git describe` would answer with the tag this run is about to write and
+      # the notes would cover nothing.
+      #
+      # `--match "v[0-9]*"` is not optional. This repository carries tags that
+      # are not releases (`pre-idiomatic-merge/main`,
+      # `pre-idiomatic-merge/provider`), and a bare `git describe --tags` picks
+      # one of those and quietly cuts the history down to a fraction of itself.
+      - name: Find the previous release tag
+        id: previous
+        shell: bash
+        run: |
+          set -euo pipefail
+          if PREVIOUS_TAG=$(git describe --tags --abbrev=0 --match "v[0-9]*" HEAD 2>/dev/null); then
+            echo "previous release tag: $PREVIOUS_TAG"
+          else
+            PREVIOUS_TAG=$(git rev-list --max-parents=0 HEAD | tail -1)
+            echo "no release tag yet; the notes start at the first commit $PREVIOUS_TAG"
+          fi
+          echo "tag=$PREVIOUS_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Configure the committer
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      # bumpp rewrites the root manifest and nothing else, and it is told not to
+      # commit, tag or push. Everything downstream of the root version is
+      # scripts/sync-version.mjs's job, and the commit is made by hand further
+      # down once every derived file has been regenerated. Letting bumpp commit
+      # here would seal a half-updated tree.
+      - name: Bump the root version
+        id: bump
+        shell: bash
+        env:
+          RELEASE_TYPE: ${{ inputs.release_type }}
+          PREID: ${{ inputs.preid }}
+        run: |
+          set -euo pipefail
+          if [[ -n "$PREID" ]]; then
+            pnpm exec bumpp package.json --release "$RELEASE_TYPE" --preid "$PREID" \
+              --yes --no-commit --no-tag --no-push
+          else
+            pnpm exec bumpp package.json --release "$RELEASE_TYPE" \
+              --yes --no-commit --no-tag --no-push
+          fi
+          NEW_VERSION=$(node -p "require('./package.json').version")
+          echo "new version: $NEW_VERSION"
+          echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+
+      # The eleven cross-reference pins, Cargo.toml, the committed toolchain
+      # source, parser.node.json, the transcript fixture and eighteen test
+      # files. The script fails loudly if any declared location has moved or
+      # changed shape rather than updating fewer files than it should.
+      - name: Propagate the version across the rest of the surface
+        run: |
+          node scripts/sync-version.mjs
+          node scripts/sync-version.mjs --check
+
+      # Order matters and is not negotiable:
+      #   Cargo.lock records the workspace crates' own versions, and the Rust
+      #   licence inventory records a sha256 OF Cargo.lock, so it has to run
+      #   second. The VS Code inventory records a sha256 of pnpm-lock.yaml, so
+      #   it has to run after the pnpm lockfile is rewritten.
+      - name: Regenerate the lockfiles
+        run: |
+          cargo update -w
+          pnpm install --lockfile-only
+
+      # The two docs Rust tools sit outside the product workspace and keep their
+      # own Cargo.lock, each recording a resolved version for the crates/ path
+      # dependencies it pulls in. A workspace bump leaves both stale, and
+      # scripts/build-docs-wasm.mjs builds with --locked, so a stale lock does
+      # not produce a wrong artifact: it fails the docs site build outright,
+      # four minutes in, over one digit.
+      #
+      # `cargo metadata` without --locked is enough to relock them and costs
+      # nothing. tests/packaging/boundary.test.mjs is the gate that proves it
+      # happened, and it runs in the consistency step below.
+      - name: Relock the out-of-workspace docs tools
+        run: |
+          cargo metadata --manifest-path docs/tools/demo-wasm/Cargo.toml --format-version 1 > /dev/null
+          cargo metadata --manifest-path docs/tools/projection-dump/Cargo.toml --format-version 1 > /dev/null
+
+      - name: Regenerate the licence inventories
+        run: pnpm run licenses:generate
+
+      # The gate below is not a static analysis. 12 of the 112 tests in
+      # `test:packaging:unit` either spawn `target/release/oxc-tsrx` and read what
+      # it prints, or stage a real platform package with `--bin-dir
+      # target/release`, and the canonical parser packaging case copies the
+      # `parser_napi_binding` cdylib out of that same directory. None of that is
+      # in the repository. Before this step existed, a `mode=dry-run` dispatch
+      # failed "Prove the cut is internally consistent" 12 times over for reasons
+      # that had nothing to do with the version being cut. These are the same two
+      # builds ci.yml's correctness lane runs before the same suite.
+      #
+      # This has to run AFTER `cargo update -w`. sync-version.mjs rewrote the
+      # workspace version in Cargo.toml, so until Cargo.lock is regenerated every
+      # `--locked` build fails on a stale lockfile.
+      #
+      # `cargo fetch --locked` comes first because the addon builds `--offline`,
+      # and cc is a build-dependency of napi-build rather than of oxc_tsrx_cli, so
+      # building the CLI alone never populates it on a clean runner.
+      #
+      # The addon is written to the runner's temp directory and NOT over
+      # packages/toolchain/parser.node. That file is committed, it is a
+      # darwin-arm64 build, and its record describes it byte for byte. Building
+      # over it here would put a linux-x64 binary, a rewritten `target`, and new
+      # `bytes`/`sha256` into the release commit for every cut. What the tests
+      # read is the cdylib in target/release, which this produces either way.
+      - name: Build what the consistency gate executes
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fetch --locked
+          pnpm run build:native
+          node scripts/build-parser-native.mjs --out "${RUNNER_TEMP}/parser.node"
+          ls -l target/release/oxc-tsrx "${RUNNER_TEMP}/parser.node"
+
+      # 0.1.0 shipped every native package with no parser.node inside it, so a
+      # manifest that does not describe its own artifact is the failure this
+      # repository is most careful about. sync-version.mjs rewrites
+      # `packageVersion` in packages/toolchain/parser.node.json and deliberately
+      # leaves `bytes` and `sha256` alone, on the grounds that the addon is not
+      # version stamped. This step asserts those grounds instead of trusting
+      # them: the record still has to describe the committed addon exactly, and
+      # the build above must not have touched either file.
+      - name: Prove the committed parser addon still matches its record
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -n "$(git status --porcelain packages/toolchain/parser.node)" ]]; then
+            echo "the build rewrote the committed parser addon:" >&2
+            git status --porcelain packages/toolchain/parser.node >&2
+            echo "a release commit must not carry an addon rebuilt for the runner's platform" >&2
+            exit 1
+          fi
+          node -e '
+            const { createHash } = require("node:crypto");
+            const { readFileSync } = require("node:fs");
+            const file = "packages/toolchain/parser.node.json";
+            const record = JSON.parse(readFileSync(file, "utf8"));
+            const addon = readFileSync("packages/toolchain/parser.node");
+            const sha256 = createHash("sha256").update(addon).digest("hex");
+            const version = JSON.parse(readFileSync("packages/toolchain/package.json", "utf8")).version;
+            const problems = [];
+            if (record.bytes !== addon.length)
+              problems.push("records " + record.bytes + " bytes but the addon is " + addon.length);
+            if (record.sha256 !== sha256)
+              problems.push("records sha256 " + record.sha256 + " but the addon hashes to " + sha256);
+            if (record.packageVersion !== version)
+              problems.push("records packageVersion " + record.packageVersion + " but the cut is " + version);
+            if (problems.length > 0) {
+              console.error(file + ": " + problems.join("; "));
+              process.exit(1);
+            }
+            console.log(
+              "ok  " + file + " describes parser.node: " + record.bytes + " bytes, " +
+                record.target + ", packageVersion " + record.packageVersion,
+            );
+          '
+
+      # What this workflow deliberately does NOT regenerate, and why:
+      #
+      #   * docs/terminal-transcripts.json holds two `oxc-tsrx <version>` strings
+      #     that are live CLI output. The release binary they need is now built
+      #     above, so what is left is `pnpm run docs:transcripts`, which drives a
+      #     scaffold through the CLI and rewrites a captured fixture. That is
+      #     still deliberately out: no gate reads those two strings.
+      #     tests/site/documented-version-pin.test.mjs scans that file, but only
+      #     for the `oxc-tsrx@N.N.N` form, which the transcripts do not use.
+      #
+      #   * docs/acceptance/performance-report.json carries the version inside
+      #     its `versionsIdentity` string and is produced by a full comparative
+      #     benchmark run. Nothing asserts it against the root manifest; a stale
+      #     value renders an old version string on the benchmark page.
+      #
+      # Both are cosmetic drift, both are recorded in
+      # docs/releasing/publish-runbook.md as an operator step, and neither can
+      # produce a broken tarball. Everything that CAN is regenerated above and
+      # gated below.
+      - name: Prove the cut is internally consistent
+        run: |
+          node scripts/sync-version.mjs --check
+          pnpm run test:release
+          pnpm run test:packaging:unit
+          pnpm run licenses:check
+          node --test tests/site/documented-version-pin.test.mjs
+
+      # test:release is the lockstep guard: it reads the root manifest at
+      # runtime and asserts every package manifest and the VS Code manifest
+      # equal it, so a manifest this workflow forgot fails above rather than
+      # shipping. This step is the same assertion written out in the log, so a
+      # reader of the run can see the four numbers agree without opening a test
+      # file.
+      - name: Show the version lockstep
+        shell: bash
+        env:
+          VERSION: ${{ steps.bump.outputs.version }}
+        run: |
+          set -euo pipefail
+          for manifest in package.json packages/toolchain/package.json \
+            packages/tsrx-core-compat/package.json packages/vscode/package.json; do
+            FOUND=$(node -p "require('./$manifest').version")
+            NAME=$(node -p "require('./$manifest').name")
+            if [[ "$FOUND" != "$VERSION" ]]; then
+              echo "$manifest ($NAME) is $FOUND, expected $VERSION" >&2
+              exit 1
+            fi
+            echo "ok  $NAME  $FOUND"
+          done
+
+      - name: Commit and tag the cut
+        shell: bash
+        env:
+          VERSION: ${{ steps.bump.outputs.version }}
+        run: |
+          set -euo pipefail
+          git add -A
+          git commit -m "chore: release v$VERSION"
+          git tag -a "v$VERSION" -m "v$VERSION"
+          if [[ -n "$(git status --porcelain)" ]]; then
+            echo "files were left uncommitted by the cut:" >&2
+            git status --porcelain >&2
+            exit 1
+          fi
+          git --no-pager show --stat --oneline HEAD | head -60
+
+      # changelogen for the sections it parses well, plus every commit it
+      # dropped. `--to HEAD~1` excludes the release commit itself, so the notes
+      # describe the work rather than the bump. The script refuses to write the
+      # file unless every commit in the range appears in it.
+      - name: Generate the release notes
+        id: notes
+        shell: bash
+        env:
+          PREVIOUS_TAG: ${{ steps.previous.outputs.tag }}
+        run: |
+          set -euo pipefail
+          node scripts/release-notes.mjs \
+            --from "$PREVIOUS_TAG" \
+            --to HEAD~1 \
+            --out "${RUNNER_TEMP}/release-notes.md"
+          {
+            echo "## Release notes"
+            echo
+            cat "${RUNNER_TEMP}/release-notes.md"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [[ -n "$(git status --porcelain)" ]]; then
+            echo "generating the notes left files behind:" >&2
+            git status --porcelain >&2
+            exit 1
+          fi
+
+      - name: Retain the cut for review
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-cut-${{ steps.bump.outputs.version }}-${{ inputs.mode }}
+          path: |
+            ${{ runner.temp }}/release-notes.md
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Report what a dry run would have done
+        if: inputs.mode == 'dry-run'
+        shell: bash
+        env:
+          VERSION: ${{ steps.bump.outputs.version }}
+        run: |
+          echo "mode=dry-run: nothing was pushed."
+          echo "The cut for v$VERSION was built, gated and tagged locally, then discarded"
+          echo "with the runner. Re-dispatch with mode=release to publish it."
+
+      - name: Push the commit and the tag
+        if: inputs.mode == 'release'
+        shell: bash
+        env:
+          VERSION: ${{ steps.bump.outputs.version }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          git push origin "HEAD:$BRANCH"
+          git push origin "refs/tags/v$VERSION"
+
+      - name: Create the GitHub Release
+        if: inputs.mode == 'release'
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+        with:
+          tag_name: v${{ steps.bump.outputs.version }}
+          name: v${{ steps.bump.outputs.version }}
+          body_path: ${{ runner.temp }}/release-notes.md
+          draft: false
+          prerelease: ${{ inputs.release_type == 'prerelease' }}
+          make_latest: ${{ inputs.release_type != 'prerelease' }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      # Deliberately the last word in this file. The release exists on GitHub;
+      # nothing is on npm yet, and nothing in this workflow can put it there.
+      - name: Say what has not happened yet
+        if: inputs.mode == 'release'
+        shell: bash
+        env:
+          VERSION: ${{ steps.bump.outputs.version }}
+        run: |
+          {
+            echo "### Not published"
+            echo
+            echo "v$VERSION is tagged and released on GitHub. Nothing has been published to npm."
+            echo
+            echo "Next, from docs/releasing/publish-runbook.md:"
+            echo
+            echo "1. Dispatch **Build release candidate** at the tagged SHA."
+            echo "2. Dispatch **Publish to npm** in \`dry-run\` with that run id."
+            echo "3. Dispatch it again in \`publish\` with \`PUBLISH $VERSION\` typed in."
+          } >> "$GITHUB_STEP_SUMMARY"
