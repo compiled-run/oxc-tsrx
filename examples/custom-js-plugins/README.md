@@ -58,7 +58,7 @@ in the shape a real Vite+ app has.
 | `.oxlintrc.json` | One **top-level** `jsPlugins` entry and one rule. No `overrides` block, on purpose. |
 | `src/Greeting.tsrx` | A TSRX component with an inline `style` object on line 5, column 9. |
 | `src/Panel.tsx` | An ordinary React component with the same problem on line 2, column 19. |
-| `vite.config.ts` | The scaffold's config after the two edits `vp lint` needs: the plugin added to `lint.jsPlugins` and `lint.rules`, and `lint.options` deleted. |
+| `vite.config.ts` | The scaffold's config after the one edit `vp lint` needs: the plugin added to `lint.jsPlugins` and `lint.rules`. `lint.options` stays exactly as the scaffold wrote it. |
 
 `tests/plugins/custom-js-plugins-doc.test.mjs` runs the first four of these:
 one `oxlint` over `src/` reporting both files at those positions, the same rule

@@ -553,8 +553,8 @@ Verified in CI on every pull request and every commit that lands on `main`, on
 `ubuntu-24.04`, `windows-latest`, and `macos-latest`:
 
 - install-only behavior for `npx oxlint` and `npx oxfmt`, the pinned-version
-  collision case, and provider discovery across npm, pnpm, Bun, Yarn Berry
-  node-modules, and Yarn Berry Plug'n'Play
+  collision case, and provider discovery across npm, pnpm, Bun, Deno, Yarn
+  Berry node-modules, and Yarn Berry Plug'n'Play
   (`test:packaging:released-hosts` and `test:packaging:providers`);
 - the pre-publish gate, against packages packed on that runner;
 - a real lint, a real format, live `--lsp` sessions, and a parser addon load.

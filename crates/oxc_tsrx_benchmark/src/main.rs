@@ -34,13 +34,13 @@ use tsrx_lint::{ConfigRuleFilter, ConfigRuleSeverity, LintSession};
 use tsrx_syntax::{project, scan};
 
 use crate::{
-    budgets::{Budgets, ensure_binary, parse_args, validate_budgets},
+    budgets::{Budgets, ensure_binary, parse_args, resolve_incumbent_binary, validate_budgets},
     fixtures::{build_corpus, create_temp_directory, fnv1a64},
     in_process::{measure_config_session, measure_control, measure_product},
     process::{run_memory_child, run_process_measurements},
     report::{
         Corpus, P01Summary, P02Summary, P03Summary, P05Summary, P07Summary, RawSamples, Report,
-        Summaries, host,
+        ReportedAssertion, Summaries, host,
     },
     stats::{boolean, distribution, maximum, minimum, percentile, ratio},
 };
@@ -89,11 +89,15 @@ fn run() -> Result<(), String> {
     let budget_source = fs::read_to_string(&args.budget_path).map_err(|error| {
         format!("unable to read budgets {}: {error}", args.budget_path.display())
     })?;
-    let budgets: Budgets = serde_json::from_str(&budget_source)
+    let mut budgets: Budgets = serde_json::from_str(&budget_source)
         .map_err(|error| format!("invalid benchmark budgets: {error}"))?;
     validate_budgets(&budgets)?;
     ensure_binary(&budgets.candidate_binary, "candidate")?;
-    ensure_binary(&budgets.stock_oxlint_binary, "stock Oxlint")?;
+    // The report must publish the budget file's own declared paths, so the declared copy is taken
+    // before the working copy's incumbent path is resolved against the installed layout.
+    let declared_budgets = budgets.clone();
+    budgets.stock_oxlint_binary =
+        resolve_incumbent_binary(&budgets.stock_oxlint_binary, "stock Oxlint")?;
 
     let filters =
         vec![ConfigRuleFilter { severity: ConfigRuleSeverity::Deny, name: RULE.to_string() }];
@@ -346,6 +350,24 @@ fn run() -> Result<(), String> {
     assertions.shrink_to_fit();
     let passed = assertions.iter().all(|assertion| assertion.pass);
 
+    // Every threshold above reads straight from `budgets.json` except P07's, which is
+    // `min(ratio, additive)` over the measured equivalent-TSX RSS and therefore moves by a
+    // page between two runs of the same build. Publish the rule that produced it, stated
+    // purely in frozen budget numbers, so the adjudicator can prove a rerun shares the same
+    // budget without demanding a byte-identical measured limit.
+    let p07_derivation = format!(
+        "min(candidateTsxMedianRssBytes * {}, candidateTsxMedianRssBytes + {})",
+        declared_budgets.p07.upstream_ratio_max, declared_budgets.p07.additive_bytes_max
+    );
+    let assertions = assertions
+        .into_iter()
+        .map(|assertion| {
+            let threshold_derivation = (assertion.name == "P07 TSRX peak RSS")
+                .then(|| p07_derivation.clone());
+            ReportedAssertion { assertion, threshold_derivation }
+        })
+        .collect::<Vec<_>>();
+
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|error| error.to_string())?
@@ -354,7 +376,7 @@ fn run() -> Result<(), String> {
         schema_version: 1,
         generated_at_unix_ms: timestamp,
         host: host(&budgets),
-        budgets: budgets.clone(),
+        budgets: declared_budgets,
         corpus: Corpus {
             kind: "generated retained statement-control TSRX corpus",
             bytes: source.len(),
@@ -437,8 +459,8 @@ fn run() -> Result<(), String> {
         let failures = report
             .assertions
             .iter()
-            .filter(|assertion| !assertion.pass)
-            .map(|assertion| assertion.name)
+            .filter(|reported| !reported.assertion.pass)
+            .map(|reported| reported.assertion.name)
             .collect::<Vec<_>>()
             .join(", ");
         return Err(format!("performance assertions failed: {failures}"));

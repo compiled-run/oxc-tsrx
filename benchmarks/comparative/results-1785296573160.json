@@ -1,7 +1,7 @@
 {
   "schemaVersion": 3,
-  "generatedAtUnixMs": 1784321739730,
-  "timestamp": "2026-07-17T20:55:39.730Z",
+  "generatedAtUnixMs": 1785296573160,
+  "timestamp": "2026-07-29T03:42:53.160Z",
   "host": {
     "platform": "darwin",
     "arch": "arm64",
@@ -12,7 +12,7 @@
   },
   "build": {
     "profile": "release",
-    "binary": "node_modules/oxlint-tsrx/bin/oxlint (all TSX -> in-process oxlint-current declared bin; mixed -> public oxlint-current Node child + target/release/oxc-tsrx)",
+    "binary": "node_modules/oxc-tsrx/bin/oxlint (all TSX -> in-process oxlint-current declared bin; mixed -> public oxlint-current Node child + target/release/oxc-tsrx)",
     "oxcRevision": "8e0ed2ebb96137fb1611cdbd5742d5cb46037d40"
   },
   "corpus": {
@@ -33,16 +33,16 @@
     "output": "zero-diagnostic default output",
     "crossToolCorpus": "byte-identical TSX files",
     "launch": "every lane measured through its npm CLI entry point, Node launcher included",
-    "compileCache": "oxlint-tsrx enables the Node module compile cache before routing; five fresh-process warmups precede measurements",
+    "compileCache": "oxc-tsrx enables the Node module compile cache before routing; five fresh-process warmups precede measurements",
     "productRouting": {
-      "allTsx": "oxlint-tsrx npm launcher -> oxlint-current declared npm binary in the same Node process",
-      "mixed": "oxlint-tsrx npm launcher -> public oxlint-current declared npm binary in a Node subprocess plus target/release/oxc-tsrx; the canonical child starts while the bridge loads"
+      "allTsx": "oxc-tsrx npm launcher -> oxlint-current declared npm binary in the same Node process",
+      "mixed": "oxc-tsrx npm launcher -> public oxlint-current declared npm binary in a Node subprocess plus target/release/oxc-tsrx; the canonical child starts while the bridge loads"
     },
     "executables": {
       "eslint": "node_modules/.bin/eslint",
       "oxlint": "node_modules/oxlint-current/bin/oxlint",
-      "oxcTsrx": "node_modules/oxlint-tsrx/bin/oxlint",
-      "oxcTsrxMixed": "node_modules/oxlint-tsrx/bin/oxlint"
+      "oxcTsrx": "node_modules/oxc-tsrx/bin/oxlint",
+      "oxcTsrxMixed": "node_modules/oxc-tsrx/bin/oxlint"
     },
     "argumentShape": {
       "eslint": "--config eslint.config.mjs --no-ignore --no-warn-ignored <1,000 explicit TSX files>",
@@ -62,8 +62,8 @@
     "eslint": "v10.7.0",
     "typescriptEslint": "8.64.0",
     "oxlint": "Version: 1.74.0",
-    "oxcTsrx": "oxc-tsrx 0.1.0 (OXC 8e0ed2ebb96137fb1611cdbd5742d5cb46037d40)",
-    "oxcTsrxLauncher": "oxlint-tsrx 0.1.0"
+    "oxcTsrx": "oxc-tsrx 0.1.4 (OXC 8e0ed2ebb96137fb1611cdbd5742d5cb46037d40)",
+    "oxcTsrxLauncher": "oxc-tsrx 0.1.4"
   },
   "validation": {
     "eslint": {
@@ -96,141 +96,141 @@
   "tools": {
     "eslint": {
       "warmupMs": [
-        605.135166,
-        604.377917,
-        617.441792,
-        607.376375,
-        609.208
+        651.514417,
+        643.8895,
+        644.750792,
+        649.295375,
+        656.005458
       ],
       "rawMs": [
-        621.886625,
-        619.312417,
-        602.85375,
-        609.494583,
-        621.715625,
-        615.882875,
-        615.536666,
-        615.555542,
-        614.062625,
-        607.018458,
-        608.268958,
-        616.669625,
-        609.010834,
-        606.780458,
-        606.6195,
-        604.040125,
-        602.567666,
-        615.568917,
-        605.485667,
-        615.228083
+        646.215708,
+        702.485875,
+        649.192208,
+        643.502625,
+        693.62125,
+        651.123291,
+        644.673458,
+        646.15475,
+        650.219,
+        643.577542,
+        642.456625,
+        647.709875,
+        656.824959,
+        639.763916,
+        643.123208,
+        648.03925,
+        656.277667,
+        656.42475,
+        709.22825,
+        693.155458
       ],
-      "medianMs": 609.494583,
-      "p95Ms": 621.715625
+      "medianMs": 648.03925,
+      "p95Ms": 702.485875
     },
     "oxlint": {
       "warmupMs": [
-        43.811042,
-        41.500083,
-        42.608166,
-        39.96225,
-        39.094
+        42.340416,
+        43.544791,
+        41.905958,
+        42.218083,
+        41.031917
       ],
       "rawMs": [
-        41.621292,
-        42.465709,
-        43.171958,
-        40.559834,
-        41.157875,
-        40.797125,
-        41.438417,
-        42.138792,
-        40.555584,
-        40.201625,
-        39.002334,
-        40.730417,
-        41.6025,
-        41.807417,
-        40.722208,
-        41.221833,
-        41.727417,
-        40.329625,
-        41.605542,
-        40.763
+        42.459583,
+        44.30475,
+        43.245166,
+        41.4205,
+        41.494416,
+        42.027458,
+        41.5715,
+        42.670709,
+        40.983708,
+        41.227,
+        42.228125,
+        42.88,
+        43.181625,
+        41.438833,
+        41.165209,
+        40.104167,
+        41.593083,
+        42.19875,
+        42.192625,
+        42.037334
       ],
-      "medianMs": 41.157875,
-      "p95Ms": 42.465709
+      "medianMs": 42.027458,
+      "p95Ms": 43.245166
     },
     "oxcTsrx": {
       "warmupMs": [
-        45.089583,
-        45.780917,
-        44.334792,
-        46.942916,
-        46.053917
+        48.863333,
+        48.688875,
+        47.976584,
+        54.298292,
+        49.770875
       ],
       "rawMs": [
-        45.344208,
-        44.63875,
-        48.075584,
-        45.722,
-        46.029,
-        44.838208,
-        46.115959,
-        45.174959,
-        45.544083,
-        43.89625,
-        44.902333,
-        44.821333,
-        47.713333,
-        45.191625,
-        45.02875,
-        46.454708,
-        45.780291,
-        45.9105,
-        45.192125,
-        44.584708
+        48.70825,
+        50.61675,
+        47.835875,
+        48.85,
+        49.662542,
+        51.027542,
+        49.507833,
+        51.398667,
+        47.352916,
+        46.970459,
+        50.330291,
+        49.151042,
+        49.501084,
+        48.967542,
+        48.341167,
+        47.835917,
+        47.446,
+        48.965625,
+        47.518,
+        50.587792
       ],
-      "medianMs": 45.192125,
-      "p95Ms": 47.713333
+      "medianMs": 48.965625,
+      "p95Ms": 51.027542
     },
     "oxcTsrxMixed": {
       "warmupMs": [
-        69.808875,
-        67.53875,
-        66.439584,
-        67.33225,
-        67.074292
+        71.79275,
+        72.091209,
+        74.029166,
+        72.037625,
+        70.587542
       ],
       "rawMs": [
-        68.705958,
-        66.522917,
-        66.080541,
-        67.841042,
-        71.327959,
-        68.021541,
-        67.42825,
-        66.431083,
-        65.923875,
-        67.767584,
-        66.59925,
-        66.715542,
-        69.493375,
-        69.121208,
-        70.712708,
-        67.550209,
-        66.937083,
-        67.277625,
-        67.637167,
-        66.369167
+        71.072125,
+        70.586666,
+        71.171667,
+        71.371375,
+        70.996084,
+        69.84775,
+        70.035458,
+        69.095833,
+        73.3545,
+        69.108167,
+        71.459833,
+        71.977583,
+        74.051,
+        72.022125,
+        71.045458,
+        70.1615,
+        78.9015,
+        72.717459,
+        70.557583,
+        68.931625
       ],
-      "medianMs": 67.42825,
-      "p95Ms": 70.712708
+      "medianMs": 71.045458,
+      "p95Ms": 74.051
     }
   },
   "ratios": {
-    "oxcTsrxVsOxlint": 1.0980189088965355,
-    "eslintVsOxcTsrx": 13.486743165983013,
-    "mixedVsTsx": 1.492035393334569
+    "oxcTsrxVsOxlint": 1.1650865250998526,
+    "eslintVsOxcTsrx": 13.23457527602272,
+    "mixedVsTsx": 1.4509251745484713
   },
   "budgets": {
     "schemaVersion": 3,
@@ -250,21 +250,21 @@
   "assertionDetails": [
     {
       "name": "nearOxlintParity",
-      "observed": 1.0980189088965355,
+      "observed": 1.1650865250998526,
       "threshold": 1.25,
       "comparison": "<=",
       "pass": true
     },
     {
       "name": "fasterThanEslint",
-      "observed": 13.486743165983013,
+      "observed": 13.23457527602272,
       "threshold": 2,
       "comparison": ">=",
       "pass": true
     },
     {
       "name": "mixedNoBlowup",
-      "observed": 1.492035393334569,
+      "observed": 1.4509251745484713,
       "threshold": 1.5,
       "comparison": "<=",
       "pass": true

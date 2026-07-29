@@ -161,6 +161,19 @@ jobs:
           node-version: 24.15.0
           cache: pnpm
 
+      # The provider matrix drives Bun and Deno as real consumers, and neither
+      # ships on any GitHub runner image. Without these two steps those lanes
+      # find no executable and skip themselves, which reads as a green run and
+      # covers nothing. OXC_TSRX_REQUIRE_PM_LANES below turns that skip into a
+      # failure, so a lane can never go quiet again.
+      - name: Install Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+
+      - name: Install Deno
+        uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
+        with:
+          deno-version: v2.x
+
       - name: Prove the runner is the platform this lane claims to cover
         shell: bash
         env:
@@ -246,6 +259,10 @@ jobs:
         run: pnpm run test:packaging:released-hosts
 
       - name: Exercise the package-manager provider matrix
+        env:
+          # Every lane this runner provisions must actually run. A missing
+          # package manager fails the job instead of skipping the lane.
+          OXC_TSRX_REQUIRE_PM_LANES: npm,pnpm,bun,deno,yarn_node_modules,yarn_pnp
         run: pnpm run test:packaging:providers
 
       - name: Test the package contracts

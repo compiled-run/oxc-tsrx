@@ -12,7 +12,16 @@
 // Run: node benchmarks/comparative/run.mjs [--assert]
 import { execFileSync, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs'
 import { cpus, release as osRelease } from 'node:os'
 import { createRequire } from 'node:module'
 import path from 'node:path'
@@ -298,8 +307,28 @@ function validateLanes({ eslintBin, oxlintBin, oxcTsrxBin, nativeLintBin, oxcTsr
 
 const tsxDir = path.join(here, '.corpus-tsx')
 const mixedDir = path.join(here, '.corpus-mixed')
+// The generated ESLint flat config imports `typescript-eslint`, and ESLint runs
+// with its cwd inside the corpus directory. Under pnpm that package only exists
+// beneath `tests/`, and the ESM resolver walking up from the corpus never
+// reaches it. A temporary `node_modules` symlink beside the corpora puts it back
+// on the lookup chain without changing a single byte of the config, so the
+// recorded `boundary.configSha256` stays machine-independent. It is removed in
+// the `finally` below and is ignored by .gitignore's `node_modules/` rule.
+const linkedModules = path.join(here, 'node_modules')
+function linkTestModules() {
+  if (existsSync(linkedModules)) {
+    throw new Error(`refusing to overwrite an existing ${path.relative(repoRoot, linkedModules)}`)
+  }
+  symlinkSync(path.join(repoRoot, 'tests', 'node_modules'), linkedModules, 'dir')
+}
+function unlinkTestModules() {
+  if (lstatSync(linkedModules, { throwIfNoEntry: false })?.isSymbolicLink()) {
+    unlinkSync(linkedModules)
+  }
+}
 let report
 try {
+  linkTestModules()
   const tsx = writeCorpus(tsxDir, false)
   const mixed = writeCorpus(mixedDir, true)
   const specsSha256 = createHash('sha256')
@@ -468,6 +497,7 @@ export default [{
   )
   console.log(`passed: ${report.passed} -> ${path.relative(repoRoot, output)}`)
 } finally {
+  unlinkTestModules()
   rmSync(tsxDir, { recursive: true, force: true })
   rmSync(mixedDir, { recursive: true, force: true })
 }

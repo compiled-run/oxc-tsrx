@@ -40,10 +40,10 @@ function initReviewRoute() {
       }
       status.textContent =
         done === 0
-          ? `About ${route.dataset.totalMinutes} minutes of reading for a full first pass.`
+          ? `About ${route.dataset.totalMinutes} minutes for a full first pass, including the code and commits these steps point at.`
           : done === checks.length
             ? 'You have read the whole map.'
-            : `${done} of ${checks.length} steps done. About ${left} minutes of reading left.`
+            : `${done} of ${checks.length} steps done. About ${left} minutes left.`
     }
     for (const check of checks) check.addEventListener('change', update)
     update()
@@ -68,6 +68,10 @@ function initEditorReplay(cleanupCallbacks) {
         tabs[(current + 1) % tabs.length].click()
         return
       }
+      // Each step lingers for over two seconds, so without a label change the
+      // button reads "Play" for the whole walkthrough and looks unresponsive.
+      button.textContent = 'Playing…'
+      button.setAttribute('aria-label', 'Playing editor walkthrough')
       let index = 0
       const advance = () => {
         if (!replay.isConnected) return stopReplay()
@@ -76,6 +80,7 @@ function initEditorReplay(cleanupCallbacks) {
         else {
           timerId = null
           button.textContent = 'Replay'
+          button.setAttribute('aria-label', 'Replay editor walkthrough')
         }
       }
       advance()
@@ -83,8 +88,29 @@ function initEditorReplay(cleanupCallbacks) {
   }
 }
 
+function initChoosers() {
+  for (const chooser of document.querySelectorAll('[data-chooser]:not([data-ready])')) {
+    chooser.dataset.ready = '1'
+    const options = [...chooser.querySelectorAll('[data-chooser-option]')]
+    const panels = [...chooser.querySelectorAll('[data-chooser-panel]')]
+    const select = (index) => {
+      for (const option of options) {
+        option.setAttribute('aria-pressed', String(option.dataset.chooserOption === index))
+      }
+      for (const panel of panels) panel.hidden = panel.dataset.chooserPanel !== index
+    }
+    for (const option of options) {
+      option.addEventListener('click', () => select(option.dataset.chooserOption))
+    }
+    // Without JS every answer is on the page at once; with JS the reader picks
+    // theirs, so start on the first rather than on nothing.
+    select(options[0].dataset.chooserOption)
+  }
+}
+
 export function init(cleanupCallbacks) {
   initMatrixFilters()
   initReviewRoute()
+  initChoosers()
   initEditorReplay(cleanupCallbacks)
 }

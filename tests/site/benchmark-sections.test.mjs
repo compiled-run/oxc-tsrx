@@ -12,10 +12,12 @@ import {
 const root = resolve(import.meta.dirname, "../..");
 const families = ["comparative", "native-lint", "native-format", "type-aware", "vite", "editor"];
 
+async function aggregateReport() {
+  return JSON.parse(await readFile(join(root, "docs/acceptance/performance-report.json"), "utf8"));
+}
+
 async function latestReports() {
-  const aggregate = JSON.parse(
-    await readFile(join(root, "docs/acceptance/performance-report.json"), "utf8"),
-  );
+  const aggregate = await aggregateReport();
   const latest = new Map();
   for (const family of families) {
     const selected = aggregate.results?.[family]?.path;
@@ -227,6 +229,139 @@ test("release headlines are derived from the aggregate-selected measurements", a
   ];
   const release = await readFile(join(root, "docs/releasing/v0.1.0.md"), "utf8");
   for (const headline of headlines) assert.match(release, new RegExp(headline.replace(".", "\\.")));
+});
+
+// Hand-written prose wraps at whatever column the sentence happens to reach,
+// so phrase assertions read a whitespace-collapsed copy of the file.
+const collapse = (text) => text.replace(/\s+/gu, " ");
+const countWord = (count) =>
+  ["zero", "one", "two", "three", "four", "five"][count] ?? String(count);
+
+async function proseFixture(relative) {
+  const latest = await latestReports();
+  const aggregate = await aggregateReport();
+  const observed = (family, name) =>
+    latest.get(family).report.assertions.find((entry) => entry.name === name).observed;
+  return {
+    source: collapse(await readFile(join(root, relative), "utf8")),
+    relative,
+    aggregate,
+    lint: (name) => observed("native-lint", name),
+    format: (name) => observed("native-format", name),
+    typeAware: latest.get("type-aware").report,
+    vite: latest.get("vite").report,
+    editor: latest.get("editor").report,
+    comparative: latest.get("comparative").report,
+    // Every family's assertion list is normalized to an array in the
+    // aggregate, so a lane's "n/n pass" cell is derivable for all six.
+    assertionCount: (family) => aggregate.results[family].assertions.length,
+    adjudicationCount: (family) => aggregate.results[family].adjudication?.reports?.length ?? 1,
+  };
+}
+
+test("the release acceptance matrix keeps every lane row derived from the pinned reports", async () => {
+  const fixture = await proseFixture("docs/acceptance/matrix.md");
+  const { lint, format, typeAware, vite, editor, comparative } = fixture;
+  const lintCount = fixture.assertionCount("native-lint");
+  const formatCount = fixture.assertionCount("native-format");
+  const comparativeCount = fixture.assertionCount("comparative");
+
+  // Invariants the qualitative half of each cell asserts in words.
+  assert.equal(typeAware.invariants.defaultTypeAwareProcesses, 0);
+  assert.equal(typeAware.invariants.singleTypeAwareProcesses, 1);
+  assert.equal(typeAware.invariants.projectTypeAwareProcesses, 1);
+  assert.equal(vite.invariants.nativeTsrxParseCount, 1);
+  assert.equal(fixture.aggregate.results.comparative.adjudication.triggered, false);
+  assert.equal(fixture.adjudicationCount("comparative"), 1);
+
+  const rows = [
+    // Native lint
+    `${lint("P02 median scan+copy+parse throughput").toFixed(2)} MiB/s median scan/project/parse`,
+    `${lint("P03 CLI one-thread lint throughput").toFixed(2)} MiB/s complete CLI lint`,
+    `${lint("P03 end-to-end CLI latency ratio").toFixed(3)}× equivalent-TSX CLI latency`,
+    `${lint("P05 fresh-process TSRX p95 latency").toFixed(2)} ms fresh-process p95`,
+    `${lintCount}/${lintCount} pass across ${countWord(fixture.adjudicationCount("native-lint"))} adjudication reports`,
+    // Native format
+    `${format("p04_sequential_median_mib_s").toFixed(2)} MiB/s sequential`,
+    `${format("p04_default_thread_mib_s").toFixed(2)} MiB/s default-thread p95`,
+    `${format("p04_generalized_control_median_mib_s").toFixed(2)} MiB/s generalized control`,
+    `${format("p05_stdin_p95_ms").toFixed(2)} ms fresh-stdin p95`,
+    `${format("p07_rss_ratio").toFixed(3)}× complete-output RSS`,
+    `${formatCount}/${formatCount} pass across ${countWord(fixture.adjudicationCount("native-format"))} adjudication reports`,
+    // Type-aware lint
+    `Default syntax ${typeAware.defaultSyntax.p95Ms.toFixed(2)} ms p95 with zero type processes`,
+    `one-file type-aware ${typeAware.singleTypeAware.p95Ms.toFixed(2)} ms p95`,
+    `two-file project ${typeAware.projectTypeAware.p95Ms.toFixed(2)} ms p95`,
+    `one type process per batch`,
+    `${fixture.assertionCount("type-aware")}/${fixture.assertionCount("type-aware")} pass`,
+    // Vite/Vite+ process boundary
+    `Ordinary Oxfmt ${vite.directOrdinaryFormat.p95Ms.toFixed(2)} ms p95 / ${vite.ratios.directOrdinaryFormatVsCanonicalP95.toFixed(3)}× canonical`,
+    `mixed lint ${vite.directMixedLint.p95Ms.toFixed(2)} ms p95 / ${vite.ratios.directLintVsCanonicalP95.toFixed(3)}×`,
+    `mixed format ${vite.directMixedFormat.p95Ms.toFixed(2)} ms p95 / ${vite.ratios.directFormatVsCanonicalP95.toFixed(3)}×`,
+    `Vite+ ${vite.versions.vitePlusCurrent} mixed lint ${vite.vitePlusCurrentMixedLint.p95Ms.toFixed(2)} ms p95`,
+    `one native TSRX parse`,
+    `${fixture.assertionCount("vite")}/${fixture.assertionCount("vite")} pass`,
+    // Incremental editor
+    `Fresh open ${editor.initialOpen.medianMs.toFixed(2)} ms median / ${editor.initialOpen.p95Ms.toFixed(2)} ms p95 across ${editor.initialOpen.samples} samples`,
+    `diagnostics ${editor.editDiagnostics.p95Ms.toFixed(3)} ms p95`,
+    `format ${editor.formatting.p95Ms.toFixed(3)} ms p95`,
+    `code action ${editor.codeActions.p95Ms.toFixed(3)} ms p95`,
+    `${editor.memory.rssBeforeSoakMiB.toFixed(2)} MiB RSS and ${editor.memory.growthMiB} MiB growth after ${editor.samplePolicy.editSoak.toLocaleString("en-US")} edits`,
+    `${fixture.assertionCount("editor")}/${fixture.assertionCount("editor")} pass`,
+    // Matched CLI comparison
+    `Same ${comparative.corpus.files.toLocaleString("en-US")} explicit TSX files`,
+    `ESLint ${comparative.tools.eslint.medianMs.toFixed(2)} ms`,
+    `official Oxlint ${comparative.tools.oxlint.medianMs.toFixed(2)} ms`,
+    `OXC for TSRX npm CLI ${comparative.tools.oxcTsrx.medianMs.toFixed(2)} ms median`,
+    `paired ${Math.round(comparative.corpus.tsrxShare * 100)}% TSRX workload ${comparative.tools.oxcTsrxMixed.medianMs.toFixed(2)} ms / ${comparative.ratios.mixedVsTsx.toFixed(3)}× all-TSX`,
+    `All ${comparativeCount} assertions pass in a single unadjudicated fresh report`,
+  ];
+  for (const row of rows) {
+    assert.ok(fixture.source.includes(row), `docs/acceptance/matrix.md is missing: ${row}`);
+  }
+});
+
+test("the architecture page's measured prose stays derived from the pinned reports", async () => {
+  const fixture = await proseFixture("docs/architecture/rust-oxc-core.md");
+  const { format, typeAware, editor, comparative } = fixture;
+  const scanThroughput = fixture.lint("P02 median scan+copy+parse throughput");
+  const slowestRoundTripP95Ms = Math.max(
+    editor.editDiagnostics.p95Ms,
+    editor.formatting.p95Ms,
+    editor.codeActions.p95Ms,
+  );
+
+  // "in the hundreds of MiB/s" and "well under a millisecond" are rounded to
+  // a magnitude rather than a figure, so they are guarded at the magnitude
+  // the sentence claims instead of against an exact value.
+  assert.ok(
+    scanThroughput >= 100 && scanThroughput < 1000,
+    `scan+copy+parse throughput ${scanThroughput} is no longer "in the hundreds of MiB/s"`,
+  );
+  assert.ok(
+    slowestRoundTripP95Ms < 1,
+    `slowest editor round-trip p95 ${slowestRoundTripP95Ms} ms is no longer under a millisecond`,
+  );
+
+  const claims = [
+    `run in the hundreds of MiB/s`,
+    `holds ${format("p04_generalized_control_median_mib_s").toFixed(2)} MiB/s on the stress corpus and ${format("p04_sequential_median_mib_s").toFixed(2)} MiB/s on the fast path`,
+    `the CLI finishes in about ${Math.round(comparative.tools.oxcTsrx.medianMs)} ms, where official Oxlint takes about ${Math.round(comparative.tools.oxlint.medianMs)} ms and ESLint takes about ${Math.round(comparative.tools.eslint.medianMs)} ms`,
+    `Type-aware lint costs roughly ${Math.round(typeAware.singleTypeAware.medianMs)} ms per file`,
+    `editor responses stay well under a millisecond after a fresh open of about ${editor.initialOpen.medianMs.toFixed(1)} ms`,
+  ];
+  for (const claim of claims) {
+    assert.ok(
+      fixture.source.includes(claim),
+      `docs/architecture/rust-oxc-core.md is missing: ${claim}`,
+    );
+  }
+});
+
+test("the editor diagram quotes its latency through a build-time token", async () => {
+  const source = await readFile(join(root, "docs/diagrams/editor-session.json"), "utf8");
+  assert.match(source, /open to first diagnostics measured \{\{editorInitialOpenMedian\}\} median/u);
+  assert.doesNotMatch(source, /\d+(?:\.\d+)?\s*ms/u);
 });
 
 test("public benchmark copy names non-comparable boundaries without speedup marketing", async () => {

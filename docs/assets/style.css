@@ -334,6 +334,33 @@ html.dark .theme-toggle .icon-moon {
   font-weight: 600;
   color: var(--c-text-1);
 }
+.outline-progress {
+  margin: 0 0 12px;
+}
+.outline-progress-track {
+  height: 3px;
+  border-radius: 999px;
+  background: var(--c-divider);
+  overflow: hidden;
+}
+.outline-progress-fill {
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--c-brand);
+  transition: width 0.12s linear;
+}
+.outline-remaining {
+  margin: 6px 0 0;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--c-text-3);
+}
+@media (prefers-reduced-motion: reduce) {
+  .outline-progress-fill {
+    transition: none;
+  }
+}
 .outline ul {
   margin: 0;
   padding: 0;
@@ -397,10 +424,24 @@ html.dark .theme-toggle .icon-moon {
 .doc p,
 .doc ul,
 .doc ol {
-  margin: 16px 0;
+  margin: 18px 0;
+}
+.doc ul,
+.doc ol {
+  padding-left: 26px;
+}
+/* A list of multi-line items needs more air than a list of one-liners: at the
+   body's 1.7 the wrapped lines of one bullet sit as close together as two
+   separate bullets, and the list reads as a block of prose. */
+.doc li {
+  line-height: 1.75;
 }
 .doc li + li {
-  margin-top: 4px;
+  margin-top: 10px;
+}
+.doc li > ul,
+.doc li > ol {
+  margin: 8px 0;
 }
 .doc strong {
   color: var(--c-text-1);
@@ -458,6 +499,28 @@ html.dark .code-block {
   padding: 20px 24px;
   overflow-x: auto;
   line-height: 1.6;
+  /* A permanent grey bar under every fence reads as chrome, so the track is
+     transparent and the thumb only appears while the block is hovered. The
+     content still scrolls by wheel, trackpad, and keyboard when it is not. */
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+.code-block:hover pre,
+.code-block pre:focus-visible {
+  scrollbar-color: var(--c-divider) transparent;
+}
+.code-block pre::-webkit-scrollbar {
+  height: 6px;
+}
+.code-block pre::-webkit-scrollbar-track {
+  background: transparent;
+}
+.code-block pre::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 999px;
+}
+.code-block:hover pre::-webkit-scrollbar-thumb {
+  background: var(--c-divider);
 }
 .code-block code {
   background: none;
@@ -477,6 +540,9 @@ html.dark .code-block {
   border-radius: 8px 8px 0 0;
 }
 .pm-tabs-bar [role='tab'] {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   border: none;
   background: none;
   padding: 8px 12px;
@@ -490,9 +556,119 @@ html.dark .code-block {
 .pm-tabs-bar [role='tab']:hover {
   color: var(--c-text-1);
 }
+.pm-tabs-bar [role='tab'] svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  opacity: 0.65;
+}
+/* A Marketplace listing. The whole card is one link, so every underline the
+   prose link rules would add has to come back off, and the call to action is an
+   outline chip: a filled brand pill puts white on light lavender in dark mode,
+   which does not pass contrast. */
+.doc a.ext-card,
+.doc a.ext-card:hover {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 20px 0;
+  padding: 14px 16px;
+  border: 1px solid var(--c-divider);
+  border-radius: 12px;
+  background: var(--c-bg-alt);
+  color: inherit;
+  text-decoration: none;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+.doc a.ext-card:hover,
+.doc a.ext-card:focus-visible {
+  border-color: color-mix(in srgb, var(--c-brand) 55%, var(--c-divider));
+  background: color-mix(in srgb, var(--c-brand) 6%, var(--c-bg-alt));
+}
+.ext-card img {
+  width: 40px;
+  height: 40px;
+  flex: none;
+}
+.ext-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.ext-card-name {
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--c-text-1);
+}
+.ext-card-summary {
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--c-text-2);
+}
+.doc .ext-card code.ext-card-id {
+  align-self: flex-start;
+  font-size: 12px;
+  color: var(--c-text-2);
+  opacity: 0.75;
+  background: none;
+  padding: 0;
+}
+.ext-card-cta {
+  margin-left: auto;
+  flex: none;
+  align-self: center;
+  padding: 6px 16px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--c-brand) 50%, var(--c-divider));
+  color: var(--c-brand);
+  font-size: 13px;
+  font-weight: 600;
+  transition: background 120ms ease;
+}
+.doc a.ext-card:hover .ext-card-cta {
+  background: var(--c-brand-soft);
+}
+@media (max-width: 560px) {
+  .ext-card-cta {
+    display: none;
+  }
+}
+
+/* Inline, not inline-flex: a flex container carries its own baseline, which
+   lifts the label off the line it sits in. The mark is aligned to the text
+   instead. */
+.brand-link {
+  border-radius: 5px;
+  padding: 0 3px;
+  margin: 0 -3px;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background 120ms ease, color 120ms ease;
+}
+.brand-link svg {
+  width: 0.95em;
+  height: 0.95em;
+  vertical-align: -0.14em;
+  margin-right: 0.32em;
+  opacity: 0.7;
+  transition: opacity 120ms ease;
+}
+.brand-link:hover,
+.brand-link:focus-visible {
+  background: var(--c-bg-alt);
+  text-decoration: underline;
+}
+.brand-link:hover svg,
+.brand-link:focus-visible svg {
+  opacity: 1;
+}
 .pm-tabs-bar [role='tab'][aria-selected='true'] {
   color: var(--c-brand);
   border-bottom-color: var(--c-brand);
+}
+.pm-tabs-bar [role='tab'][aria-selected='true'] svg {
+  opacity: 1;
 }
 .pm-tabs .code-block {
   margin: 0;
@@ -656,6 +832,42 @@ html.dark .copy-button.copied {
 }
 
 /* ---------- benchmark charts (ECharts SVG rendered at build time) ---------- */
+/* Each release-gate family publishes every one of its gates, which is a lot of
+   page for a reader who only wanted the verdict in the summary line. The
+   evidence stays in the document and starts closed. */
+.bench-details {
+  margin: 12px 0 26px;
+  border: 1px solid var(--c-divider);
+  border-radius: 10px;
+  background: var(--c-bg-soft);
+}
+.bench-details > summary {
+  padding: 11px 14px;
+  color: var(--c-text-2);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: 10px;
+}
+.bench-details > summary:hover {
+  color: var(--c-brand);
+}
+.bench-details > summary:focus-visible {
+  outline: 2px solid var(--c-brand);
+  outline-offset: 2px;
+}
+.bench-details[open] > summary {
+  border-bottom: 1px solid var(--c-divider);
+  border-radius: 10px 10px 0 0;
+}
+.bench-details > :not(summary) {
+  margin-left: 14px;
+  margin-right: 14px;
+  /* Forty-odd build-time SVGs per page: skip laying out the ones nobody has
+     opened. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 400px;
+}
 .bench-chart {
   margin: 16px 0;
 }
@@ -965,6 +1177,7 @@ html.dark .projection-map-code .shiki span {
 }
 .gs-terminal-titlebar button,
 .er-play,
+.chooser-chips button,
 .matrix-chips button {
   padding: 5px 11px;
   border: 1px solid var(--c-divider);
@@ -978,12 +1191,14 @@ html.dark .projection-map-code .shiki span {
 }
 .gs-terminal-titlebar button:hover,
 .er-play:hover,
+.chooser-chips button:hover,
 .matrix-chips button:hover {
   border-color: var(--c-brand);
   background: var(--c-brand-soft);
 }
 .gs-terminal-titlebar button:focus-visible,
 .er-play:focus-visible,
+.chooser-chips button:focus-visible,
 .matrix-chips button:focus-visible {
   outline: 2px solid var(--c-brand);
   outline-offset: 2px;
@@ -2389,11 +2604,49 @@ p.home-bench-caption {
 .comp-track {
   display: block;
   position: relative;
-  height: 12px;
+  height: 26px;
   margin-top: 6px;
-  border-radius: 6px;
+  border-radius: 13px;
   background: rgba(0, 0, 0, 0.06);
   overflow: hidden;
+}
+/* Static fallback plume for the treated lanes: what ships before, and instead
+   of, the shader. The dark pill lives on the canvas that fuel.js sizes, never
+   on the track, so the track keeps encoding time as length in every state. */
+.comp-chart .comp-row[data-key='oxlint'] .comp-fill,
+.comp-chart .comp-row[data-key='oxcTsrx'] .comp-fill {
+  background: linear-gradient(
+    90deg,
+    #fffbe8 0%,
+    #ffe066 12%,
+    #ffa726 32%,
+    #ff7a1a 55%,
+    #ff3a5e 78%,
+    #e912a8 100%
+  );
+  mask-image: linear-gradient(90deg, #000 0%, #000 48%, transparent 100%);
+}
+/* The mixed lane is the same fire after it burned out, so it gets the cool ramp. */
+.comp-chart .comp-row[data-key='oxcTsrxMixed'] .comp-fill {
+  opacity: 1;
+  background: linear-gradient(
+    90deg,
+    #e0f3f8 0%,
+    #90d9e2 12%,
+    #3eb3c4 32%,
+    #338acc 55%,
+    #305cb3 78%,
+    #342e79 100%
+  );
+  mask-image: linear-gradient(90deg, #000 0%, #000 48%, transparent 100%);
+}
+.comp-track > canvas {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: block;
+  height: 100%;
+  border-radius: 13px;
 }
 html.dark .comp-track {
   background: rgba(255, 255, 255, 0.08);
@@ -2403,14 +2656,34 @@ html.dark .comp-track {
   top: 0;
   bottom: 0;
   left: 0;
-  border-radius: 6px;
+  border-radius: 13px;
   min-width: 4px;
 }
+/* Neutral grey, not slate: the cooled lane is blue now, and a blue-grey
+   competitor bar reads as a relative of it. Luminance matches the slate it
+   replaces, so the bar carries exactly the weight it did before.
+   The baseline ruler is deliberately inert. A static machined hatch, pure
+   neutral with no hue and no animation, reads as measured stock rather than as
+   an unfinished placeholder, while staying quiet enough not to compete with
+   the three living lanes. Both themes now carry the same hatch at the same
+   115deg pitch; only the stripe contrast differs, because a light overlay that
+   reads as machined on #a2a2a2 disappears on #737373. No flame lane is
+   touched. */
 .comp-fill.comp-other {
-  background: #94a3b8;
+  background-color: #a2a2a2;
+  background-image: repeating-linear-gradient(
+    115deg,
+    rgba(255, 255, 255, 0.14) 0 5px,
+    rgba(0, 0, 0, 0.05) 5px 10px
+  );
 }
 html.dark .comp-fill.comp-other {
-  background: #64748b;
+  background-color: #737373;
+  background-image: repeating-linear-gradient(
+    115deg,
+    rgba(255, 255, 255, 0.16) 0 5px,
+    rgba(0, 0, 0, 0.12) 5px 10px
+  );
 }
 .comp-fill.comp-ours {
   background: linear-gradient(90deg, #7c3aed, #a855f7);
@@ -2503,59 +2776,74 @@ html.dark .comp-fill.comp-mixed {
   font-size: 12.5px;
   color: var(--c-text-2);
 }
+/* Same track material as .comp-track above, so the two halves of the section
+   read as one chart. */
 .gate-meter {
   display: block;
   position: relative;
-  height: 6px;
+  height: 10px;
   margin-top: auto;
-  margin-right: 3px;
-  border-radius: 3px;
+  border-radius: 5px;
   background: rgba(0, 0, 0, 0.06);
+  overflow: hidden;
 }
 html.dark .gate-meter {
   background: rgba(255, 255, 255, 0.08);
 }
-.gate-meter::after {
-  content: "";
-  position: absolute;
-  right: -1px;
-  top: -3px;
-  bottom: -3px;
-  border-right: 2px dashed var(--c-text-3);
-}
+/* One shared fuel ramp instead of six per-card identity hues: the six gates
+   are one category, so hue was encoding a variable that does not exist. The
+   ramp is sized to the TRACK, not to the fill, via the --gate-pct the card
+   emits: at 20% of the track the background is 500% of the fill, which is
+   exactly one track width. So a gate far under budget samples only the cool
+   start and reads calm gold, and a gate near its budget runs hot into magenta.
+   Colour temperature and length then encode the same thing. Missing or zero
+   --gate-pct degrades to a fill-sized ramp rather than breaking. No mask-image
+   here; fading the trailing edge is right for a decorative plume and wrong for
+   a value. Contrast is measured against the composited track the fill sits on,
+   not the card. Dark stops vs #323338: 12.13, 9.67, 6.49, 4.83, 3.61, 3.07.
+   Light stops vs #f0f0f0: 2.34, 2.75, 3.26, 3.92, 4.57. OKLCH L* descends
+   strictly in both ramps (98.6 to 62.5 dark, 70.0 to 56.5 light), so the order
+   survives when hue collapses under CVD, and every chromatic stop clears a
+   0.08 chroma floor. */
 .gate-meter-fill {
   position: absolute;
   top: 0;
   bottom: 0;
   left: 0;
-  border-radius: 3px;
+  border-radius: 5px;
   max-width: 100%;
+  min-width: 6px;
+  background-repeat: no-repeat;
+  background-size: calc(10000% / max(var(--gate-pct, 100), 1)) 100%;
+  background-image: linear-gradient(
+    90deg,
+    #bb9c00 0%,
+    #c88300 22%,
+    #d56400 48%,
+    #ee003e 76%,
+    #ce0090 100%
+  );
 }
-/* Per-gate identity hues. Both mode sets are validated with the dataviz
-   palette checker against the real card surfaces (#ffffff / #202127):
-   lightness band, chroma floor, CVD separation, and contrast all pass. */
-.gate-hue-violet .gate-meter-fill { background: #6d28d9; }
-.gate-hue-orange .gate-meter-fill { background: #eb6834; }
-.gate-hue-aqua .gate-meter-fill { background: #1baf7a; }
-.gate-hue-yellow .gate-meter-fill { background: #eda100; }
-.gate-hue-magenta .gate-meter-fill { background: #d55181; }
-.gate-hue-blue .gate-meter-fill { background: #2a78d6; }
-html.dark .gate-hue-violet .gate-meter-fill { background: #9085e9; }
-html.dark .gate-hue-orange .gate-meter-fill { background: #d95926; }
-html.dark .gate-hue-aqua .gate-meter-fill { background: #199e70; }
-html.dark .gate-hue-yellow .gate-meter-fill { background: #c98500; }
-html.dark .gate-hue-magenta .gate-meter-fill { background: #d55181; }
-html.dark .gate-hue-blue .gate-meter-fill { background: #3987e5; }
-/* A failing gate is an alarm: status red overrides the identity hue. */
+html.dark .gate-meter-fill {
+  background-image: linear-gradient(
+    90deg,
+    #fffbe8 0%,
+    #ffe066 12%,
+    #ffa726 32%,
+    #ff7a1a 55%,
+    #ff3a5e 78%,
+    #e912a8 100%
+  );
+}
+/* A failing gate is signalled by flatness plus the glyph plus the FAILING aria
+   text, never by hue: alarm red measures only 1.24:1 to 2.42:1 against the
+   ramp stops, and as low as 1.04:1 under simulated protanopia. */
 .gate-card .gate-meter-fill.fail {
-  background: #b91c1c;
+  background-image: none;
+  background-color: #b91c1c;
 }
 html.dark .gate-card .gate-meter-fill.fail {
-  background: #f87171;
-}
-.gate-emoji {
-  margin-right: 6px;
-  font-size: 13px;
+  background-color: #f87171;
 }
 .gate-budget {
   padding-top: 4px;
@@ -2563,18 +2851,27 @@ html.dark .gate-card .gate-meter-fill.fail {
   color: var(--c-text-3);
   font-variant-numeric: tabular-nums;
 }
+/* One card carries a caveat that must survive without a hover: a ratio under
+   1.00 has to say on its face which two things were divided, or it reads as a
+   claim to be faster than the tool charted above it. It is set apart by size
+   and by the token colour, never by fading it: an opacity here dropped
+   .gate-aside below 4.5:1 in both themes, and a caveat nobody can read is not
+   a caveat. --c-text-3 is the same token the gate line already clears
+   contrast with. */
+.gate-aside {
+  display: block;
+  margin-top: 5px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--c-text-3);
+}
+/* Only a failing gate renders a glyph, so the glyph is always the alarm. */
 .gate-status {
   margin-right: 5px;
   font-weight: 700;
-  color: #15803d;
-}
-html.dark .gate-status {
-  color: #4ade80;
-}
-.gate-budget.fail .gate-status {
   color: #b91c1c;
 }
-html.dark .gate-budget.fail .gate-status {
+html.dark .gate-status {
   color: #f87171;
 }
 @media (max-width: 720px) {
@@ -2632,8 +2929,9 @@ html.dark .explorer-panel .shiki span {
 /* ---------- interactive pipeline ---------- */
 .pipeline-tabs {
   gap: 0;
-  flex-wrap: nowrap;
-  overflow-x: auto;
+  /* Wrap rather than scroll: a scrollbar under four step names hides the last
+     step behind a gesture nobody makes on a docs page. */
+  flex-wrap: wrap;
 }
 .pipeline-tabs [role="tab"] {
   display: inline-flex;
@@ -2693,10 +2991,97 @@ html.dark .explorer-panel .shiki span {
      would break the sticky caption strip */
   overflow: clip;
 }
-.diagram-scroll {
+/* Without JS this is the old scrolling block. With JS it becomes an artboard:
+   a fixed window onto a diagram that is taller than the viewport. */
+.diagram-stage {
+  position: relative;
   overflow-x: auto;
   padding: 16px;
   background: var(--c-bg);
+}
+.diagram-stage[data-ready] {
+  overflow: hidden;
+  height: clamp(300px, 58vh, 560px);
+  padding: 0;
+  cursor: grab;
+  touch-action: none;
+  /* A pan drags across the node labels; without this the browser paints a text
+     selection over them and swaps in the text cursor part way through. */
+  user-select: none;
+  isolation: isolate;
+}
+/* The canvas is positioned, so a plain outline on the stage paints underneath
+   it and the focus ring disappears behind the diagram. Draw the ring as an
+   overlay above the canvas instead. */
+.diagram-stage[data-ready]:focus-visible {
+  outline: none;
+}
+.diagram-stage[data-ready]:focus-visible::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  border: 2px solid var(--c-brand);
+  pointer-events: none;
+}
+.diagram-stage[data-grabbing],
+.diagram-stage[data-space-pan][data-grabbing] {
+  cursor: grabbing;
+}
+.diagram-stage[data-space-pan] {
+  cursor: grab;
+}
+/* A node is the one thing on the artboard you can select, so it is the one
+   thing that gets a pointer; everything else is pan surface. Mid-pan the closed
+   hand wins over every node, so crossing a box while dragging doesn't flip the
+   cursor back and forth. */
+.diagram-stage[data-ready] .diagram-node {
+  cursor: pointer;
+}
+.diagram-stage[data-ready][data-grabbing] .diagram-node,
+.diagram-stage[data-ready][data-space-pan] .diagram-node {
+  cursor: inherit;
+}
+.diagram-stage[data-ready] .diagram-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+  transform-origin: 0 0;
+}
+.diagram-tools {
+  position: absolute;
+  z-index: 4;
+  right: 10px;
+  bottom: 10px;
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--c-divider);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--c-bg-alt) 92%, transparent);
+  backdrop-filter: blur(6px);
+}
+.diagram-tools button {
+  min-width: 30px;
+  height: 30px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 999px;
+  background: none;
+  color: var(--c-text-2);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.diagram-tools button:hover {
+  background: var(--c-brand-soft);
+  color: var(--c-text-1);
+}
+.diagram-tools button:focus-visible {
+  outline: 2px solid var(--c-brand);
+  outline-offset: 1px;
 }
 .diagram-svg {
   display: block;
@@ -2728,6 +3113,13 @@ html.dark .explorer-panel .shiki span {
 .diagram-node:focus {
   outline: none;
 }
+/* Hovering a node tints its edge, so the pointer is backed up by something you
+   can see. Suppressed mid-pan: boxes lighting up one after another as the
+   artboard slides past is noise, not feedback. The active and focus rules below
+   carry `!important` and so still win over this. */
+.diagram-stage:not([data-grabbing]) .diagram-node:hover > .shape > * {
+  stroke: var(--c-brand);
+}
 .diagram-node:focus-visible > .shape > *,
 .diagram-node-active > .shape > * {
   stroke: var(--c-brand) !important;
@@ -2742,6 +3134,15 @@ html.dark .explorer-panel .shiki span {
 }
 .diagram-step-dimmed {
   opacity: 0.34;
+}
+/* A step dims the boxes it doesn't cover, but the strip is now showing the box
+   you just picked, so that one comes back to full strength and drops the step's
+   dashes. Otherwise a click reads as nothing having happened. */
+.diagram-node-active.diagram-step-dimmed {
+  opacity: 1;
+}
+.diagram-node-active > .shape > * {
+  stroke-dasharray: none !important;
 }
 .diagram-caption-strip {
   position: sticky;
@@ -2860,7 +3261,9 @@ html.dark .explorer-panel .shiki span {
   background: var(--c-brand-soft);
   color: var(--c-brand);
 }
-.matrix-count { font-variant-numeric: tabular-nums; color: var(--c-text-3); font-weight: 500; }
+/* text-3 on the pressed chip's tinted background lands at 4.3:1, just under the
+   4.5:1 axe asks for at this size. */
+.matrix-count { font-variant-numeric: tabular-nums; color: var(--c-text-2); font-weight: 500; }
 .doc .matrix-status { min-height: 1.4em; margin: 0 0 8px; font-size: 13px; color: var(--c-text-3); }
 .matrix-badge {
   display: inline-flex;
@@ -2873,8 +3276,43 @@ html.dark .explorer-panel .shiki span {
   white-space: nowrap;
 }
 .matrix-chips .matrix-badge { width: 10px; height: 10px; padding: 0; }
-.matrix-badge-reuse { --mb: 16, 185, 129; --mb-fg: #047857; }
-.matrix-badge-adapt { --mb: 245, 158, 11; --mb-fg: #b45309; }
+/* ---------- chooser ---------- */
+.chooser {
+  margin: 20px 0;
+  padding: 14px 16px 4px;
+  border: 1px solid var(--c-divider);
+  border-radius: 10px;
+  background: var(--c-bg-soft);
+}
+.doc .chooser-prompt {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--c-text-2);
+}
+.chooser-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chooser-chips button { color: var(--c-text-2); }
+.chooser-chips button[aria-pressed="true"] {
+  border-color: var(--c-brand);
+  background: var(--c-brand-soft);
+  color: var(--c-brand);
+}
+.doc .chooser-panel { margin: 14px 0 0; }
+/* With JS the pressed chip already names the case, so the label would say it
+   twice. Without JS the labels are what keeps the answers apart. */
+.chooser[data-ready] .chooser-label { display: none; }
+.doc .chooser-label {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--c-text-2);
+}
+.doc .chooser-answer { margin: 0 0 14px; }
+/* The light-theme foregrounds are a step darker than the badge tint suggests:
+   one shade up lands at 4.2 to 4.45:1 against it, which reads fine and fails
+   the contrast rule at this size. */
+.matrix-badge-reuse { --mb: 16, 185, 129; --mb-fg: #065f46; }
+.matrix-badge-adapt { --mb: 245, 158, 11; --mb-fg: #92400e; }
 .matrix-badge-glue { --mb: 59, 130, 246; --mb-fg: #1d4ed8; }
 .matrix-badge-redesign { --mb: 139, 92, 246; --mb-fg: #6d28d9; }
 html.dark .matrix-badge-reuse { --mb-fg: #34d399; }
@@ -2960,4 +3398,211 @@ html.dark .er-squiggle-error, html.dark .er-problem-error { --sq: #f87171; }
   color: var(--c-bg);
   font-size: 11.5px;
   font-weight: 600;
+}
+
+/* `<!-- rule-sees -->`: four before/after facets behind one tab bar. */
+.facet-tabs {
+  margin: 20px 0;
+  border: 1px solid var(--c-divider);
+  border-radius: 10px;
+  overflow: clip;
+}
+.facet-tabs-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 4px 8px 0;
+  background: var(--c-bg-alt);
+  border-bottom: 1px solid var(--c-divider);
+}
+.facet-tabs-bar button {
+  border: none;
+  background: none;
+  padding: 8px 12px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--c-text-2);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+}
+.facet-tabs-bar button:hover {
+  color: var(--c-text-1);
+}
+.facet-tabs-bar button[aria-selected='true'] {
+  color: var(--c-brand);
+  border-bottom-color: var(--c-brand);
+}
+.facet-tabs [role='tabpanel'] {
+  padding: 16px;
+}
+.facet-summary {
+  margin: 0 0 14px;
+}
+.facet-note {
+  margin: 14px 0 0;
+  font-size: 14px;
+  color: var(--c-text-2);
+}
+.facet-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.facet-pair .code-block {
+  margin: 6px 0 0;
+}
+.facet-label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--c-text-2);
+}
+@media (max-width: 700px) {
+  .facet-pair {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---------- page status banner (a page whose subject is not shipped) ---------- */
+.page-status {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 0 0 28px;
+  padding: 14px 16px;
+  border: 1px solid var(--c-divider);
+  border-radius: 10px;
+  background: var(--c-bg-soft);
+}
+.page-status-label {
+  flex-shrink: 0;
+  padding: 2px 9px;
+  border-radius: 999px;
+  /* Same pill idiom as the classification badges: a tinted ground with a
+     strong foreground, per theme, rather than white on a pale fill. */
+  background: rgba(139, 92, 246, 0.15);
+  color: #6d28d9;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+html.dark .page-status-label {
+  color: #c4b5fd;
+}
+.page-status-text {
+  flex: 1;
+  min-width: 240px;
+  font-size: 14px;
+  color: var(--c-text-2);
+}
+.sidebar-tag {
+  margin-left: 8px;
+  padding: 1px 6px;
+  border: 1px solid var(--c-divider);
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--c-text-3);
+  vertical-align: middle;
+}
+.sidebar a[aria-current='page'] .sidebar-tag {
+  border-color: var(--c-brand);
+  color: var(--c-brand);
+}
+
+/* `<!-- cli-builder -->`: pick a command, toggle flags, copy the line. */
+.cli-builder {
+  margin: 20px 0;
+  border: 1px solid var(--c-divider);
+  border-radius: 10px;
+  overflow: clip;
+}
+.cli-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 4px 8px 0;
+  background: var(--c-bg-alt);
+  border-bottom: 1px solid var(--c-divider);
+}
+.cli-tabs button {
+  border: none;
+  background: none;
+  padding: 8px 12px;
+  color: var(--c-text-2);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+}
+.cli-tabs button code {
+  font-size: 13px;
+  background: none;
+  padding: 0;
+  color: inherit;
+}
+.cli-tabs button:hover {
+  color: var(--c-text-1);
+}
+.cli-tabs button[aria-selected='true'] {
+  color: var(--c-brand);
+  border-bottom-color: var(--c-brand);
+}
+.cli-builder [role='tabpanel'] {
+  padding: 16px;
+}
+.cli-flags {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 8px 20px;
+  margin-bottom: 16px;
+}
+.cli-flag {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--c-text-2);
+  cursor: pointer;
+}
+/* Toggling flags is clicking, and a fast second click on a label otherwise
+   selects its text. The generated command stays selectable: that is the part
+   you copy. */
+.cli-tabs,
+.cli-flags {
+  -webkit-user-select: none;
+  user-select: none;
+}
+.cli-line,
+.cli-line code {
+  -webkit-user-select: text;
+  user-select: text;
+}
+.cli-flag input {
+  accent-color: var(--c-brand);
+  margin: 0;
+  flex: none;
+}
+.cli-flag code {
+  color: var(--c-text-1);
+}
+.cli-line {
+  margin: 0;
+}
+.cli-line code {
+  display: block;
+  padding: 14px 16px;
+  font-family: var(--font-mono);
+  font-size: 13.5px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.cli-effect {
+  margin: 12px 0 0;
+  font-size: 14px;
+  color: var(--c-text-2);
 }

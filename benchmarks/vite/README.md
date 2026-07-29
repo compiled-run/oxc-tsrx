@@ -24,12 +24,12 @@ framework-owned and is exercised by `tests/vite/framework-chain.test.mjs`; OXC
 for TSRX does not add a transform or parser to that path.
 
 Aggregate-selected representative report:
-`results-1784321678410.json`. The ordinary `oxfmt-tsrx` median is 103.26 ms
-versus canonical Oxfmt's 100.99 ms on the identical files; p95 is 113.44 ms
-versus 103.01 ms (1.101×). Exact normalized stdout/stderr and exit status
+`results-1785296550669.json`. The ordinary `oxfmt` median is 102.29 ms
+versus canonical Oxfmt's 99.50 ms on the identical files; p95 is 119.10 ms
+versus 111.45 ms (1.069×). Exact normalized stdout/stderr and exit status
 match, and trace evidence records zero TSRX dispatch events. The mixed
-companion p95 is 57.91 ms for lint (1.813× canonical two-file TSX) and 127.11
-ms for format-check (1.234× canonical). A complete Vite+ 0.2.4 mixed lint is
-237.08 ms p95. The
+companion p95 is 59.34 ms for lint (1.698× canonical two-file TSX) and 132.80
+ms for format-check (1.192× canonical). A complete Vite+ 0.2.4 mixed lint is
+254.57 ms p95. The
 native metadata records exactly one TSRX parse and zero ordinary files in the
 project-owned lane.

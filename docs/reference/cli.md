@@ -5,21 +5,28 @@ description: Every flag accepted by oxc-tsrx and oxc-tsrx-fmt, with exit codes a
 
 # CLI Reference
 
-Both native commands take **explicit source files**; directory walking and glob
-expansion belong to the `oxc-tsrx` npm toolchain and Vite+, not the native binaries. Any
-unsupported option is rejected with an actionable error rather than ignored.
+## Build a command
+
+Pick a command, tick what you want, and copy the line. Every flag here is a real
+flag, and the sentence underneath says what that combination does.
+
+<!-- cli-builder -->
+
+At least one file is required, and files matching your `ignorePatterns` are
+skipped. Calling a native binary directly means explicit file paths only:
+directory walking and glob expansion belong to the `oxc-tsrx` npm commands and
+to Vite+. An unsupported option is an error, never an ignored flag.
 
 ## What a plain install puts on your path
 
-`npm install --save-dev oxc-tsrx@latest` is the whole setup for the command line and
-for the editor. Vite+ needs one more command; see
+`npm install --save-dev oxc-tsrx@latest` is the whole setup for the command line
+and for the editor. Vite+ needs one more command; see
 [the minimum steps per host](/guide/getting-started#the-minimum-steps-per-host).
-
 The install links seven commands into `node_modules/.bin`:
 
 | Command | Kind | What it is |
 | --- | --- | --- |
-| `oxlint` | you type it | The linter. Sends `.tsrx` to the TSRX engine and everything else to canonical Oxlint. |
+| `oxlint` | you type it | The linter. Sends `.tsrx` to the TSRX engine and everything else to official Oxlint. |
 | `oxfmt` | you type it | The formatter, with the same split. |
 | `oxc-tsrx` | you type it | `providers`, `status`, `setup`, `remove`. Described in the next section. |
 | `oxc-tsrx-lint` | leaf executor | The native linter, given explicit files only. `oxlint` dispatches to it. It prints JSON, and it has no `--help`. |
@@ -28,27 +35,20 @@ The install links seven commands into `node_modules/.bin`:
 | `tsgolint` | not this project | It arrives with the `oxlint-tsgolint` dependency, the official type-aware runner used by `--type-aware` and `--type-check`. You never call it directly, and calling it prints upstream's own "unsupported entrypoint" warning. |
 
 Reach for a leaf executor directly only when your project pins official `oxlint`
-or `oxfmt`, because those command names then belong to the pinned package.
-
-The `oxc-tsrx` sections further down this page describe the **native binary** of
-the same name, which is what you get from a source build. It is a different
-program from the `oxc-tsrx` npm command above.
+or `oxfmt`, because those command names then belong to the pinned package. Note
+that the `oxc-tsrx` sections further down describe the **native binary** of the
+same name, which comes from a source build. It is a different program from the
+`oxc-tsrx` npm command above.
 
 ### `npx oxlint` with no path also lints `node_modules`
 
-A bare `npx oxlint` walks the current directory, and `node_modules` is part of
-it unless something narrows the run. Measured in a scratch project made with
-`npm init -y`: 9260 warnings, 9257 of them from `node_modules`. Official Oxlint
-from the same install produces the same wall, so this is upstream parity and not
-something TSRX introduces.
+A bare `npx oxlint` walks the current directory, `node_modules` included, and so
+does `--fix`, which will rewrite files in there. In a scratch `npm init -y`
+project that was 9260 warnings, 9257 of them from `node_modules`.
 
-A `.gitignore` containing `node_modules` removes it completely, with no git
-repository required, and naming a path (`npx oxlint src`) avoids it too. The
-same scope rule applies to `--fix`, which will rewrite files inside
-`node_modules` if you let it reach them. `oxfmt` is unaffected; it skips
-`node_modules` unless you pass `--with-node-modules`. There is more detail, with
-the measured numbers, in
-[Getting Started](/guide/getting-started#give-the-linter-a-path-or-an-empty-folder-will-bury-you).
+Name a path (`npx oxlint src`) or list `node_modules` in a `.gitignore`. `oxfmt`
+is unaffected: it skips `node_modules` unless you pass `--with-node-modules`.
+Official Oxlint behaves identically, so this is upstream behavior.
 
 ## `oxc-tsrx` (npm command)
 
@@ -66,33 +66,29 @@ Usage: oxc-tsrx providers [--project <directory>] [--json]
 | `status` | Reports whether those four slots are present. |
 | `remove` | Removes them and restores any transitive official package it displaced. |
 
-Run it with no subcommand for the same usage block. `--help`, `-h`, and `help`
-print it too, and `--version`, `-V`, and `version` print `oxc-tsrx 0.1.3`. A
-wrong subcommand names the bad word, prints the usage block after it, and exits
-2.
+Running it with no subcommand prints the usage block, and so do `--help`, `-h`,
+and `help`. `--version`, `-V`, and `version` print `oxc-tsrx 0.1.3`. A wrong
+subcommand names the bad word, prints the usage block, and exits 2.
 
-### The fourth slot is one key in `.vscode/settings.json`
+### What `setup` writes, and what it only checks
 
-Three of the four slots are packages in `node_modules`. The fourth is the single
-setting `oxc.path.oxlint`, and it is the one thing `setup` writes into your own
-tree.
+Three of the four slots are packages in `node_modules`. The fourth is one
+setting in your own tree: `"oxc.path.oxlint": "node_modules/oxc-tsrx/bin/oxlint"`
+in `.vscode/settings.json`, written only when `node_modules/.bin/oxlint` does not
+already resolve into this package. The key is merged without disturbing another
+key or a comment, never overwrites a value you set, and `remove` takes back
+exactly it. `package.json` and `tsconfig.json` are never edited.
 
-It exists because the official OXC extension finds its linter through
-`node_modules/.bin/oxlint`, and in a Vite+ project that shim belongs to Vite+,
-which knows nothing about `.tsrx`. Fixing package resolution does not fix that,
-so the editor went quiet with no error. `setup` writes
-`"oxc.path.oxlint": "node_modules/oxc-tsrx/bin/oxlint"` only when that shim does
-not already resolve into this package, merges it into whatever
-`.vscode/settings.json` you already have without disturbing another key or a
-comment, refuses to overwrite an `oxc.path.oxlint` you set yourself, and hands
-back exactly that one key on `remove`. `package.json` and `tsconfig.json` are
-never edited.
+`setup` and `status` also report four TSRX editor prerequisites they never
+install:
 
-`setup` and `status` additionally report four TSRX editor prerequisites that
-belong to the TSRX toolchain and are never installed or changed here:
-`@tsrx/typescript-plugin`, a framework binding (`@tsrx/react`, `@tsrx/vue`,
-`@tsrx/solid`, `@tsrx/preact`, `@tsrx/ripple`, or `octane`), the nearest
-`tsconfig.json` declaring that plugin, and TypeScript at `>=5.9 <6`.
+- `@tsrx/typescript-plugin`
+- a framework binding
+- the nearest `tsconfig.json`, which has to declare that plugin
+- TypeScript at `>=5.9 <6`
+
+See [Vite and
+Vite+](/integrations/vite-plus#setup-writes-one-file-in-your-own-project).
 
 ### `status` says `missing` in a healthy project
 
@@ -107,119 +103,61 @@ oxc-tsrx 0.1.3 compatibility (npm)
   needs no setting and none was written.
 ```
 
-That output is correct, and the exit code is 0. `status` only ever talks about
-the Vite+ compatibility slots, so `missing` means "not installed", which is the
-right state for every command-line and editor user, and `unnecessary` on the
-editor slot means the ordinary lookup already reaches this package. There is
-nothing to fix, and running `setup` is not the answer unless you use Vite+.
+That output is correct and the exit code is 0: `status` only ever talks about the
+Vite+ compatibility slots, so `missing` means "not installed" and `unnecessary`
+means the ordinary lookup already reaches this package. Run `setup` only if you
+use Vite+, and run `npx oxc-tsrx providers` to confirm TSRX support is wired up.
 
-Use `npx oxc-tsrx providers` to check that TSRX support is actually wired up.
+## Exit codes
 
-## `oxc-tsrx` (lint)
+Both native commands use the same three codes:
 
-```text
-Usage: oxc-tsrx [OPTIONS] FILE...
-```
-
-| Option | Description |
-| --- | --- |
-| `--format=json` | Emit JSON diagnostics. `json` is the only supported value in the current native CLI. |
-| `--config PATH`, `-c PATH` | Use an explicit JSON/JSONC Oxlint configuration; may be given once. Bypasses upward `.oxlintrc.json`/`.oxlintrc.jsonc` discovery. |
-| `--allow RULE`, `-A RULE` | Set a rule to `allow` (off), overriding configuration. |
-| `--warn RULE`, `-W RULE` | Set a rule to `warn`, overriding configuration. |
-| `--deny RULE`, `-D RULE` | Set a rule to `deny` (error), overriding configuration. |
-| `--fix` | Apply identity-only safe fixes to original TSRX bytes, each validated by a post-edit reparse before write. |
-| `--type-aware` | Opt into official tsgolint type-aware rules. Runs one TypeScript-Go process per batch over in-memory `.tsrx.tsx` virtual files; requires the supported `oxlint-tsgolint` executable. |
-| `--type-check` | Everything `--type-aware` does, plus TypeScript syntactic and semantic compiler diagnostics. |
-| `--config-base PATH` | Resolve a materialized config's relative paths (extends, ignores) against this directory. Used by the Vite+ host when the JSON payload lives in a disposable directory; requires `--config`. |
-| `--version` | Show the package version and canonical OXC revision. |
-
-At least one explicit source file is required. Files matching configured
-`ignorePatterns` are skipped.
-
-**Exit codes**
-
-| Code | Meaning |
-| --- | --- |
-| `0` | No errors, warning policy satisfied. |
-| `1` | At least one error diagnostic, or `options.denyWarnings`/`options.maxWarnings` failed. |
-| `2` | Usage, configuration, or engine error. |
-
-## `oxc-tsrx-fmt` (format)
-
-```text
-Usage: oxc-tsrx-fmt [--write | --check] [--threads=INT] PATH...
-       oxc-tsrx-fmt [--config=PATH] --stdin-filepath=PATH
-```
-
-| Option | Description |
-| --- | --- |
-| `--write` | Format and write explicit files (default for files). Transactional: all reads and formats finish before any original is replaced. |
-| `--check` | Exit `1` and list files that differ; never write. |
-| `--stdin-filepath=PATH` | Read source from stdin, infer the source type from `PATH`, print formatted source to stdout. |
-| `--config PATH`, `-c PATH` | Use an explicit JSON/JSONC Oxfmt configuration. Bypasses upward `.oxfmtrc.json`/`.oxfmtrc.jsonc` discovery. |
-| `--threads=INT` | Worker count for explicit multi-file formatting. |
-| `-h`, `--help` | Show help. |
-| `-V`, `--version` | Show the package version and canonical OXC revision. |
-
-**Exit codes**
-
-| Code | Meaning |
-| --- | --- |
-| `0` | Formatted successfully, or `--check` found no differences. |
-| `1` | `--check` found files that differ. |
-| `2` | Usage, configuration, or engine error. |
+| Code | `oxc-tsrx` (lint) | `oxc-tsrx-fmt` (format) |
+| --- | --- | --- |
+| `0` | No errors, warning policy satisfied. | Formatted successfully, or `--check` found no differences. |
+| `1` | At least one error diagnostic, or `options.denyWarnings`/`options.maxWarnings` failed. | `--check` found files that differ. |
+| `2` | Usage, configuration, or engine error. | Usage, configuration, or engine error. |
 
 ## `oxc-tsrx-lsp` (language server)
 
-The third binary hosts the same Rust lint and format sessions behind canonical
-OXC's language-server transport (stdio). It is launched by an editor client,
-not by hand. The public `oxlint --lsp` command starts it beside canonical
-Oxlint and dynamically registers `.tsrx` with the released official OXC
-extension. It provides live authored-span diagnostics, whole-document
-formatting, and validated quick fixes, with opt-in type-aware diagnostics. See
-[Editor integration](/integrations/editor) for architecture and proof commands.
+The third binary hosts the same Rust lint and format sessions behind OXC's
+language-server transport. An editor client launches it, not you: `oxlint --lsp`
+starts it beside official Oxlint and registers `.tsrx`. You get live diagnostics
+on the spans you wrote, whole-document formatting, validated quick fixes, and
+opt-in type-aware diagnostics. See [Editor
+integration](/integrations/editor).
 
 ## npm direct upstream route
 
-The public `oxlint` and `oxfmt` commands from `oxc-tsrx` recognize a small set
-of canonical delegate flags. They also conservatively recognize explicit batches
-containing only existing ordinary JS/JSX/TS/TSX files. Those invocations load
-the pinned package's manifest-declared Oxlint or Oxfmt launcher in the same
-Node process instead of initializing the TSRX bridge:
+Some invocations never need TSRX at all: the delegate-only flags below, and
+explicit batches of ordinary JS/JSX/TS/TSX files. Those load the pinned package's
+own launcher in the same Node process, so upstream diagnostics, config, fixes,
+stdin, and signals are preserved with no second process.
 
 | Command | Delegate-only flags |
 | --- | --- |
 | `oxlint` | `--help`, `-h`, `--version`, `-V`, `--rules`, `--init` |
 | `oxfmt` | `--help`, `-h`, `--version`, `-V`, `--init`, `--migrate`, `--lsp` |
 
-This preserves canonical diagnostics, config/plugin loading, fixes, stdin,
-signals, and lifecycle behavior while avoiding a second process. Ambiguous
-paths, directories, globs, unknown options, and any `.tsrx` input remain on the
-TSRX-aware bridge.
-
-`oxlint --lsp` is the deliberate exception. The public launcher multiplexes
-canonical Oxlint and `oxc-tsrx-lsp`: ordinary document traffic remains
-canonical, `.tsrx` traffic is routed to the native server, and both directions'
-request IDs are isolated. Ordinary non-LSP CLI invocations never enter this
-multiplexer.
+Ambiguous paths, directories, globs, unknown options, and any `.tsrx` input stay
+on the TSRX-aware bridge. `oxlint --lsp` is the deliberate exception: it
+multiplexes official Oxlint and `oxc-tsrx-lsp` over one connection, keeping
+ordinary documents with official Oxlint and isolating both directions' request
+IDs. Non-LSP invocations never enter that multiplexer.
 
 ## Environment variables
 
-The `oxc-tsrx` toolchain's internal command packages locate native binaries
-through platform packages; during source development these
-overrides select release binaries explicitly:
+The linter, the formatter, and the language server are one native binary that
+dispatches on a leading subcommand (`fmt`, `lsp`, or `lint`, the default) and on
+the name it was invoked under. The toolchain normally locates it through platform
+packages; during source development these three overrides name a release binary
+explicitly, and all three point at that same executable:
 
 | Variable | Description |
 | --- | --- |
 | `OXC_TSRX_LINT_BIN` | Absolute path to the native `oxc-tsrx` binary. |
-| `OXC_TSRX_FORMAT_BIN` | Absolute path to the same native `oxc-tsrx` binary; the wrapper selects the formatter with its `fmt` subcommand. |
-| `OXC_TSRX_LSP_BIN` | Absolute path to the same native `oxc-tsrx` binary, used by the editor test harness during source development. The editor client starts it with `lsp`. |
-
-All three point at one executable. The linter, the formatter, and the language
-server are one native binary that dispatches on a leading subcommand (`fmt`,
-`lsp`, or `lint`, which is also the default) and on the name it was invoked
-under. Three separate binaries linked the same OXC engines three times.
+| `OXC_TSRX_FORMAT_BIN` | The same path; the wrapper selects the formatter with its `fmt` subcommand. |
+| `OXC_TSRX_LSP_BIN` | The same path, used by the editor test harness. The editor client starts it with `lsp`. |
 
 A missing native artifact is an error; `.tsrx` is never silently delegated to
-stock tools.
+the official tools.

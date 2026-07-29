@@ -277,6 +277,23 @@ await page.waitForTimeout(400)
 const spied = await page.locator('.outline .active a').getAttribute('href')
 check(spied === '#performance-evidence', 'outline: scroll spy tracks section', String(spied))
 
+// The reading estimate is the same scroll position read a second way: part way
+// down it counts minutes left, and back at the top it names the whole page.
+const scrolledTime = await page.locator('.outline-remaining').textContent()
+const scrolledFill = await page.locator('.outline-progress-fill').evaluate((el) => el.style.width)
+const arrivalTime = await page.evaluate(async () => {
+  window.scrollTo(0, 0)
+  await new Promise((resolve) => setTimeout(resolve, 400))
+  return document.querySelector('.outline-remaining')?.textContent
+})
+check(
+  /^\d+ min read$/.test(arrivalTime ?? '') &&
+    /^(\d+ min left|Finished)$/.test(scrolledTime ?? '') &&
+    Number.parseFloat(scrolledFill) > 0,
+  'outline: reading progress counts down with the page',
+  `${arrivalTime} then ${scrolledTime} at ${scrolledFill}`,
+)
+
 // ---------- theme toggle + persistence ----------
 await page.goto(`${baseUrl}/guide/introduction`, { waitUntil: 'load' })
 await page.emulateMedia({ colorScheme: 'light' })
@@ -765,22 +782,93 @@ check(
   'diagram: clicking a step tab swaps the caption strip to that step',
   JSON.stringify(diagramStepSwitch),
 )
+// A synthetic click event was used here once. It went straight to the node and
+// so it passed while a real press-and-release on the artboard selected nothing:
+// the stage took the pointer capture, which retargets the click to the stage.
+// Drive the real mouse instead, the way a reader does.
+const diagramNode = page.locator('.diagram[data-ready] [data-diagram-node]').first()
+await diagramNode.click()
 const diagramNodeAfterStep = await page.evaluate(() => {
   const figure = document.querySelector('.diagram[data-ready]')
   const node = figure.querySelector('[data-diagram-node]')
-  node.dispatchEvent(new MouseEvent('click', { bubbles: true }))
   return {
     strip: figure.querySelector('.diagram-caption-strip').textContent,
     caption: node.dataset.caption,
+    pressed: node.getAttribute('aria-pressed'),
+    active: node.classList.contains('diagram-node-active'),
+    focused: document.activeElement === node,
   }
 })
 check(
-  diagramNodeAfterStep.strip === diagramNodeAfterStep.caption,
-  'diagram: clicking a node still shows that node explanation',
+  diagramNodeAfterStep.strip === diagramNodeAfterStep.caption &&
+    diagramNodeAfterStep.pressed === 'true' &&
+    diagramNodeAfterStep.active &&
+    diagramNodeAfterStep.focused,
+  'diagram: a real click on a node selects it and shows that node explanation',
   JSON.stringify(diagramNodeAfterStep),
 )
 
-// ---------- transplant matrix filter + review route (upstreaming page) ----------
+// Panning is a drag, not a selection: a drag that happens to end on a node must
+// leave the strip alone.
+const diagramNodeBox = await diagramNode.boundingBox()
+await page.mouse.move(diagramNodeBox.x + diagramNodeBox.width / 2 - 60, diagramNodeBox.y + 8)
+await page.mouse.down()
+await page.mouse.move(diagramNodeBox.x + diagramNodeBox.width / 2, diagramNodeBox.y + diagramNodeBox.height / 2, {
+  steps: 20,
+})
+const diagramCursorMidDrag = await page.evaluate(() => {
+  const figure = document.querySelector('.diagram[data-ready]')
+  const node = figure.querySelector('[data-diagram-node]')
+  return {
+    node: getComputedStyle(node).cursor,
+    stage: getComputedStyle(figure.querySelector('.diagram-stage')).cursor,
+  }
+})
+await page.mouse.up()
+const diagramAfterDrag = await page.evaluate(() => {
+  const figure = document.querySelector('.diagram[data-ready]')
+  const second = figure.querySelectorAll('[data-diagram-node]')[1]
+  return {
+    strip: figure.querySelector('.diagram-caption-strip').textContent,
+    secondCaption: second.dataset.caption,
+  }
+})
+check(
+  diagramAfterDrag.strip !== diagramAfterDrag.secondCaption,
+  'diagram: a pan that ends on a node does not select it',
+  JSON.stringify(diagramAfterDrag),
+)
+check(
+  diagramCursorMidDrag.node === 'grabbing' && diagramCursorMidDrag.stage === 'grabbing',
+  'diagram: panning shows the closed hand over the whole artboard',
+  JSON.stringify(diagramCursorMidDrag),
+)
+
+// Nodes are the only thing on the artboard you can select, so they are the only
+// thing that gets a pointer. Everything else is pan surface.
+const diagramCursorAtRest = await page.evaluate(() => {
+  const figure = document.querySelector('.diagram[data-ready]')
+  const stage = figure.querySelector('.diagram-stage')
+  const node = figure.querySelector('[data-diagram-node]')
+  return {
+    node: getComputedStyle(node).cursor,
+    label: getComputedStyle(node.querySelector('text') ?? node).cursor,
+    shape: getComputedStyle(node.querySelector('.shape > *')).cursor,
+    stage: getComputedStyle(stage).cursor,
+    background: getComputedStyle(stage.querySelector('svg rect')).cursor,
+  }
+})
+check(
+  diagramCursorAtRest.node === 'pointer' &&
+    diagramCursorAtRest.label === 'pointer' &&
+    diagramCursorAtRest.shape === 'pointer' &&
+    diagramCursorAtRest.stage === 'grab' &&
+    diagramCursorAtRest.background === 'grab',
+  'diagram: the cursor is a pointer on a node and a grab hand off it',
+  JSON.stringify(diagramCursorAtRest),
+)
+
+// ---------- transplant matrix filter (upstreaming page) ----------
 await page.goto(`${baseUrl}/architecture/upstreaming-to-oxc`, { waitUntil: 'load' })
 await page.waitForSelector('[data-matrix-filter][data-ready]')
 const matrixFiltered = await page.evaluate(() => {
@@ -811,22 +899,46 @@ const matrixReset = await page.evaluate(() => {
   return [...filter.querySelectorAll('tr[data-classification]')].every((row) => !row.hidden)
 })
 check(matrixReset, 'matrix filter: All chip restores every row')
-const reviewProgress = await page.evaluate(() => {
-  const route = document.querySelector('[data-review-route]')
-  const checks = [...route.querySelectorAll('[data-review-check]')]
-  const status = route.querySelector('[data-review-status]')
-  const initial = status.textContent
-  checks[0].click()
-  const afterOne = status.textContent
-  for (const box of checks.slice(1)) box.click()
-  return { initial, afterOne, done: status.textContent, total: route.dataset.totalMinutes }
+
+// ---------- chooser (provider protocol page) ----------
+// The chooser replaces a decision table, so the thing worth proving is that a
+// reader who picks their own case is left looking at exactly one answer.
+await page.goto(`${baseUrl}/architecture/provider-protocol`, { waitUntil: 'load' })
+await page.waitForSelector('[data-chooser][data-ready]')
+const chooserStart = await page.evaluate(() => {
+  const chooser = document.querySelector('[data-chooser]')
+  return {
+    options: chooser.querySelectorAll('[data-chooser-option]').length,
+    shown: [...chooser.querySelectorAll('[data-chooser-panel]')].filter((panel) => !panel.hidden)
+      .length,
+    pressed: chooser.querySelector('[data-chooser-option][aria-pressed="true"]')?.dataset
+      .chooserOption,
+  }
 })
 check(
-  reviewProgress.initial.includes(`About ${reviewProgress.total} minutes`) &&
-    /minutes of reading left/.test(reviewProgress.afterOne) &&
-    reviewProgress.done.includes('whole map'),
-  'review route: checking steps updates the minutes-left status to completion',
-  JSON.stringify(reviewProgress),
+  chooserStart.options >= 2 && chooserStart.shown === 1 && chooserStart.pressed === '0',
+  'chooser: opens on the first case with one answer showing',
+  JSON.stringify(chooserStart),
+)
+await page.locator('[data-chooser-option]').last().click()
+const chooserPicked = await page.evaluate(() => {
+  const chooser = document.querySelector('[data-chooser]')
+  const options = [...chooser.querySelectorAll('[data-chooser-option]')]
+  const shown = [...chooser.querySelectorAll('[data-chooser-panel]')].filter((panel) => !panel.hidden)
+  return {
+    shown: shown.length,
+    answers: shown[0]?.textContent.trim().length ?? 0,
+    matches: shown[0]?.dataset.chooserPanel === options.at(-1).dataset.chooserOption,
+    pressed: options.filter((option) => option.getAttribute('aria-pressed') === 'true').length,
+  }
+})
+check(
+  chooserPicked.shown === 1 &&
+    chooserPicked.matches &&
+    chooserPicked.pressed === 1 &&
+    chooserPicked.answers > 20,
+  'chooser: picking a case swaps to that answer and presses only that chip',
+  JSON.stringify(chooserPicked),
 )
 
 // ---------- editor replay (editor page) ----------

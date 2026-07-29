@@ -41,6 +41,11 @@ export default {
       items: [
         { text: 'Rust/OXC Core', link: '/architecture/rust-oxc-core' },
         { text: 'Upstreaming to OXC', link: '/architecture/upstreaming-to-oxc' },
+        {
+          text: 'Provider Protocol',
+          link: '/architecture/provider-protocol',
+          tag: 'Proposal',
+        },
       ],
     },
     {
@@ -55,7 +60,7 @@ export default {
   ],
   hero: {
     name: 'OXC for TSRX',
-    text: 'A parser, linter, formatter, and language server for .tsrx',
+    text: 'Bring .tsrx into your OXC and Vite+ toolchain',
     tagline:
       'One install, and your .tsrx files lint and format like .tsx does.',
     actions: [

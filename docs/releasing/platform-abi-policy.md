@@ -88,4 +88,4 @@ override, `NODE_PATH`, source-tree `target/release`, or a mismatched native
 package is invalid.
 
 Unsupported OS, CPU, or libc combinations must fail with an actionable error.
-They must never delegate `.tsrx` to stock Oxlint/Oxfmt or silently skip files.
+They must never delegate `.tsrx` to official Oxlint/Oxfmt or silently skip files.

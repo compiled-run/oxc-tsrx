@@ -1009,7 +1009,7 @@ export async function setupCompatibility(options = {}) {
   const collisions = status.slots.filter((slot) => slot.state === "collision");
   if (collisions.length > 0) {
     throw new Error(
-      `refusing to replace unowned package slot(s): ${collisions.map((slot) => slot.name).join(", ")}. Remove the direct package(s), reinstall, and run ${PROVIDER} setup again`,
+      `refusing to replace unowned package slot(s): ${collisions.map((slot) => slot.name).join(", ")}. Installing on top of the existing node_modules does not free the slot, so run rm -rf node_modules, install again, and run ${PROVIDER} setup again`,
     );
   }
   const modules = join(status.projectRoot, "node_modules");

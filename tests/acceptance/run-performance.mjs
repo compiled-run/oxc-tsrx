@@ -216,7 +216,7 @@ function requireContract(family, report) {
     if (report.assertions?.directOrdinaryFormatRatio !== true) {
       fail('ordinary npm formatter ratio budget failed')
     }
-    if (report.build?.formatLauncher !== 'node_modules/oxfmt-tsrx/bin/oxfmt') {
+    if (report.build?.formatLauncher !== 'node_modules/oxc-tsrx/bin/oxfmt') {
       fail('ordinary formatter lane does not identify the installed npm launcher')
     }
     if (report.invariants?.ordinaryFormatProcessParity !== true ||
@@ -272,8 +272,8 @@ function requireContract(family, report) {
     if (JSON.stringify(report.boundary?.executables) !== JSON.stringify({
       eslint: 'node_modules/.bin/eslint',
       oxlint: 'node_modules/oxlint-current/bin/oxlint',
-      oxcTsrx: 'node_modules/oxlint-tsrx/bin/oxlint',
-      oxcTsrxMixed: 'node_modules/oxlint-tsrx/bin/oxlint',
+      oxcTsrx: 'node_modules/oxc-tsrx/bin/oxlint',
+      oxcTsrxMixed: 'node_modules/oxc-tsrx/bin/oxlint',
     })) {
       fail('comparative executable identities drifted')
     }
@@ -282,11 +282,11 @@ function requireContract(family, report) {
         fail(`${lane} does not share explicit ignore behavior`)
       }
     }
-    if (!report.build?.binary?.startsWith('node_modules/oxlint-tsrx/bin/oxlint')) {
+    if (!report.build?.binary?.startsWith('node_modules/oxc-tsrx/bin/oxlint')) {
       fail('build identity does not name the npm launcher')
     }
-    if (!/^oxlint-tsrx\s+\S+/u.test(report.versions?.oxcTsrxLauncher ?? '')) {
-      fail('missing oxlint-tsrx launcher version')
+    if (!/^oxc-tsrx\s+\S+/u.test(report.versions?.oxcTsrxLauncher ?? '')) {
+      fail('missing oxc-tsrx launcher version')
     }
     if (JSON.stringify(report.boundary?.rules) !== JSON.stringify(['no-debugger'])) {
       fail('unmatched rule boundary')

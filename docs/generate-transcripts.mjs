@@ -259,31 +259,6 @@ const parseBrokenTsrx = `export function Broken() @{
 `
 
 // Must stay identical to the js fence on docs/guide/parsing.md.
-const parseScript = `import { readFileSync } from "node:fs";
-import { parseSync } from "oxc-tsrx/parser";
-
-const source = readFileSync("src/View.tsrx", "utf8");
-const result = parseSync("src/View.tsrx", source);
-
-console.log("errors:", result.errors.length);
-console.log("imports:", result.module.staticImports.map((s) => s.moduleRequest.value));
-console.log("top level:", result.program.body.map((node) => node.type));
-
-function* walk(node) {
-  if (Array.isArray(node)) {
-    for (const item of node) yield* walk(item);
-  } else if (node && typeof node === "object") {
-    if (typeof node.type === "string") yield node;
-    for (const value of Object.values(node)) yield* walk(value);
-  }
-}
-
-const forNode = [...walk(result.program)].find((node) => node.type === "JSXForExpression");
-console.log("found:", forNode.type);
-console.log("its first line, straight from your file:");
-console.log(source.slice(forNode.start, forNode.end).split("\\n")[0]);
-`
-
 const parseBrokenScript = `import { readFileSync } from "node:fs";
 import { parseSync } from "oxc-tsrx/parser";
 
@@ -349,7 +324,7 @@ const customPluginsPage = readFileSync(
   'utf8',
 )
 const taskFeedFence = customPluginsPage.match(
-  /Add this as `src\/TaskFeed\.tsrx`:\r?\n\r?\n```tsrx\r?\n([\s\S]*?)^```/mu,
+  /`src\/TaskFeed\.tsrx`:\r?\n\r?\n```tsrx\r?\n([\s\S]*?)^```/mu,
 )
 if (!taskFeedFence) {
   throw new Error(
@@ -1090,29 +1065,20 @@ const demos = {
 
   'parsing-quickstart': {
     caption:
-      'Real output, captured at build time. The sample project has the src/View.tsrx and parse.mjs from above, a Broken.tsrx with an unterminated closing tag, and oxc-tsrx installed.',
+      'Real output, captured at build time, from a Broken.tsrx whose closing tag is unterminated.',
     files: {
-      'src/View.tsrx': parseViewTsrx,
       'src/Broken.tsrx': parseBrokenTsrx,
-      'parse.mjs': parseScript,
-      'parse-broken.mjs': parseBrokenScript,
+      'errors.mjs': parseBrokenScript,
     },
     links: {
       'node_modules/oxc-tsrx': path.join(repoRoot, 'packages', 'toolchain'),
     },
     entries: [
       {
-        comment: 'Run the parse script from above against the good file',
-        command: 'node parse.mjs',
-        runner: 'node',
-        args: ['parse.mjs'],
-        expectExit: 0,
-      },
-      {
         comment: 'Parse errors land in result.errors and point at your file',
-        command: 'node parse-broken.mjs',
+        command: 'node errors.mjs',
         runner: 'node',
-        args: ['parse-broken.mjs'],
+        args: ['errors.mjs'],
         expectExit: 0,
       },
     ],

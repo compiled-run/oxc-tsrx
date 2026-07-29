@@ -399,3 +399,112 @@ test('identity drift and correctness invariant failures fail closed', () => {
     /correctness invariant failed/u,
   )
 })
+
+// One threshold in the adjudicated families is derived from a measurement rather than read
+// straight from a frozen budget, so two reruns of the same build differ by a memory page.
+// Those assertions publish the rule that produced the limit; coherence then compares the
+// rule. Everything else still has to match to the number.
+const DERIVATION = 'min(candidateTsxMedianRssBytes * 1.25, candidateTsxMedianRssBytes + 33554432)'
+
+function bareReport(path, mixedRatio, threshold) {
+  const built = report(path, mixedRatio)
+  built.assertions.find(({ name }) => name === 'mixedNoBlowup').threshold = threshold
+  return built
+}
+
+function derivedReport(path, mixedRatio, threshold, derivation = DERIVATION) {
+  const built = bareReport(path, mixedRatio, threshold)
+  built.assertions.find(({ name }) => name === 'mixedNoBlowup').thresholdDerivation = derivation
+  return built
+}
+
+test('coherence compares the derivation rule when both reports publish one', () => {
+  const adjudicated = adjudicateReports(
+    [
+      derivedReport('reports/first.json', 1.49, 1.5),
+      derivedReport('reports/second.json', 1.48, 1.500002),
+      derivedReport('reports/third.json', 1.47, 1.499998),
+    ],
+    { bandFraction: 0.03 },
+  )
+  assert.equal(adjudicated.decision, 'passed')
+  assert.deepEqual(adjudicated.triggeredBy, ['mixedNoBlowup'])
+  assert.equal(adjudicated.selectedReport, 'reports/second.json')
+
+  assert.throws(
+    () =>
+      adjudicateReports(
+        [
+          derivedReport('reports/first.json', 1.49, 1.5),
+          derivedReport('reports/rule-drift.json', 1.48, 1.5, 'min(candidateTsxMedianRssBytes * 1.5, candidateTsxMedianRssBytes + 33554432)'),
+          derivedReport('reports/third.json', 1.47, 1.5),
+        ],
+        { bandFraction: 0.03 },
+      ),
+    /performance assertion drifted: mixedNoBlowup/u,
+  )
+})
+
+test('coherence still requires numeric threshold equality when neither report publishes a rule', () => {
+  assert.throws(
+    () =>
+      adjudicateReports(
+        [
+          bareReport('reports/first.json', 1.49, 1.5),
+          bareReport('reports/numeric-drift.json', 1.48, 1.500002),
+          bareReport('reports/third.json', 1.47, 1.5),
+        ],
+        { bandFraction: 0.03 },
+      ),
+    /performance assertion drifted: mixedNoBlowup/u,
+  )
+
+  const adjudicated = adjudicateReports(
+    [
+      bareReport('reports/first.json', 1.49, 1.5),
+      bareReport('reports/second.json', 1.48, 1.5),
+      bareReport('reports/third.json', 1.47, 1.5),
+    ],
+    { bandFraction: 0.03 },
+  )
+  assert.equal(adjudicated.decision, 'passed')
+})
+
+test('coherence fails closed when only one report publishes a derivation rule', () => {
+  assert.throws(
+    () =>
+      adjudicateReports(
+        [
+          derivedReport('reports/first.json', 1.49, 1.5),
+          bareReport('reports/bare.json', 1.48, 1.5),
+          derivedReport('reports/third.json', 1.47, 1.5),
+        ],
+        { bandFraction: 0.03 },
+      ),
+    /threshold derivation drifted: mixedNoBlowup/u,
+  )
+  assert.throws(
+    () =>
+      adjudicateReports(
+        [
+          bareReport('reports/first.json', 1.49, 1.5),
+          derivedReport('reports/derived.json', 1.48, 1.5),
+          bareReport('reports/third.json', 1.47, 1.5),
+        ],
+        { bandFraction: 0.03 },
+      ),
+    /threshold derivation drifted: mixedNoBlowup/u,
+  )
+})
+
+test('a threshold derivation must be a non-empty string', () => {
+  for (const malformed of ['', 42, null]) {
+    assert.throws(
+      () =>
+        adjudicateReports([derivedReport('reports/only.json', 1.2, 1.5, malformed)], {
+          bandFraction: 0.03,
+        }),
+      /mixedNoBlowup has an empty threshold derivation/u,
+    )
+  }
+})

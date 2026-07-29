@@ -1,33 +1,33 @@
 ---
 title: Formatting
-description: How oxc-tsrx-fmt formats .tsrx files with real Oxfmt layout and converts the result back to TSRX.
+description: How oxc-tsrx formats .tsrx files with real Oxfmt layout and converts the result back to TSRX.
 ---
 
 # Formatting
 
-`oxc-tsrx-fmt` formats `.tsrx` files with Oxfmt, OXC's formatter, and then
-converts the result back into TSRX. Ordinary JS/TS files are formatted by
-Oxfmt directly, with a byte-for-byte-identical-output guarantee versus
-running `oxfmt` yourself.
+`oxfmt` formats your `.tsrx` files with OXC's real formatter, then converts the
+result back into TSRX. Ordinary JS/TS files go straight to Oxfmt, and the output
+is byte-for-byte identical to running `oxfmt` yourself.
 
 ## How a format run works
 
 <!-- pipeline:format -->
 
-Step by step:
+Four steps:
 
-1. The file is scanned and projected to a valid-TSX copy, the same idea as
-   [linting](/guide/linting), except here the placeholders are special
-   markers designed to survive formatting.
-2. Oxfmt parses and formats that copy. Once.
-3. The *lift* walks the formatted output and turns it back into TSRX:
-   markers become `@if`/`@for`/`@switch`/`@try` again, your code keeps its
-   new formatting, dynamic closing tags are rebuilt from their opening
-   expression, and raw `<style>` contents are copied from your original file
-   untouched.
-4. As a final safety check, the lifted result is re-scanned and must match
-   the structural fingerprint of the input. If anything doesn't line up, the
-   tool errors out instead of writing a broken file.
+1. **Copy.** Build a valid TSX copy, the same idea as
+   [linting](/guide/linting), except the placeholders here are markers designed
+   to survive formatting.
+2. **Format.** Oxfmt parses and formats that copy, once.
+3. **Convert back.** Markers become `@if`, `@for`, `@switch`, and `@try` again,
+   and your code keeps its new formatting.
+4. **Check.** The result is re-read and compared against the original. If the
+   structure does not match, the tool errors out instead of writing a broken
+   file.
+
+Two things are carried over rather than reformatted: dynamic closing tags are
+rebuilt from their opening expression, and whatever is inside a raw `<style>`
+block is copied from your file untouched.
 
 ## Usage
 
@@ -39,17 +39,16 @@ your project half-formatted. Symbolic links are rejected.
 
 ## Configuration
 
-`oxc-tsrx-fmt` finds one `.oxfmtrc.json` or `.oxfmtrc.jsonc` by searching
-upward, or takes `--config`/`-c`. The standard layout options work:
-`printWidth`, `singleQuote`, `semi`, `useTabs`, `tabWidth`, `trailingComma`,
-`arrowParens`, `bracketSpacing`, `singleAttributePerLine`, and more, plus
-`overrides` and `ignorePatterns`. The full list is in
-[Configuration](/integrations/configuration).
+Your `.oxfmtrc.json` works as usual. `oxfmt` searches upward from the current
+directory to find it, or takes a `--config` path, and the layout options you
+already use all apply: `printWidth`, `singleQuote`, `semi`, `tabWidth`,
+`trailingComma`, and the rest, plus `overrides` and `ignorePatterns`.
+[Configuration](/integrations/configuration) has the full list.
 
-Options that could silently change TSRX output in unsupported ways are
-rejected with a clear error before anything is formatted or written:
-`sortImports`, `jsdoc` formatting, embedded-language formatting, experimental
-flags, `.editorconfig`, and JS/TS config files.
+A few options are refused with a clear error before anything is written,
+because they would change `.tsrx` output in ways this project cannot yet
+guarantee: `sortImports`, `jsdoc`, embedded-language formatting, experimental
+flags, `.editorconfig`, and JS or TS config files.
 
 ## CSS inside `<style>` is preserved, not formatted
 
@@ -58,9 +57,9 @@ them. The upstream OXC CSS formatter currently can't be used without patching
 OXC's dependency graph, and this project's core rule is *no patches*, so CSS
 formatting waits until upstream exposes a clean package boundary.
 
-## How we know the lift is safe
+## How we know it is safe
 
-A pinned, read-only corpus of real-world TSRX (the Markless oracle) proves
-that all 179 parser-valid tracked files format, re-parse, and converge
-(formatting a formatted file changes nothing), and that all 12 known invalid
-fixtures are rejected. Every raw `<style>` payload is compared byte-for-byte.
+This is tested against a real TSRX codebase, not just fixtures. All 179 valid
+files format, re-parse, and settle, meaning formatting an already-formatted file
+changes nothing. All 12 broken files are rejected rather than mangled, and every
+raw `<style>` block comes out byte for byte identical.

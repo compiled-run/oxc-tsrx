@@ -137,6 +137,21 @@ pub(crate) struct RawSamples {
     pub(crate) candidate_cold_cli_ns: Vec<u64>,
 }
 
+/// An assertion as it appears in the results JSON: the raw comparison plus, for the one
+/// threshold in this family that is not read straight from `budgets.json`, the rule that
+/// produced it. The adjudicator compares that rule instead of the numeric limit, so a
+/// page-granular difference in measured RSS between two reruns of the same build cannot be
+/// mistaken for a budget change. The string is a pure function of frozen budget fields and
+/// never carries a measured value.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ReportedAssertion {
+    #[serde(flatten)]
+    pub(crate) assertion: Assertion,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) threshold_derivation: Option<String>,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct Report {
@@ -148,7 +163,7 @@ pub(crate) struct Report {
     pub(crate) config_session: ConfigSessionSummary,
     pub(crate) summaries: Summaries,
     pub(crate) raw_samples: RawSamples,
-    pub(crate) assertions: Vec<Assertion>,
+    pub(crate) assertions: Vec<ReportedAssertion>,
     pub(crate) passed: bool,
     pub(crate) limitations: [&'static str; 3],
 }

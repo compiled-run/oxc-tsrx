@@ -41,7 +41,7 @@ That is nine npm packages. `@oxc-tsrx/runtime`, `@oxc-tsrx/parser`,
 longer exist. `docs/releasing/v0.1.0-launch.json` holds the authoritative list
 and the publish order.
 
-Every native artifact must report the same project version and canonical OXC
+Every native artifact must report the same project version and official OXC
 revision. A partial set is not a supported release.
 
 ## 1. Freeze the candidate

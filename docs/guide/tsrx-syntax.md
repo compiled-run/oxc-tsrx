@@ -74,7 +74,7 @@ error-plus-reset-binding forms:
   <Profile user={await loadUser()} />
 } @pending {
   <Skeleton />
-} @catch (error; reset) {
+} @catch (error, reset) {
   <Retry error={error} onRetry={reset} />
 }
 ```
@@ -87,7 +87,7 @@ expression positions.
 ## Dynamic JSX tags
 
 Matched dynamic opening/closing tags are recognized and validated against the
-real expression AST from the single canonical OXC parse, with no lexical
+real expression AST from the single official OXC parse, with no lexical
 approximation and no second parser:
 
 ```tsrx

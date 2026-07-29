@@ -5,36 +5,32 @@ description: How oxc-tsrx runs real OXC lint rules on .tsrx files and reports er
 
 # Linting
 
-`oxc-tsrx` lints `.tsrx` files (and ordinary JS/TS files) with OXC's real lint
-rules. Authored descendants use the canonical rule engine; diagnostics or
-fixes that would touch TSRX projection scaffolding are suppressed rather than
-presented as equivalent Oxlint behavior.
+`oxc-tsrx` lints `.tsrx` files, and ordinary JS/TS files too, with OXC's real
+lint rules. The code you wrote goes through the same rule engine Oxlint uses. If
+a diagnostic or a fix would land on the placeholder code the tool generates
+instead of on yours, it is dropped rather than shown.
 
 ## How a lint run works
 
 <!-- pipeline:lint -->
 
-Step by step:
+Four steps:
 
-1. The file is scanned once to find the TSRX-only syntax.
-2. A valid-TSX copy is built in memory (the *projection*). Your code is copied
-   into it unchanged; only the TSRX control syntax is replaced with TSX
-   placeholders. The tool records which byte ranges in the copy correspond to
-   which byte ranges in your file.
-3. OXC parses and lints that copy, once.
-4. Every diagnostic is translated back through those recorded ranges, so the
-   error you see points at the right line and column in your `.tsrx` file.
+1. **Scan.** Read the file once and find the TSRX-only syntax.
+2. **Copy.** Build a valid TSX copy in memory, the *projection*. Your code is
+   copied over unchanged, and only the TSRX controls become placeholders.
+3. **Lint.** OXC parses and lints that copy, once.
+4. **Map back.** Move every error onto your file, so the line and column point
+   at what you wrote.
 
-Ordinary `.js`, `.jsx`, `.ts`, and `.tsx` files skip steps 1–2 entirely: the
-file goes straight to OXC, exactly like running `oxlint` yourself.
+Step 2 also records which piece of the copy came from which piece of your file,
+and that record is what makes step 4 exact.
 
-## See the projection for yourself
+Ordinary `.js`, `.jsx`, `.ts`, and `.tsx` files skip steps 1 and 2 entirely.
+They go straight to OXC, exactly like running `oxlint` yourself.
 
-The tabs below show one real file at each stage. The projected TSX is the
-actual output of the projection engine, and the diagnostics are actual
-`oxc-tsrx` output. Notice how the `@`-controls become scaffold comments and
-wrappers in tab 2, while your code (like `var total` and `debugger;`) is
-byte-for-byte identical, which is what makes exact mapping possible:
+Here is one real file at each of those stages, with the actual copy the tool
+built and the actual diagnostics it returned:
 
 <!-- projection-explorer -->
 
@@ -49,11 +45,12 @@ engine errors.
 
 ## Why you never see errors in code you didn't write
 
-The placeholders in the projected copy are code too, and sometimes a lint rule
-fires on *them* instead of on your code. When that happens, the whole
-diagnostic is dropped (and counted in metadata) rather than shown. The rule
-is simple: a diagnostic must land entirely inside bytes you wrote, or you
-don't see it. No error will ever point into invisible scaffolding.
+The copy OXC reads contains placeholder code you never typed, and now and then a
+rule fires on a placeholder instead of on your code.
+
+When that happens the diagnostic is dropped rather than shown, and the run
+counts it so nothing disappears silently. The rule is simple: if an error does
+not sit entirely inside code you wrote, you never see it.
 
 ## Safe fixes
 
@@ -65,27 +62,31 @@ is rejected.
 
 ## Configuration
 
-`oxc-tsrx` finds one `.oxlintrc.json` or `.oxlintrc.jsonc` by searching from
-your working directory upward, or takes an explicit `--config`/`-c` path. The
-usual Oxlint fields work: built-in rules and plugins with options, `env`,
-`globals`, `settings`, `extends`, `overrides`, `ignorePatterns`, and warning
-policy.
+Your `.oxlintrc.json` works as usual. `oxc-tsrx` searches upward from the
+current directory to find it, or takes a `--config` path, and the ordinary
+Oxlint fields all apply: rules, plugins, `env`, `globals`, `settings`,
+`extends`, `overrides`, and `ignorePatterns`.
 
-JavaScript lint plugins and direct-native JS/TS config files are rejected up
-front instead of half-working. Type-aware lint is supported only through an
-explicit flag and the exact verified `oxlint-tsgolint` 0.24.0 executable; a
-missing or mismatched tool fails without silently falling back. See
-[Configuration](/integrations/configuration) for the exact support matrix
-and [Custom JavaScript plugins](/integrations/custom-js-plugins) for the
-tested parser adapters and remaining host boundary.
+Three things behave differently here:
+
+- **The config has to be JSON or JSONC.** A `.js` or `.ts` config is rejected up
+  front rather than half-working.
+- **Your own JavaScript lint plugins do run on `.tsrx`**, but they see the TSX
+  copy rather than the code you wrote. Read
+  [Custom JavaScript plugins](/integrations/custom-js-plugins) before relying on
+  them.
+- **Type-aware lint is opt-in** and needs exactly `oxlint-tsgolint` 0.24.0. A
+  missing or mismatched version fails loudly instead of quietly switching
+  itself off.
+
+[Configuration](/integrations/configuration) lists every supported field.
 
 ## What is tested
 
-The retained test suite proves `no-debugger` and `no-unused-vars` report at
-the correct original positions, and that `no-var` fixes apply correctly,
-across all the control-flow forms (`@if`, `@for`, `@switch`, `@try`). It does
-not claim every OXC rule behaves identically around the placeholders; that
-broader claim is deliberately left unclaimed until proven. A separate matrix
-proves authored type-aware labels, explicit `.tsrx` imports, one type process
-per batch, and identity-safe fixes without changing the default one-OXC-parse
-path.
+Tests prove that `no-debugger` and `no-unused-vars` report at the right line and
+column in your file, and that `no-var` fixes apply correctly, inside every
+control-flow form (`@if`, `@for`, `@switch`, `@try`). Type-aware linting has its
+own suite covering the same ground.
+
+What is *not* claimed: that every OXC rule behaves identically around the
+placeholders. That stays unclaimed until it is proven.

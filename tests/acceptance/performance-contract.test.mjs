@@ -92,8 +92,8 @@ function assertComparativeRoute(report, label) {
   assert.deepEqual(report.boundary.executables, {
     eslint: 'node_modules/.bin/eslint',
     oxlint: 'node_modules/oxlint-current/bin/oxlint',
-    oxcTsrx: 'node_modules/oxlint-tsrx/bin/oxlint',
-    oxcTsrxMixed: 'node_modules/oxlint-tsrx/bin/oxlint',
+    oxcTsrx: 'node_modules/oxc-tsrx/bin/oxlint',
+    oxcTsrxMixed: 'node_modules/oxc-tsrx/bin/oxlint',
   }, `${label}: executables`)
   for (const lane of ['eslint', 'oxlint', 'oxcTsrx', 'oxcTsrxMixed']) {
     assert.match(report.boundary.argumentShape[lane], /--no-ignore/u, `${label}: ${lane} args`)
@@ -497,12 +497,12 @@ test('every public performance lane is reproducible, structured, and budget-froz
   assert.equal(comparative.validation.routeEvidence.mixedUsesPublicCanonicalNodeChild, true)
   assert.equal(comparative.validation.routeEvidence.mixedUsesNativeTsrxChild, true)
   assert.equal(comparative.validation.routeEvidence.mixedUsesPrivateInProcessAdapter, false)
-  assert.equal(comparative.boundary.executables.oxcTsrx, 'node_modules/oxlint-tsrx/bin/oxlint')
+  assert.equal(comparative.boundary.executables.oxcTsrx, 'node_modules/oxc-tsrx/bin/oxlint')
   assert.deepEqual(comparative.boundary.rules, ['no-debugger'])
   assert.equal(comparative.build.profile, 'release')
-  assert.match(comparative.build.binary, /^node_modules\/oxlint-tsrx\/bin\/oxlint/u)
+  assert.match(comparative.build.binary, /^node_modules\/oxc-tsrx\/bin\/oxlint/u)
   assert.match(comparative.build.oxcRevision, /^[0-9a-f]{40}$/u)
-  assert.match(comparative.versions.oxcTsrxLauncher, /^oxlint-tsrx\s+\S+/u)
+  assert.match(comparative.versions.oxcTsrxLauncher, /^oxc-tsrx\s+\S+/u)
   for (const lane of ['eslint', 'oxlint', 'oxcTsrx', 'oxcTsrxMixed']) {
     assert.equal(comparative.tools[lane].rawMs.length, comparative.samplePolicy.measured, lane)
     assert.equal(comparative.validation[lane].files, comparative.corpus.files, `${lane}: files`)
@@ -516,7 +516,7 @@ test('every public performance lane is reproducible, structured, and budget-froz
   assert.equal(vite.assertions.directOrdinaryFormatP95, true)
   assert.equal(vite.assertions.directOrdinaryFormatRatio, true)
   assert.ok(vite.ratios.directOrdinaryFormatVsCanonicalP95 <= 1.25)
-  assert.equal(vite.build.formatLauncher, 'node_modules/oxfmt-tsrx/bin/oxfmt')
+  assert.equal(vite.build.formatLauncher, 'node_modules/oxc-tsrx/bin/oxfmt')
   assert.equal(vite.invariants.ordinaryFormatProcessParity, true)
   assert.equal(vite.invariants.ordinaryFormatDispatchEvents, 0)
 })

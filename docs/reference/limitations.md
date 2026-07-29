@@ -12,293 +12,95 @@ skipped file or a wrong-but-plausible result.
 
 `oxc-tsrx` lints, formats, parses, and powers your editor. Turning `.tsrx` into
 something a browser runs is a separate job, and it belongs to your framework's
-TSRX plugin. That plugin already exists: the TSRX toolchain ships one for React,
-Preact, Solid, Vue, Ripple, and Octane, across Vite, Rspack, Turbopack, and Bun.
-For React on Vite it is two packages and three lines of config:
+TSRX plugin. That plugin already exists for React, Preact, Solid, Vue, Ripple,
+and Octane, across Vite, Rspack, Turbopack, and Bun. For React on Vite:
 
 ```sh
 npm install @tsrx/react @tsrx/vite-plugin-react
 ```
 
-```js
-import tsrxReact from '@tsrx/vite-plugin-react'
-
-export default defineConfig({ plugins: [tsrxReact()] })
-```
-
 The [TSRX getting started guide](https://tsrx.dev/getting-started) has the other
-framework and bundler combinations. Install one and `.tsrx` imports build and
-run like any other module.
-
-Without a TSRX plugin, your bundler reads `.tsrx` as ordinary TypeScript and
-fails on the first `@{`:
-
-```text
-$ vp build
-✗ `,` or `)` expected
-```
-
-That error means no TSRX plugin is installed. It does not mean anything is wrong
-with `oxc-tsrx`, and installing `oxc-tsrx` will not fix it. The two sit on
-different sides of your project: the framework plugin owns compilation, CSS,
-source maps, and HMR, and this package owns lint, format, parse, and editor
-support.
-
-`oxc-tsrx` cannot stand in for that plugin, and neither can its public API.
+framework and bundler combinations. Without one of them your bundler reads
+`.tsrx` as ordinary TypeScript and fails on the first `@{`, and installing
+`oxc-tsrx` will not fix that. The public API is not a substitute either:
 `oxc-tsrx/parser` gives you an AST and `oxc-tsrx/format` gives you formatted
-TSRX, and neither is code a bundler can consume. The legal-TSX projection that
-makes linting and formatting work is lint scaffolding, not a build output:
-`<style>` payloads are replaced with `null` and control flow is rewritten to
-plain `if`, so running it would not run your component.
+TSRX, and neither is code a bundler can consume.
 
 ## Formatting
 
-- **CSS inside `<style>` is never reformatted.** The surrounding TSRX/JSX
-  gets full Oxfmt layout, but style contents are preserved byte-for-byte.
-  Using OXC's CSS formatter currently requires patching OXC's dependency
-  graph, and the project's core rule is no patches, so this waits on
-  upstream. See the
-  [embedded CSS boundary](/architecture/embedded-css-boundary).
-- `.editorconfig` and formatter options that take callbacks are rejected.
-- Oxfmt options that only affect other languages (JSON, prose) do not change
-  `.tsrx` output.
+- **CSS inside `<style>` is never reformatted.** The surrounding TSRX and JSX
+  gets full Oxfmt layout, and style contents are preserved byte for byte. See
+  [the embedded CSS boundary](/architecture/embedded-css-boundary).
+- `.editorconfig` and formatter options that take callbacks are rejected, and
+  `--disable-nested-config` is not supported for `.tsrx`.
 
 ## Syntax
 
-- Dynamic tags whose name expression contains more dynamic JSX (a dynamic tag
-  inside a dynamic tag's name) are not supported.
-- Half-typed or broken syntax is never linted or formatted approximately. The
-  editor publishes a `parse-error`, returns no formatting edit, and resumes
-  normal diagnostics once the buffer is valid again.
+- A dynamic tag whose name expression contains more dynamic JSX, meaning a
+  dynamic tag inside a dynamic tag's name, is not supported.
 
 ## Linting
 
-- **JavaScript lint plugins on `.tsrx` see the projection, not your authored
-  tree.** Your `jsPlugins` rules do run on `.tsrx`, from the `oxlint` command
-  and in the editor, but neither runs your module against the TSRX AST. The
-  native path is Rust with no Node.js runtime, so the legal-TSX projection of
-  your file is linted by the published Oxlint binary instead, and diagnostics
-  are mapped back to your bytes. Four consequences:
-  - `@if`, `@for`, `@switch`, and `@try` reach your rule as the ordinary `if`,
-    `for`, and `switch` statements they project to. A rule keyed on
-    `JSXForExpression` never fires on this route. Your rule does visit those
-    projected statements, but a report *on* one is dropped, because its span
-    covers text the projection wrote. A rule keyed on `IfStatement` fires inside
-    Oxlint and produces nothing on a file whose `if` came from `@if`.
-  - `context.filename` is the mirror path, ending in `.tsrx.tsx`, not your
-    authored path.
-  - Each linted `.tsrx` file is parsed once more. The cost is announced on
-    stderr by the CLI and in the server log by the editor, and
-    `settings.oxcTsrx.jsPluginsOnTsrx: false` turns the lane off.
-  - A diagnostic whose position falls on projected-only text is dropped rather
-    than reported at an invented location. Dropped reports are counted, not
-    silent: `--format=json` carries `oxcTsrx.jsPluginProjection.unmapped`, the
-    CLI notes the count on stderr, and the editor publishes a
-    `js-plugins-unmapped` warning. The exit code is unchanged, so a CI job that
-    wants to fail on dropped rules has to read that field itself.
-  - **This lane runs in CI on Linux only.** Windows and macOS are exercised on
-    every pull request now, with a real lint, a real format, live
-    `--lsp` sessions, and a parser addon load (see [platform
-    support](/reference/platform-support)), but the suites that drive
-    `jsPlugins` on `.tsrx` are not in that set. Nothing has spawned the Node
-    host from the Rust process on Windows or macOS, so treat this one lane as
-    unverified there rather than known-good, even though the platform itself is
-    Tier 1.
-
-  For a rule that must see authored TSRX nodes there is still no released
-  Oxlint route. *The local ESLint adapter* is one escape hatch and is AST-only:
-  the public parser v1 exposes no token stream, so `SourceCode` token rules
-  cannot be correct, and there is no full framework scope contract. *The
-  upstream custom-parser draft* is broader (it does provide `SourceCode` and
-  forces token/range/location options), but it is unmerged and built locally,
-  so it is not a released product path. See [Custom JavaScript
-  plugins](/integrations/custom-js-plugins).
-- **Type-aware rules** require an explicit `--type-aware` or `--type-check`
-  opt-in and the exact supported `oxlint-tsgolint` executable. Missing or
-  mismatched tooling fails instead of silently downgrading. The editor
-  analyzes each requested document; cross-document unsaved project semantics
-  are not claimed.
-- **The `oxlint-tsgolint` version has to match, and Vite+ 0.2.6 ships a
-  different one.** This package runs the type-aware lane against
-  `oxlint-tsgolint` 0.24.0 and refuses any other version rather than guess at
-  the protocol. Vite+ 0.2.4 depends on exactly `=0.24.0`; Vite+ 0.2.6 depends on
-  `=7.0.2001`, which its own `oxlint` uses happily and this package will not.
-  Vite+ picks the runner with
-  `require.resolve("oxlint-tsgolint/bin/tsgolint", { paths: [process.cwd(), …] })`
-  and passes the result to whichever `oxlint` it launches, so the outcome is a
-  property of your install layout rather than of Vite+ 0.2.6 on its own:
-  - **Stock `vp create` scaffold on 0.2.6.** Nothing at the project root
-    resolves `oxlint-tsgolint`, so Vite+'s own 7.0.2001 wins. With
-    `lint.options.typeAware` or `typeCheck` set, `vp lint` over a batch
-    containing a `.tsrx` file reports the ordinary half, then stops with
-    `unsupported tsgolint version 7.0.2001` and exits 2.
-  - **Any layout where the project root resolves 0.24.0.** Adding
-    `oxlint-tsgolint@0.24.0` as a direct dev dependency does it, and so can a
-    workspace root, a hoisting install layout, or an ancestor `node_modules`
-    that happens to contain it. Vite+ then hands 0.24.0 to both linters and the
-    type-aware lane runs on `.tsrx` and on ordinary files alike. That last case
-    is how an earlier version of this page came to report the failure and a
-    later audit came to report the opposite: both measurements were correct
-    about the tree they ran in.
-  - **A batch with no `.tsrx` file in it** is unaffected either way, because it
-    never reaches this package's type-aware lane.
-
-  Measured on a `vp create` React scaffold with published `oxc-tsrx` 0.1.4 and
-  Vite+ 0.2.6, in a directory with no ancestor `node_modules`, on darwin-arm64;
-  all three states are printed on [the type-aware template
-  default](/integrations/vite-plus#the-type-aware-template-default).
+- **JavaScript lint plugins see the projection, not your authored tree.** Your
+  `jsPlugins` rules do run on `.tsrx`, but the native path is Rust with no
+  Node.js runtime, so they lint a legal-TSX copy of your file, at the cost of
+  one extra parse per file, which is announced every time.
+  `settings.oxcTsrx.jsPluginsOnTsrx: false` turns the lane off.
+  - `@if`, `@for`, `@switch`, and `@try` arrive as the ordinary statements they
+    project to.
+  - A report landing on projected-only text is counted and dropped, never placed
+    at an invented location.
+  - [Custom JavaScript plugins](/integrations/custom-js-plugins) has the details
+    and the measurements.
+- **Type-aware rules need an explicit `--type-aware` or `--type-check`** and the
+  exact supported `oxlint-tsgolint` executable. Any other version fails rather
+  than guess at the protocol, which is what a fresh Vite+ scaffold runs into when
+  it resolves Vite+'s own runner instead. See [the type-aware template
+  default](/integrations/vite-plus#type-aware-lint-may-need-one-dependency).
 - **`vp lint` and your editor read different config files.** Vite+ owns lint
-  configuration in the `lint` block of `vite.config.ts` and folds any scaffolded
-  `.oxlintrc.json` into it, while the language server reads `.oxlintrc.json`.
-  Measured on a fresh scaffold: a `jsPlugins` entry present only in
-  `.oxlintrc.json` produced nothing from `vp lint`, and the same entry present
-  only in `vite.config.ts` produced nothing in the editor. A rule you want on
-  both surfaces has to be declared twice, in the two different shapes those
-  files use.
+  configuration in the `lint` block of `vite.config.ts`, and the language server
+  reads `.oxlintrc.json`, so a rule you want on both surfaces has to be declared
+  twice, in the two shapes those files use.
 - Not every OXC rule is guaranteed to behave identically around the TSRX
-  placeholders. The tested guarantee covers the standard rules in the test
-  matrix; anything that would report inside placeholder code is suppressed.
-- Lint output comes out as `default`, `agent`, `github`, or `json`. Any other
-  Oxlint format is refused on a run that includes `.tsrx`.
-- `--disable-nested-config` is not supported for `.tsrx` formatting.
+  placeholders. Anything that would report inside placeholder code is suppressed.
+- On a run that includes `.tsrx`, lint output comes out as `default`, `agent`,
+  `github`, or `json`. Any other Oxlint format is refused.
 
-## CLI and configuration
+## Commands and configuration
 
-- **A bare `npx oxlint` lints `node_modules` too, and that is upstream
-  behavior.** With no path argument and nothing else narrowing the run, Oxlint
-  walks the whole current directory. In a scratch project created with
-  `npm init -y` that is thousands of warnings, nearly all of them from
-  `node_modules`. Official Oxlint from the same install reproduces it, so this
-  is parity with canonical Oxlint and not something the TSRX drop-in adds.
-
-  A `.gitignore` containing `node_modules` removes it completely, and no git
-  repository is needed for that file to count. Naming a path
-  (`npx oxlint src`) avoids it as well. This project ships no ignore file, no
-  default config, and no postinstall that would write one for you, so an empty
-  scratch folder is the one place you will meet it.
-- **`npx oxlint --fix` will rewrite files inside `node_modules` if they are in
-  scope.** Measured in a project with no source files of its own: files changed
-  under `node_modules`, exit code 0, no warning. Official Oxlint does the same
-  thing in the same folder, so again this is upstream parity. Point `--fix` at a
-  path you own, or make sure `node_modules` is ignored first. `oxfmt` is not
-  affected; it skips `node_modules` unless you pass `--with-node-modules`.
-- **`npx oxc-tsrx status` reports `missing` three times in a healthy project.**
-  The first three of its four slots are the Vite+ compatibility facades, so
-  `oxc-parser: missing`, `oxlint: missing`, and `oxfmt: missing` are the correct
-  state for every command-line and editor user, and the fourth reads
-  `oxc.path.oxlint: unnecessary (editor)` because the ordinary lookup already
-  reaches this package. It exits 0. Use `npx oxc-tsrx providers` to check that
-  TSRX support is wired up.
 - **`setup` reports the TSRX editor prerequisites and never acts on them.** It
-  does not install `@tsrx/typescript-plugin` or a framework binding, does not
-  edit `package.json`, and does not edit any `tsconfig.json`, so every `!` line
-  it prints is work left for you. That ceiling is deliberate: this package owns
-  lint and format for `.tsrx`, and TSRX language support in the editor belongs
-  to the TSRX toolchain. The one thing `setup` does write outside
-  `node_modules` is the `oxc.path.oxlint` key in your `.vscode/settings.json`,
-  and only when the ordinary lookup cannot reach this package.
-- **A seventh command, `tsgolint`, appears in `node_modules/.bin`.** It is not
-  part of this project. It comes from the `oxlint-tsgolint` dependency, which is
-  the official type-aware runner behind `--type-aware` and `--type-check`. You
-  never invoke it yourself.
-- The native binaries take **explicit file paths only**. Directory walking
-  and globs come from the `oxc-tsrx` npm commands and Vite+.
-- Config files must be JSON/JSONC. JS/TS config modules are rejected, except
-  through the Vite+ path, where the toolchain resolves your
-  `vite.config.*` once via Vite+'s public API and hands both engines the same
-  extracted `lint`/`fmt` settings. Values that cannot be serialized (like
-  callbacks) fail with a clear error.
+  does not install `@tsrx/typescript-plugin` or a framework binding, and does not
+  edit `package.json` or any `tsconfig.json`, so every `!` line it prints is work
+  left for you. TSRX language support in the editor belongs to the TSRX
+  toolchain.
+- **Vite+ needs `oxc-tsrx setup` again after every clean install.** Vite+ finds
+  its lint and format tools by the literal package names `oxlint` and `oxfmt`, so
+  `setup` writes those slots inside `node_modules`, and a clean install wipes
+  them. That rerun is real and is not scheduled to go away. See [the one extra
+  step Vite+ needs](/integrations/vite-plus#the-one-extra-step-vite-needs).
+- **A project that pins official `oxlint` or `oxfmt` keeps official behavior for
+  those command names.** Breaking a pinned setup would be worse. `.tsrx` is then
+  reachable through `oxc-tsrx-lint` and `oxc-tsrx-fmt`, which are always
+  installed.
+- The native binaries take explicit file paths only. Directory walking and globs
+  come from the `oxc-tsrx` npm commands and Vite+.
+- Config files must be JSON or JSONC. JS and TS config modules are rejected,
+  except through Vite+, where the toolchain resolves your `vite.config.*` once
+  and hands both engines the same extracted settings. Values that cannot be
+  serialized, like callbacks, fail with a clear error.
 
-## Packaging and ecosystem
+## Editor and platform coverage
 
-- **Prepared, not published from this repository state.** The eight native npm
-  targets and the hosted release workflow are ready. Three of the eight are
-  built and executed on every pull request, and the other five are
-  built, packaged, and smoked only when a release candidate is built by hand.
-  [Platform support](/reference/platform-support) is the per-target split, and
-  it names what the two musl packages never get. npm availability is only
-  claimed after an explicitly approved publication.
-- **Vite+ needs one command after install, permanently.** Vite+ finds its
-  lint/format tools by the literal *package* names `oxlint` and `oxfmt`, and it
-  pins its own `oxlint@=1.72.0`. A bin name cannot answer a package resolution,
-  and `oxc-tsrx` cannot legitimately publish a package under either name, so
-  `oxc-tsrx setup` writes those project-local slots instead.
-
-  Because `setup` works inside `node_modules`, a clean install wipes it and you
-  run it again. That rerun is real and it is not scheduled to go away.
-- **Everywhere except Vite+, the install is the whole step, and the `oxlint` /
-  `oxfmt` command names are how.** Counted out: one step for the command line,
-  one step for the editor, two for Vite+, and the second Vite+ step repeats
-  after every clean dependency install. The full table is in
-  [Getting Started](/guide/getting-started#the-minimum-steps-per-host).
-
-  `oxc-tsrx` declares bins under those names,
-  which is exactly what released Vite+ and the released official OXC extension
-  select by. That is the shipped delivery mechanism, not a stopgap.
-
-  `oxc-tsrx` also declares a static `oxc.provider` block in its own
-  `package.json`, and a host that reads that block can find TSRX from the
-  install alone. Three separate facts hold at once here, and they are easy to
-  blur:
-  - discovery is implemented and proven in CI from clean consumers on npm,
-    pnpm, Bun, and both Yarn Berry linkers;
-  - no released Oxlint, Oxfmt, Vite+, or `oxc.oxc-vscode` build reads
-    `oxc.provider`. Nothing has been submitted upstream, nothing has been
-    accepted, and upstream patching is not part of this project's plan, so no
-    released host is going to start reading it;
-  - so `oxc.provider` is a recorded proposal, and the command names plus
-    `setup` are what actually deliver the product. They stay.
-
-  Of the four capabilities that block declares, only the language server has a
-  host, and that host is the `oxlint --lsp` multiplexer inside `oxc-tsrx`. The
-  parser has no host at all: it is public, but you reach it by importing
-  `oxc-tsrx/parser` yourself, never through discovery.
-- **A project that pins official `oxlint` or `oxfmt` keeps official behavior
-  for those command names.** That is deliberate: breaking a pinned setup would
-  be worse. `.tsrx` is then reachable through `oxc-tsrx-lint` and
-  `oxc-tsrx-fmt`, which are always installed.
-- An earlier research design that would have had `setup` write project-owned
-  dependency aliases, overrides, and a lockfile once is **not** the roadmap. It
-  would put permanent rewrites in your own manifest to satisfy one host's
-  resolution, which is worse than one explicit, reversible command. That design
-  is superseded, not pending.
-- The language server has two different levels of proof. Its protocol suite
-  runs in CI on Linux, and every pull request also starts real
-  `oxlint --lsp` and `oxfmt --lsp` stdio sessions on Linux, Windows, and macOS.
-  The released-official-extension integration, which drives a real extension
-  host, is proven locally only, on darwin-arm64. The optional legacy VSIX is
-  also proven that way, and its Marketplace availability is a separate
-  approval-gated action that the primary editor workflow does not need.
-- OXC upgrades are manual: bump the adapter crate and lockfile, then pass the
-  full behavior and performance suites.
-
-## What the test suites do and do not prove
-
-- **A published platform is not a tested platform, and the two lists differ.**
-  Eight targets are published. Three of them (`linux-x64-gnu`,
-  `win32-x64-msvc`, `darwin-arm64`) run a real lint, a real format, live
-  `--lsp` sessions, and a parser addon load on every pull request and on every
-  commit that lands on `main`. Three more get the same work only when a release
-  candidate is built by hand.
-  The two musl targets have never been run on a musl system at all, and their
-  parser addon has never been loaded anywhere, which is a limit of the runners
-  available rather than an oversight. The whole matrix, with the job behind
-  each row, is in [platform support](/reference/platform-support).
-- The pinned read-only Markless corpus proves the formatter contract on real
-  code: 179/179 valid files format, re-parse, and converge; 12/12
-  known-invalid fixtures are rejected; every `<style>` payload survives
-  byte-for-byte. It does not test Markless's own compiler or runtime.
-- The Vite and Vite+ build/dev/command matrices pass for the tested minimum
-  Vite+ 0.1.24 and the pinned current Vite+ 0.2.4. The end-to-end `vp` command
-  matrix runs on npm only; pnpm, Yarn, and Bun are not claimed for those
-  commands. The package-manager facade proof and the npm `vp` command proof are
-  separate axes, not one combined guarantee.
-- A disposable-copy editor walkthrough proves automatic activation, live
-  diagnostics, real format-on-save, and one validated safe action without
-  changing the external worktree. Automatic activation there is the optional
-  legacy VSIX's, which declares `.tsrx` itself. The released official OXC
-  extension does not: every one of its activation events is an `onLanguage:`
-  entry and none of them is `.tsrx`'s language, so a `.tsrx` file opened first
-  in a session does not start it. Open an ordinary JavaScript, TypeScript, or JSON
-  file once and the rest of the session works. See
-  [Editor integration](/integrations/editor#what-a-plain-install-actually-covers).
+- **The released official OXC extension does not start on a `.tsrx` file.** It
+  activates only on `onLanguage:` events and none of them is TSRX's language, so
+  a `.tsrx` file opened first in a session does not start it. Open an ordinary
+  JavaScript, TypeScript, or JSON file once and the rest of the session works.
+  See [Editor
+  integration](/integrations/editor#what-a-plain-install-actually-covers).
+- **Three lanes run in CI on Linux only:** the editor server, the type-aware
+  lane, and the JavaScript plugin lane. Windows and macOS get a real lint, a real
+  format, live `--lsp` sessions, and a parser addon load on every pull request,
+  so treat those three as unverified there rather than known-good.
+- Publishing a platform is a weaker promise than testing one, and the two musl
+  targets have never run on a musl system.
+  [Platform support](/reference/platform-support) has the per-target split.

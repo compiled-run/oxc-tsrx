@@ -669,13 +669,21 @@ test("repository npm invocation matches npm's public manifest-declared bin", asy
 });
 
 test("editor and maintainer docs distinguish OXC's compiled seam from runtime hooks", async () => {
-  const [editor, guide] = await Promise.all([
-    readFile(editorIntegrationPath, "utf8"),
-    readFile(upstreamingGuidePath, "utf8"),
-  ]);
+  // Prose reflows on every edit, so phrase assertions run against collapsed
+  // whitespace: a line break must never be the reason a fact "disappears".
+  const flatten = (text) => text.replace(/\s+/gu, " ");
+  const [editor, guide] = (
+    await Promise.all([
+      readFile(editorIntegrationPath, "utf8"),
+      readFile(upstreamingGuidePath, "utf8"),
+    ])
+  ).map(flatten);
 
-  assert.match(editor, /hard-codes its document selectors/i);
-  assert.match(editor, /exposes no public API/i);
+  // The page may say this in its own words. What must survive is that the
+  // extension picks its documents from a fixed internal list rather than from
+  // an API a provider could call.
+  assert.match(editor, /hard-codes its document selectors|fixed\s+internal list/i);
+  assert.match(editor, /exposes no public API|rather than from a public API/i);
   assert.match(editor, /github\.com\/oxc-project\/oxc\/discussions\/21936/);
   assert.match(guide, /ToolBuilder/);
   assert.match(guide, /compile-time Rust embedding seam/i);
@@ -686,21 +694,25 @@ test("editor and maintainer docs distinguish OXC's compiled seam from runtime ho
 });
 
 test("the maintainer guide defines a source-backed upstream transplant contract", async () => {
-  const [guide, readme, core, editor, siteConfig] = await Promise.all([
+  const flatten = (text) => text.replace(/\s+/gu, " ");
+  const [guideRaw, readme, core, editor, siteConfig] = await Promise.all([
     readFile(upstreamingGuidePath, "utf8"),
     readFile(join(root, "README.md"), "utf8"),
     readFile(join(root, "docs/architecture/rust-oxc-core.md"), "utf8"),
     readFile(editorIntegrationPath, "utf8"),
     readFile(join(root, "docs/site.config.mjs"), "utf8"),
   ]);
+  const guide = flatten(guideRaw);
 
   assert.match(guide, /OXC for TSRX is an independent community project/i);
-  assert.match(guide, /not affiliated with,\s+endorsed by, or a product of/i);
+  // The disclaimer is required, its exact phrasing is not.
+  assert.match(guide, /not affiliated with[^.]*(?:endorsed by|product of)/i);
+  assert.match(guide, /VoidZero/);
   assert.match(guide, new RegExp(pinnedOxcRevision));
   assert.match(guide, new RegExp(auditedOxcMain));
-  assert.match(guide, /audited on 2026-07-16/i);
+  assert.match(guide, /audited(?: on)? 2026-07-16/i);
   assert.match(guide, /no merged whole-file (?:language |parser )?hook/i);
-  assert.match(guide, /no OXC maintainer\s+interest or endorsement is claimed/i);
+  assert.match(guide, /no (?:OXC )?maintainer interest(?: or endorsement)? is claimed/i);
   assert.match(guide, /unicode-id-start\s*=\s*[`"]1[`"]|`unicode-id-start = "1"`/);
 
   for (const path of [
@@ -746,10 +758,14 @@ test("the maintainer guide defines a source-backed upstream transplant contract"
   assert.match(guide, /unmerged research/i);
   assert.match(guide, /not (?:runtime |release )?dependencies/i);
   assert.match(guide, /one (?:canonical )?OXC parse/i);
-  assert.match(guide, /format performs two structural scanner passes/i);
+  assert.match(guide, /format (?:performs|does) two structural scan(?:ner passe|)s/i);
+  // Was pinned to the precise phrasing ("affine authored identity segments and
+  // explicitly unmapped synthetic regions"). The page now says the same thing in
+  // plain words, so assert the fact: a whole-file copy whose ranges are not all
+  // yours, which is why PartialLoader does not fit.
   assert.match(
     guide,
-    /affine authored identity segments and explicitly unmapped synthetic regions/i,
+    /affine authored identity segments|some ranges are yours and some are\s+placeholders/i,
   );
   assert.match(
     guide,
@@ -758,14 +774,13 @@ test("the maintainer guide defines a source-backed upstream transplant contract"
   assert.match(guide, /cargo test --locked -p tsrx_syntax --all-targets/);
   assert.match(guide, /pnpm run benchmark:native-lint/);
   assert.match(guide, /pnpm run benchmark:native-format/);
-  assert.match(guide, /avoid editing generated directories directly/i);
-  assert.match(guide, /`just allocs`/);
-  assert.match(guide, /`just ready`/);
-  assert.match(guide, /disclose AI use/i);
-  assert.match(
-    guide,
-    /human contributor\s+must review, test, understand, and take responsibility/i,
-  );
+  // The page defers to OXC's own AGENTS.md rather than restating its gate
+  // commands, so assert the two things that must never be dropped: that it
+  // points there, and that it keeps the human-responsibility and AI-disclosure
+  // rule. The exact wording of the gates is upstream's to change.
+  assert.match(guide, /AGENTS\.md/);
+  assert.match(guide, /disclose[sd]? AI use/i);
+  assert.match(guide, /human contributor[^.]*respons/i);
 
   // The extension is optional because these two may link either at the file in
   // this repository or at the published site, which serves clean URLs. What has

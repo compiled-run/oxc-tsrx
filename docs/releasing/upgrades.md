@@ -1,6 +1,6 @@
 # Dependency and toolchain upgrade policy
 
-Installed artifacts are insulated from upstream churn: the canonical OXC
+Installed artifacts are insulated from upstream churn: the official OXC
 workspace engine closure is pinned to one commit and compiled into the native
 binaries; remaining registry dependencies are locked separately.
 Official npm tools and Vite+ are exercised at explicit supported versions. An
@@ -13,7 +13,7 @@ release that may require adapter changes and always requires full qualification.
 
 As of 2026-07-16, the release candidate is qualified against:
 
-- canonical OXC commit
+- official OXC commit
   `8e0ed2ebb96137fb1611cdbd5742d5cb46037d40` across twelve direct adapter Git
   dependencies, with their canonical workspace closure resolved from the same
   source and commit;
@@ -31,7 +31,7 @@ npm package exists and a clean consumer qualifies it.
 
 ## OXC adapter upgrade procedure
 
-`.github/workflows/advisory.yml` resolves canonical OXC `main`, replaces the
+`.github/workflows/advisory.yml` resolves official OXC `main`, replaces the
 release pin in a disposable copy, conservatively updates the Git lock source,
 and runs compile/behavior checks. The job is deliberately non-blocking. It is an
 early warning, not permission to merge or release that revision.
@@ -44,7 +44,7 @@ For a deliberate upgrade:
 2. Change all twelve `rev` fields together in
    `crates/oxc_adapter/Cargo.toml`. Change the public revision constant and the
    runtime/native/VSIX distribution metadata in the same patch.
-3. Update only the canonical OXC lock source with Cargo's precise Git revision
+3. Update only the official OXC lock source with Cargo's precise Git revision
    support. Inspect `Cargo.lock`; unrelated registry movement is not part of an
    OXC upgrade.
 4. Run `tests/packaging/boundary.test.mjs`. It must prove one repository, one
@@ -107,7 +107,7 @@ nor CSS validation.
 
 Requalify CSS only when all of the following are true:
 
-- the public canonical OXC dependency graph resolves at one exact revision with
+- the public official OXC dependency graph resolves at one exact revision with
   no Cargo patch, source replacement, fork, vendor copy, or local checkout;
 - CSS parse/format uses a clear single allocator/ownership boundary;
 - one adversarial batch test covers malformed CSS, closing-tag-like bytes,

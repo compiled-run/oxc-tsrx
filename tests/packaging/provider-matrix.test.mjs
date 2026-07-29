@@ -10,9 +10,10 @@
  *
  * The lanes differ only in where the package manager physically puts the
  * provider: hoisted `node_modules` (npm, Bun, Yarn with the node-modules
- * linker), an isolated store linked in as a direct dependency (pnpm), or no
- * `node_modules` at all (Yarn Plug'n'Play, where the provider lives inside a zip
- * in `.yarn/cache` and only `.pnp.cjs` can say where). Discovery never depends on
+ * linker), an isolated store linked in as a direct dependency (pnpm, and Deno
+ * under `node_modules/.deno`), or no `node_modules` at all (Yarn Plug'n'Play,
+ * where the provider lives inside a zip in `.yarn/cache` and only `.pnp.cjs`
+ * can say where). Discovery never depends on
  * that layout because it resolves only direct dependencies, through an injected
  * `(request, issuer)` resolver.
  *
@@ -56,7 +57,21 @@ const providerClient = join(root, "packages/vscode/dist/provider-client.cjs");
 const npm = process.platform === "win32" ? "npm.cmd" : "npm";
 const pnpm = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 const bun = process.platform === "win32" ? "bun.exe" : "bun";
+const deno = process.platform === "win32" ? "deno.exe" : "deno";
 const corepack = process.platform === "win32" ? "corepack.cmd" : "corepack";
+
+/**
+ * Lanes are skipped when their package manager is not on the machine, which is
+ * right for a laptop and wrong for CI: a runner that quietly lost Bun would
+ * turn "covered" into "skipped" without failing anything. The workflow names
+ * the lanes it provisions here, and a named lane that cannot run is an error.
+ */
+const REQUIRED_LANES = new Set(
+  (process.env.OXC_TSRX_REQUIRE_PM_LANES ?? "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean),
+);
 
 /** Pinned so a lane result names an exact Yarn build rather than "whatever was latest". */
 const YARN_VERSION = "4.9.2";
@@ -298,6 +313,11 @@ function cleanEnvironment(temporary, registry) {
     XDG_STATE_HOME: join(temporary, "xdg-state"),
     PNPM_HOME: join(temporary, "pnpm-home"),
     BUN_INSTALL_CACHE_DIR: join(temporary, "bun-cache"),
+    // Deno takes the registry from the environment rather than a flag, and
+    // DENO_DIR keeps its npm cache inside the fixture like every other lane.
+    NPM_CONFIG_REGISTRY: registry,
+    DENO_DIR: join(temporary, "deno-dir"),
+    DENO_NO_UPDATE_CHECK: "1",
     // Corepack materialises the pinned Yarn here. Nothing global or user-level
     // is written, and `corepack enable` (which installs shims onto PATH) is
     // never run.
@@ -375,6 +395,18 @@ const lanes = [
       `--registry=${registry}`,
     ],
     tracked: ["bun.lock", "package.json"],
+    installTree: ["node_modules"],
+  },
+  {
+    id: "deno",
+    label: "deno install / deno install --frozen",
+    executable: deno,
+    // Deno's npm compatibility writes a pnpm-shaped store: every package lives
+    // in `node_modules/.deno/<name>@<version>/node_modules/<name>`, and only
+    // the direct dependency is linked at the top level.
+    install: () => ["install", "--node-modules-dir=auto"],
+    frozen: () => ["install", "--node-modules-dir=auto", "--frozen"],
+    tracked: ["deno.lock", "package.json"],
     installTree: ["node_modules"],
   },
   {
@@ -721,7 +753,11 @@ test(
           const reason = `${lane.executable} is not installed on this machine`;
           record(lane, { install: "blocked", frozen: "blocked", notes: reason });
           process.stderr.write(`BLOCKED lane ${lane.id}: ${reason}\n`);
-          assert.equal(lane.required !== true, true, `${lane.id} is a required lane`);
+          assert.equal(
+            lane.required !== true && !REQUIRED_LANES.has(lane.id),
+            true,
+            `${lane.id} is a required lane`,
+          );
           subtest.skip(reason);
           return;
         }
@@ -742,6 +778,7 @@ test(
             }`;
             record(lane, { install: "blocked", frozen: "blocked", notes: reason });
             process.stderr.write(`BLOCKED lane ${lane.id}: ${reason}\n`);
+            assert.equal(REQUIRED_LANES.has(lane.id), false, `${lane.id} is a required lane`);
             subtest.skip(reason);
             return;
           }

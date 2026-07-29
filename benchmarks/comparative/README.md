@@ -29,20 +29,20 @@ generated from the same component specifications. That lane is an internal OXC
 for TSRX workload ratio only. It is not compared with ESLint or official
 Oxlint because those tools do not parse TSRX.
 
-Aggregate-selected representative report: `results-1784321699288.json`.
+Aggregate-selected representative report: `results-1785296573160.json`.
 
 | Lane | Median | p95 |
 | --- | ---: | ---: |
-| ESLint + typescript-eslint, matched TSX | 609.06 ms | 617.25 ms |
-| Official Oxlint, matched TSX | 40.68 ms | 41.96 ms |
-| OXC for TSRX npm CLI, matched TSX | 45.92 ms | 46.86 ms |
-| OXC for TSRX npm CLI, mixed file types (20% TSRX) | 68.38 ms | 70.37 ms |
+| ESLint + typescript-eslint, matched TSX | 648.04 ms | 702.49 ms |
+| Official Oxlint, matched TSX | 42.03 ms | 43.25 ms |
+| OXC for TSRX npm CLI, matched TSX | 48.97 ms | 51.03 ms |
+| OXC for TSRX npm CLI, mixed file types (20% TSRX) | 71.05 ms | 74.05 ms |
 
-On this retained host and corpus, OXC for TSRX's matched-TSX median was 1.129×
+On this retained host and corpus, OXC for TSRX's matched-TSX median was 1.165×
 official Oxlint's median. That all-TSX command imports the exact
 manifest-declared official Oxlint launcher in the same Node process with zero
-TSRX dispatch. ESLint's median was 13.26× OXC for TSRX's, and the mixed OXC for
-TSRX workload was 1.489× its all-TSX lane. The mixed route proves exactly one
+TSRX dispatch. ESLint's median was 13.23× OXC for TSRX's, and the mixed OXC for
+TSRX workload was 1.451× its all-TSX lane. The mixed route proves exactly one
 public canonical Node child and one native TSRX child, with zero private
 adapter children. These
 are bounded fresh-process results for the recorded versions and fixture, not a

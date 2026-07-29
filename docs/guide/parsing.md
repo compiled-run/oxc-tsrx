@@ -5,15 +5,14 @@ description: Parse .tsrx and ordinary JS/TS into a real AST with oxc-tsrx/parser
 
 # Parsing
 
-`oxc-tsrx/parser` is the parser behind the lint and format tools, exposed
-as a library you can call yourself. It has the same API shape as
+`oxc-tsrx/parser` is the parser behind the lint and format tools, exposed as a
+library you can call yourself. It has the same API shape as
 [`oxc-parser`](https://www.npmjs.com/package/oxc-parser), OXC's official npm
-parser, and it handles ordinary JavaScript and TypeScript (`js`, `jsx`, `ts`,
-`tsx`, `dts`) plus `.tsrx` files.
+parser, and it handles `.tsrx` alongside ordinary `js`, `jsx`, `ts`, `tsx`, and
+`dts`.
 
-If you are building something that needs to understand `.tsrx` source (a
-bundler plugin, a codemod, an editor feature, a static analysis tool), this
-is the package for you.
+Reach for it when you are building something that has to understand `.tsrx`
+source: a codemod, a bundler plugin, an editor feature, an analysis tool.
 
 ## Install
 
@@ -28,90 +27,106 @@ Like the CLI tools, the parser is native Rust code. Your package manager
 downloads a ready-made binary for your platform during this normal install.
 There are no install scripts, and nothing is downloaded later.
 
-## Parse your first file
+## Parse a file
 
-Save this as `src/View.tsrx`. The "Try in playground" button lets you explore
-the file in your browser first:
-
-```tsrx
-import { Row } from "./Row";
-
-export function View({ items }: { items: Item[] }) @{
-  <ul class="list">
-    @for (const item of items; key item.id) {
-      <Row item={item} />
-    } @empty {
-      <li>No items yet</li>
-    }
-  </ul>
-}
-```
-
-Then save this parse script as `parse.mjs`. It parses the file and walks the
-tree looking for the `@for` node:
+Two arguments, a file name and its source:
 
 ```js
-import { readFileSync } from "node:fs";
 import { parseSync } from "oxc-tsrx/parser";
 
-const source = readFileSync("src/View.tsrx", "utf8");
-const result = parseSync("src/View.tsrx", source);
-
-console.log("errors:", result.errors.length);
-console.log("imports:", result.module.staticImports.map((s) => s.moduleRequest.value));
-console.log("top level:", result.program.body.map((node) => node.type));
-
-function* walk(node) {
-  if (Array.isArray(node)) {
-    for (const item of node) yield* walk(item);
-  } else if (node && typeof node === "object") {
-    if (typeof node.type === "string") yield node;
-    for (const value of Object.values(node)) yield* walk(value);
-  }
-}
-
-const forNode = [...walk(result.program)].find((node) => node.type === "JSXForExpression");
-console.log("found:", forNode.type);
-console.log("its first line, straight from your file:");
-console.log(source.slice(forNode.start, forNode.end).split("\n")[0]);
+const result = parseSync("View.tsrx", source);
 ```
+
+The file name decides the language, so `.tsrx` gets TSRX and `.ts` gets
+TypeScript. Pass `{ lang: "tsrx" }` if the name cannot tell you, for instance
+when the source came from a string.
+
+There is an async entry point with the same signature:
+
+```js
+import { parse } from "oxc-tsrx/parser";
+
+const result = await parse("View.tsrx", source);
+```
+
+## What comes back
+
+`result` has four fields, each converted from the native side only the first
+time you read it. A tool that only wants the import list never pays for
+building the whole AST.
+
+| Field | What it holds |
+| --- | --- |
+| `result.program` | the AST |
+| `result.module` | imports and exports: `staticImports`, `staticExports`, `dynamicImports`, `importMetas`, each with positions |
+| `result.comments` | every line and block comment |
+| `result.errors` | everything wrong with the code you parsed |
+
+Positions are plain JavaScript string indexes, so `source.slice(node.start,
+node.end)` always gives back the exact text of a node, even in files with emoji
+or other multi-byte characters. They point into the string you passed in, never
+into an internal copy.
+
+## Walking the tree
+
+To visit nodes, reach for [`oxc-walker`](https://www.npmjs.com/package/oxc-walker).
+It walks this AST with no special handling, TSRX nodes included, so you do not
+have to hand-roll a recursive `find`.
+
+Here it is inside a Vite plugin. A bundler hands you the module id and its
+source, which is the shape most tools using this parser end up in:
+
+```js
+import { parseSync } from "oxc-tsrx/parser";
+import { walk } from "oxc-walker";
+
+export function tsrxKeyedLoops() {
+  return {
+    name: "tsrx-keyed-loops",
+    transform: {
+      filter: { id: /\.tsrx$/ },
+      handler(code, id) {
+        const { program } = parseSync(id, code);
+        const unkeyed = [];
+
+        walk(program, {
+          enter(node) {
+            if (node.type === "JSXForExpression" && !node.key) {
+              unkeyed.push(node);
+            }
+          },
+        });
+
+        for (const node of unkeyed) {
+          this.warn({ message: "@for without a key", pos: node.start });
+        }
+
+        return null;
+      },
+    },
+  };
+}
+```
+
+Three things there are worth copying:
+
+- `filter` is applied in Rust before your handler runs, which is cheaper than an
+  early `return` in JavaScript;
+- it returns `null`, because reading the tree is all it does. Compiling `.tsrx`
+  belongs to your framework's plugin, which this one runs alongside;
+- it collects nodes during the walk and reports afterwards, because `walk`
+  rebinds `this`, so `this.warn` is not available inside `enter`.
 
 <!-- terminal-demo:parsing-quickstart -->
 
-Three things worth noticing:
-
-- `top level:` lists ordinary ESTree node types. This is a normal AST, and
-  code that walks ASTs can walk it with no special cases.
-- The `@for` came back as a `JSXForExpression` node, a real node type, not a
-  comment or a placeholder.
-- Slicing the source with the node's `start` and `end` returns exactly what
-  you typed. Positions always point into the string you passed in, never
-  into an internal copy.
-
-## How a parse works
-
-<!-- diagram:parser-paths -->
-
-Step by step, for a `.tsrx` file:
-
-1. The file is scanned once to find the TSRX-only syntax.
-2. A valid-TSX copy is built in memory (the *projection*). Your code is
-   copied into it unchanged; only the TSRX control syntax is replaced with
-   TSX placeholders.
-3. Canonical OXC parses that copy, once. There is no second parser and no
-   TSRX fork of OXC.
-4. The parsed tree is rebuilt into the tree you authored: the placeholders
-   become TSRX nodes again, and every position is mapped back to your
-   original source.
-
-Ordinary `.js`, `.jsx`, `.ts`, and `.tsx` files skip steps 1, 2, and 4
-entirely: the file goes straight to OXC, exactly like calling `oxc-parser`
-yourself.
+The top level is ordinary ESTree node types, so code that already walks ASTs
+walks this one with no special cases. The `@for` came back as a real
+`JSXForExpression` node, not a comment or a placeholder.
 
 ## The tree is the code you wrote
 
-Every TSRX control comes back as its own node type, shaped like the JSX
-nodes you already know:
+Every TSRX control comes back as its own node type, shaped like the JSX nodes
+you already know:
 
 | You write | You get back |
 | --- | --- |
@@ -122,36 +137,25 @@ nodes you already know:
 | `@try` / `@pending` / `@catch` | `JSXTryExpression` |
 | `<{expr}>` dynamic tags | `JSXElement` whose tag name is a `JSXExpressionContainer` |
 
-Everything else (elements, attributes, statements, expressions, TypeScript
-types) uses the same node shapes as `oxc-parser`, and the package re-exports
-the `@oxc-project/types` type definitions so your editor can autocomplete
-them.
+Everything else, from elements and attributes to TypeScript types, uses the same
+node shapes as `oxc-parser`. The package re-exports the `@oxc-project/types`
+definitions so your editor can autocomplete them.
 
-Positions are plain JavaScript string indexes, so `source.slice(node.start,
-node.end)` is always the exact text of a node, even in files with emoji or
-other multi-byte characters.
+## How a parse works
 
-## Four results, each loaded lazily
+<!-- diagram:parser-paths -->
 
-`parseSync` returns a result with four independent getters:
+Four steps, for a `.tsrx` file:
 
-- `result.program` is the AST.
-- `result.module` is a fast summary of imports and exports: `staticImports`,
-  `staticExports`, `dynamicImports`, and `importMetas`, each with positions.
-- `result.comments` lists every line and block comment.
-- `result.errors` lists everything wrong with the parsed code.
+1. **Scan.** Read the file once and find the TSRX-only syntax.
+2. **Copy.** Build a valid TSX copy in memory, with the TSRX controls replaced
+   by placeholders and your code copied over unchanged.
+3. **Parse.** OXC parses that copy, once. There is no second parser and no fork.
+4. **Rebuild.** Placeholders become TSRX nodes again, and every position maps
+   back to your original source.
 
-Each field is converted from the native side only the first time you read
-it. A tool that only wants the import list never pays for building the full
-JavaScript AST.
-
-There is also an async entry point with the same signature:
-
-```js
-import { parse } from "oxc-tsrx/parser";
-
-const result = await parse("src/View.tsrx", source);
-```
+Ordinary `.js`, `.jsx`, `.ts`, and `.tsx` files skip steps 1, 2, and 4. They go
+straight to OXC, exactly like calling `oxc-parser` yourself.
 
 ## Options
 
@@ -159,55 +163,72 @@ The third argument tunes the parse:
 
 | Option | What it does |
 | --- | --- |
-| `lang` | Forces a language: `"js"`, `"jsx"`, `"ts"`, `"tsx"`, `"dts"`, or `"tsrx"`. Without it, the file extension of the first argument decides. |
+| `lang` | Forces a language: `"js"`, `"jsx"`, `"ts"`, `"tsx"`, `"dts"`, or `"tsrx"`. Without it, the file name decides. |
 | `sourceType` | `"module"`, `"script"`, `"commonjs"`, or `"unambiguous"`. |
 | `astType` | `"js"` or `"ts"`: which AST flavor to produce when the extension alone does not decide it. |
 | `range` | Adds a `range: [start, end]` array to every node, for tools that expect ESLint-style ranges. |
 | `preserveParens` | On by default: parenthesized expressions appear as `ParenthesizedExpression` nodes. Set `false` to see through them. |
 | `showSemanticErrors` | Also reports semantic problems, like declaring the same `let` twice. |
-| `recovery` | `"none"` (default) or `"editor"`. Editor recovery is a capability flag; see below. |
+| `recovery` | `"none"` (default) or `"editor"`. |
 
 ## Two kinds of errors
 
-Problems in the code you parse never throw. They land in `result.errors`,
-each with a severity, a message, positions, and a ready-to-print codeframe,
-as you saw in the `Broken.tsrx` run above.
+**Problems in the code you parse never throw.** They land in `result.errors`,
+each with a severity, a message, positions, and a ready-to-print codeframe, as
+in the second run above.
 
-Problems running the parser itself do throw, as a `ParserOperationalError`
-with a stable `code` you can match on. Examples: the native binary for your
-platform is not installed (`ERR_TSRX_NATIVE_NOT_INSTALLED`), it failed its
-integrity check (`ERR_TSRX_NATIVE_INTEGRITY`), or you asked for a feature
-this build does not support (`ERR_TSRX_CAPABILITY_RECOVERY`). Before loading
-the native binary, the loader verifies its package role, target, version,
-and SHA-256 digest, and a failed check is an error, never a silent fallback.
+**Problems running the parser itself do throw.** You get a
+`ParserOperationalError` carrying a stable `code` you can match on:
 
-## Feature detection with `capabilities`
+| Code | What went wrong |
+| --- | --- |
+| `ERR_TSRX_NATIVE_NOT_INSTALLED` | there is no native binary for your platform |
+| `ERR_TSRX_NATIVE_INTEGRITY` | the binary failed its checksum |
+| `ERR_TSRX_CAPABILITY_RECOVERY` | you asked for something this build cannot do |
 
-The package exports a `capabilities` object describing exactly what the
-installed native build can do, including the pinned OXC revision it was
-built from:
+Before loading a binary, the package checks its target, its version, and its
+SHA-256 digest. A failed check throws. It never quietly falls back to a
+different build.
+
+## Feature detection
+
+`capabilities` tells you what the installed build supports, so you can check
+before you rely on something:
 
 ```js
 import { capabilities } from "oxc-tsrx/parser";
 
-console.log(capabilities.languages);    // ["js", "jsx", "ts", "tsx", "dts", "tsrx"]
-console.log(capabilities.oxcRevision);  // the exact OXC commit
-console.log(capabilities.editorRecovery);
+capabilities.languages;       // which languages it parses
+capabilities.editorRecovery;  // whether recovery: "editor" works here
+capabilities.oxcRevision;     // the OXC version it was built from
 ```
 
-Capability-gated options like `recovery: "editor"` follow the project's
-fail-closed rule: if the installed build does not support one, the call
-throws a clear error instead of quietly parsing with less than you asked
-for.
+Asking for something the installed build cannot do throws, rather than parsing
+with less than you asked for and letting you find out later.
 
 ## What is tested
 
-The retained `tests/parser-api` suite proves the program crosses the native
-boundary as one versioned payload (including `BigInt` and `RegExp` values),
-that the loader's integrity checks reject tampered binaries, that the
-package stays safe to bundle with tools like Rolldown, and that lazy fields
-convert correctly in files with multi-byte characters. The recorded terminal
-output above is captured by really running the scripts at build time.
+The parser is the same code path the linter, the formatter, and the language
+server run on, so every one of their suites exercises it too. On top of that,
+`tests/parser-api` covers the boundary a library user actually depends on:
+
+- **Nothing is lost crossing from Rust to JavaScript.** The whole program moves
+  as one payload, `BigInt` and `RegExp` values included, and a malformed payload
+  is rejected rather than half-decoded.
+- **Text with emoji and other multi-byte characters keeps exact positions.** A
+  broken surrogate pair fails at its exact offset instead of shifting everything
+  after it.
+- **A tampered binary never loads.** The suite mutates the packed loader's
+  identity and checksums and asserts every mutation is refused.
+- **It works as a real dependency.** Packed tarballs are installed into a fresh
+  project, then loaded, parsed, and bundled, so a broken publish fails here
+  rather than in your build.
+- **Deep files do not blow the stack.** Deeply nested TSRX is built iteratively
+  on a bounded stack.
+
+All of it runs on Linux, macOS, and Windows on every pull request. The terminal
+output on this page is captured by really running the code at build time, so it
+cannot drift from what the parser does.
 
 ## Next steps
 

@@ -30,7 +30,7 @@ use tsrx_format::{FormatMode, format_text};
 use tsrx_syntax::{project, scan};
 
 use crate::{
-    budgets::{Budgets, ensure_binary, parse_args, validate_budgets},
+    budgets::{Budgets, ensure_binary, parse_args, resolve_incumbent_binary, validate_budgets},
     fixtures::{build_corpus, build_generalized_control_corpus, create_temp_directory, fnv1a64},
     in_process::{measure_config_session, measure_control, measure_product},
     process::{run_memory_child, run_process_measurements},
@@ -79,11 +79,15 @@ fn run(arguments: impl Iterator<Item = String>) -> Result<(), String> {
     let budget_source = fs::read_to_string(&args.budget_path).map_err(|error| {
         format!("unable to read budgets {}: {error}", args.budget_path.display())
     })?;
-    let budgets: Budgets = serde_json::from_str(&budget_source)
+    let mut budgets: Budgets = serde_json::from_str(&budget_source)
         .map_err(|error| format!("invalid formatter benchmark budgets: {error}"))?;
     validate_budgets(&budgets)?;
     ensure_binary(&budgets.candidate_binary, "candidate formatter")?;
-    ensure_binary(&budgets.stock_oxfmt_binary, "stock Oxfmt")?;
+    // The report must publish the budget file's own declared paths, so the declared copy is taken
+    // before the working copy's incumbent path is resolved against the installed layout.
+    let declared_budgets = budgets.clone();
+    budgets.stock_oxfmt_binary =
+        resolve_incumbent_binary(&budgets.stock_oxfmt_binary, "stock Oxfmt")?;
 
     let tsrx = build_corpus(budgets.corpus_target_bytes);
     let overlay = scan(&tsrx).map_err(|error| error.to_string())?;
@@ -360,7 +364,7 @@ fn run(arguments: impl Iterator<Item = String>) -> Result<(), String> {
             oxc_revision: OXC_REVISION,
             stock_oxfmt_version: command_path_text(&budgets.stock_oxfmt_binary, &["--version"]),
         },
-        budgets: budgets.clone(),
+        budgets: declared_budgets,
         corpus: Corpus {
             bytes: tsrx.len(),
             equivalent_tsx_bytes: tsx.len(),

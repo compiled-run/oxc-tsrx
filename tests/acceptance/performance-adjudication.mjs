@@ -39,6 +39,12 @@ function validateAssertion(assertion, reportPath) {
   if (!assertion || typeof assertion !== 'object' || typeof assertion.name !== 'string') {
     throw new Error(`${reportPath}: malformed performance assertion`)
   }
+  if (
+    assertion.thresholdDerivation !== undefined &&
+    (typeof assertion.thresholdDerivation !== 'string' || assertion.thresholdDerivation.length === 0)
+  ) {
+    throw new Error(`${reportPath}: ${assertion.name} has an empty threshold derivation`)
+  }
   if (typeof assertion.pass !== 'boolean') {
     throw new Error(`${reportPath}: ${assertion.name} lacks a boolean result`)
   }
@@ -132,10 +138,28 @@ function requireCoherentReports(reports) {
       const assertion = report.assertions.find(({ name }) => name === firstAssertion.name)
       if (
         !assertion ||
-        assertion.threshold !== firstAssertion.threshold ||
         assertion.operator !== firstAssertion.operator ||
         assertion.invariant !== firstAssertion.invariant
       ) {
+        throw new Error(`${report.path}: performance assertion drifted: ${firstAssertion.name}`)
+      }
+      // Almost every threshold is a frozen budget number, and for those the numeric
+      // limit is the whole contract. A handful are derived from a measurement, so two
+      // reruns of the same build legitimately differ by a page. Those publish the rule
+      // that produced the limit, stated purely in frozen budget numbers; when both
+      // reports carry it, the rule is what must match. One report carrying it and the
+      // other not is schema drift, and fails closed.
+      const firstIsDerived = firstAssertion.thresholdDerivation !== undefined
+      const isDerived = assertion.thresholdDerivation !== undefined
+      if (firstIsDerived !== isDerived) {
+        throw new Error(
+          `${report.path}: performance assertion threshold derivation drifted: ${firstAssertion.name}`,
+        )
+      }
+      const coherent = firstIsDerived
+        ? assertion.thresholdDerivation === firstAssertion.thresholdDerivation
+        : assertion.threshold === firstAssertion.threshold
+      if (!coherent) {
         throw new Error(`${report.path}: performance assertion drifted: ${firstAssertion.name}`)
       }
     }

@@ -14,6 +14,7 @@ import {
   benchmarksSectionsHtml,
   benchmarksSectionsMarkdown,
   comparativeChartHtml,
+  editorReplayLatencies,
   homeBenchmarksHtml,
   latestReportDates,
 } from './benchmarks-data.mjs'
@@ -41,6 +42,41 @@ const escapeHtml = (text) =>
     .replaceAll("'", '&#39;')
 
 const diagramCache = new Map()
+
+// A diagram caption may quote a measured latency. The number is never typed
+// into the diagram JSON: the source carries a {{token}} that resolves here
+// from the aggregate-selected report, so a benchmark refresh cannot leave a
+// stale figure behind in a diagram.
+let diagramMetricsPromise = null
+function diagramMetrics() {
+  diagramMetricsPromise ??= editorReplayLatencies().then((latency) => ({
+    editorInitialOpenMedian: editorReplayMs(latency.initialOpenMedianMs),
+  }))
+  return diagramMetricsPromise
+}
+
+function resolveDiagramMetrics(value, metrics, figureId) {
+  if (typeof value === 'string') {
+    return value.replace(/\{\{([A-Za-z0-9]+)\}\}/g, (_marker, token) => {
+      if (!(token in metrics)) {
+        throw new Error(`Diagram ${figureId} references unknown metric ${token}`)
+      }
+      return metrics[token]
+    })
+  }
+  if (Array.isArray(value)) {
+    return value.map((entry) => resolveDiagramMetrics(entry, metrics, figureId))
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [
+        key,
+        resolveDiagramMetrics(entry, metrics, figureId),
+      ]),
+    )
+  }
+  return value
+}
 
 function decorateDiagramSvg(svg, metadata, figureId) {
   const [, width, height] = svg.match(/viewBox="0 0 ([0-9]+) ([0-9]+)"/) ?? []
@@ -71,8 +107,12 @@ async function diagramHtml(name) {
   if (diagramCache.has(name)) return diagramCache.get(name)
   const sourceDir = path.join(docsDir, 'diagrams')
   const assetDir = path.join(docsDir, 'assets', 'diagrams')
-  const metadata = JSON.parse(await readFile(path.join(sourceDir, `${name}.json`), 'utf8'))
   const figureId = `diagram-${name}`
+  const metadata = resolveDiagramMetrics(
+    JSON.parse(await readFile(path.join(sourceDir, `${name}.json`), 'utf8')),
+    await diagramMetrics(),
+    figureId,
+  )
   const svg = decorateDiagramSvg(
     await readFile(path.join(assetDir, `${name}.svg`), 'utf8'),
     metadata,
@@ -94,7 +134,14 @@ async function diagramHtml(name) {
     : ''
   const html = `<figure class="diagram" id="${figureId}" aria-labelledby="${figureId}-caption">
 ${steps}<div class="diagram-caption-strip" aria-live="polite">Select a diagram node to read its explanation.</div>
-<div class="diagram-scroll">${svg}</div>
+<div class="diagram-stage" data-diagram-stage>
+  <div class="diagram-canvas" data-diagram-canvas>${svg}</div>
+  <div class="diagram-tools" data-diagram-tools hidden>
+    <button type="button" data-diagram-zoom="out" aria-label="Zoom out">&minus;</button>
+    <button type="button" data-diagram-zoom="in" aria-label="Zoom in">+</button>
+    <button type="button" data-diagram-fit>Fit</button>
+  </div>
+</div>
 <figcaption id="${figureId}-caption"><strong>${escapeHtml(metadata.title)}.</strong> ${escapeHtml(
     metadata.caption,
   )}</figcaption>
@@ -265,15 +312,17 @@ const TSRX_DOCS = {
   '@default': ['Fallback', 'Renders when no @case matches.'],
   '@try': ['Async boundary', 'Awaited content, with loading and error branches.'],
   '@pending': ['Loading', 'Shown while @try content loads.'],
-  '@catch': ['Error', 'Handles @try failures; (error; reset) supported.'],
+  '@catch': ['Error', 'Handles @try failures; (error, reset) supported.'],
 }
 
 function addTsrxHovers(html) {
-  // Chained form first: shiki tokenizes "@else if" as "@else" + " if".
+  // Chained form first. The grammar scopes the trailing `if` as part of the
+  // directive, so shiki emits two adjacent spans with identical styling; fuse
+  // them so the hover target is the whole `@else if` rather than half of it.
   html = html.replace(
-    /(>)([ \t]*)(@else)(<\/span>)(<span[^>]*>)(\s*if\b)/g,
-    (match, open, whitespace, token, close, nextOpen, ifWord) =>
-      `${open}${whitespace}<span class="tsrx-hover" tabindex="0" role="img" aria-label="@else if: Chained conditional. Tests another condition when the previous branch failed." data-doc-title="@else if · Chained conditional" data-doc="Tests another condition when the previous branch failed.">${token}</span>${close}${nextOpen}${ifWord}`,
+    /(<span style="([^"]*)">)([ \t]*)@else<\/span><span style="\2">([ \t]*if\b)/g,
+    (match, open, style, whitespace, ifWord) =>
+      `${open}${whitespace}<span class="tsrx-hover" tabindex="0" role="img" aria-label="@else if: Chained conditional. Tests another condition when the previous branch failed." data-doc-title="@else if · Chained conditional" data-doc="Tests another condition when the previous branch failed.">@else${ifWord}</span>`,
   )
   return html.replace(
     /(<span(?! class="tsrx-hover")[^>]*>)([ \t]*)(@(?:\{|if|else|for|empty|switch|case|default|try|pending|catch))(<\/span>)/g,
@@ -329,29 +378,43 @@ function createMarked(slugger, headings) {
       heading({ tokens, depth }) {
         const html = this.parser.parseInline(tokens)
         const id = slugger(html)
-        headings.push({ depth, id, text: html.replace(/<[^>]*>/g, '') })
+        // Plain text, not inline HTML: the outline and the permalink label both
+        // escape what they are given, so an undecoded `&quot;` would be escaped
+        // a second time and read as `&quot;` on the page.
+        const text = decodeEntities(html.replace(/<[^>]*>/g, ''))
+        headings.push({ depth, id, text })
         const anchor =
           depth > 1
             ? `<a class="header-anchor" href="#${id}" aria-label="Permalink to “${escapeHtml(
-                html.replace(/<[^>]*>/g, ''),
+                text,
               )}”">#</a>`
             : ''
         return `<h${depth} id="${id}">${html}${anchor}</h${depth}>\n`
       },
       code({ text, lang }) {
-        const language = (lang || 'text').split(/\s/)[0]
+        const [language, ...flags] = (lang || 'text').split(/\s+/)
+        // The button hands the fence to the real engines, so it is only honest
+        // on a fence the engines accept. A sample that is deliberately not a
+        // whole file, or is showing what invalid TSRX looks like, opts out with
+        // ```tsrx no-playground; tests/site/playground-snippets.test.mjs proves
+        // every fence that keeps the button still parses.
         const tryButton =
-          language === 'tsrx'
+          language === 'tsrx' && !flags.includes('no-playground')
             ? `<button type="button" class="try-button" data-code="${escapeHtml(text)}">Try in playground</button>`
             : ''
         let body = highlightHtml(text, language)
         if (language === 'tsrx') body = addTsrxHovers(body)
         return `<div class="code-block" data-lang="${escapeHtml(language)}">${body}${tryButton}</div>\n`
       },
-      link({ href, tokens }) {
+      link({ href, title, tokens }) {
         const text = this.parser.parseInline(tokens)
         if (/^https?:\/\//.test(href)) {
-          return `<a href="${href}" target="_blank" rel="noreferrer">${text}<span class="visually-hidden"> (opens in new tab)</span></a>`
+          // `[Deno](https://deno.com "brand:deno")` renders the project's own
+          // mark next to its name. The title is the only inline signal Markdown
+          // gives an author, and an unknown brand degrades to a plain link.
+          const brand = /^brand:([a-z]+)$/.exec(title ?? '')?.[1]
+          const mark = brand && BRAND_ICONS[brand] ? brandIconHtml(brand) : ''
+          return `<a${mark ? ' class="brand-link"' : ''} href="${href}" target="_blank" rel="noreferrer">${mark}${text}<span class="visually-hidden"> (opens in new tab)</span></a>`
         }
         // A source link may name the file (`./rust-oxc-core.md#…`) the way it
         // reads in an editor. The site serves routes, not files, so drop the
@@ -424,7 +487,9 @@ function sidebarHtml(activeLink) {
               (item) =>
                 `<li><a href="${withBase(item.link)}"${
                   item.link === activeLink ? ' aria-current="page"' : ''
-                }>${item.text}</a></li>`,
+                }>${item.text}${
+                  item.tag ? `<span class="sidebar-tag">${escapeHtml(item.tag)}</span>` : ''
+                }</a></li>`,
             )
             .join('\n')}
         </ul>
@@ -433,12 +498,56 @@ function sidebarHtml(activeLink) {
     .join('\n')
 }
 
-function outlineHtml(headings) {
+// Reading minutes per outline section, measured from the rendered article so
+// that generated blocks (diagrams, demos, tables) count the same as prose.
+// 200 words a minute is the low end of adult silent reading, which suits
+// reference pages people read carefully rather than skim.
+const WORDS_PER_MINUTE = 200
+
+function annotateReadingTime(articleHtml, headings) {
+  const marks = [...articleHtml.matchAll(/<h([23]) id="([^"]+)"/g)]
+  const words = (html) =>
+    html
+      // Chart tick labels are not reading. A page of build-time SVG charts
+      // counts thousands of axis numbers otherwise, and tells a reader it is a
+      // twenty-minute page when the prose is three.
+      .replace(/<svg[\s\S]*?<\/svg>/gi, ' ')
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/&[a-z]+;|&#\d+;/gi, ' ')
+      .split(/\s+/)
+      .filter(Boolean).length
+  const counted = new Map()
+  for (const [index, mark] of marks.entries()) {
+    const start = mark.index
+    const end = index + 1 < marks.length ? marks[index + 1].index : articleHtml.length
+    counted.set(mark[2], words(articleHtml.slice(start, end)))
+  }
+  // Everything above the first section belongs to the page, not to a heading,
+  // so it lands on the total without giving the first item a misleading badge.
+  const lead = marks.length > 0 ? words(articleHtml.slice(0, marks[0].index)) : words(articleHtml)
+  for (const heading of headings) heading.words = counted.get(heading.id) ?? 0
+  return lead
+}
+
+function readingMinutes(words) {
+  return Math.max(1, Math.round(words / WORDS_PER_MINUTE))
+}
+
+function outlineHtml(headings, leadWords = 0) {
   const items = headings.filter((h) => h.depth === 2 || h.depth === 3)
   if (items.length === 0) return ''
+  const total = readingMinutes(
+    leadWords + items.reduce((sum, h) => sum + (h.words ?? 0), 0),
+  )
+  // Without JS the bar sits at zero and the readout names the whole page, which
+  // is exactly true for a reader who has not scrolled.
   return `
     <nav class="outline" aria-labelledby="outline-title">
       <p class="outline-title" id="outline-title">On this page</p>
+      <div class="outline-progress" data-total-minutes="${total}">
+        <div class="outline-progress-track" aria-hidden="true"><div class="outline-progress-fill"></div></div>
+        <p class="outline-remaining" aria-live="polite">${total} min read</p>
+      </div>
       <ul>
         ${items
           .map(
@@ -736,12 +845,71 @@ function matrixFilterHtml(article) {
   return article.slice(0, markerIndex) + article.slice(markerIndex + marker.length, start) + replacement + article.slice(end + '</table></div>'.length)
 }
 
+// ---------- chooser (a decision table you answer for your own project) ----------
+// <!-- chooser --> before a two-column table turns the first column into
+// buttons and the second into the answer that button reveals. It is for a
+// decision a reader makes about their own project, where a table asks them to
+// scan rows that will never apply to them. Without JS every answer stays on the
+// page under its own label, which is the table again in prose form.
+function chooserHtml(article) {
+  const marker = '<!-- chooser -->'
+  const markerIndex = article.indexOf(marker)
+  const start = article.indexOf('<div class="table-wrap">', markerIndex)
+  const end = article.indexOf('</table></div>', start)
+  if (markerIndex === -1 || start === -1 || end === -1) {
+    throw new Error('chooser marker found without a following table')
+  }
+  const table = article.slice(start, end)
+  const prompt = table.match(/<th[^>]*>([\s\S]*?)<\/th>/)?.[1]?.trim()
+  const rows = [...table.matchAll(/<tr>\s*<td[^>]*>([\s\S]*?)<\/td>\s*<td[^>]*>([\s\S]*?)<\/td>\s*<\/tr>/g)]
+  if (!prompt || rows.length < 2) {
+    throw new Error('chooser needs a two-column table with a header and at least two rows')
+  }
+  const options = rows.map(([, label, answer], index) => ({
+    index,
+    // The chip is a button, so the label has to survive as plain text.
+    chip: label.replace(/<[^>]*>/g, '').trim(),
+    label: label.trim(),
+    answer: answer.trim(),
+  }))
+  const chips = options
+    .map(
+      (option) =>
+        `<button type="button" data-chooser-option="${option.index}" aria-pressed="false">${escapeHtml(option.chip)}</button>`,
+    )
+    .join('\n    ')
+  const panels = options
+    .map(
+      (option) =>
+        `<div class="chooser-panel" data-chooser-panel="${option.index}">
+      <p class="chooser-label">${option.label}</p>
+      <p class="chooser-answer">${option.answer}</p>
+    </div>`,
+    )
+    .join('\n    ')
+  const replacement = `<div class="chooser" data-chooser>
+  <p class="chooser-prompt">${prompt}</p>
+  <div class="chooser-chips" role="group" aria-label="${escapeHtml(prompt.replace(/<[^>]*>/g, ''))}">
+    ${chips}
+  </div>
+  <div class="chooser-panels">
+    ${panels}
+  </div>
+</div>`
+  return (
+    article.slice(0, markerIndex) +
+    article.slice(markerIndex + marker.length, start) +
+    replacement +
+    article.slice(end + '</table></div>'.length)
+  )
+}
+
 // ---------- review route checklist (Upstreaming to OXC) ----------
 // <!-- review-route --> before an ordered list turns each step into a
 // checklist item with its stated reading time, and app.js keeps a running
 // "minutes left" total. Without JS the checkboxes still work, the total is
 // simply static.
-const REVIEW_MINUTE_WORDS = { five: 5, ten: 10, fifteen: 15, twenty: 20 }
+const REVIEW_MINUTE_WORDS = { two: 2, three: 3, four: 4, five: 5, ten: 10, fifteen: 15, twenty: 20 }
 
 function reviewRouteHtml(article) {
   const marker = '<!-- review-route -->'
@@ -766,7 +934,7 @@ function reviewRouteHtml(article) {
       return `<li class="review-step"><input type="checkbox" data-review-check data-minutes="${minutes}" aria-label="Mark review step ${stepIndex} as read" /><span class="review-step-body">${body.trim()}</span>${badge}</li>`
     })
   const replacement = `<div class="review-route" data-review-route data-total-minutes="${totalMinutes}">
-  <p class="review-status" aria-live="polite" data-review-status>A full first pass is about ${totalMinutes} minutes of reading. Check steps off as you go.</p>
+  <p class="review-status" aria-live="polite" data-review-status>A full first pass is about ${totalMinutes} minutes, including the code and commits these steps point at. Check them off as you go.</p>
   <ol class="review-route-list">${items}</ol>
 </div>`
   return article.slice(0, markerIndex) + article.slice(markerIndex + marker.length, start) + replacement + article.slice(end + '</ol>'.length)
@@ -853,7 +1021,12 @@ function editorReplayWindow({ code, targets, problems, status }) {
 </div>`
 }
 
-function editorReplayStages() {
+// Every latency this demo says out loud comes from the aggregate-selected
+// editor report, formatted here rather than typed in, so rerunning the
+// benchmarks moves the demo copy along with the gate tables.
+const editorReplayMs = (value) => `${value.toFixed(2)} ms`
+
+function editorReplayStages(latency) {
   const openCode = `export function Counter({start}:{start:number}) @{
   var count = start;
   console.log("mounted");
@@ -898,7 +1071,7 @@ function editorReplayStages() {
             text: 'eslint(no-debugger): `debugger` statement is not allowed · at your authored bytes',
           },
         ],
-        status: 'open to first diagnostics: 2.40 ms median',
+        status: `open to first diagnostics: ${editorReplayMs(latency.initialOpenMedianMs)} median`,
       }),
     },
     {
@@ -909,7 +1082,7 @@ function editorReplayStages() {
         code: fixedCode,
         targets: ['console'],
         problems: [consoleProblem],
-        status: 'code action round trip: under 1 ms p95',
+        status: `code action round trip: ${editorReplayMs(latency.codeActionsP95Ms)} p95`,
       }),
     },
     {
@@ -920,14 +1093,15 @@ function editorReplayStages() {
         code: formattedCode,
         targets: ['console'],
         problems: [consoleProblem],
-        status: 'format request: under 1 ms p95 · code actions never touch disk',
+        status: `format request: ${editorReplayMs(latency.formattingP95Ms)} p95 · code actions never touch disk`,
       }),
     },
   ]
 }
 
-function editorReplayHtml() {
-  const stages = editorReplayStages()
+async function editorReplayHtml() {
+  const latency = await editorReplayLatencies()
+  const stages = editorReplayStages(latency)
   const prefix = 'er'
   return `<figure class="er-replay" data-editor-replay>
   <div class="er-replay-head">
@@ -950,17 +1124,18 @@ function editorReplayHtml() {
       )
       .join('\n    ')}
   </div>
-  <figcaption>The diagnostics, quick-fix rules, and latency figures are the real recorded ones: 2.40 ms median open-to-diagnostics and sub-millisecond edit, format, and code-action p95 on the recorded Apple M5 Pro, with zero disk writes from code actions.</figcaption>
+  <figcaption>The diagnostics, quick-fix rules, and latency figures are the real recorded ones: ${escapeHtml(editorReplayMs(latency.initialOpenMedianMs))} median open-to-diagnostics and edit, format, and code-action p95 all at or under ${escapeHtml(editorReplayMs(latency.slowestRoundTripP95Ms))} on the recorded ${escapeHtml(latency.cpu)}, with zero disk writes from code actions.</figcaption>
 </figure>`
 }
 
-function editorReplayMarkdown() {
+async function editorReplayMarkdown() {
+  const latency = await editorReplayLatencies()
   return [
     'One editing session, replayed in three stages:',
     '',
-    '1. **Open.** An unsaved buffer with a `console.log` warning and a `debugger` error gets live diagnostics on the exact authored bytes (2.40 ms median open to first diagnostics).',
-    '2. **Quick fix.** The validated `no-debugger` quickfix removes the statement; it was only offered because the text exists verbatim and the result reparses (under 1 ms p95).',
-    '3. **Format on save.** Oxfmt formats a projected copy, the lift back to TSRX is verified, and one edit fixes the messy spacing (under 1 ms p95, zero disk writes).',
+    `1. **Open.** An unsaved buffer with a \`console.log\` warning and a \`debugger\` error gets live diagnostics on the exact authored bytes (${editorReplayMs(latency.initialOpenMedianMs)} median open to first diagnostics).`,
+    `2. **Quick fix.** The validated \`no-debugger\` quickfix removes the statement; it was only offered because the text exists verbatim and the result reparses (${editorReplayMs(latency.codeActionsP95Ms)} p95).`,
+    `3. **Format on save.** Oxfmt formats a projected copy, the lift back to TSRX is verified, and one edit fixes the messy spacing (${editorReplayMs(latency.formattingP95Ms)} p95, zero disk writes).`,
   ].join('\n')
 }
 
@@ -1064,6 +1239,161 @@ function decorateProjectionLines(html, mapIds, { unpairedAttr, diagLines } = {})
 
 // "How it works" walkthrough: the four pipeline steps as buttons that light up
 // the matching lines of the linked projection map, one explanation at a time.
+// `<!-- cli-builder -->`: a flag picker. Nobody reads a table of twenty flags,
+// but people will click three of them to see the command they should have run,
+// so the reference doubles as the thing you copy.
+const CLI_COMMANDS = [
+  {
+    id: 'oxlint',
+    label: 'oxlint',
+    base: 'npx oxlint',
+    target: 'src/Cart.tsrx',
+    lead: 'Lints your files.',
+    flags: [
+      { flag: '--fix', summary: 'apply safe fixes', effect: 'applies fixes to your original TSRX and reparses the result before writing' },
+      { flag: '--deny', value: 'no-debugger', summary: 'turn a rule into an error', effect: 'treats <code>no-debugger</code> as an error whatever the config says' },
+      { flag: '--warn', value: 'no-console', summary: 'turn a rule into a warning', effect: 'downgrades <code>no-console</code> to a warning' },
+      { flag: '--allow', value: 'no-unused-vars', summary: 'switch a rule off', effect: 'switches <code>no-unused-vars</code> off for this run' },
+      { flag: '--type-aware', summary: 'add type-aware rules', effect: 'adds the official tsgolint rules, one type-checking process for the whole batch' },
+      { flag: '--type-check', summary: 'add full TypeScript diagnostics', effect: 'adds TypeScript compiler diagnostics on top of the type-aware rules' },
+      { flag: '--config', value: '.oxlintrc.json', summary: 'name a config file', effect: 'reads that config instead of searching upward for one' },
+      { flag: '--format', value: 'json', summary: 'machine-readable output', effect: 'prints one JSON report instead of the usual text' },
+    ],
+  },
+  {
+    id: 'oxfmt',
+    label: 'oxfmt',
+    base: 'npx oxfmt',
+    target: 'src/Cart.tsrx',
+    lead: 'Formats your files.',
+    flags: [
+      { flag: '--check', summary: 'report, do not write', effect: 'lists files that would change and exits 1, writing nothing' },
+      { flag: '--write', summary: 'write the result', effect: 'rewrites the files, and only after every file in the batch formatted successfully' },
+      { flag: '--config', value: '.oxfmtrc.json', summary: 'name a config file', effect: 'reads that config instead of searching upward for one' },
+      { flag: '--threads', value: '4', summary: 'set worker count', effect: 'formats with four workers' },
+      { flag: '--with-node-modules', summary: 'include node_modules', effect: 'stops skipping <code>node_modules</code>, which it skips by default' },
+    ],
+  },
+  {
+    id: 'oxc-tsrx',
+    label: 'oxc-tsrx',
+    base: 'npx oxc-tsrx',
+    target: '',
+    lead: 'Manages the install itself.',
+    exclusive: true,
+    flags: [
+      { flag: 'providers', summary: 'what a host finds here', effect: 'prints the provider index and writes nothing. Look for <code>routed extensions: .tsrx -> oxc-tsrx</code>' },
+      { flag: 'status', summary: 'check the Vite+ slots', effect: 'reports the four compatibility slots. Three <code>missing</code> lines are the healthy result outside Vite+' },
+      { flag: 'setup', summary: 'write the Vite+ slots', effect: 'writes the project-local stand-ins Vite+ resolves, plus the editor setting when it is needed' },
+      { flag: 'remove', summary: 'undo setup', effect: 'removes those slots and restores any official package it displaced' },
+      { flag: '--json', summary: 'machine-readable output', effect: 'prints the same answer as JSON' },
+    ],
+  },
+]
+
+function cliBuilderHtml() {
+  const tabs = CLI_COMMANDS.map(
+    (command, index) =>
+      `<button type="button" role="tab" id="cli-tab-${command.id}" aria-controls="cli-panel-${command.id}" aria-selected="${index === 0}" tabindex="${index === 0 ? 0 : -1}"><code>${escapeHtml(command.label)}</code></button>`,
+  ).join('')
+  const panels = CLI_COMMANDS.map((command, index) => {
+    const flags = command.flags
+      .map(
+        (entry, position) =>
+          `<label class="cli-flag"><input type="${command.exclusive ? 'radio' : 'checkbox'}" name="cli-${command.id}"${command.exclusive && position === 0 ? ' checked' : ''} data-cli-flag="${escapeHtml(entry.flag)}"${entry.value ? ` data-cli-value="${escapeHtml(entry.value)}"` : ''} data-cli-effect="${escapeHtml(entry.effect)}"><span><code>${escapeHtml(entry.flag)}${entry.value ? ` ${entry.value}` : ''}</code> ${escapeHtml(entry.summary)}</span></label>`,
+      )
+      .join('')
+    return `<div role="tabpanel" id="cli-panel-${command.id}" aria-labelledby="cli-tab-${command.id}"${index === 0 ? '' : ' hidden'} data-cli-command data-cli-base="${escapeHtml(command.base)}" data-cli-target="${escapeHtml(command.target)}" data-cli-lead="${escapeHtml(command.lead)}"${command.exclusive ? ' data-cli-exclusive' : ''}>
+  <div class="cli-flags">${flags}</div>
+  <div class="code-block cli-line" data-lang="sh"><code data-cli-output></code></div>
+  <p class="cli-effect" data-cli-explain aria-live="polite"></p>
+</div>`
+  }).join('\n')
+  return `<div class="cli-builder" data-cli-builder>
+  <div class="cli-tabs" role="tablist" aria-label="Command">${tabs}</div>
+  ${panels}
+</div>\n`
+}
+
+const cliBuilderMarkdown = CLI_COMMANDS.map(
+  (command) =>
+    `### \`${command.label}\`\n\n${command.lead}\n\n| Flag | What it does |\n| --- | --- |\n${command.flags
+      .map(
+        (entry) =>
+          `| \`${entry.flag}${entry.value ? ` ${entry.value}` : ''}\` | ${entry.effect.replace(/<\/?code>/g, '`').replace(/<[^>]*>/g, '')} |`,
+      )
+      .join('\n')}`,
+).join('\n\n')
+
+// `<!-- rule-sees -->`: the four things a JavaScript rule sees differently on
+// `.tsrx`. Each one is a before/after pair, so a tabbed panel showing your file
+// next to the copy carries it better than four dense paragraphs did.
+const RULE_SEES = [
+  {
+    id: 'control',
+    label: 'Control blocks',
+    summary:
+      'TSRX control syntax is already compiled away, so a rule keyed on <code>JSXForExpression</code> never fires. Your rule does visit the compiled statement, but a report on one is dropped, because its span covers text the copy wrote.',
+    yours: '@for (const task of tasks) {\n  <li>{task.label}</li>;\n}',
+    copy: 'for (const task of tasks) {\n  <li>{task.label}</li>;\n}',
+    note: 'Measured one rule per node type: <code>JSXElement</code> reported 7 and dropped 0, while <code>IfStatement</code>, <code>SwitchStatement</code>, and <code>FunctionDeclaration</code> each reported 0 and dropped 1.',
+  },
+  {
+    id: 'filename',
+    label: 'context.filename',
+    summary:
+      'Your rule is handed the copy\u2019s path. The path relative to your working directory survives, so a rule testing for <code>src/</code> works, but one comparing an absolute path or expecting a <code>.tsrx</code> extension does not. The diagnostic still lands on your file.',
+    yours: 'src/View.tsrx',
+    copy: '<temporary directory>/src/View.tsrx.tsx',
+  },
+  {
+    id: 'dropped',
+    label: 'Dropped reports',
+    summary:
+      'The copy adds markers and wrappers matching nothing you typed, and a report on one of those has no position in your file to point at. It is dropped, and the count is never silent.',
+    note: 'The count goes to stderr on a second <code>oxlint (oxc-tsrx):</code> line, into <code>oxcTsrx.jsPluginProjection.unmapped</code> under <code>--format=json</code>, and into one <code>js-plugins-unmapped</code> warning in your editor.',
+  },
+  {
+    id: 'overrides',
+    label: 'overrides globs',
+    summary:
+      'The copy is named <code>View.tsrx.tsx</code>, which <code>**/*.tsrx</code> does not match, so <code>oxlint</code> emits each of your <code>overrides[].files</code> and <code>excludeFiles</code> globs with <code>.tsx</code> appended as well.',
+    yours: '"files": ["**/*.tsrx"]',
+    copy: '"files": ["**/*.tsrx", "**/*.tsrx.tsx"]',
+    note: 'A config reached through <code>extends</code> does not get that rewrite yet, so put <code>.tsrx</code>-targeted overrides in the config that names <code>jsPlugins</code>.',
+  },
+]
+
+function ruleSeesHtml() {
+  const buttons = RULE_SEES.map(
+    (facet, index) =>
+      `<button type="button" role="tab" id="rule-sees-tab-${facet.id}" aria-controls="rule-sees-panel-${facet.id}" aria-selected="${index === 0}" tabindex="${index === 0 ? 0 : -1}">${escapeHtml(facet.label)}</button>`,
+  ).join('')
+  const panels = RULE_SEES.map(
+    (facet, index) =>
+      `<div role="tabpanel" id="rule-sees-panel-${facet.id}" aria-labelledby="rule-sees-tab-${facet.id}"${index === 0 ? '' : ' hidden'}>
+  <p class="facet-summary">${facet.summary}</p>
+  ${
+    facet.yours
+      ? `<div class="facet-pair">
+    <div><span class="facet-label">You wrote</span><div class="code-block" data-lang="tsrx">${highlightHtml(facet.yours, 'tsrx')}</div></div>
+    <div><span class="facet-label">Your rule sees</span><div class="code-block" data-lang="tsx">${highlightHtml(facet.copy, 'tsx')}</div></div>
+  </div>`
+      : ''
+  }${facet.note ? `\n  <p class="facet-note">${facet.note}</p>` : ''}
+</div>`,
+  ).join('\n')
+  return `<div class="facet-tabs" data-facet-tabs>
+  <div class="facet-tabs-bar" role="tablist" aria-label="What your rule sees on .tsrx">${buttons}</div>
+  ${panels}
+</div>\n`
+}
+
+const ruleSeesMarkdown = RULE_SEES.map(
+  (facet) =>
+    `- **${facet.label}.** ${facet.summary.replace(/<\/?code>/g, '`').replace(/<[^>]*>/g, '')}`,
+).join('\n')
+
 async function howItWorksHtml() {
   const example = await loadProjectionExample()
   if (!example) {
@@ -1206,22 +1536,72 @@ const PM_EXEC_PREFIXES = {
   yarn: 'yarn',
   bun: 'bunx',
 }
-const PM_INSTALL_PATTERN = /<!-- pm-install -->\r?\n```sh\r?\n([\s\S]*?)\r?\n```/g
+// <!-- pm-exec --> is the same component for a block that only runs a command:
+// authors write the `npx` form and each tab gets that manager's runner.
+const PM_TABS_PATTERN = /<!-- pm-(?:install|exec) -->\r?\n```sh\r?\n([\s\S]*?)\r?\n```/g
+
+// Each project's own mark, as the single-path glyphs published by Simple Icons
+// (CC0; the marks themselves stay their owners' trademarks and are used here to
+// name the tool they belong to). They are inlined rather than fetched, so the
+// strict CSP holds, and they fill with `currentColor` so a selected tab and a
+// hovered brand link tint the mark along with the label.
+const BRAND_ICONS = {
+  npm: 'M1.763 0C.786 0 0 .786 0 1.763v20.474C0 23.214.786 24 1.763 24h20.474c.977 0 1.763-.786 1.763-1.763V1.763C24 .786 23.214 0 22.237 0zM5.13 5.323l13.837.019-.009 13.836h-3.464l.01-10.382h-3.456L12.04 19.17H5.113z',
+  pnpm: 'M0 0v7.5h7.5V0zm8.25 0v7.5h7.498V0zm8.25 0v7.5H24V0zM2 2h3.5v3.5H2zm8.25 0h3.498v3.5H10.25zm8.25 0H22v3.5h-3.5zM8.25 8.25v7.5h7.498v-7.5zm8.25 0v7.5H24v-7.5zm2 2H22v3.5h-3.5zM0 16.5V24h7.5v-7.5zm8.25 0V24h7.498v-7.5zm8.25 0V24H24v-7.5z',
+  yarn: 'M12 0C5.375 0 0 5.375 0 12s5.375 12 12 12 12-5.375 12-12S18.625 0 12 0zm.768 4.105c.183 0 .363.053.525.157.125.083.287.185.755 1.154.31-.088.468-.042.551-.019.204.056.366.19.463.375.477.917.542 2.553.334 3.605-.241 1.232-.755 2.029-1.131 2.576.324.329.778.899 1.117 1.825.278.774.31 1.478.273 2.015a5.51 5.51 0 0 0 .602-.329c.593-.366 1.487-.917 2.553-.931.714-.009 1.269.445 1.353 1.103a1.23 1.23 0 0 1-.945 1.362c-.649.158-.95.278-1.821.843-1.232.797-2.539 1.242-3.012 1.39a1.686 1.686 0 0 1-.704.343c-.737.181-3.266.315-3.466.315h-.046c-.783 0-1.214-.241-1.45-.491-.658.329-1.51.19-2.122-.134a1.078 1.078 0 0 1-.58-1.153 1.243 1.243 0 0 1-.153-.195c-.162-.25-.528-.936-.454-1.946.056-.723.556-1.367.88-1.71a5.522 5.522 0 0 1 .408-2.256c.306-.727.885-1.348 1.32-1.737-.32-.537-.644-1.367-.329-2.21.227-.602.412-.936.82-1.08h-.005c.199-.074.389-.153.486-.259a3.418 3.418 0 0 1 2.298-1.103c.037-.093.079-.185.125-.283.31-.658.639-1.029 1.024-1.168a.94.94 0 0 1 .328-.06zm.006.7c-.507.016-1.001 1.519-1.001 1.519s-1.27-.204-2.266.871c-.199.218-.468.334-.746.44-.079.028-.176.023-.417.672-.371.991.625 2.094.625 2.094s-1.186.839-1.626 1.881c-.486 1.144-.338 2.261-.338 2.261s-.843.732-.899 1.487c-.051.663.139 1.2.343 1.515.227.343.51.176.51.176s-.561.653-.037.931c.477.25 1.283.394 1.71-.037.31-.31.371-1.001.486-1.283.028-.065.12.111.209.199.097.093.264.195.264.195s-.755.324-.445 1.066c.102.246.468.403 1.066.398.222-.005 2.664-.139 3.313-.296.375-.088.505-.283.505-.283s1.566-.431 2.998-1.357c.917-.598 1.293-.76 2.034-.936.612-.148.57-1.098-.241-1.084-.839.009-1.575.44-2.196.825-1.163.718-1.742.672-1.742.672l-.018-.032c-.079-.13.371-1.293-.134-2.678-.547-1.515-1.413-1.881-1.344-1.997.297-.5 1.038-1.297 1.334-2.78.176-.899.13-2.377-.269-3.151-.074-.144-.732.241-.732.241s-.616-1.371-.788-1.483a.271.271 0 0 0-.157-.046z',
+  bun: 'M12 22.596c6.628 0 12-4.338 12-9.688 0-3.318-2.057-6.248-5.219-7.986-1.286-.715-2.297-1.357-3.139-1.89C14.058 2.025 13.08 1.404 12 1.404c-1.097 0-2.334.785-3.966 1.821a49.92 49.92 0 0 1-2.816 1.697C2.057 6.66 0 9.59 0 12.908c0 5.35 5.372 9.687 12 9.687v.001ZM10.599 4.715c.334-.759.503-1.58.498-2.409 0-.145.202-.187.23-.029.658 2.783-.902 4.162-2.057 4.624-.124.048-.199-.121-.103-.209a5.763 5.763 0 0 0 1.432-1.977Zm2.058-.102a5.82 5.82 0 0 0-.782-2.306v-.016c-.069-.123.086-.263.185-.172 1.962 2.111 1.307 4.067.556 5.051-.082.103-.23-.003-.189-.126a5.85 5.85 0 0 0 .23-2.431Zm1.776-.561a5.727 5.727 0 0 0-1.612-1.806v-.014c-.112-.085-.024-.274.114-.218 2.595 1.087 2.774 3.18 2.459 4.407a.116.116 0 0 1-.049.071.11.11 0 0 1-.153-.026.122.122 0 0 1-.022-.083 5.891 5.891 0 0 0-.737-2.331Zm-5.087.561c-.617.546-1.282.76-2.063 1-.117 0-.195-.078-.156-.181 1.752-.909 2.376-1.649 2.999-2.778 0 0 .155-.118.188.085 0 .304-.349 1.329-.968 1.874Zm4.945 11.237a2.957 2.957 0 0 1-.937 1.553c-.346.346-.8.565-1.286.62a2.178 2.178 0 0 1-1.327-.62 2.955 2.955 0 0 1-.925-1.553.244.244 0 0 1 .064-.198.234.234 0 0 1 .193-.069h3.965a.226.226 0 0 1 .19.07c.05.053.073.125.063.197Zm-5.458-2.176a1.862 1.862 0 0 1-2.384-.245 1.98 1.98 0 0 1-.233-2.447c.207-.319.503-.566.848-.713a1.84 1.84 0 0 1 1.092-.11c.366.075.703.261.967.531a1.98 1.98 0 0 1 .408 2.114 1.931 1.931 0 0 1-.698.869v.001Zm8.495.005a1.86 1.86 0 0 1-2.381-.253 1.964 1.964 0 0 1-.547-1.366c0-.384.11-.76.32-1.079.207-.319.503-.567.849-.713a1.844 1.844 0 0 1 1.093-.108c.367.076.704.262.968.534a1.98 1.98 0 0 1 .4 2.117 1.932 1.932 0 0 1-.702.868Z',
+  deno: 'M1.105 18.02A11.9 11.9 0 0 1 0 12.985q0-.698.078-1.376a12 12 0 0 1 .231-1.34A12 12 0 0 1 4.025 4.02a12 12 0 0 1 5.46-2.771 12 12 0 0 1 3.428-.23c1.452.112 2.825.477 4.077 1.05a12 12 0 0 1 2.78 1.774 12.02 12.02 0 0 1 4.053 7.078A12 12 0 0 1 24 12.985q0 .454-.036.914a12 12 0 0 1-.728 3.305 12 12 0 0 1-2.38 3.875c-1.33 1.357-3.02 1.962-4.43 1.936a4.4 4.4 0 0 1-2.724-1.024c-.99-.853-1.391-1.83-1.53-2.919a5 5 0 0 1 .128-1.518c.105-.38.37-1.116.76-1.437-.455-.197-1.04-.624-1.226-.829-.045-.05-.04-.13 0-.183a.155.155 0 0 1 .177-.053c.392.134.869.267 1.372.35.66.111 1.484.25 2.317.292 2.03.1 4.153-.813 4.812-2.627s.403-3.609-1.96-4.685-3.454-2.356-5.363-3.128c-1.247-.505-2.636-.205-4.06.582-3.838 2.121-7.277 8.822-5.69 15.032a.191.191 0 0 1-.315.19 12 12 0 0 1-1.25-1.634 12 12 0 0 1-.769-1.404M11.57 6.087c.649-.051 1.214.501 1.31 1.236.13.979-.228 1.99-1.41 2.013-1.01.02-1.315-.997-1.248-1.614.066-.616.574-1.575 1.35-1.635',
+}
+
+// `<!-- extension:oxc -->` renders the Marketplace listing as a card: the
+// extension's own icon, what it is, and a link to install it. The icons are
+// copied from the published VSIXs into `assets/extensions`, so nothing is
+// fetched from a Marketplace CDN at page load.
+const EXTENSIONS = {
+  oxc: {
+    name: 'Oxc',
+    id: 'oxc.oxc-vscode',
+    summary: 'Oxlint and Oxfmt editor integration. This is the one that serves .tsrx.',
+    icon: 'oxc.png',
+  },
+  tsrx: {
+    name: 'TSRX for VS Code',
+    id: 'ripple-ts.ripple-ts-vscode-plugin',
+    summary: 'Syntax highlighting and IntelliSense for .tsrx, from the TSRX toolchain.',
+    icon: 'tsrx.png',
+  },
+}
+
+function extensionCardHtml(key) {
+  const extension = EXTENSIONS[key]
+  const href = `https://marketplace.visualstudio.com/items?itemName=${extension.id}`
+  return `<a class="ext-card" href="${href}" target="_blank" rel="noreferrer">
+  <img src="${withBase(`/assets/extensions/${extension.icon}`)}" alt="" width="44" height="44" loading="lazy">
+  <span class="ext-card-body"><span class="ext-card-name">${escapeHtml(extension.name)}</span><span class="ext-card-summary">${escapeHtml(extension.summary)}</span><code class="ext-card-id">${escapeHtml(extension.id)}</code></span>
+  <span class="ext-card-cta">Install<span class="visually-hidden"> (opens in new tab)</span></span>
+</a>\n`
+}
+
+function brandIconHtml(name) {
+  const path = BRAND_ICONS[name]
+  if (!path) return ''
+  return `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="${path}"/></svg>`
+}
 
 function pmInstallTabsHtml(npmCommand, groupId) {
   const PM_INSTALL_PREFIXES = PM_INSTALL_VARIANTS.find((variant) =>
     npmCommand.startsWith(variant.npm),
   )
-  if (!PM_INSTALL_PREFIXES) {
+  if (!PM_INSTALL_PREFIXES && !/^npx /.test(npmCommand)) {
     throw new Error(
-      `pm-install block must start with "npm install --save-dev" or "npm install", got: ${npmCommand.split('\n')[0]}`,
+      `pm tabs block must start with "npm install --save-dev", "npm install", or "npx", got: ${npmCommand.split('\n')[0]}`,
     )
   }
-  const managers = Object.keys(PM_INSTALL_PREFIXES)
+  const managers = Object.keys(PM_EXEC_PREFIXES)
   const buttons = managers
     .map(
       (pm, index) =>
-        `<button type="button" role="tab" id="pm-tab-${groupId}-${pm}" aria-controls="pm-panel-${groupId}-${pm}" aria-selected="${index === 0}" tabindex="${index === 0 ? 0 : -1}" data-pm="${pm}">${pm}</button>`,
+        `<button type="button" role="tab" id="pm-tab-${groupId}-${pm}" aria-controls="pm-panel-${groupId}-${pm}" aria-selected="${index === 0}" tabindex="${index === 0 ? 0 : -1}" data-pm="${pm}">${brandIconHtml(pm)}${pm}</button>`,
     )
     .join('')
   const panels = managers
@@ -1229,9 +1609,10 @@ function pmInstallTabsHtml(npmCommand, groupId) {
       const command =
         pm === 'npm'
           ? npmCommand
-          : npmCommand
-              .replace(PM_INSTALL_PREFIXES.npm, PM_INSTALL_PREFIXES[pm])
-              .replace(/^npx(?= )/gm, PM_EXEC_PREFIXES[pm])
+          : (PM_INSTALL_PREFIXES
+              ? npmCommand.replace(PM_INSTALL_PREFIXES.npm, PM_INSTALL_PREFIXES[pm])
+              : npmCommand
+            ).replace(/^npx(?= )/gm, PM_EXEC_PREFIXES[pm])
       return `<div role="tabpanel" id="pm-panel-${groupId}-${pm}" aria-labelledby="pm-tab-${groupId}-${pm}" data-pm="${pm}"${index === 0 ? '' : ' hidden'}><div class="code-block" data-lang="sh">${highlightHtml(command, 'sh')}</div></div>`
     })
     .join('')
@@ -1361,7 +1742,28 @@ async function pipelineHtml(kind) {
 </div>`
 }
 
-function renderDocPage({ page, article, headings, pageIndex, flat }) {
+// A page whose subject is not shipped says so directly under its title, in the
+// same words every time, so a reader never has to infer status from prose.
+const PAGE_STATUS = {
+  proposal: {
+    label: 'Proposal',
+    text: 'Nothing on this page is required to use oxc-tsrx. It is a design written down here and implemented in this repository only: no released OXC, Oxlint, Oxfmt, Vite+, or VS Code build reads it, and nothing has been submitted upstream.',
+  },
+}
+
+function statusBannerHtml(status) {
+  const entry = PAGE_STATUS[status]
+  if (!entry) return ''
+  return `<aside class="page-status page-status-${status}"><span class="page-status-label">${escapeHtml(
+    entry.label,
+  )}</span><span class="page-status-text">${escapeHtml(entry.text)}</span></aside>`
+}
+
+function renderDocPage({ page, article, headings, pageIndex, flat, leadWords = 0 }) {
+  const banner = statusBannerHtml(page.status)
+  const withBanner = banner
+    ? article.replace(/(<\/h1>\n?)/, (match) => `${match}${banner}`)
+    : article
   const main = `
 <div class="layout">
   <div id="sidebar-backdrop" class="sidebar-backdrop" hidden></div>
@@ -1373,11 +1775,11 @@ function renderDocPage({ page, article, headings, pageIndex, flat }) {
   <main id="main-content" class="content">
     <div class="doc-toolbar">${pageMenuHtml(page.link)}</div>
     <article class="doc">
-      ${article}
+      ${withBanner}
     </article>
     ${prevNextHtml(pageIndex, flat)}
   </main>
-  <aside class="aside" aria-label="Page outline">${outlineHtml(headings)}</aside>
+  <aside class="aside" aria-label="Page outline">${outlineHtml(headings, leadWords)}</aside>
 </div>`
   return pageShell({
     title: page.title,
@@ -1459,12 +1861,13 @@ async function renderHomePage({ description }) {
     <p class="pg-note demo-scenario-note" id="pg-scenario-note" hidden></p>
   </section>
   <section class="home-bench" aria-label="Headline performance">
-    <h2>Fast, and gated on it</h2>
-    <p>A release gate is an automated pass or fail check that runs before every release. Each benchmark below has a frozen budget, meaning the worst result we allow ourselves to ship. If a new build ever lands on the wrong side of a budget, the release fails and does not go out. Every number below is read from the committed benchmark reports when this site is built. Measured ${reportDate} on one machine; your hardware will differ.</p>
+    <h2>Fast, and it stays fast</h2>
+    <p>Every number below is read from a committed benchmark report, and every one is a release gate: cross a frozen budget and the release fails.</p>
     <h3 class="home-bench-sub">Lint the same 1,000 files, three tools</h3>
     ${await comparativeChartHtml()}
     <h3 class="home-bench-sub">Release gates we ship against</h3>
     ${await homeBenchmarksHtml()}
+    <p class="home-bench-caption">Measured ${reportDate} on one machine. Your hardware will differ.</p>
     <p class="home-bench-link"><a href="${withBase('/reference/benchmarks')}">See every gate and report →</a></p>
   </section>
   <section class="features" aria-label="Feature highlights">
@@ -1599,16 +2002,17 @@ async function build() {
     // Swap pm-install blocks for placeholders before markdown rendering; the
     // markdown twin keeps only the plain npm fence with the marker stripped.
     const pmInstallBlocks = []
-    const body = sourceBody.replace(PM_INSTALL_PATTERN, (match, command) => {
+    const body = sourceBody.replace(PM_TABS_PATTERN, (match, command) => {
       pmInstallBlocks.push(command)
       return `<!-- pm-tabs:${pmInstallBlocks.length - 1} -->`
     })
-    let exportedBody = sourceBody.replace(/<!-- pm-install -->\r?\n/g, '')
+    let exportedBody = sourceBody.replace(/<!-- pm-(?:install|exec) -->\r?\n/g, '')
     const page = {
       link: item.link,
       group: item.group,
       title: data.title || item.text,
       description: data.description || '',
+      status: data.status || '',
     }
     const headings = []
     const marked = createMarked(makeSlugger(), headings)
@@ -1620,11 +2024,19 @@ async function build() {
       const benchmarkMarkdown = await benchmarksSectionsMarkdown()
       article = article.replace('<!-- benchmarks:auto -->', await benchmarksSectionsHtml())
       exportedBody = exportedBody.replace('<!-- benchmarks:auto -->', benchmarkMarkdown)
-      const anchor = headings.findIndex((heading) => heading.text === 'Measurement hygiene')
+      const anchor = headings.findIndex((heading) => heading.text === 'How a number gets on this page')
       headings.splice(anchor === -1 ? headings.length : anchor, 0, ...benchmarkHeadings)
     }
     if (article.includes('<!-- projection-explorer -->')) {
       article = article.replace('<!-- projection-explorer -->', await projectionExplorerHtml())
+    }
+    if (article.includes('<!-- cli-builder -->')) {
+      article = article.replace('<!-- cli-builder -->', cliBuilderHtml())
+      exportedBody = exportedBody.replace('<!-- cli-builder -->', cliBuilderMarkdown)
+    }
+    if (article.includes('<!-- rule-sees -->')) {
+      article = article.replace('<!-- rule-sees -->', ruleSeesHtml())
+      exportedBody = exportedBody.replace('<!-- rule-sees -->', ruleSeesMarkdown)
     }
     if (article.includes('<!-- how-it-works -->')) {
       article = article.replace('<!-- how-it-works -->', await howItWorksHtml())
@@ -1634,6 +2046,15 @@ async function build() {
       const example = await loadProjectionExample()
       article = article.replace('<!-- terminal-demo -->', terminalDemoHtml(example))
       exportedBody = exportedBody.replace('<!-- terminal-demo -->', terminalDemoMarkdown(example))
+    }
+    for (const match of article.matchAll(/<!-- extension:([a-z]+) -->/g)) {
+      const extension = EXTENSIONS[match[1]]
+      if (!extension) throw new Error(`unknown extension marker: ${match[0]}`)
+      article = article.replace(match[0], extensionCardHtml(match[1]))
+      exportedBody = exportedBody.replace(
+        match[0],
+        `[${extension.name} (\`${extension.id}\`)](https://marketplace.visualstudio.com/items?itemName=${extension.id}): ${extension.summary}`,
+      )
     }
     for (const match of article.matchAll(/<!-- terminal-demo:([a-z0-9-]+) -->/g)) {
       const demo = (await loadTerminalTranscripts())?.demos?.[match[1]]
@@ -1647,9 +2068,12 @@ async function build() {
     if (article.includes('<!-- review-route -->')) {
       article = reviewRouteHtml(article)
     }
+    if (article.includes('<!-- chooser -->')) {
+      article = chooserHtml(article)
+    }
     if (article.includes('<!-- editor-replay -->')) {
-      article = article.replace('<!-- editor-replay -->', editorReplayHtml())
-      exportedBody = exportedBody.replace('<!-- editor-replay -->', editorReplayMarkdown())
+      article = article.replace('<!-- editor-replay -->', await editorReplayHtml())
+      exportedBody = exportedBody.replace('<!-- editor-replay -->', await editorReplayMarkdown())
     }
     if (article.includes('<!-- annotate-config -->')) {
       article = annotateConfigBlocks(article)
@@ -1668,10 +2092,12 @@ async function build() {
     }
     article = addGlossary(article)
     searchDocs.push(...extractSections(new Marked(), exportedBody, page))
+    const leadWords = annotateReadingTime(article, headings)
     const html = renderDocPage({
       page,
       article,
       headings,
+      leadWords,
       pageIndex: pageIndex < flat.length ? pageIndex : -1,
       flat,
     })

@@ -15,6 +15,11 @@ import { parseNpmPackResponse } from "../../scripts/npm-pack-response.mjs";
 import { startLocalRegistry } from "./local-registry.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
+// Read from the package this test packs, so cutting a release cannot leave the
+// expected `--version` output behind and paint the whole suite red.
+const toolchainVersion = JSON.parse(
+  await readFile(resolve(root, "packages/toolchain/package.json"), "utf8"),
+).version;
 const npm = process.platform === "win32" ? "npm.cmd" : "npm";
 const packageManagers = [
   {
@@ -190,7 +195,7 @@ test(
               cwd: consumer,
               env: environment,
             });
-            assert.equal(version.stdout, "oxc-tsrx 0.1.3\n", argument);
+            assert.equal(version.stdout, `oxc-tsrx ${toolchainVersion}\n`, argument);
           }
           const unknown = await run(process.execPath, [cli, "frobnicate"], {
             cwd: consumer,

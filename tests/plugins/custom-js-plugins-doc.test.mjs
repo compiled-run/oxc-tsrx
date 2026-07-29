@@ -178,41 +178,35 @@ test("every terminal-demo marker on the page resolves to a captured transcript",
   }
 });
 
-// The page carries two sample projects: the plain one at the top, mirrored by
-// examples/custom-js-plugins, and the `vp create` walkthrough, mirrored by
-// examples/custom-js-plugins/vite-plus. Both use the same "Save this as" wording
-// and both name a `.oxlintrc.json`, so a name alone cannot say which directory
-// it belongs to. The walkthrough's heading is the boundary.
-const WALKTHROUGH_HEADING = "## The whole path, on a fresh Vite+ project";
-const walkthroughStart = page.indexOf(WALKTHROUGH_HEADING);
-const walkthroughEnd = page.indexOf("\n## ", walkthroughStart + 1);
+// The page used to carry a second sample project: a step-by-step `vp create`
+// walkthrough that reprinted every file it told you to write. That duplicated
+// the Vite+ page and read like contributor notes, so it was cut down to a short
+// "In a Vite+ project" section. The facts it existed to pin are still asserted
+// below, they just no longer need their own scaffold.
+const VITE_HEADING = "## In a Vite+ project";
+const viteStart = page.indexOf(VITE_HEADING);
+const viteEnd = page.indexOf("\n## ", viteStart + 1);
 
-test("the page still carries the fresh-scaffold walkthrough", () => {
-  assert.ok(walkthroughStart >= 0, `the page lost its "${WALKTHROUGH_HEADING}" section`);
-  assert.ok(walkthroughEnd > walkthroughStart, "the walkthrough section never ends");
-  const section = page.slice(walkthroughStart, walkthroughEnd);
-  // The five facts that make this route work rather than nearly work. Each one
-  // was measured on a scaffold, and each was wrong on this page at some point.
-  assert.match(section, /tsconfig\.app\.json/u, "the walkthrough stopped naming the app tsconfig");
-  assert.match(
-    section,
-    /solution-style/u,
-    "the walkthrough no longer warns that the root tsconfig is inert",
-  );
-  assert.match(
-    section,
-    /@tsrx\/typescript-plugin/u,
-    "the walkthrough stopped naming the TSRX toolchain package setup will not install",
-  );
+test("the Vite+ section still answers the questions it exists for", () => {
+  assert.ok(viteStart >= 0, `the page lost its "${VITE_HEADING}" section`);
+  assert.ok(viteEnd > viteStart, "the Vite+ section never ends");
+  const section = page.slice(viteStart, viteEnd);
+  // Two facts a plugin author cannot guess, and one pointer. The TSRX language
+  // prerequisites moved to the Vite+ page, which this section links.
   assert.match(
     section,
     /vite\.config\.ts/u,
-    "the walkthrough stopped saying where vp lint reads its configuration",
+    "the section stopped saying where vp lint reads its configuration",
   );
   assert.match(
     section,
-    /No `overrides` block was needed/u,
-    "the walkthrough stopped answering the overrides question it was written to settle",
+    /node_modules[/\\]\.bin[/\\]oxlint/u,
+    "the section stopped warning that the oxlint on your PATH is Vite+'s",
+  );
+  assert.match(
+    section,
+    /integrations\/vite-plus/u,
+    "the section stopped linking the page that owns the rest of the Vite+ setup",
   );
 });
 
@@ -220,26 +214,17 @@ test("every file the page tells you to save matches its examples directory", asy
   // Tolerate the sentence wrapping across lines. A single-line-only pattern
   // silently drops coverage for any instruction that reflows.
   const instructions = [...page.matchAll(/[Ss]ave\s+this\s+as\s+`([^`]+)`:\r?\n\r?\n```/g)];
-  assert.ok(instructions.length >= 7, "the page stopped telling readers to save files");
-  let walkthroughInstructions = 0;
+  assert.ok(instructions.length >= 2, "the page stopped telling readers to save files");
   for (const instruction of instructions) {
     const name = instruction[1];
-    const inWalkthrough =
-      instruction.index > walkthroughStart && instruction.index < walkthroughEnd;
-    if (inWalkthrough) walkthroughInstructions += 1;
-    const directory = inWalkthrough ? join(examples, "vite-plus") : examples;
     const fence = fences(page).find((entry) => entry.index > instruction.index);
-    const expected = await readFile(join(directory, name), "utf8");
+    const expected = await readFile(join(examples, name), "utf8");
     assert.equal(
       fence.body,
       expected,
-      `the fence for ${name} differs from ${relative(root, join(directory, name))}`,
+      `the fence for ${name} differs from ${relative(root, join(examples, name))}`,
     );
   }
-  assert.ok(
-    walkthroughInstructions >= 4,
-    "the walkthrough stopped printing the files it tells you to write",
-  );
 });
 
 // This page told readers twice that a plugin declared in the root tsconfig would
@@ -386,16 +371,24 @@ test("the editor page documents the editor half of the lane", async () => {
 
 test("no page still claims a plain install serves .tsrx before activation", async () => {
   for (const path of [editorPagePath, readmePath]) {
-    const text = await readFile(path, "utf8");
+    // Prose wraps at 80 columns, so match against a single-line copy: a phrase
+    // must not stop counting because a rewrap split it across two lines.
+    const text = (await readFile(path, "utf8")).replaceAll(/\s+/gu, " ");
     // Every page that promises editor diagnostics has to name the activation
-    // step in the same breath, because Ripple's extension owns `.tsrx` as the
-    // language id `ripple` and the official OXC extension activates on neither.
+    // step in the same breath, because the TSRX toolchain's extension owns
+    // `.tsrx` under its own language id and the official OXC extension
+    // activates on neither. The id itself is that extension's to name, so the
+    // pages describe the ownership rather than pinning the string.
     assert.match(
       text,
       /activation event|activationEvents|onLanguage/u,
       `${path} promises editor diagnostics without naming the activation step`,
     );
-    assert.match(text, /ripple/iu, `${path} does not name the extension that owns .tsrx`);
+    assert.match(
+      text,
+      /(claims|contributes|owns) `\.tsrx`/u,
+      `${path} does not name the extension that owns .tsrx`,
+    );
   }
 });
 
@@ -427,8 +420,8 @@ async function makeWalkthroughProject() {
   const project = await mkdtemp(join(tmpdir(), "oxc-tsrx-walkthrough-doc-"));
   await cp(join(examples, "vite-plus"), project, { recursive: true });
   // vite.config.ts is the `vp lint` half. It needs Vite+ to run, which this
-  // suite does not install, so it ships as a printed file and is checked for
-  // byte equality with the page above rather than executed here.
+  // suite does not install, so it ships unexecuted: the docs link to it rather
+  // than printing it, and nothing here asserts anything about its contents.
   await rm(join(project, "vite.config.ts"));
   // Provider discovery walks up looking for a package.json, and the language
   // server needs it to find this package at all. A scaffold always has one.
@@ -614,7 +607,7 @@ test("the page's commands really do what the page says", async (t) => {
       // The fence the page tells you to add is executed here rather than
       // trusted, because it is the one file on the page that is not mirrored in
       // examples/custom-js-plugins.
-      const fence = page.match(/Add this as `src\/TaskFeed\.tsrx`:\r?\n\r?\n```tsrx\r?\n([\s\S]*?)^```/mu);
+      const fence = page.match(/`src\/TaskFeed\.tsrx`:\r?\n\r?\n```tsrx\r?\n([\s\S]*?)^```/mu);
       assert.ok(fence, "the page stopped telling readers to add src/TaskFeed.tsrx");
       await writeFile(join(project, "src/TaskFeed.tsrx"), fence[1]);
       const result = await oxlint(project, ["src/TaskFeed.tsrx"]);

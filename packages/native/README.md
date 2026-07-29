@@ -32,5 +32,5 @@ addon. `oxc-tsrx` loads it for its `oxc-tsrx/parser` export.
 
 `checksums.json` records, for every executable and addon in the package, its
 SHA-256 digest, byte size, object identity, Rust target, package version,
-API/ABI role, Node-API version, capabilities, and the exact canonical OXC
+API/ABI role, Node-API version, capabilities, and the exact official OXC
 revision it was built against.

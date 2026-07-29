@@ -9,7 +9,6 @@ import { performance } from "node:perf_hooks";
 import { pathToFileURL } from "node:url";
 import { installPhysicalToolPackages } from "../../tests/vite/physical-consumer.mjs";
 
-const require = createRequire(import.meta.url);
 const root = resolve(import.meta.dirname, "../..");
 const fixture = join(root, "tests/fixtures/vite/toolchain/diagnostics");
 const budgetsPath = join(root, "benchmarks/vite/budgets.json");
@@ -20,6 +19,10 @@ const formatBin = join(root, "target/release/oxc-tsrx");
 // declares them, so they are resolved from that manifest rather than from a
 // hoisted repository-root `node_modules`.
 const fromToolchain = createRequire(pathToFileURL(join(root, "packages/toolchain/package.json")).href);
+// `vite` and `vite-plus-current` are devDependencies of the test workspace, so
+// they only resolve from that manifest, the same way benchmarks/comparative
+// resolves its incumbents.
+const fromTests = createRequire(pathToFileURL(join(root, "tests/package.json")).href);
 const toolchainPackage = (name) => dirname(fromToolchain.resolve(`${name}/package.json`));
 const productLintBin = join(root, "packages/toolchain/bin/oxlint");
 const productFormatBin = join(root, "packages/toolchain/bin/oxfmt");
@@ -255,10 +258,10 @@ const summary = {
   },
   corpus: await corpusIdentity(),
   versions: {
-    vite: require("vite/package.json").version,
-    vitePlusCurrent: require("vite-plus-current/package.json").version,
-    oxlint: require("oxlint-current/package.json").version,
-    oxfmt: require("oxfmt-current/package.json").version,
+    vite: fromTests("vite/package.json").version,
+    vitePlusCurrent: fromTests("vite-plus-current/package.json").version,
+    oxlint: fromToolchain("oxlint-current/package.json").version,
+    oxfmt: fromToolchain("oxfmt-current/package.json").version,
   },
   samplePolicy: {
     warmups,

@@ -201,11 +201,18 @@ test("a capability executor reports a child killed by a signal as exit 2", {
 });
 
 test("the capability calling convention is documented where an adopting host will look", async () => {
+  // The published README is the registry landing page, so the protocol lives on
+  // the docs site instead. The package README links to this page.
+  const page = await readFile(
+    join(packageRoot, "../../docs/architecture/provider-protocol.md"),
+    "utf8",
+  );
   const readme = await readFile(join(packageRoot, "README.md"), "utf8");
-  const start = readme.indexOf("### Capability calling convention");
-  assert.notEqual(start, -1, "the README must document the calling convention");
-  const end = readme.indexOf("\n### ", start + 1);
-  const section = end === -1 ? readme.slice(start) : readme.slice(start, end);
+  assert.match(readme, /architecture\/provider-protocol/u, "the README must link the protocol page");
+  const start = page.indexOf("### Capability calling convention");
+  assert.notEqual(start, -1, "the page must document the calling convention");
+  const end = page.indexOf("\n### ", start + 1);
+  const section = end === -1 ? page.slice(start) : page.slice(start, end);
   for (const required of [
     "#### argv",
     "#### Output",
@@ -409,8 +416,8 @@ test("an isolated consumer resolves every public export and bin from the package
     }
 
     // --- The capability calling convention -------------------------------
-    // Documented in packages/toolchain/README.md, "Capability calling
-    // convention". No host calls lint or format through discovery yet, so
+    // Documented in docs/architecture/provider-protocol.md, "Capability
+    // calling convention". No host calls lint or format through discovery, so
     // these assertions are what an adopting host would be able to rely on.
     const executors = [
       ["oxc-tsrx-lint", "lint", []],

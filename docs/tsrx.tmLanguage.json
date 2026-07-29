@@ -522,7 +522,7 @@
     },
     "tsrx-template-branch-directive": {
       "name": "meta.directive.branch.tsrx",
-      "begin": "(?:(@)(else|empty|pending|catch)|(else|catch))(?![_$[:alnum:]])(?=\\s*(?:\\(|\\{|[^\\n{}]+\\{))",
+      "begin": "(?:(@)(else|empty|pending|catch)|(else|catch))(?![_$[:alnum:]])(?:\\s+(if))?(?=\\s*(?:\\(|\\{|[^\\n{}]+\\{))",
       "beginCaptures": {
         "1": {
           "name": "keyword.control.directive.tsrx"
@@ -531,6 +531,9 @@
           "name": "keyword.control.directive.tsrx"
         },
         "3": {
+          "name": "keyword.control.directive.tsrx"
+        },
+        "4": {
           "name": "keyword.control.directive.tsrx"
         }
       },
@@ -7153,5 +7156,7 @@
       ]
     }
   },
-  "fileTypes": ["ripple"]
+  "fileTypes": [
+    "ripple"
+  ]
 }

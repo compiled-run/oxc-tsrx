@@ -233,7 +233,9 @@ function adjudicationHtml(adjudication) {
   const reports = adjudication.reports
     .map(({ path: reportPath }) => `<code>${escapeHtml(reportPath)}</code>`)
     .join(', ')
-  return `<p class="bench-adjudication"><strong>Near-threshold adjudication.</strong> ${triggers} entered the unchanged ${band} band, so the aggregate required exactly ${adjudication.requiredReports - 1} additional fresh identity-matched reports. Only triggering assertions receive two-of-three tolerance; every other assertion and invariant must pass in every report. The representative is selected by median normalized budget pressure with a stable report-path tie-break, never by choosing the fastest passing sample. Any failure more than ${band} beyond its threshold, or a red selected representative, fails the aggregate. Retained reports: ${reports}.</p>`
+  // The policy itself is stated once on the page. Per family, all that is left
+  // to say is which assertion triggered it and which reports were retained.
+  return `<p class="bench-adjudication"><strong>Near-threshold adjudication.</strong> ${triggers} landed inside the ${band} band, so this family required ${adjudication.requiredReports - 1} additional fresh identity-matched reports and kept the median-pressure representative of the three. Retained: ${reports}.</p>`
 }
 
 function assertionPresentation(assertion) {
@@ -350,7 +352,7 @@ function comparativeRows({ report }) {
 }
 
 const FAMILIES = [
-  { family: 'comparative', title: 'Matched 1,000-file CLI comparison', rows: comparativeRows, note: 'ESLint, official Oxlint, and OXC for TSRX lint the same byte-identical TSX files with one no-debugger rule, the same explicit file list, zero-diagnostic default output, 5 warmups, and 20 measured processes. Every lane runs through its npm CLI entry point. The ordinary oxlint-tsrx lane imports the exact declared official Oxlint launcher in the same Node process; only the separate mixed-file-types lane enters the native TSRX path. That mixed row is a paired internal workload ratio, not a cross-tool comparison.' },
+  { family: 'comparative', title: 'Matched 1,000-file CLI comparison', rows: comparativeRows, note: 'ESLint, official Oxlint, and OXC for TSRX lint the same byte-identical TSX files, with one no-debugger rule, through each tool’s own npm entry point, over 5 warmups and 20 measured processes. The separate mixed-file-types row is a paired internal workload rather than a cross-tool comparison, and it is the only lane that enters the native TSRX path.' },
   { family: 'native-lint', title: 'Native lint', rows: (context) => arrayRows(context, nativeLintDistributions(context.report)), note: 'Frozen release gate: throughput, same-build ordinary-path overhead, cold start, memory, and batch invariants. The npm-launcher ratio is a diagnostic boundary, not a speed claim.' },
   { family: 'native-format', title: 'Native format', rows: (context) => arrayRows(context, nativeFormatDistributions(context.report)), note: 'Frozen release gate: formatter throughput, convergence scaling, memory, and batch invariants. The historical 16.6 MiB/s value is an absolute cross-corpus-derived floor, not a speedup claim.' },
   { family: 'type-aware', title: 'Opt-in type-aware lint', rows: typeAwareRows, note: 'The opt-in TypeScript-Go lane. The default lane stays syntax-only with zero type processes.' },
@@ -713,6 +715,12 @@ export const benchmarkHeadings = FAMILIES.map(({ family, title }) => ({
   text: title,
 }))
 
+// Every gate keeps its chart, because the point of publishing them is that the
+// retained samples are there to check. Read end to end, though, that is forty-odd
+// charts and seventy table rows, which is a page nobody finishes. So the matched
+// cross-tool comparison, the one result most readers came for, stays open, and
+// each release-gate family collapses to a headline sentence with its numbers one
+// click away.
 export async function benchmarksSectionsHtml() {
   const sections = []
   for (const { family, title, rows: extract, note } of FAMILIES) {
@@ -722,14 +730,27 @@ export async function benchmarksSectionsHtml() {
       ? new Date(report.generatedAtUnixMs).toISOString().slice(0, 10)
       : (report.timestamp ?? '').slice(0, 10)
     const allPass = rows.every((row) => row.pass)
-    sections.push(`
+    const verdict = allPass ? 'every budget passed' : 'BUDGET FAILURES PRESENT'
+    const evidence = `${tableHtml(rows)}\n${chartsHtml(rows)}\n${adjudicationHtml(adjudication)}`
+    const headline = `<p>${escapeHtml(note)} Report: <code>${escapeHtml(file)}</code> (${escapeHtml(
+      when,
+    )}), ${verdict}.</p>`
+    sections.push(
+      family === 'comparative'
+        ? `
 <h2 id="${family}">${escapeHtml(title)}</h2>
-<p>${escapeHtml(note)} Report: <code>${escapeHtml(file)}</code> (${escapeHtml(when)}), ${
-      allPass ? 'every budget passed' : 'BUDGET FAILURES PRESENT'
-    }.</p>
+${headline}
 ${chartsHtml(rows)}
 ${tableHtml(rows)}
-${adjudicationHtml(adjudication)}`)
+${adjudicationHtml(adjudication)}`
+        : `
+<h2 id="${family}">${escapeHtml(title)}</h2>
+${headline}
+<details class="bench-details">
+<summary>${rows.length} ${rows.length === 1 ? 'budget' : 'budgets'}, ${verdict}. Show the numbers and the per-gate charts</summary>
+${evidence}
+</details>`,
+    )
   }
   return sections.join('\n')
 }
@@ -755,49 +776,65 @@ ${tableMarkdown(rows)}${adjudication ? `\n\n${adjudicationMarkdown(adjudication)
 // Headline rows for the home page chart, picked from the same normalized
 // rows. Labels are plain language, the visible number is the real measured
 // value, and each note explains the metric in the hover/focus tooltip.
+//
+// House style for these notes: write for a developer who has never seen this
+// repo. Say what was run and what the number means, spell out p95 rather than
+// naming it, and keep every "this is not a comparison against X" disclaimer
+// intact. Simpler is not allowed to become vaguer about what is being claimed.
+//
+// `aside` is the one thing a card says about itself WITHOUT hover, printed
+// under the meter next to the gate. It exists for the parity card: a ratio
+// under 1.00 sitting above a chart where official Oxlint is faster than us
+// reads as a contradiction unless the card itself says what the two sides are.
+//
+// `ariaNote` is the same explanation written for someone listening rather than
+// reading. `note` is a tooltip a sighted reader scans and can re-read at will;
+// the screen-reader summary is spoken in one uninterrupted run, so a tighter
+// sentence is the better experience there, not a lesser one. It also stops the
+// page shipping the same 240 characters twice per card. Every disclaimer that
+// the visible note carries has to survive in the spoken one, so where a note is
+// already short enough to speak, `ariaNote` is left off and `note` is used.
 const HOME_PICKS = [
   {
     family: 'native-lint',
     match: /median standard-path latency ratio/i,
-    label: 'Ordinary-file lint overhead',
-    emoji: '⚖️',
-    hue: 'violet',
+    label: 'Ordinary files: parity with the OXC path we wrap',
     unit: '×',
-    note: 'Median ordinary-TSX latency through the product direct path versus the same-build canonical OXC adapter control. 1.00× is parity; this is not the official Oxlint npm/CLI boundary.',
+    aside: '1.00× is the target. Internal same-build check, not official Oxlint.',
+    note: 'Time to lint an ordinary TSX file with this project, divided by the time plain OXC takes on the same file from the same build. 1.00× means we add no cost. Both sides run in one process, so this is an internal check, not a race against the official Oxlint command from npm.',
+    // The aside is read out immediately before this, and it already says
+    // "1.00× is the target. Internal same-build check, not official Oxlint.",
+    // so the spoken form does not repeat either point.
+    ariaNote: 'Our lint time on an ordinary TSX file, divided by plain OXC on the same file from the same build.',
   },
   {
     family: 'native-format',
     match: /sequential throughput vs absolute/i,
     label: 'Sequential formatting',
-    emoji: '✨',
-    hue: 'orange',
     unit: 'MiB/s',
-    note: 'Sequential formatter throughput. The ≥16.6 MiB/s gate is an absolute regression floor derived from a non-comparable historical result; it is not a speedup comparison.',
+    note: 'How many megabytes of source the formatter gets through per second on one thread. The floor it clears is a line we refuse to drop below, taken from an earlier measurement of our own formatter. It is not a comparison against another tool.',
+    ariaNote: 'Megabytes of source formatted per second on one thread. The floor comes from an earlier measurement of our own formatter, not from another tool.',
   },
   {
     family: 'native-lint',
     match: /fresh-process TSRX p95 latency/i,
     label: 'Cold start: lint a file from scratch',
-    emoji: '❄️',
-    hue: 'aqua',
     unit: 'ms',
-    note: 'Launching a brand-new process and linting a TSRX file end to end, 95th percentile. There is no warmup to wait for.',
+    note: 'Time to start a brand-new process and lint one TSRX file, from launch to finished. There is no warmup to wait for. Timed at the slow end: 95 out of 100 runs are this fast or faster.',
+    ariaNote: 'Time to start a brand-new process and lint one TSRX file, launch to finished, with no warmup. Slow end: 95 of 100 runs are this fast or faster.',
   },
   {
     family: 'editor',
     match: /edit-to-diagnostics p95/i,
     label: 'Native editor diagnostics',
-    emoji: '💡',
-    hue: 'yellow',
     unit: 'ms',
-    note: 'Direct local stdio language-server edit-to-diagnostics round trip, excluding VS Code rendering.',
+    note: 'Time from your keystroke to the squiggly underline being ready, measured at the language server on your own machine. It does not count the time VS Code spends drawing it. Timed at the slow end: 95 out of 100 edits are this fast or faster.',
+    ariaNote: 'Time from your keystroke to the squiggly underline being ready at the language server, not counting the time VS Code spends drawing it. Slow end: 95 of 100 edits are this fast or faster.',
   },
   {
     family: 'native-lint',
     match: /median scan\+copy\+parse throughput/i,
     label: 'Reading TSRX source',
-    emoji: '📖',
-    hue: 'magenta',
     unit: 'MiB/s',
     note: 'How fast TSRX source moves through the extra work this project adds: scanning your file, building the in-memory TSX copy, and parsing it.',
   },
@@ -805,10 +842,9 @@ const HOME_PICKS = [
     family: 'type-aware',
     match: /single-file type-aware p95/i,
     label: 'Type-aware lint (opt-in)',
-    emoji: '🔬',
-    hue: 'blue',
     unit: 'ms',
-    note: 'A single-file lint with full TypeScript type information, 95th percentile. Off by default; the standard lane stays syntax-only.',
+    note: 'Linting one file with full TypeScript type information, the slower check that has to ask the type checker. Off unless you turn it on, so the everyday lint stays syntax only. Timed at the slow end: 95 out of 100 runs are this fast or faster.',
+    ariaNote: 'Linting one file with full TypeScript type information, the slower check that asks the type checker. Off unless you turn it on. Slow end: 95 of 100 runs are this fast or faster.',
   },
 ]
 
@@ -823,6 +859,37 @@ export async function benchmarkRowsByFamily() {
   return rowsByFamily
 }
 
+// What fraction of what this gate ALLOWS has been spent, which is the only
+// thing the meter is drawing. The answer depends on where the gate's natural
+// origin sits, and the two cases are genuinely different:
+//
+//   * A millisecond, MiB or MiB/s gate starts at zero. Spending none of a
+//     50 ms budget means 0 ms, so observed / threshold is the whole answer.
+//   * A RATIO gate starts at 1.00, not zero. Its budget is the overhead above
+//     parity, so the fraction spent is (observed - 1) / (threshold - 1). The
+//     zero-origin form drew the 0.988x parity card at 94% of budget running
+//     hot magenta, when that result has in fact spent none of its allowed
+//     overhead at all. That was the opposite of the honest picture.
+//
+// Nothing here changes a measured value, a threshold or a verdict. The card
+// still prints 0.988x against a gate of <= 1.05x; only the meter moves.
+// The unit is the discriminator: '×' is unique to ratio gates, and today only
+// the parity pick resolves to it (the other five resolve to ms or MiB/s).
+function budgetUsed(row) {
+  if (row.unit === '×') {
+    // Both directions measured from parity. A '<=' gate allows overhead above
+    // 1.00; a '>=' ratio gate with a threshold under 1.00 allows shortfall
+    // below it. A ratio gate pinned at exactly 1.00 allows neither and would
+    // divide by zero, so it falls through to the zero-origin form.
+    const allowed = row.direction === '<=' ? row.threshold - 1 : 1 - row.threshold
+    const spent = row.direction === '<=' ? row.observed - 1 : 1 - row.observed
+    // Clamped at zero so an at-or-better-than-parity result reads as empty
+    // rather than as a negative fill.
+    if (allowed > 0) return Math.max(spent / allowed, 0)
+  }
+  return row.direction === '<=' ? row.observed / row.threshold : row.threshold / row.observed
+}
+
 export async function homeBenchmarksHtml() {
   const rowsByFamily = await benchmarkRowsByFamily()
   const picked = []
@@ -832,10 +899,10 @@ export async function homeBenchmarksHtml() {
     picked.push({
       ...row,
       label: pick.label,
-      emoji: pick.emoji,
-      hue: pick.hue,
       unit: row.unit || pick.unit,
+      aside: pick.aside ?? '',
       note: typeof pick.note === 'function' ? pick.note(row) : pick.note,
+      ariaNote: pick.ariaNote ?? (typeof pick.note === 'function' ? pick.note(row) : pick.note),
     })
   }
   const cards = picked
@@ -844,25 +911,43 @@ export async function homeBenchmarksHtml() {
       const result = withUnit(row.observed, row.unit)
       const gate = `${row.direction === '<=' ? '≤' : '≥'} ${withUnit(row.threshold, row.unit)}`
       const status = row.pass ? 'passing' : 'FAILING'
-      // How close the result sits to its frozen budget: the meter fill, with
-      // the dashed line at the right edge marking the budget itself.
-      const used = row.direction === '<=' ? row.observed / row.threshold : row.threshold / row.observed
+      // How close the result sits to its frozen budget: the meter fill runs
+      // the full track width at the budget, so a longer fill is a tighter gate.
+      // --gate-pct hands that same percentage to CSS so the fuel ramp can be
+      // sized to the track rather than to the fill, which makes colour
+      // temperature encode budget pressure instead of decorating it.
+      // budgetUsed() is where the origin question is answered; see below.
+      const used = budgetUsed(row)
       const usedPct = Math.max(Math.min(used, 1.1) * 100, 1).toFixed(1)
-      const summary = `${row.label}: ${result}, release gate ${gate}, ${status}. ${row.note}`
+      // The tooltip prints this line verbatim next to the pass or fail glyph,
+      // so it has to explain what a frozen budget buys the reader rather than
+      // restating the verdict the glyph already carries.
+      const budgetMeaning = 'Frozen budget: a build that breaks it fails the release'
+      // The aside sits above the meter, not under the gate line. .gate-meter
+      // carries margin-top:auto, so anything after it is pinned to the bottom
+      // of the card and anything before it absorbs the slack. Putting the
+      // caveat under the gate line therefore lifted this card's meter about
+      // 35px clear of the other two in its row and broke the shared baseline
+      // the six meters read as. Above the meter it qualifies the label, which
+      // is what it is doing anyway, and every meter stays on one line.
+      const aside = row.aside ? `\n    <span class="gate-aside">${escapeHtml(row.aside)}</span>` : ''
+      // The aside is on the card, not just in the tooltip, so it belongs in the
+      // screen-reader summary too. The explanation that follows it is the
+      // spoken form, which is why this reads row.ariaNote and not row.note.
+      const summary = `${row.label}: ${result}, release gate ${gate}, ${status}.${row.aside ? ` ${row.aside}` : ''} ${row.ariaNote}`
       return `
-  <div class="bench-row gate-card gate-hue-${row.hue}" tabindex="0" role="img" aria-label="${escapeHtml(summary)}"
+  <div class="bench-row gate-card" tabindex="0" role="img" aria-label="${escapeHtml(summary)}"
      data-label="${escapeDatasetHtml(row.label)}" data-result="${escapeDatasetHtml(result)}"
-     data-budget="${escapeDatasetHtml(gate)}" data-pct="${escapeDatasetHtml(`frozen release gate ${status}`)}"
+     data-budget="${escapeDatasetHtml(gate)}" data-pct="${escapeDatasetHtml(budgetMeaning)}"
      data-pass="${row.pass}" data-note="${escapeDatasetHtml(row.note)}">
     <span class="gate-value">${escapeHtml(value)}</span>
-    <span class="gate-label"><span class="gate-emoji" aria-hidden="true">${row.emoji}</span>${escapeHtml(row.label)}</span>
-    <span class="gate-meter" aria-hidden="true"><span class="gate-meter-fill${row.pass ? '' : ' fail'}" style="width:${usedPct}%"></span></span>
-    <span class="gate-budget ${row.pass ? 'pass' : 'fail'}"><span class="gate-status" aria-hidden="true">${row.pass ? '✓' : '✗'}</span>gate ${escapeHtml(gate)}</span>
+    <span class="gate-label">${escapeHtml(row.label)}</span>${aside}
+    <span class="gate-meter" aria-hidden="true"><span class="gate-meter-fill${row.pass ? '' : ' fail'}" style="width:${usedPct}%;--gate-pct:${usedPct}"></span></span>
+    <span class="gate-budget ${row.pass ? 'pass' : 'fail'}">${row.pass ? '' : '<span class="gate-status" aria-hidden="true">✗</span>'}gate ${escapeHtml(gate)}</span>
   </div>`
     })
     .join('')
-  return `<div class="gate-grid" role="group" aria-label="Selected frozen release gates. Each card shows the measured value, and a thin meter shows how close it sits to the frozen budget marked by the dashed line. Hover or focus a card for what it measures.">${cards}</div>
-<p class="home-bench-caption">Each card is one release gate: the big number is the measured value, and the thin bar shows how close it sits to its frozen budget (the dashed line). If a result ever crosses its budget, the release fails. Hover or focus a card for what exactly is measured.</p>`
+  return `<div class="gate-grid" role="group" aria-label="Selected frozen release gates. Each card shows the measured value. Hover or focus a card for what it measures.">${cards}</div>`
 }
 
 
@@ -911,22 +996,27 @@ export async function comparativeChartHtml() {
       const widthPct = Math.max((bar.ms / max) * 100, 0.8)
       const label = `${bar.ms >= 100 ? bar.ms.toFixed(0) : bar.ms.toFixed(1)} ms`
       const mixed = bar.key === 'oxcTsrxMixed'
+      // Written for a first-time reader: what ran, against what, and what the
+      // number is not. The exact route-evidence counts and the manifest-level
+      // wording live in the methodology block below, which is where the
+      // honesty tests match them; repeating that machinery in a hover made the
+      // tooltips unreadable without making them more truthful.
+      const files = report.corpus.files.toLocaleString('en-US')
       const comparison = mixed
-        ? `${report.ratios.mixedVsTsx.toFixed(3)}× versus the paired all-TSX product workload`
-        : `${(report.tools.eslint.medianMs / bar.ms).toFixed(1)}× relative to the matched ESLint lane`
+        ? `${report.ratios.mixedVsTsx.toFixed(3)}× our own TSX-only run of the same command`
+        : bar.key === 'eslint'
+          ? 'The baseline the other two lanes are measured against'
+          : `${(report.tools.eslint.medianMs / bar.ms).toFixed(1)}× the speed of the ESLint lane`
       let note = mixed
-        ? `Median wall-clock time for the paired mixed-file-types workload (${report.corpus.files} components, ${Math.round(report.corpus.tsrxShare * 100)}% TSRX), through the oxlint-tsrx npm command. This is an internal product workload ratio, not a cross-tool speed comparison.`
-        : `Median wall-clock time for the same byte-identical ${report.corpus.files}-file TSX corpus, one no-debugger rule, one explicit file list, and zero-diagnostic default output. Every tool is launched through its npm command.`
+        ? `A different workload, not a rival tool: ${files} components where ${Math.round(report.corpus.tsrxShare * 100)}% are TSRX files, linted through the same oxlint-tsrx npm command. It is measured only against our own TSX-only run, to show that mixing file types does not blow the time up. It is not a comparison against ESLint or Oxlint.`
+        : `Typical time to lint the same ${files} TSX files, byte for byte the same on every lane, with one rule turned on and nothing to report. Each tool is started through its own npm command, the way a project would run it.`
       if (bar.key === 'oxcTsrx') {
-        note = `Median wall-clock time for the same corpus through the oxlint-tsrx npm command. It imports the exact manifest-declared official Oxlint launcher in the same Node process with zero TSRX dispatch.`
-      } else if (bar.key === 'oxcTsrxMixed') {
-        const route = report.validation.routeEvidence
-        note += ` The measured route proves ${route.publicCanonicalNodeChildren} public canonical Node child, ${route.nativeTsrxChildren} native TSRX child, and ${route.privateInProcessAdapterChildren} private adapter children.`
+        note = `Typical time to lint those same ${files} TSX files through our oxlint-tsrx npm command. They are ordinary TSX, so it loads official Oxlint's own launcher and runs it in this very process. None of our TSRX handling is in the way.`
       }
       const badge = bar.badge ? `<span class="comp-badge">${escapeHtml(bar.badge)}</span>` : ''
       return `
   <div class="bench-row comp-row comp-${bar.cls.split(' ')[0]}" tabindex="0" role="img" aria-label="${escapeHtml(`${bar.name}: ${label} median`)}"
-     data-label="${escapeDatasetHtml(bar.name)}" data-result="${escapeDatasetHtml(label + ' median')}"
+     data-key="${bar.key}" data-label="${escapeDatasetHtml(bar.name)}" data-result="${escapeDatasetHtml(label + ' median')}"
      data-budget="${escapeDatasetHtml(bar.gate)}" data-pct="${escapeDatasetHtml(comparison)}" data-pass="${bar.pass}" data-note="${escapeDatasetHtml(note)}">
     <span class="comp-head"><span class="comp-name">${escapeHtml(bar.name)}${badge}</span><span class="comp-time">${label}</span></span>
     <span class="comp-track"><span class="bench-bar comp-fill${bar.cls.includes('mixed') ? ' comp-mixed' : ` comp-${bar.cls}`}" style="width:${widthPct.toFixed(1)}%"></span></span>
@@ -937,11 +1027,35 @@ export async function comparativeChartHtml() {
   const route = report.validation.routeEvidence
   return `<div class="comp-chart" role="group" aria-label="Median CLI lint time on one matched ${report.corpus.files}-file TSX corpus plus a separate paired mixed-file-types workload. Shorter bars are faster.">${rows}
 </div>
-<p class="home-bench-caption">Bar lengths show absolute median wall-clock time. Matched cross-tool bars use the same ${report.corpus.files} TSX files with one rule; the separately patterned mixed bar is the paired internal workload of mixed file types (TSX plus TSRX). Every tool crosses the npm boundary: each time is the npm command a project actually runs, Node launcher included. Shorter is faster.</p>
+<p class="home-bench-caption">Shorter is faster. Every tool crosses the npm boundary: each time is the npm command a project actually runs, Node launcher included.</p>
 <details class="bench-fine">
   <summary>Methodology, versions, and gates</summary>
-  <p>All three tools lint the same explicit list of ${report.corpus.files} byte-identical TSX files (${(report.corpus.tsxBytes / 1024).toFixed(0)} KiB) with the <code>no-debugger</code> rule and zero-diagnostic default output, on the same machine (${escapeHtml(report.host.cpu)}). Every lane is measured through its npm CLI entry point, so each time includes that tool's own Node launcher. For the all-TSX product lane, <code>oxlint-tsrx</code> imports the exact manifest-declared official Oxlint launcher in the same Node process with zero TSRX dispatch. The separate mixed-file-types lane (${Math.round(report.corpus.tsrxShare * 100)}% TSRX by file count) proves ${route.publicCanonicalNodeChildren} public canonical Node child, ${route.nativeTsrxChildren} native TSRX child, and ${route.privateInProcessAdapterChildren} private adapter children; it is a paired internal workload, not a cross-tool comparison. Each time is the median of ${report.samplePolicy.measured} measured processes after ${report.samplePolicy.warmups} warmups. Hover any bar for its frozen ratio gate: the release fails if a future build breaks it. Versions: ESLint ${escapeHtml(report.versions.eslint)} with typescript-eslint ${escapeHtml(report.versions.typescriptEslint)}; official Oxlint ${escapeHtml(report.versions.oxlint.replace('Version: ', ''))}. Report <code>${escapeHtml(file)}</code> (${when}).</p>
+  <p>Bar lengths show absolute median wall-clock time. Matched cross-tool bars use the same ${report.corpus.files} TSX files with one rule; the separately patterned mixed bar is the paired internal workload of mixed file types (TSX plus TSRX). Every tool crosses the npm boundary: each time is the npm command a project actually runs, Node launcher included. All three tools lint the same explicit list of ${report.corpus.files} byte-identical TSX files (${(report.corpus.tsxBytes / 1024).toFixed(0)} KiB) with the <code>no-debugger</code> rule and zero-diagnostic default output, on the same machine (${escapeHtml(report.host.cpu)}). Every lane is measured through its npm CLI entry point, so each time includes that tool's own Node launcher. For the all-TSX product lane, <code>oxlint-tsrx</code> imports the exact manifest-declared official Oxlint launcher in the same Node process with zero TSRX dispatch. The separate mixed-file-types lane (${Math.round(report.corpus.tsrxShare * 100)}% TSRX by file count) proves ${route.publicCanonicalNodeChildren} public canonical Node child, ${route.nativeTsrxChildren} native TSRX child, and ${route.privateInProcessAdapterChildren} private adapter children; it is a paired internal workload, not a cross-tool comparison. Each time is the median of ${report.samplePolicy.measured} measured processes after ${report.samplePolicy.warmups} warmups. Hover any bar for its frozen ratio gate: the release fails if a future build breaks it. Versions: ESLint ${escapeHtml(report.versions.eslint)} with typescript-eslint ${escapeHtml(report.versions.typescriptEslint)}; official Oxlint ${escapeHtml(report.versions.oxlint.replace('Version: ', ''))}. Report <code>${escapeHtml(file)}</code> (${when}).</p>
 </details>`
+}
+
+// The home-page editor-replay demo quotes recorded latencies inside its prose
+// rather than in a gate card, so it needs the same single source of truth as
+// the tables: the aggregate-selected editor report. Exporting the scalars here
+// keeps a refreshed benchmark run from leaving hand-typed numbers behind in
+// docs/build.mjs.
+export async function editorReplayLatencies() {
+  const { report } = await latestReport('editor')
+  const roundTrips = {
+    editDiagnosticsP95Ms: report.editDiagnostics.p95Ms,
+    formattingP95Ms: report.formatting.p95Ms,
+    codeActionsP95Ms: report.codeActions.p95Ms,
+  }
+  return {
+    cpu: report.host.cpu,
+    initialOpenMedianMs: report.initialOpen.medianMs,
+    initialOpenP95Ms: report.initialOpen.p95Ms,
+    ...roundTrips,
+    // One number can stand for "edit, format, and code action" only if it is
+    // the slowest of the three, so the claim stays true whichever way a fresh
+    // run reorders them.
+    slowestRoundTripP95Ms: Math.max(...Object.values(roundTrips)),
+  }
 }
 
 export async function latestReportDates() {

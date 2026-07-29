@@ -171,7 +171,223 @@ function initDiagrams() {
       event.preventDefault()
       activateNode(node)
     })
+
+    initDiagramStage(figure)
   }
+}
+
+// A pipeline diagram is taller than the viewport, and a page-length picture is
+// a picture nobody reads. With JS the SVG becomes an artboard: a fixed-height
+// window you pan by dragging and zoom with the buttons, the keyboard, or a
+// pinch. Without JS the stage keeps its old behavior and simply scrolls.
+function initDiagramStage(figure) {
+  const stage = figure.querySelector('[data-diagram-stage]')
+  const canvas = figure.querySelector('[data-diagram-canvas]')
+  const tools = figure.querySelector('[data-diagram-tools]')
+  const svg = canvas?.querySelector('svg')
+  if (!stage || !canvas || !svg) return
+
+  const MIN_SCALE = 0.2
+  const MAX_SCALE = 4
+  let scale = 1
+  let x = 0
+  let y = 0
+  const pointers = new Map()
+  let pinchDistance = 0
+  let dragged = false
+  let panPointerId = null
+  // How far the pointer has to travel before a press counts as a pan. Measured
+  // from where the press started, not from the last event: a slow drag moves a
+  // pixel at a time and would never cross a per-event threshold.
+  const DRAG_SLOP = 3
+
+  const apply = () => {
+    canvas.style.transform = `translate(${x}px, ${y}px) scale(${scale})`
+  }
+
+  const contentSize = () => {
+    const box = svg.viewBox?.baseVal
+    if (box?.width) return { width: box.width, height: box.height }
+    return { width: svg.clientWidth || 1, height: svg.clientHeight || 1 }
+  }
+
+  const fit = () => {
+    const { width, height } = contentSize()
+    const padding = 24
+    const available = {
+      width: Math.max(stage.clientWidth - padding * 2, 1),
+      height: Math.max(stage.clientHeight - padding * 2, 1),
+    }
+    scale = Math.min(available.width / width, available.height / height, MAX_SCALE)
+    x = (stage.clientWidth - width * scale) / 2
+    y = (stage.clientHeight - height * scale) / 2
+    apply()
+  }
+
+  const zoomAt = (factor, originX, originY) => {
+    const next = Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale * factor))
+    if (next === scale) return
+    // Keep whatever sits under the cursor (or the stage centre) in place.
+    x = originX - ((originX - x) * next) / scale
+    y = originY - ((originY - y) * next) / scale
+    scale = next
+    apply()
+  }
+
+  const zoomCentre = (factor) => zoomAt(factor, stage.clientWidth / 2, stage.clientHeight / 2)
+
+  // The SVG is sized in absolute pixels for the no-JS path; the artboard needs
+  // it laid out at its intrinsic size so the transform can do the scaling.
+  const { width, height } = contentSize()
+  canvas.style.width = `${width}px`
+  canvas.style.height = `${height}px`
+  stage.dataset.ready = '1'
+  stage.tabIndex = 0
+  stage.setAttribute('role', 'application')
+  stage.setAttribute('aria-label', 'Diagram artboard. Drag to pan, plus and minus to zoom.')
+  if (tools) tools.hidden = false
+  fit()
+
+  const onResize = () => fit()
+  window.addEventListener('resize', onResize)
+  pageCleanupCallbacks.push(() => window.removeEventListener('resize', onResize))
+
+  // Capturing the pointer on pointerdown would be the obvious thing, and it is
+  // what broke node selection: a captured pointer retargets the click that
+  // follows to the capturing element, so every click on a node arrived as a
+  // click on the stage and selected nothing. Wait until the press has actually
+  // travelled, then capture. A press that never moves stays an ordinary click
+  // on whatever is under it, and only a real pan closes the hand.
+  const beginPan = (event) => {
+    if (panPointerId !== null) return
+    panPointerId = event.pointerId
+    stage.setPointerCapture(event.pointerId)
+    stage.dataset.grabbing = '1'
+  }
+
+  stage.addEventListener('pointerdown', (event) => {
+    if (event.target.closest('[data-diagram-tools]')) return
+    pointers.set(event.pointerId, {
+      x: event.clientX,
+      y: event.clientY,
+      startX: event.clientX,
+      startY: event.clientY,
+    })
+    if (pointers.size === 1) dragged = false
+    // Two fingers on the artboard is a pinch, never a tap on a node.
+    else dragged = true
+  })
+
+  stage.addEventListener('pointermove', (event) => {
+    const previous = pointers.get(event.pointerId)
+    if (!previous) return
+    const point = { ...previous, x: event.clientX, y: event.clientY }
+    pointers.set(event.pointerId, point)
+
+    if (pointers.size === 2) {
+      const [a, b] = [...pointers.values()]
+      const distance = Math.hypot(a.x - b.x, a.y - b.y)
+      if (pinchDistance) {
+        const rect = stage.getBoundingClientRect()
+        zoomAt(
+          distance / pinchDistance,
+          (a.x + b.x) / 2 - rect.left,
+          (a.y + b.y) / 2 - rect.top,
+        )
+      }
+      pinchDistance = distance
+      return
+    }
+
+    if (Math.hypot(point.x - point.startX, point.y - point.startY) > DRAG_SLOP) {
+      dragged = true
+      beginPan(event)
+    }
+    x += event.clientX - previous.x
+    y += event.clientY - previous.y
+    apply()
+  })
+
+  const endPointer = (event) => {
+    pointers.delete(event.pointerId)
+    if (pointers.size < 2) pinchDistance = 0
+    if (panPointerId === event.pointerId) panPointerId = null
+    if (pointers.size === 0) delete stage.dataset.grabbing
+  }
+  stage.addEventListener('pointerup', endPointer)
+  stage.addEventListener('pointercancel', endPointer)
+
+  // A drag that ends on a node must not also select it.
+  stage.addEventListener('click', (event) => {
+    if (!dragged) return
+    event.stopPropagation()
+    dragged = false
+  }, true)
+
+  // Plain wheel keeps scrolling the page; only a deliberate ctrl/cmd wheel
+  // (which is also what a trackpad pinch sends) zooms the artboard.
+  stage.addEventListener(
+    'wheel',
+    (event) => {
+      if (!event.ctrlKey && !event.metaKey) return
+      event.preventDefault()
+      const rect = stage.getBoundingClientRect()
+      zoomAt(event.deltaY < 0 ? 1.12 : 1 / 1.12, event.clientX - rect.left, event.clientY - rect.top)
+    },
+    { passive: false },
+  )
+
+  tools?.addEventListener('click', (event) => {
+    const zoom = event.target.closest('[data-diagram-zoom]')
+    if (zoom) {
+      zoomCentre(zoom.dataset.diagramZoom === 'in' ? 1.25 : 1 / 1.25)
+      return
+    }
+    if (event.target.closest('[data-diagram-fit]')) fit()
+  })
+
+  stage.addEventListener('keydown', (event) => {
+    if (event.target !== stage) return
+    // The stage is focusable, so Space would scroll the page out from under the
+    // artboard you are looking at. Held, it is the usual pan modifier instead.
+    // Never call fit() from here: keydown auto-repeats while the key is held,
+    // and re-fitting on every repeat fights the drag and reads as a flicker.
+    if (event.key === ' ') {
+      event.preventDefault()
+      stage.dataset.spacePan = '1'
+      return
+    }
+    const step = event.shiftKey ? 120 : 40
+    const moves = {
+      ArrowUp: [0, step],
+      ArrowDown: [0, -step],
+      ArrowLeft: [step, 0],
+      ArrowRight: [-step, 0],
+    }
+    if (moves[event.key]) {
+      event.preventDefault()
+      x += moves[event.key][0]
+      y += moves[event.key][1]
+      apply()
+      return
+    }
+    if (event.key === '+' || event.key === '=') {
+      event.preventDefault()
+      zoomCentre(1.25)
+    } else if (event.key === '-') {
+      event.preventDefault()
+      zoomCentre(1 / 1.25)
+    } else if (event.key === '0') {
+      event.preventDefault()
+      fit()
+    }
+  })
+
+  const releaseSpace = () => delete stage.dataset.spacePan
+  stage.addEventListener('keyup', (event) => {
+    if (event.key === ' ') releaseSpace()
+  })
+  stage.addEventListener('blur', releaseSpace)
 }
 
 function initProjectionMaps() {
@@ -235,6 +451,85 @@ function cleanupPage() {
   for (const cleanup of pageCleanupCallbacks.splice(0)) cleanup()
 }
 
+// The CLI command builder: toggling flags rewrites the command line and the
+// sentence under it, so the reference answers "what do I actually type" without
+// anyone reading a table.
+function initCliBuilder() {
+  for (const builder of document.querySelectorAll('[data-cli-builder]:not([data-ready])')) {
+    builder.dataset.ready = '1'
+    const tabs = [...builder.querySelectorAll('[role="tab"]')]
+    const panels = [...builder.querySelectorAll('[role="tabpanel"]')]
+
+    const render = (panel) => {
+      const checked = [...panel.querySelectorAll('input:checked')]
+      const parts = checked.map((input) =>
+        input.dataset.cliValue
+          ? `${input.dataset.cliFlag} ${input.dataset.cliValue}`
+          : input.dataset.cliFlag,
+      )
+      const target = panel.dataset.cliTarget
+      const line = [panel.dataset.cliBase, ...parts, target].filter(Boolean).join(' ')
+      panel.querySelector('[data-cli-output]').textContent = line
+      const effects = checked.map((input) => input.dataset.cliEffect)
+      panel.querySelector('[data-cli-explain]').innerHTML = effects.length
+        ? `${panel.dataset.cliLead} This run ${effects.join(', and ')}.`
+        : panel.dataset.cliLead
+    }
+
+    for (const panel of panels) {
+      panel.addEventListener('change', () => render(panel))
+      render(panel)
+    }
+
+    const select = (tab) => {
+      for (const [index, candidate] of tabs.entries()) {
+        const active = candidate === tab
+        candidate.setAttribute('aria-selected', String(active))
+        candidate.tabIndex = active ? 0 : -1
+        panels[index].hidden = !active
+      }
+    }
+    for (const tab of tabs) tab.addEventListener('click', () => select(tab))
+    builder.querySelector('[role="tablist"]').addEventListener('keydown', (event) => {
+      const delta = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0
+      const index = tabs.indexOf(document.activeElement)
+      if (!delta || index === -1) return
+      event.preventDefault()
+      const next = tabs[(index + delta + tabs.length) % tabs.length]
+      next.focus()
+      select(next)
+    })
+  }
+}
+
+// Generic tab group for the `rule-sees` component: one panel visible at a time,
+// with the arrow keys moving between tabs the way a tablist should.
+function initFacetTabs() {
+  for (const group of document.querySelectorAll('[data-facet-tabs]:not([data-ready])')) {
+    group.dataset.ready = '1'
+    const tabs = [...group.querySelectorAll('[role="tab"]')]
+    const panels = [...group.querySelectorAll('[role="tabpanel"]')]
+    const select = (tab) => {
+      for (const [index, candidate] of tabs.entries()) {
+        const active = candidate === tab
+        candidate.setAttribute('aria-selected', String(active))
+        candidate.tabIndex = active ? 0 : -1
+        panels[index].hidden = !active
+      }
+    }
+    for (const tab of tabs) tab.addEventListener('click', () => select(tab))
+    group.querySelector('[role="tablist"]').addEventListener('keydown', (event) => {
+      const delta = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0
+      const index = tabs.indexOf(document.activeElement)
+      if (!delta || index === -1) return
+      event.preventDefault()
+      const next = tabs[(index + delta + tabs.length) % tabs.length]
+      next.focus()
+      select(next)
+    })
+  }
+}
+
 function initTerminalDemos() {
   for (const terminal of document.querySelectorAll('[data-terminal-demo]:not([data-ready])')) {
     terminal.dataset.ready = '1'
@@ -261,6 +556,16 @@ function initTerminalDemos() {
         return
       }
 
+      // Say it is running. Without this the label still reads "Play" while the
+      // lines appear, so a slow demo looks like a button that did nothing.
+      button.textContent = 'Playing…'
+      button.setAttribute('aria-label', 'Playing terminal walkthrough')
+      terminal.dataset.playing = '1'
+
+      // A fixed per-line delay is fine for a six-line demo and interminable for
+      // a hundred-line JSON report, so the whole reveal is budgeted instead:
+      // short transcripts keep their unhurried 80ms, long ones speed up to fit.
+      const step = Math.min(80, Math.max(12, Math.round(2600 / lines.length)))
       let index = 0
       const revealNext = () => {
         if (!terminal.isConnected) {
@@ -268,9 +573,10 @@ function initTerminalDemos() {
           return
         }
         lines[index++].classList.remove('gs-terminal-line-hidden')
-        if (index < lines.length) timerId = setTimeout(revealNext, 80)
+        if (index < lines.length) timerId = setTimeout(revealNext, step)
         else {
           timerId = null
+          delete terminal.dataset.playing
           button.textContent = 'Replay'
           button.setAttribute('aria-label', 'Replay terminal walkthrough')
         }
@@ -285,9 +591,22 @@ let spyEntries = []
 let spyActiveItem = null
 let spyTicking = false
 
+let spyProgress = null
+
 function collectOutline() {
   spyActiveItem?.classList.remove('active')
   spyActiveItem = null
+  const progress = document.querySelector('.outline-progress')
+  spyProgress = progress
+    ? {
+        root: progress,
+        fill: progress.querySelector('.outline-progress-fill'),
+        readout: progress.querySelector('.outline-remaining'),
+        total: Math.max(Number(progress.dataset.totalMinutes) || 0, 1),
+        article: document.querySelector('article.doc'),
+        text: '',
+      }
+    : null
   spyEntries = [...document.querySelectorAll('.outline a[href^="#"]')]
     .map((link) => ({
       item: link.parentElement,
@@ -299,6 +618,7 @@ function collectOutline() {
 
 function updateSpy() {
   spyTicking = false
+  updateProgress()
   if (spyEntries.length === 0) return
   let current = spyEntries[0]
   for (const entry of spyEntries) {
@@ -309,6 +629,27 @@ function updateSpy() {
     spyActiveItem?.classList.remove('active')
     current.item.classList.add('active')
     spyActiveItem = current.item
+  }
+}
+
+// How far the article itself has gone past the reading line, not how far the
+// window has scrolled: a long footer or a short page would otherwise report
+// progress the reader has not made.
+function updateProgress() {
+  if (!spyProgress?.article) return
+  const { top, height } = spyProgress.article.getBoundingClientRect()
+  const line = window.innerHeight * 0.35
+  const scrollable = Math.max(height - (window.innerHeight - line), 1)
+  // The reading line sits below the top of the article, so an unscrolled page
+  // measures a few percent. A reader who has not scrolled has not started.
+  const read =
+    window.scrollY < 8 ? 0 : Math.min(Math.max((line - top) / scrollable, 0), 1)
+  spyProgress.fill.style.width = `${(read * 100).toFixed(1)}%`
+  const left = Math.ceil(spyProgress.total * (1 - read))
+  const text = read === 0 ? `${spyProgress.total} min read` : left <= 0 ? 'Finished' : `${left} min left`
+  if (spyProgress.text !== text) {
+    spyProgress.text = text
+    spyProgress.readout.textContent = text
   }
 }
 
@@ -330,7 +671,13 @@ function initPage() {
   initProjectionMaps()
   initHowItWorks()
   initTerminalDemos()
-  if (document.querySelector('[data-matrix-filter], [data-review-route], [data-editor-replay]')) {
+  initFacetTabs()
+  initCliBuilder()
+  if (
+    document.querySelector(
+      '[data-matrix-filter], [data-review-route], [data-editor-replay], [data-chooser]',
+    )
+  ) {
     import(new URL('./interactive.js', import.meta.url))
       .then((module) => module.init(pageCleanupCallbacks))
       .catch(() => {})
@@ -342,6 +689,28 @@ function initPage() {
     import(new URL('./playground.js', import.meta.url))
       .then((module) => module.initDemo(demo))
       .catch(() => {})
+  }
+  const fuelRows = document.querySelectorAll(
+    '.comp-row[data-key="oxlint"], .comp-row[data-key="oxcTsrx"], .comp-row[data-key="oxcTsrxMixed"]',
+  )
+  const chart = document.querySelector('.comp-chart')
+  if (
+    fuelRows.length &&
+    chart &&
+    !window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  ) {
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return
+        io.disconnect()
+        import(new URL('./fuel.js', import.meta.url))
+          .then((module) => module.init(fuelRows, pageCleanupCallbacks))
+          .catch(() => {})
+      },
+      { rootMargin: '200px 0px' },
+    )
+    io.observe(chart)
+    pageCleanupCallbacks.push(() => io.disconnect())
   }
 }
 initPage()

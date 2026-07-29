@@ -10,7 +10,7 @@
     "canonical": "Ordinary JavaScript and TypeScript stay on the released canonical Oxlint language server.",
     "oxc": "The native TSRX server parses the projected TSX copy exactly once per change, then Oxlint rules and Oxfmt layout run on that single parse.",
     "tsgo": "Type-aware and type-check diagnostics start one TypeScript-Go process only when you opt in through settings.",
-    "diagnostics": "Every diagnostic maps back to the exact TSRX you typed. On the recorded machine, open to first diagnostics measured 2.40 ms median.",
+    "diagnostics": "Every diagnostic maps back to the exact TSRX you typed. On the recorded machine, open to first diagnostics measured {{editorInitialOpenMedian}} median.",
     "edits": "A quick fix or format edit applies only with an exact authored mapping and a clean reparse. Malformed input returns no edit instead of a guess."
   },
   "steps": [

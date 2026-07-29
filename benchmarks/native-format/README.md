@@ -57,25 +57,25 @@ and RSS ≤1.15× canonical TSX. The generalized control lane additionally
 requires ≥15 MiB/s median, ≥12 MiB/s p95, ≤1.35× normalized full/half scaling,
 one OXC parse, and idempotence.
 
-Aggregate-selected representative report: `results-1784321655592.json`.
+Aggregate-selected representative report: `results-1785296526997.json`.
 
-- 134.78 MiB/s median (127.00 MiB/s p95) retained sequential corpus;
-- 823.10 MiB/s default-thread 16 MiB batch at p95;
-- 21.79 MiB/s generalized median and 21.14 MiB/s p95 across 394 dynamic tags
+- 121.55 MiB/s median (115.16 MiB/s p95) retained sequential corpus;
+- 450.74 MiB/s default-thread 16 MiB batch at p95;
+- 18.99 MiB/s generalized median and 16.61 MiB/s p95 across 394 dynamic tags
   and 197 raw style payloads;
-- 1.000× generalized normalized scaling;
+- 1.016× generalized normalized scaling;
 - one timed config load for two files/two parses with applied options;
-- 3.16 ms fresh stdin p95; and
+- 3.45 ms fresh stdin p95; and
 - 1.143× complete-output RSS.
 
 The report retains 30 raw samples for every sequential phase. Their p95 values
-are 0.818 ms scan, 0.318 ms projection, 0.848 ms canonical parse, 4.944 ms
-canonical format, and 1.085 ms checked lift. Because the RSS ratio lies inside
+are 1.021 ms scan, 0.336 ms projection, 0.911 ms canonical parse, 5.318 ms
+canonical format, and 1.263 ms checked lift. Because the RSS ratio lies inside
 the policy's 3% near-threshold band around the 1.15× limit, it was adjudicated
-by three explicit fresh passing runs: `results-1784321650912.json`,
-`results-1784321655592.json`, and `results-1784321660260.json`. Their RSS
-ratios were 1.143192×, 1.143192×, and 1.143295×. The aggregate selected
-`results-1784321655592.json` by median normalized budget pressure with a stable
+by three explicit fresh passing runs: `results-1785296522210.json`,
+`results-1785296526997.json`, and `results-1785296531837.json`. Their RSS
+ratios were 1.143476×, 1.143476×, and 1.143476×. The aggregate selected
+`results-1785296526997.json` by median normalized budget pressure with a stable
 report-path tie-break; no threshold changed.
 
 The stdin upstream ratio compares the direct Rust candidate executable with

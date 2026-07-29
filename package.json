@@ -24,7 +24,7 @@
   "scripts": {
     "build:native": "node scripts/build-native.mjs",
     "build:parser-native": "node scripts/build-parser-native.mjs",
-    "test": "node --test tests/native-lint.test.mjs tests/native-control-lint.test.mjs tests/native-format.test.mjs tests/native-control-format.test.mjs tests/config/native-lint-config.test.mjs tests/config/native-format-config.test.mjs tests/vite/package-seam.test.mjs tests/vite/framework-chain.test.mjs tests/vite/vite-plus-commands.test.mjs tests/type-aware/type-aware.test.mjs tests/editor/lsp.test.mjs tests/editor/demo-workspace.test.mjs tests/editor/package.test.mjs tests/editor/provider-client.test.mjs tests/plugins/parser-integrations.test.mjs tests/plugins/custom-js-plugins-doc.test.mjs tests/plugins/tsrx-js-plugins.test.mjs",
+    "test": "node --test tests/native-lint.test.mjs tests/native-control-lint.test.mjs tests/native-format.test.mjs tests/native-control-format.test.mjs tests/config/native-lint-config.test.mjs tests/config/native-format-config.test.mjs tests/vite/package-seam.test.mjs tests/vite/framework-chain.test.mjs tests/vite/vite-plus-commands.test.mjs tests/type-aware/type-aware.test.mjs tests/editor/lsp.test.mjs tests/editor/demo-workspace.test.mjs tests/editor/package.test.mjs tests/editor/provider-client.test.mjs tests/plugins/parser-integrations.test.mjs tests/plugins/custom-js-plugins-doc.test.mjs tests/plugins/tsrx-js-plugins.test.mjs tests/site/playground-snippets.test.mjs",
     "test:config": "node --test tests/config/native-lint-config.test.mjs tests/config/native-format-config.test.mjs",
     "test:native-format": "node --test tests/native-format.test.mjs",
     "test:native-lint": "node --test tests/native-lint.test.mjs",

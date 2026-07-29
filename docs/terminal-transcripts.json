@@ -12,7 +12,7 @@
         {
           "comment": "Format .tsrx and ordinary JS/TS with real Oxfmt layout",
           "command": "npx oxfmt --check src/Counter.tsrx src/View.tsx",
-          "output": "Checking formatting...\n\nsrc/View.tsx (0ms)\nsrc/Counter.tsrx (1ms)\n\nFormat issues found in above 2 files. Run without `--check` to fix.\nFinished in 86ms on 2 files using 18 threads.\nNo config found, using defaults. Please add a config file or try `oxfmt --init` if needed.\n"
+          "output": "Checking formatting...\n\nsrc/View.tsx (0ms)\nsrc/Counter.tsrx (0ms)\n\nFormat issues found in above 2 files. Run without `--check` to fix.\nFinished in 77ms on 2 files using 18 threads.\nNo config found, using defaults. Please add a config file or try `oxfmt --init` if needed.\n"
         }
       ]
     },
@@ -287,16 +287,16 @@
       ]
     },
     "parsing-quickstart": {
-      "caption": "Real output, captured at build time. The sample project has the src/View.tsrx and parse.mjs from above, a Broken.tsrx with an unterminated closing tag, and oxc-tsrx installed.",
+      "caption": "Real output, captured at build time, from the file and the script above plus a Broken.tsrx with an unterminated closing tag.",
       "transcript": [
         {
-          "comment": "Run the parse script from above against the good file",
-          "command": "node parse.mjs",
-          "output": "errors: 0\nimports: [ './Row' ]\ntop level: [ 'ImportDeclaration', 'ExportNamedDeclaration' ]\nfound: JSXForExpression\nits first line, straight from your file:\n@for (const item of items; key item.id) {\n"
+          "comment": "The script above, run against the file above",
+          "command": "node example.mjs",
+          "output": "errors: 0\nimports: [ './Row' ]\ntop level: [ 'ImportDeclaration', 'ExportNamedDeclaration' ]\nfound: JSXForExpression\nsource.slice gives back exactly what you wrote:\n@for (const item of items; key item.id) {\n"
         },
         {
           "comment": "Parse errors land in result.errors and point at your file",
-          "command": "node parse-broken.mjs",
+          "command": "node errors.mjs",
           "output": "Error: unterminated JSX closing tag starting at byte 30\n\n  x unterminated JSX closing tag starting at byte 30\n   ,-[src/Broken.tsrx:2:3]\n 1 | export function Broken() @{\n 2 |   <p>hello</p\n   :   ^\n 3 | }\n   `----\n\n"
         }
       ]

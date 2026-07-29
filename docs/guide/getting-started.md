@@ -42,17 +42,48 @@ This is the complete list of things you have to run to lint and format `.tsrx`.
 | Editor, through the released official OXC extension | 1 | the same install, and nothing else |
 | [Vite+](/integrations/vite-plus) (`vp lint`, `vp fmt`) | 2 | the same install, then `oxc-tsrx setup` |
 
-No row asks you to create a config file, add an ignore file, or add a lifecycle
-script. `oxc-tsrx` writes nothing into your project during install.
+## Using Vite+ (one extra step)
 
-Making TSRX a *language* in your editor belongs to the TSRX toolchain, not to
-this package. It needs `@tsrx/typescript-plugin`, a framework binding, and a
-`plugins` entry in the tsconfig that owns your source. `setup` reports all
-three and installs none.
-[Custom JavaScript plugins](/integrations/custom-js-plugins#the-whole-path-on-a-fresh-vite-project)
-walks the sequence on a fresh scaffold.
+Vite+ looks for its lint and format tools as project-local *packages* named
+`oxlint` and `oxfmt`, which a command name cannot satisfy. `oxc-tsrx setup`
+writes those slots:
 
-### What the install adds to `node_modules/.bin`
+<!-- pm-install -->
+```sh
+npm install --save-dev vite-plus oxc-tsrx@latest
+npx oxc-tsrx setup
+```
+
+Run both lines with your own package manager. A `vp create` scaffold names pnpm
+in `devEngines.packageManager`, so npm will refuse to run there at all.
+
+`setup` works inside `node_modules`, so run it again after every clean install.
+It never edits `package.json`, and `oxc-tsrx remove` undoes it.
+
+Then `vp lint`, `vp fmt`, and `vp check --fix` handle `.tsrx`. If your scaffold
+turns type-aware lint on, there is one more dependency to add first:
+[the type-aware template default](/integrations/vite-plus#type-aware-lint-may-need-one-dependency)
+has the failure you would see and the fix.
+
+## In your editor
+
+Install the official OXC extension. That is the whole setup, and your `.tsrx`
+files get diagnostics, formatting, and quick fixes.
+
+<!-- extension:oxc -->
+
+One catch: it does not start on a `.tsrx` file. Open any JavaScript, TypeScript,
+or JSON file once, and `.tsrx` works for the rest of the session.
+
+Syntax highlighting and type checking are a different job, owned by the TSRX
+toolchain rather than by this package. Its extension is what provides them:
+
+<!-- extension:tsrx -->
+
+See [the editor page](/integrations/editor#what-a-plain-install-actually-covers)
+for what a plain install covers.
+
+## What the install adds to `node_modules/.bin`
 
 Three commands are yours to type:
 
@@ -65,69 +96,26 @@ Three commands are yours to type:
 Four more get linked that you never type: three native leaf commands, plus
 `tsgolint` from a dependency.
 
-- **Not Node-only.** npm, pnpm, yarn, and bun are covered in CI, and Deno works
-  but is not. Only the wrappers need Node; the linter and formatter are one
-  standalone binary at
-  `node_modules/@oxc-tsrx/native-<your-platform>/bin/oxc-tsrx`.
+- **Not Node-only.** npm, pnpm, yarn, bun, and
+  [Deno](https://deno.com "brand:deno") are all covered in CI. Only the thin
+  wrappers need Node. The linter and formatter are one standalone binary.
 - **Except under Vite+**, where `oxlint` and `oxfmt` are Vite+'s wrappers rather
   than ours. Use
-  [`vp lint` and `vp fmt`](/integrations/vite-plus#oxlint-and-oxfmt-on-the-command-line-belong-to-vite-here).
+  [`vp lint` and `vp fmt`](/integrations/vite-plus#oxlint-and-oxfmt-on-the-command-line-are-vites-here).
 
 To see what a host finds in your project, without changing anything:
 
+<!-- pm-exec -->
 ```sh
 npx oxc-tsrx providers --json
 ```
 
-The line to look for is `routed extensions: .tsrx -> oxc-tsrx`. (Don't be
-alarmed if `npx oxc-tsrx status` prints `missing` three times outside a Vite+
-project. That is the correct result, and
-[Limitations](/reference/limitations#cli-and-configuration) says why.)
+The line to look for is `routed extensions: .tsrx -> oxc-tsrx`.
 
-### Editors need no extra install
-
-Install `oxc-tsrx` and nothing else, and the released official OXC extension
-gives you `.tsrx` diagnostics that refresh as you type, formatting, quick fixes
-you can apply, and your own Oxlint JavaScript plugin rules. Ordinary TypeScript
-files keep going to canonical Oxlint.
-
-One step is not an install, and skipping it looks like a broken integration.
-The official extension never activates on `.tsrx`. Open any JavaScript,
-TypeScript, or JSON file once, and `.tsrx` is served for the rest of the
-session. See
-[the editor page](/integrations/editor#what-a-plain-install-actually-covers)
-for what that session covered.
-
-### Using Vite+? (compatibility step)
-
-Released [Vite+](/integrations/vite-plus) finds its lint and format tools
-through project-local *packages* named literally `oxlint` and `oxfmt`. A command
-name cannot satisfy that, and this project cannot legitimately publish a package
-under either name, so Vite+ needs the project-local slots that
-`oxc-tsrx setup` writes:
-
-<!-- pm-install -->
-```sh
-npm install --save-dev vite-plus oxc-tsrx@latest
-npx oxc-tsrx setup
-```
-
-Pick your own package manager in the tabs above and run both lines with it. In a
-project `vp create` scaffolded, that is almost never the npm tab: `vp create`
-writes a `devEngines.packageManager` block into `package.json` naming pnpm, and
-npm then refuses to run there at all.
-
-`setup` is explicit, idempotent, reversible, and never edits `package.json`. It
-works inside `node_modules`, so run it again after every clean dependency
-install.
-
-After that, `vp lint`, `vp fmt`, and `vp check --fix` handle `.tsrx`. If your
-scaffold turns type-aware lint on, add one more dependency first: Vite+ and
-this package can disagree about which `oxlint-tsgolint` runs.
-[The type-aware template default](/integrations/vite-plus#the-type-aware-template-default)
-has the failure, the fix, and the alternative.
-
-Vite+ is the only place an install alone is not enough.
+Outside a Vite+ project, `npx oxc-tsrx status` prints `missing` three times.
+That is the correct result, not a broken install:
+[The CLI reference](/reference/cli#status-says-missing-in-a-healthy-project)
+says why.
 
 ## Create a TSRX file
 
@@ -166,45 +154,30 @@ formatter write its layout changes:
 
 <!-- terminal-demo:getting-started-format-write -->
 
-Two things to know:
+Mixed file types need no special handling. In a single run, `.tsrx` files go
+through the TSRX engine while ordinary `.js`, `.jsx`, `.ts`, and `.tsx` files go
+straight to OXC.
 
-- **Mixed file types are fine.** `.tsrx` files go through the TSRX engine,
-  while ordinary `.js`/`.ts`/`.tsx` files go straight to OXC.
-- **You can tune rule severity inline.** For example
-  `npx oxlint --warn no-console --deny no-debugger src/Cart.tsrx`.
+To change a rule's severity for one run, without touching your config, name it
+on the command line:
 
-### Give the linter a path, or an empty folder will bury you
-
-`npx oxlint` with no path lints everything under the current directory,
-`node_modules` included. That is canonical Oxlint behavior, not something TSRX
-adds. Two things avoid it:
-
-- **A `.gitignore` listing `node_modules`.** Oxlint honors it even outside a git
-  repository. Real projects have one; fresh scratch folders do not, which is the
-  only place this bites.
-- **Naming a path.** `npx oxlint src` lints your sources and nothing else.
-
-This package ships no ignore file and no config, and writes none. Your
-`.gitignore` and `.oxlintrc.json` are the only inputs.
-
-> **Do not run `npx oxlint --fix` where `node_modules` is still in scope.** With
-> nothing narrowing the run, `--fix` rewrites files inside your dependency tree
-> and still exits 0. Official Oxlint does the same, so this is upstream parity
-> rather than a TSRX defect, but your dependency tree is modified either way.
-> Fix a path you own (`npx oxlint --fix src`), or make sure `node_modules` is
-> ignored first.
-
-`oxfmt` is not affected. It skips `node_modules` unless you pass
-`--with-node-modules`.
+<!-- pm-exec -->
+```sh
+npx oxlint --warn no-console --deny no-debugger src/Cart.tsrx
+```
 
 ## Configuration
 
-Both commands find your normal OXC config by searching upward from the
-current directory (`.oxlintrc.json`/`.oxlintrc.jsonc` for lint,
-`.oxfmtrc.json`/`.oxfmtrc.jsonc` for format), or take an explicit
-`--config`/`-c` path. See
-[Configuration](/integrations/configuration) for exactly which fields
-are supported.
+Both commands read your normal OXC config, searching upward from the current
+directory:
+
+| | Lint | Format |
+| --- | --- | --- |
+| Config file | `.oxlintrc.json` or `.oxlintrc.jsonc` | `.oxfmtrc.json` or `.oxfmtrc.jsonc` |
+| Somewhere else | `oxlint --config path` | `oxfmt --config path` |
+
+[Configuration](/integrations/configuration) lists exactly which fields are
+supported.
 
 ## Build from source (optional)
 
@@ -218,23 +191,20 @@ cargo build --release --locked -p oxc_tsrx_cli --bins
 ```
 
 Keep the `--locked` flag: it makes Cargo build against the exact pinned OXC
-commit from the lockfile. The binaries land in `target/release/`:
+commit from the lockfile. The binaries land in `target/release/`.
 
-<!-- terminal-demo:getting-started-native -->
-
-The native binaries emit JSON diagnostics and want explicit file paths. The
-friendly text output, directory walking, and glob handling come from the npm
-commands, so most projects only need those. See the
-[CLI Reference](/reference/cli) for every flag.
+They emit JSON diagnostics and take explicit file paths only. The friendly text
+output, directory walking, and glob handling live in the npm commands, so most
+projects want those instead. See the [CLI Reference](/reference/cli) for every
+flag.
 
 ## Next steps
 
-- See which TSRX syntax is supported in
-  [TSRX Syntax](/guide/tsrx-syntax).
-- Keep your framework's TSRX plugin as-is; it compiles and runs `.tsrx`. See
-  [tsrx.dev](https://tsrx.dev/getting-started) for it, and
-  [Vite and Vite+](/integrations/vite-plus) for how the two sit side by side.
-- Get live diagnostics, formatting, and quick fixes through the official OXC
-  extension with [Editor integration](/integrations/editor).
-- Curious how it works under the hood? Read
-  [Architecture](/architecture/rust-oxc-core).
+- **[TSRX Syntax](/guide/tsrx-syntax).** Every block the linter and formatter
+  understand, and what each one becomes.
+- **[Editor integration](/integrations/editor).** Live diagnostics, formatting,
+  and quick fixes while you type.
+- **[Vite and Vite+](/integrations/vite-plus).** How this package and your
+  framework's build plugin sit side by side, neither one touching the other.
+- **[Architecture](/architecture/rust-oxc-core).** How one OXC parse serves
+  linting, formatting, and your editor.

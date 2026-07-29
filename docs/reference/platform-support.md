@@ -45,11 +45,10 @@ that same machine, runs:
   installed copy.
 
 That is the `install-arbitration` job in `.github/workflows/ci.yml`, on
-`ubuntu-24.04`, `windows-latest`, and `macos-latest`. `linux-x64-gnu`
-additionally carries the full product test suite, which is the one place the
-editor server, the type-aware lane, and the JavaScript plugin lane run. Those
-three suites are Linux-only today, so a Tier 1 platform is not a claim that
-every feature has been driven there. See
+`ubuntu-24.04`, `windows-latest`, and `macos-latest`. `linux-x64-gnu` also
+carries the full product suite, the one place the editor server, the type-aware
+lane, and the JavaScript plugin lane run. So Tier 1 is not a claim that every
+feature has been driven on every Tier 1 platform. See
 [Limitations](/reference/limitations) for the named gaps.
 
 ## Tier 2
@@ -63,13 +62,13 @@ are built and packaged for every release, and they are smoked when a release
 candidate is built.
 
 That smoke is real work, not a compile check. `release-candidate.yml` gives each
-of these targets a runner of its own architecture and operating system
-(`macos-15-intel`, `ubuntu-22.04-arm`, `windows-11-arm`), and that runner runs
-the same lint, format, and `--lsp` sessions listed under Tier 1, then loads the
-`parser.node` built for that target. What these targets do not have is a run
-tied to the change that would break them: the release candidate starts by hand,
-so a regression on `linux-arm64-gnu` stays invisible until someone cuts a
-release.
+target a runner of its own architecture and operating system (`macos-15-intel`,
+`ubuntu-22.04-arm`, `windows-11-arm`), which runs the same lint, format, and
+`--lsp` sessions as Tier 1 and loads that target's `parser.node`.
+
+What they lack is a run tied to the change that would break them. The release
+candidate starts by hand, so a regression on `linux-arm64-gnu` stays invisible
+until someone cuts a release.
 
 ### musl is Tier 2, with a carve-out
 
@@ -78,20 +77,14 @@ release.
 
 These two get their own sentence, because the Tier 2 line above would flatter
 them. **Neither has ever been executed on a musl system.** There is no Alpine
-container and no musl runner in any workflow in this repository.
+container and no musl runner in any workflow here: both are cross-compiled on a
+glibc runner, and the release candidate's smoke runs there too, which proves the
+binary carries its own libc and nothing at all about Alpine.
 
-Both are cross-compiled on a glibc Linux runner, and everything that happens
-afterwards happens there. The release candidate checks that the binary is
-statically linked (`ldd` has to report `statically linked`), starts it, and runs
-the same lint, format, and `--lsp` smoke on it. A static binary runs happily on
-glibc, so what that proves is that the binary carries its own libc. It proves
-nothing about how it behaves on Alpine.
-
-The `parser.node` addon for these two targets is built, checksummed, and
-packaged without ever being loaded anywhere. That is a categorical limit rather
-than an oversight: a musl-linked `.node` cannot be `dlopen`'d by a glibc Node at
-all, so the runner that builds it has no way to open it. Loading it needs a musl
-Node on a musl system, which is a runner this project does not have yet.
+Their `parser.node` addon is built, checksummed, and packaged without ever being
+loaded anywhere, because a musl-linked `.node` cannot be `dlopen`'d by a glibc
+Node at all. That needs a musl Node on a musl system, a runner this project does
+not have yet.
 
 If you run `oxc-tsrx` on Alpine and something breaks, please
 [file it](https://github.com/markless-dev/oxc-tsrx/issues). That report is what
@@ -120,9 +113,8 @@ needs a stable Rust toolchain and no other setup.
 ## How this page stays true
 
 The eight targets above are the ones `packages/toolchain/dist/native-targets.js`
-declares, and that file is what the packaging scripts read when they build and
-name the npm packages. `tests/site/platform-support-matrix.test.mjs` compares
-the lists on this page against that file on every documentation run, so adding
-or dropping a target fails the test until this page is updated. Which tier a
-target sits in is a decision and stays a decision; that a target appears here at
-all is checked.
+declares, which is what the packaging scripts read.
+`tests/site/platform-support-matrix.test.mjs` compares this page against that
+file on every documentation run, so adding or dropping a target fails until this
+page is updated. Which tier a target sits in stays a judgment call; that it
+appears here at all is checked.

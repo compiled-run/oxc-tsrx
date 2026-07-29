@@ -123,3 +123,45 @@ pub(crate) fn ensure_binary(path: &Path, label: &str) -> Result<(), String> {
         Err(format!("{label} binary does not exist: {}", path.display()))
     }
 }
+
+/// Locate an incumbent binary declared in the budget file.
+///
+/// The declared path is relative to the repository root, which is where the harness runs, and it
+/// is honoured first so any layout that really does install into a repository-root `node_modules`
+/// keeps measuring exactly what the budget names. pnpm instead installs each workspace package's
+/// dependencies under the package that declares them, so the fallback looks for the same package
+/// name under `packages/toolchain/node_modules`. That mirrors the JavaScript lanes, which resolve
+/// `oxlint-current` and `oxfmt-current` through `createRequire` from `packages/toolchain`
+/// (`benchmarks/vite/run.mjs`, `benchmarks/comparative/run.mjs`).
+///
+/// The returned path is for measurement only. The budget struct that reaches the report keeps the
+/// declared value, so the report's `budgets` block stays byte-faithful to `budgets.json`.
+pub(crate) fn resolve_incumbent_binary(declared: &Path, label: &str) -> Result<PathBuf, String> {
+    if declared.is_file() {
+        return Ok(declared.to_path_buf());
+    }
+    let fallback = toolchain_package_path(declared);
+    if let Some(path) = fallback.as_ref().filter(|path| path.is_file()) {
+        return Ok(path.clone());
+    }
+    Err(match fallback {
+        Some(path) => format!(
+            "{label} binary does not exist at {} or {}",
+            declared.display(),
+            path.display()
+        ),
+        None => format!("{label} binary does not exist: {}", declared.display()),
+    })
+}
+
+/// Rewrite `node_modules/<package>/<rest>` to `packages/toolchain/node_modules/<package>/<rest>`,
+/// keeping the declared package name. Paths with no `node_modules` component have no fallback.
+fn toolchain_package_path(declared: &Path) -> Option<PathBuf> {
+    let mut components = declared.components();
+    components.find(|component| component.as_os_str() == "node_modules")?;
+    let remainder = components.as_path();
+    if remainder.as_os_str().is_empty() {
+        return None;
+    }
+    Some(Path::new("packages/toolchain/node_modules").join(remainder))
+}
