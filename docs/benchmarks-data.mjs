@@ -801,7 +801,7 @@ const HOME_PICKS = [
     label: 'Ordinary files: parity with the OXC path we wrap',
     unit: '×',
     aside: '1.00× is the target. Internal same-build check, not official Oxlint.',
-    note: 'Time to lint an ordinary TSX file with this project, divided by the time plain OXC takes on the same file from the same build. 1.00× means we add no cost. Both sides run in one process, so this is an internal check, not a race against the official Oxlint command from npm.',
+    note: 'Our lint time on an ordinary TSX file, divided by plain OXC on the same file from the same build. Both sides run in one process.',
     // The aside is read out immediately before this, and it already says
     // "1.00× is the target. Internal same-build check, not official Oxlint.",
     // so the spoken form does not repeat either point.
@@ -812,7 +812,7 @@ const HOME_PICKS = [
     match: /sequential throughput vs absolute/i,
     label: 'Sequential formatting',
     unit: 'MiB/s',
-    note: 'How many megabytes of source the formatter gets through per second on one thread. The floor it clears is a line we refuse to drop below, taken from an earlier measurement of our own formatter. It is not a comparison against another tool.',
+    note: 'Megabytes of source formatted per second on one thread. The floor comes from an earlier measurement of our own formatter, not from another tool.',
     ariaNote: 'Megabytes of source formatted per second on one thread. The floor comes from an earlier measurement of our own formatter, not from another tool.',
   },
   {
@@ -820,7 +820,7 @@ const HOME_PICKS = [
     match: /fresh-process TSRX p95 latency/i,
     label: 'Cold start: lint a file from scratch',
     unit: 'ms',
-    note: 'Time to start a brand-new process and lint one TSRX file, from launch to finished. There is no warmup to wait for. Timed at the slow end: 95 out of 100 runs are this fast or faster.',
+    note: 'Time to start a brand-new process and lint one TSRX file, launch to finished, with no warmup. 95 of 100 runs are this fast or faster.',
     ariaNote: 'Time to start a brand-new process and lint one TSRX file, launch to finished, with no warmup. Slow end: 95 of 100 runs are this fast or faster.',
   },
   {
@@ -828,7 +828,7 @@ const HOME_PICKS = [
     match: /edit-to-diagnostics p95/i,
     label: 'Native editor diagnostics',
     unit: 'ms',
-    note: 'Time from your keystroke to the squiggly underline being ready, measured at the language server on your own machine. It does not count the time VS Code spends drawing it. Timed at the slow end: 95 out of 100 edits are this fast or faster.',
+    note: 'Time from your keystroke to the squiggly underline being ready at the language server, not counting the time VS Code spends drawing it. 95 of 100 edits are this fast or faster.',
     ariaNote: 'Time from your keystroke to the squiggly underline being ready at the language server, not counting the time VS Code spends drawing it. Slow end: 95 of 100 edits are this fast or faster.',
   },
   {
@@ -836,14 +836,14 @@ const HOME_PICKS = [
     match: /median scan\+copy\+parse throughput/i,
     label: 'Reading TSRX source',
     unit: 'MiB/s',
-    note: 'How fast TSRX source moves through the extra work this project adds: scanning your file, building the in-memory TSX copy, and parsing it.',
+    note: 'How fast TSRX source moves through the extra work this project adds: scan, in-memory TSX copy, and parse.',
   },
   {
     family: 'type-aware',
     match: /single-file type-aware p95/i,
     label: 'Type-aware lint (opt-in)',
     unit: 'ms',
-    note: 'Linting one file with full TypeScript type information, the slower check that has to ask the type checker. Off unless you turn it on, so the everyday lint stays syntax only. Timed at the slow end: 95 out of 100 runs are this fast or faster.',
+    note: 'Linting one file with full TypeScript type information, the slower check that asks the type checker. Off unless you turn it on. 95 of 100 runs are this fast or faster.',
     ariaNote: 'Linting one file with full TypeScript type information, the slower check that asks the type checker. Off unless you turn it on. Slow end: 95 of 100 runs are this fast or faster.',
   },
 ]
@@ -974,16 +974,15 @@ export async function comparativeChartHtml() {
     },
     {
       key: 'oxcTsrx',
-      name: 'OXC for TSRX (oxlint-tsrx)',
+      name: 'Oxlint + TSRX',
       ms: report.tools.oxcTsrx.medianMs,
       cls: 'ours',
       pass: assertions.nearOxlintParity && assertions.fasterThanEslint,
       gate: `matched ratios ≤ ${budgets.oxcTsrxVsOxlintMax}× Oxlint and ≥ ${budgets.eslintVsOxcTsrxMin}× over ESLint`,
-      badge: 'same-process official Oxlint route',
     },
     {
       key: 'oxcTsrxMixed',
-      name: 'OXC for TSRX · mixed file types',
+      name: 'Oxlint + TSRX · .tsx and .tsrx together',
       ms: report.tools.oxcTsrxMixed.medianMs,
       cls: 'ours mixed',
       pass: assertions.mixedNoBlowup,
@@ -1003,22 +1002,29 @@ export async function comparativeChartHtml() {
       // tooltips unreadable without making them more truthful.
       const files = report.corpus.files.toLocaleString('en-US')
       const comparison = mixed
-        ? `${report.ratios.mixedVsTsx.toFixed(3)}× our own TSX-only run of the same command`
+        ? `${report.ratios.mixedVsTsx.toFixed(3)}× our own TSX-only run`
         : bar.key === 'eslint'
           ? 'The baseline the other two lanes are measured against'
           : `${(report.tools.eslint.medianMs / bar.ms).toFixed(1)}× the speed of the ESLint lane`
       let note = mixed
-        ? `A different workload, not a rival tool: ${files} components where ${Math.round(report.corpus.tsrxShare * 100)}% are TSRX files, linted through the same oxlint-tsrx npm command. It is measured only against our own TSX-only run, to show that mixing file types does not blow the time up. It is not a comparison against ESLint or Oxlint.`
-        : `Typical time to lint the same ${files} TSX files, byte for byte the same on every lane, with one rule turned on and nothing to report. Each tool is started through its own npm command, the way a project would run it.`
+        ? `Not a rival tool. The same oxlint-tsrx command on ${files} components, ${Math.round(report.corpus.tsrxShare * 100)}% of them .tsrx, measured only against our own TSX-only run.`
+        : `The same ${files} TSX files on every lane, one rule, nothing to report, each through its own npm command.`
       if (bar.key === 'oxcTsrx') {
-        note = `Typical time to lint those same ${files} TSX files through our oxlint-tsrx npm command. They are ordinary TSX, so it loads official Oxlint's own launcher and runs it in this very process. None of our TSRX handling is in the way.`
+        note = `The same ${files} TSX files through oxlint-tsrx. Ordinary TSX loads official Oxlint's own launcher in this process, with no TSRX handling in the way.`
       }
-      const badge = bar.badge ? `<span class="comp-badge">${escapeHtml(bar.badge)}</span>` : ''
+      // No pill on this lane. The two claims a "same-process official Oxlint
+      // route" badge used to make are both still made, in prose and at more
+      // length: the note directly above says it loads official Oxlint's own
+      // launcher and runs it in this very process, and the methodology block
+      // below says it imports the manifest-declared official launcher in the
+      // same Node process with zero TSRX dispatch. The lane is named
+      // "Oxlint + TSRX", which already states the relationship, so the pill was
+      // repeating the label and pushing the row's time toward wrapping.
       return `
   <div class="bench-row comp-row comp-${bar.cls.split(' ')[0]}" tabindex="0" role="img" aria-label="${escapeHtml(`${bar.name}: ${label} median`)}"
      data-key="${bar.key}" data-label="${escapeDatasetHtml(bar.name)}" data-result="${escapeDatasetHtml(label + ' median')}"
      data-budget="${escapeDatasetHtml(bar.gate)}" data-pct="${escapeDatasetHtml(comparison)}" data-pass="${bar.pass}" data-note="${escapeDatasetHtml(note)}">
-    <span class="comp-head"><span class="comp-name">${escapeHtml(bar.name)}${badge}</span><span class="comp-time">${label}</span></span>
+    <span class="comp-head"><span class="comp-name">${escapeHtml(bar.name)}</span><span class="comp-time">${label}</span></span>
     <span class="comp-track"><span class="bench-bar comp-fill${bar.cls.includes('mixed') ? ' comp-mixed' : ` comp-${bar.cls}`}" style="width:${widthPct.toFixed(1)}%"></span></span>
   </div>`
     })
