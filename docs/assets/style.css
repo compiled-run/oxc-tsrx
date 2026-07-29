@@ -2607,8 +2607,17 @@ p.home-bench-caption {
   height: 26px;
   margin-top: 6px;
   border-radius: 13px;
-  background: rgba(0, 0, 0, 0.06);
   overflow: hidden;
+}
+/* Light theme draws the track as an outline, not as a fill. A filled
+   rgba(0, 0, 0, 0.06) track composites to #f0f0f0 on the white page and reads
+   as a grey lozenge with real visual mass; a hairline carries the same scale
+   with none of the weight. Inset shadow rather than border, so the content box
+   never changes and the canvas fuel.js sizes off the track keeps its geometry.
+   overflow:hidden and the radius stay: that clipping rounds the plume's left
+   cap. Dark keeps its fill, where a white 8% wash has no such mass. */
+html:not(.dark) .comp-track {
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.15);
 }
 /* Static fallback plume for the treated lanes: what ships before, and instead
    of, the shader. The dark pill lives on the canvas that fuel.js sizes, never
@@ -2740,6 +2749,19 @@ html.dark .comp-fill.comp-mixed {
   margin: 8px 0 0;
   text-align: left;
 }
+/* The methodology block is a labelled list rather than one paragraph, so the
+   npm-boundary and corpus facts are each stated once and findable by eye. */
+.bench-fine ul {
+  display: grid;
+  gap: 7px;
+  margin: 10px 0 0;
+  padding-left: 18px;
+  text-align: left;
+}
+.bench-fine li strong {
+  color: var(--c-text-2);
+  font-weight: 600;
+}
 
 /* Home release-gate stat cards. */
 .gate-grid {
@@ -2784,8 +2806,13 @@ html.dark .comp-fill.comp-mixed {
   height: 10px;
   margin-top: auto;
   border-radius: 5px;
-  background: rgba(0, 0, 0, 0.06);
   overflow: hidden;
+}
+/* Same outline treatment as .comp-track: light theme defines the meter by a
+   hairline so the empty part of a short gate reads as room left, not as a grey
+   pill. See the .comp-track note for why this is an inset shadow. */
+html:not(.dark) .gate-meter {
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.15);
 }
 html.dark .gate-meter {
   background: rgba(255, 255, 255, 0.08);
@@ -2799,9 +2826,11 @@ html.dark .gate-meter {
    Colour temperature and length then encode the same thing. Missing or zero
    --gate-pct degrades to a fill-sized ramp rather than breaking. No mask-image
    here; fading the trailing edge is right for a decorative plume and wrong for
-   a value. Contrast is measured against the composited track the fill sits on,
-   not the card. Dark stops vs #323338: 12.13, 9.67, 6.49, 4.83, 3.61, 3.07.
-   Light stops vs #f0f0f0: 2.34, 2.75, 3.26, 3.92, 4.57. OKLCH L* descends
+   a value. Contrast is measured against whatever the fill actually sits on.
+   Dark stops vs the composited track #323338: 12.13, 9.67, 6.49, 4.83, 3.61,
+   3.07. Light stops now sit on the unfilled track, so they are read against the
+   card itself, #ffffff: 2.67, 3.13, 3.72, 4.46, 5.21, every one better than the
+   2.34 to 4.58 they measured on the old #f0f0f0 fill. OKLCH L* descends
    strictly in both ramps (98.6 to 62.5 dark, 70.0 to 56.5 light), so the order
    survives when hue collapses under CVD, and every chromatic stop clears a
    0.08 chroma floor. */
