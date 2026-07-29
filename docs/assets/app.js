@@ -789,11 +789,15 @@ function showChartTooltip(row) {
   }
   // Dataset values are double-escaped at build time, so they stay inert here.
   const { label, result, budget, pct, pass, note, samples } = row.dataset
+  // Colour is redundant with the glyph and the word, never the only carrier:
+  // "✓ pass" still reads as pass in greyscale and to a screen reader. It is
+  // here so the eye lands on the verdict and the measured number first.
+  const verdict = pass === 'true' ? 'pass' : 'fail'
   chartTooltip.innerHTML =
     `<strong>${label}</strong>` +
-    `<span>Result: ${result}</span>` +
-    `<span>Budget: ${budget}</span>` +
-    `<span>${pct} · ${pass === 'true' ? '✓ pass' : '✗ fail'}</span>` +
+    `<span><span class="chart-tooltip-key">Result:</span> <span class="chart-tooltip-value">${result}</span></span>` +
+    `<span><span class="chart-tooltip-key">Budget:</span> ${budget}</span>` +
+    `<span>${pct} · <span class="chart-tooltip-${verdict}">${verdict === 'pass' ? '✓ pass' : '✗ fail'}</span></span>` +
     (samples ? `<span class="chart-tooltip-samples">${samples}</span>` : '') +
     (note ? `<span class="chart-tooltip-note">${note}</span>` : '')
   chartTooltip.hidden = false

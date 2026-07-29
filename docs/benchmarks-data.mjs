@@ -995,35 +995,33 @@ export async function comparativeChartHtml() {
       const widthPct = Math.max((bar.ms / max) * 100, 0.8)
       const label = `${bar.ms >= 100 ? bar.ms.toFixed(0) : bar.ms.toFixed(1)} ms`
       const mixed = bar.key === 'oxcTsrxMixed'
-      // Written for a first-time reader: what ran, against what, and what the
-      // number is not. The exact route-evidence counts and the manifest-level
-      // wording live in the methodology block below, which is where the
-      // honesty tests match them; repeating that machinery in a hover made the
-      // tooltips unreadable without making them more truthful.
-      const files = report.corpus.files.toLocaleString('en-US')
+      // Every bar keeps a short hover note. Deleting them entirely broke
+      // docs/verify.mjs, which requires each .home-bench .bench-row to explain
+      // its metric in plain language on hover, and a bar labelled only with a
+      // millisecond count does not say what was measured. These are kept to one
+      // or two sentences; the full route evidence and manifest wording stay in
+      // the methodology block below.
+      const note = mixed
+        ? 'A different workload, not a rival tool: 1,000 components where about 20% are .tsrx files and the rest are ordinary .tsx, linted through the same command. It is measured only against our own TSX-only run, to show that mixing file types does not blow the time up. It is not a comparison against ESLint or Oxlint.'
+        : bar.key === 'oxcTsrx'
+          ? 'Typical time to lint those same 1,000 TSX files through our oxlint-tsrx npm command. They are ordinary TSX, so it loads official Oxlint\'s own launcher and runs it in this very process. None of our TSRX handling is in the way.'
+          : 'Typical time to lint the same 1,000 TSX files, byte for byte the same on every lane, with one rule turned on and nothing to report. Each tool is started through its own npm command, the way a project would run it.'
       const comparison = mixed
         ? `${report.ratios.mixedVsTsx.toFixed(3)}× our own TSX-only run`
         : bar.key === 'eslint'
           ? 'The baseline the other two lanes are measured against'
           : `${(report.tools.eslint.medianMs / bar.ms).toFixed(1)}× the speed of the ESLint lane`
-      let note = mixed
-        ? `Not a rival tool. The same oxlint-tsrx command on ${files} components, ${Math.round(report.corpus.tsrxShare * 100)}% of them .tsrx, measured only against our own TSX-only run.`
-        : `The same ${files} TSX files on every lane, one rule, nothing to report, each through its own npm command.`
-      if (bar.key === 'oxcTsrx') {
-        note = `The same ${files} TSX files through oxlint-tsrx. Ordinary TSX loads official Oxlint's own launcher in this process, with no TSRX handling in the way.`
-      }
-      // No pill on this lane. The two claims a "same-process official Oxlint
-      // route" badge used to make are both still made, in prose and at more
-      // length: the note directly above says it loads official Oxlint's own
-      // launcher and runs it in this very process, and the methodology block
-      // below says it imports the manifest-declared official launcher in the
-      // same Node process with zero TSRX dispatch. The lane is named
+      // No pill on this lane either. The two claims a "same-process official
+      // Oxlint route" badge used to make are both still made in the methodology
+      // block, which says it imports the manifest-declared official launcher in
+      // the same Node process with zero TSRX dispatch. The lane is named
       // "Oxlint + TSRX", which already states the relationship, so the pill was
       // repeating the label and pushing the row's time toward wrapping.
       return `
   <div class="bench-row comp-row comp-${bar.cls.split(' ')[0]}" tabindex="0" role="img" aria-label="${escapeHtml(`${bar.name}: ${label} median`)}"
      data-key="${bar.key}" data-label="${escapeDatasetHtml(bar.name)}" data-result="${escapeDatasetHtml(label + ' median')}"
-     data-budget="${escapeDatasetHtml(bar.gate)}" data-pct="${escapeDatasetHtml(comparison)}" data-pass="${bar.pass}" data-note="${escapeDatasetHtml(note)}">
+     data-budget="${escapeDatasetHtml(bar.gate)}" data-pct="${escapeDatasetHtml(comparison)}"
+     data-pass="${bar.pass}">
     <span class="comp-head"><span class="comp-name">${escapeHtml(bar.name)}</span><span class="comp-time">${label}</span></span>
     <span class="comp-track"><span class="bench-bar comp-fill${bar.cls.includes('mixed') ? ' comp-mixed' : ` comp-${bar.cls}`}" style="width:${widthPct.toFixed(1)}%"></span></span>
   </div>`

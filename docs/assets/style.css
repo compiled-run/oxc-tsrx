@@ -509,6 +509,22 @@ html.dark .code-block {
 .code-block pre:focus-visible {
   scrollbar-color: var(--c-divider) transparent;
 }
+/* Output and shell commands are line-oriented: a long line there is a sentence
+   or one command, not indentation that carries meaning, so it wraps instead of
+   hiding behind a horizontal scrollbar. Continuation lines are indented so a
+   wrapped command still reads as one command. Structured code keeps scrolling,
+   because breaking a line there would misrepresent the nesting. */
+.code-block[data-lang="text"] code .line,
+.code-block[data-lang="sh"] code .line,
+.code-block[data-lang="bash"] code .line {
+  display: inline-block;
+  white-space: pre-wrap;
+  /* Shell one-liners run long without a space to break at, so allow a break
+     inside a token rather than let one line set the width of the block. */
+  overflow-wrap: anywhere;
+  padding-left: 2ch;
+  text-indent: -2ch;
+}
 .code-block pre::-webkit-scrollbar {
   height: 6px;
 }
@@ -1194,7 +1210,6 @@ html.dark .projection-map-code .shiki span {
 .chooser-chips button:hover,
 .matrix-chips button:hover {
   border-color: var(--c-brand);
-  background: var(--c-brand-soft);
 }
 .gs-terminal-titlebar button:focus-visible,
 .er-play:focus-visible,
@@ -1814,6 +1829,33 @@ p.home-upstream-link {
 }
 .chart-tooltip span {
   color: var(--c-text-2);
+}
+/* Three tiers inside the hover so the eye lands on the number and the verdict
+   rather than reading left to right: dimmed keys, full-strength values, and a
+   hued verdict. The hue is redundant with the ✓/✗ glyph and the word itself,
+   which is why it is allowed here and not on .gate-meter-fill, where hue would
+   have been the only signal. Both pairs clear 4.5:1 on --c-bg-elv. */
+.chart-tooltip .chart-tooltip-key {
+  color: var(--c-text-3);
+}
+.chart-tooltip .chart-tooltip-value {
+  color: var(--c-text-1);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.chart-tooltip .chart-tooltip-pass {
+  color: #15803d;
+  font-weight: 600;
+}
+.chart-tooltip .chart-tooltip-fail {
+  color: #b91c1c;
+  font-weight: 600;
+}
+html.dark .chart-tooltip .chart-tooltip-pass {
+  color: #4ade80;
+}
+html.dark .chart-tooltip .chart-tooltip-fail {
+  color: #f87171;
 }
 
 /* ---------- /playground: full-viewport workbench ---------- */
@@ -2575,9 +2617,12 @@ p.home-bench-caption {
   border-radius: 10px;
   cursor: default;
 }
-.comp-row:hover,
+/* No hover background. A translucent brand wash here tints the whole row,
+   track included, and reads as a dirty bar rather than as feedback. Keyboard
+   focus still needs to be visible, so it gets an outline instead of a fill. */
 .comp-row:focus-visible {
-  background: var(--c-brand-soft);
+  outline: 2px solid var(--c-brand);
+  outline-offset: 2px;
 }
 .comp-head {
   display: flex;
@@ -2609,14 +2654,26 @@ p.home-bench-caption {
   border-radius: 13px;
   overflow: hidden;
 }
-/* Light theme draws the track as an outline, not as a fill. A filled
+/* Both themes draw the track as an outline, not as a fill. A filled
    rgba(0, 0, 0, 0.06) track composites to #f0f0f0 on the white page and reads
-   as a grey lozenge with real visual mass; a hairline carries the same scale
-   with none of the weight. Inset shadow rather than border, so the content box
-   never changes and the canvas fuel.js sizes off the track keeps its geometry.
-   overflow:hidden and the radius stay: that clipping rounds the plume's left
-   cap. Dark keeps its fill, where a white 8% wash has no such mass. */
-html:not(.dark) .comp-track {
+   as a grey lozenge with real visual mass; the dark rgba(255, 255, 255, 0.08)
+   wash it used to carry composites to #2d2d31 on the #1b1b1f page and does the
+   same thing there, which is what still read as "tinted". A hairline carries
+   the same scale with none of the weight. Inset shadow rather than border, so
+   the content box never changes and the canvas fuel.js sizes off the track
+   keeps its geometry. overflow:hidden and the radius stay: that clipping rounds
+   the plume's left cap. */
+/* The ring lives on ::after, not on the track's own box-shadow. An inset
+   shadow paints below child content, and the canvas is a child covering the
+   plume region, so a box-shadow ring simply vanished along the bar. */
+.comp-track::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+html:not(.dark) .comp-track::after {
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.15);
 }
 /* Static fallback plume for the treated lanes: what ships before, and instead
@@ -2657,8 +2714,14 @@ html:not(.dark) .comp-track {
   height: 100%;
   border-radius: 13px;
 }
-html.dark .comp-track {
-  background: rgba(255, 255, 255, 0.08);
+/* Dark takes a heavier alpha than light for the same read. The light hairline
+   is black on white, a 1.44:1 step; matching that step against the #1b1b1f page
+   needs white at roughly 0.12, and a thin bright line on a dark ground bleeds
+   optically, so the useful window is narrow. Below about 0.10 the empty end of
+   the two short lanes stops closing and the "shorter is faster" read goes with
+   it; above about 0.18 the outline turns back into a ring around a lozenge. */
+html.dark .comp-track::after {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
 }
 .comp-fill {
   position: absolute;
@@ -2707,17 +2770,6 @@ html.dark .comp-fill.comp-ours {
 html.dark .comp-fill.comp-mixed {
   background: linear-gradient(90deg, #a78bfa, #c4b5fd);
   opacity: 0.55;
-}
-.comp-badge {
-  display: inline-block;
-  margin-left: 8px;
-  padding: 2px 9px;
-  border-radius: 999px;
-  font-size: 11.5px;
-  font-weight: 600;
-  color: var(--c-brand);
-  background: var(--c-brand-soft);
-  white-space: nowrap;
 }
 .bench-fine {
   max-width: 640px;
@@ -2808,14 +2860,28 @@ html.dark .comp-fill.comp-mixed {
   border-radius: 5px;
   overflow: hidden;
 }
-/* Same outline treatment as .comp-track: light theme defines the meter by a
-   hairline so the empty part of a short gate reads as room left, not as a grey
-   pill. See the .comp-track note for why this is an inset shadow. */
-html:not(.dark) .gate-meter {
+/* Same outline treatment as .comp-track in both themes: the meter is defined by
+   a hairline so the empty part of a short gate reads as room left, not as a
+   grey pill. See the .comp-track note for why this is an inset shadow and why
+   dark needs a heavier alpha than light. The card is #202127, marginally
+   lighter than the #1b1b1f page the comparative tracks sit on, and 0.14 white
+   still separates cleanly there, so one value serves both surfaces rather than
+   splitting the two halves of the section onto different outlines. The hardest
+   case is the 6px floor meter on parity and editor-diagnostics: at that width
+   the fill covers barely a tenth of the track, so almost the whole pill is
+   hairline, and it still has to read as a value rather than as an empty slot. */
+.gate-meter::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+html:not(.dark) .gate-meter::after {
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.15);
 }
-html.dark .gate-meter {
-  background: rgba(255, 255, 255, 0.08);
+html.dark .gate-meter::after {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
 }
 /* One shared fuel ramp instead of six per-card identity hues: the six gates
    are one category, so hue was encoding a variable that does not exist. The
@@ -2846,11 +2912,12 @@ html.dark .gate-meter {
   background-size: calc(10000% / max(var(--gate-pct, 100), 1)) 100%;
   background-image: linear-gradient(
     90deg,
-    #bb9c00 0%,
-    #c88300 22%,
-    #d56400 48%,
-    #ee003e 76%,
-    #ce0090 100%
+    #ffc400 0%,
+    #ffe066 12%,
+    #ffa726 32%,
+    #ff7a1a 55%,
+    #ff3d14 78%,
+    #f2400f 100%
   );
 }
 html.dark .gate-meter-fill {
