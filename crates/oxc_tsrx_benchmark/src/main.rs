@@ -362,8 +362,8 @@ fn run() -> Result<(), String> {
     let assertions = assertions
         .into_iter()
         .map(|assertion| {
-            let threshold_derivation = (assertion.name == "P07 TSRX peak RSS")
-                .then(|| p07_derivation.clone());
+            let threshold_derivation =
+                (assertion.name == "P07 TSRX peak RSS").then(|| p07_derivation.clone());
             ReportedAssertion { assertion, threshold_derivation }
         })
         .collect::<Vec<_>>();

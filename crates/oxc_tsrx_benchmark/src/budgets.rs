@@ -145,11 +145,9 @@ pub(crate) fn resolve_incumbent_binary(declared: &Path, label: &str) -> Result<P
         return Ok(path.clone());
     }
     Err(match fallback {
-        Some(path) => format!(
-            "{label} binary does not exist at {} or {}",
-            declared.display(),
-            path.display()
-        ),
+        Some(path) => {
+            format!("{label} binary does not exist at {} or {}", declared.display(), path.display())
+        }
         None => format!("{label} binary does not exist: {}", declared.display()),
     })
 }
