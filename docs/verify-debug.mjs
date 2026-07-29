@@ -389,6 +389,9 @@ async function axeScan(url, { dark = false, openDialog = false } = {}) {
   )
   const label = `${new URL(url).pathname}${dark ? ' [dark]' : ' [light]'}${openDialog ? ' [search open]' : ''}`
   const violations = result.violations.map((violation) => {
+    for (const node of violation.nodes) {
+      console.log('AXEDBG', label, violation.id, JSON.stringify({ t: node.target.join(' '), d: node.any[0]?.data, h: node.html.slice(0, 100) }))
+    }
     const targets = violation.nodes
       .slice(0, 3)
       .map((node) => node.target.join(' '))
