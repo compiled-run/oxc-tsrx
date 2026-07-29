@@ -280,11 +280,60 @@ const highlightHtml = (code, lang) => highlightWith(highlighter, code, lang)
 
 // Content hash of the shared chrome assets, appended as ?v= to their URLs so
 // deployed pages never pair fresh HTML with a stale cached stylesheet.
+const styleSource = await readFile(path.join(docsDir, 'assets', 'style.css'), 'utf8')
 const assetVersion = createHash('sha256')
-  .update(await readFile(path.join(docsDir, 'assets', 'style.css')))
+  .update(styleSource)
   .update(await readFile(path.join(docsDir, 'assets', 'app.js')))
   .digest('hex')
   .slice(0, 10)
+
+// The three page shells this site renders. Each one gets its own stylesheet.
+const CSS_SHELLS = ['doc', 'home', 'playground']
+
+// docs/assets/style.css is authored as one file but most of it can only ever
+// match one shell, so shipping all of it to every page made the home page carry
+// the sidebar, the article typography and every doc component it never renders.
+// Regions marked `#css-pages:` are kept only for the shells they name (see the
+// header comment in the stylesheet); everything else is shared chrome. Lines
+// keep their authored order in every bundle, so a shell's cascade is exactly the
+// cascade of the source file with the other shells' rules deleted.
+function splitStylesheet(source) {
+  const bundles = new Map(CSS_SHELLS.map((shell) => [shell, []]))
+  let shells = null
+  let openedAt = 0
+  const lines = source.split('\n')
+  for (const [index, line] of lines.entries()) {
+    const opening = /^[ \t]*\/\* #css-pages:([a-z ]+)\*\/[ \t]*$/.exec(line)
+    if (opening) {
+      if (shells) {
+        throw new Error(
+          `style.css:${index + 1}: #css-pages region opened inside the one opened on line ${openedAt}`,
+        )
+      }
+      shells = opening[1].trim().split(/\s+/)
+      openedAt = index + 1
+      const unknown = shells.filter((shell) => shell !== 'none' && !CSS_SHELLS.includes(shell))
+      if (unknown.length > 0) {
+        throw new Error(
+          `style.css:${index + 1}: unknown page shell ${unknown.join(', ')} (expected ${CSS_SHELLS.join(', ')} or none)`,
+        )
+      }
+      continue
+    }
+    if (/^[ \t]*\/\* #css-pages-end \*\/[ \t]*$/.test(line)) {
+      if (!shells) throw new Error(`style.css:${index + 1}: #css-pages-end closes nothing`)
+      shells = null
+      continue
+    }
+    for (const shell of CSS_SHELLS) {
+      if (!shells || shells.includes(shell)) bundles.get(shell).push(line)
+    }
+  }
+  if (shells) throw new Error(`style.css:${openedAt}: #css-pages region is never closed`)
+  return bundles
+}
+
+const styleBundles = splitStylesheet(styleSource)
 
 // Read the pinned OXC revision from the adapter crate so the footer badge can
 // never disagree with the code.
@@ -628,7 +677,10 @@ function headerHtml() {
 </header>`
 }
 
-function pageShell({ title, description, pathname, bodyClass, header, main }) {
+function pageShell({ title, description, pathname, shell, bodyClass, header, main }) {
+  if (!CSS_SHELLS.includes(shell)) {
+    throw new Error(`pageShell: unknown shell ${shell} for ${pathname}`)
+  }
   const fullTitle = title === config.title ? title : `${title} | ${config.title}`
   const summary = description || config.description
   const canonical = canonicalUrl(pathname)
@@ -659,7 +711,7 @@ function pageShell({ title, description, pathname, bodyClass, header, main }) {
 <link rel="preload" href="${withBase('/assets/fonts/space-grotesk-latin.woff2')}" as="font" type="font/woff2" crossorigin />
 <link rel="preload" href="${withBase('/assets/fonts/inter-latin.woff2')}" as="font" type="font/woff2" crossorigin />
 <script>${themeInit}</script>
-<link rel="stylesheet" href="${withBase('/assets/style.css')}?v=${assetVersion}" />
+<link rel="stylesheet" href="${withBase(`/assets/style-${shell}.css`)}?v=${assetVersion}" />
 </head>
 <body class="${bodyClass}">
 <a class="skip-link" href="#main-content">Skip to content</a>
@@ -1785,6 +1837,7 @@ function renderDocPage({ page, article, headings, pageIndex, flat, leadWords = 0
     title: page.title,
     description: page.description,
     pathname: page.link,
+    shell: 'doc',
     bodyClass: 'doc-page',
     header: headerHtml(),
     main,
@@ -1899,6 +1952,7 @@ async function renderHomePage({ description }) {
     title: config.title,
     description,
     pathname: '/',
+    shell: 'home',
     bodyClass: 'home-page',
     header: headerHtml(),
     main,
@@ -1969,6 +2023,7 @@ function renderPlaygroundPage() {
     description:
       'A static TSRX preview that becomes an interactive native lint and format playground on the localhost development server.',
     pathname: '/playground',
+    shell: 'playground',
     bodyClass: 'home-page',
     header: headerHtml(),
     main,
@@ -2020,6 +2075,13 @@ async function build() {
     article = article
       .replaceAll('<table>', '<div class="table-wrap"><table>')
       .replaceAll('</table>', '</table></div>')
+      // A markdown table that opens its header row with a blank cell is a
+      // cross-tab: the first column carries row labels, so it has no column
+      // name to print. Marked still emits `<th></th>` for it, and a header
+      // cell with no accessible text is a header that announces nothing, which
+      // axe flags as empty-table-header. The corner cell of a cross-tab is a
+      // plain `td` in the HTML spec's own example, so emit that instead.
+      .replace(/<th([^>]*)>\s*<\/th>/g, '<td$1></td>')
     if (article.includes('<!-- benchmarks:auto -->')) {
       const benchmarkMarkdown = await benchmarksSectionsMarkdown()
       article = article.replace('<!-- benchmarks:auto -->', await benchmarksSectionsHtml())
@@ -2143,16 +2205,21 @@ async function build() {
   await writeFile(path.join(outDir, 'playground.html'), renderPlaygroundPage())
 
   await cp(path.join(docsDir, 'assets'), path.join(outDir, 'assets'), { recursive: true })
-  // Ship the stylesheet without its comments (the source keeps them). The
-  // stylesheet loads on every page, and the home page has a hard transfer
-  // budget in docs/verify.mjs; comments are the one safe-to-drop chunk.
-  const shippedStyle = path.join(outDir, 'assets', 'style.css')
-  await writeFile(
-    shippedStyle,
-    (await readFile(shippedStyle, 'utf8'))
-      .replace(/\/\*[\s\S]*?\*\//g, '')
-      .replace(/\n{3,}/g, '\n\n'),
-  )
+  // Ship one stylesheet per page shell, without comments (the source keeps
+  // them). The home page has a hard transfer budget in docs/verify.mjs, and
+  // every byte here is on its critical path, so a page gets the rules it can
+  // match and nothing else. The unsplit source is not shipped: no page links
+  // it, and leaving it in the output invites something to start.
+  await rm(path.join(outDir, 'assets', 'style.css'), { force: true })
+  for (const [shell, lines] of styleBundles) {
+    await writeFile(
+      path.join(outDir, 'assets', `style-${shell}.css`),
+      lines
+        .join('\n')
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/\n{3,}/g, '\n\n'),
+    )
+  }
   await rolldownBuild({
     input: path.join(docsDir, 'demo-highlighter-entry.mjs'),
     platform: 'browser',

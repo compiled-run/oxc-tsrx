@@ -1,4 +1,20 @@
 /* OXC for TSRX docs — vanilla CSS, TSRX-violet, VitePress-inspired. */
+
+/* Page-scoped bundles. Most of this file only ever matches one kind of page:
+   the sidebar, article typography and doc components never render on the home
+   page, and the hero, comparative chart and playground workbench never render
+   inside the docs. So a region opened by a `#css-pages:` comment and closed by
+   a `#css-pages-end` comment ships only to the shells its opening line names.
+   The shells are `doc`, `home` and `playground`, plus `none` for a region no
+   page renders any more. Everything outside a region is shared chrome and
+   ships everywhere.
+
+   docs/build.mjs composes one stylesheet per shell and keeps the surviving
+   lines in their authored order, so the cascade inside a shell is identical to
+   reading this file top to bottom. Scope a region by what can match, not by
+   what reads as related: a selector a shell can still hit — including via a
+   class its JavaScript adds at runtime — has to stay in that shell's bundle or
+   in the shared part. */
 *,
 *::before,
 *::after {
@@ -253,6 +269,7 @@ html.dark .theme-toggle .icon-moon {
   display: block;
 }
 
+/* #css-pages: doc */
 /* ---------- layout ---------- */
 .layout {
   display: flex;
@@ -594,12 +611,17 @@ html.dark .code-block {
   background: var(--c-bg-alt);
   color: inherit;
   text-decoration: none;
-  transition: border-color 120ms ease, background 120ms ease;
 }
+/* The transition is declared on the hovered state, not on the resting one, so
+   it only ever runs when the pointer arrives. Declared on the resting rule it
+   also animates the theme flip, and for those 120ms the card paints a
+   light-theme background under dark-theme text: a real contrast failure a
+   reader sees on every toggle, and one axe catches mid-interpolation. */
 .doc a.ext-card:hover,
 .doc a.ext-card:focus-visible {
   border-color: color-mix(in srgb, var(--c-brand) 55%, var(--c-divider));
   background: color-mix(in srgb, var(--c-brand) 6%, var(--c-bg-alt));
+  transition: border-color 120ms ease, background 120ms ease;
 }
 .ext-card img {
   width: 40px;
@@ -622,11 +644,14 @@ html.dark .code-block {
   line-height: 1.45;
   color: var(--c-text-2);
 }
+/* No opacity: at 12px the id already reads as the quietest line in the card,
+   and fading --c-text-2 to 0.75 lands it on #7d7d86 over the card, which is
+   3.77:1 against the 4.5:1 body-text minimum. Mute it with size and the
+   monospace face instead of by washing the colour out. */
 .doc .ext-card code.ext-card-id {
   align-self: flex-start;
   font-size: 12px;
   color: var(--c-text-2);
-  opacity: 0.75;
   background: none;
   padding: 0;
 }
@@ -660,7 +685,6 @@ html.dark .code-block {
   margin: 0 -3px;
   text-decoration: none;
   white-space: nowrap;
-  transition: background 120ms ease, color 120ms ease;
 }
 .brand-link svg {
   width: 0.95em;
@@ -670,10 +694,14 @@ html.dark .code-block {
   opacity: 0.7;
   transition: opacity 120ms ease;
 }
+/* Same reason as the extension card: a background/colour transition on the
+   resting rule animates the theme flip too, and axe sampled this link mid-flip
+   still painting the light-theme violet on the dark-theme page background. */
 .brand-link:hover,
 .brand-link:focus-visible {
   background: var(--c-bg-alt);
   text-decoration: underline;
+  transition: background 120ms ease, color 120ms ease;
 }
 .brand-link:hover svg,
 .brand-link:focus-visible svg {
@@ -737,7 +765,11 @@ html.dark .copy-button.copied {
   padding: 8px 14px;
   text-align: left;
 }
-.doc th {
+/* thead td is the corner cell of a cross-tab: a column that labels rows has no
+   name of its own, so build.mjs renders that blank cell as a td rather than as
+   a th announcing nothing. It still has to look like part of the header row. */
+.doc th,
+.doc thead td {
   background: var(--c-bg-alt);
   font-weight: 600;
 }
@@ -1274,6 +1306,8 @@ html.dark .gs-terminal-line-error {
   font-size: 12.5px;
 }
 
+/* #css-pages-end */
+/* #css-pages: home */
 /* ---------- footer badge + disclaimer ---------- */
 .home-footer p.footer-disclaimer {
   max-width: 640px;
@@ -1294,6 +1328,8 @@ html.dark .gs-terminal-line-error {
   padding: 1px 5px;
 }
 
+/* #css-pages-end */
+/* #css-pages: doc */
 /* ---------- pager ---------- */
 .pager {
   display: grid;
@@ -1330,6 +1366,8 @@ html.dark .gs-terminal-line-error {
   color: var(--c-brand);
 }
 
+/* #css-pages-end */
+/* #css-pages: home */
 /* ---------- home ---------- */
 .home {
   padding-top: var(--navbar-height);
@@ -1450,6 +1488,8 @@ html.dark .hero-name {
 .band .demo-scenario-note[hidden] {
   display: none;
 }
+/* #css-pages-end */
+/* #css-pages: home playground */
 .code-panel {
   max-width: 760px;
   margin: 0 auto;
@@ -1653,6 +1693,8 @@ html.dark .hero-name {
   margin-top: 2px;
 }
 
+/* #css-pages-end */
+/* #css-pages: home */
 /* ---------- features ---------- */
 .features {
   max-width: 1152px;
@@ -1767,6 +1809,7 @@ p.home-upstream-link {
   text-align: center;
   font-size: 14px;
 }
+/* #css-pages-end */
 .bench-row {
   cursor: default;
   outline: none;
@@ -1858,6 +1901,7 @@ html.dark .chart-tooltip .chart-tooltip-fail {
   color: #f87171;
 }
 
+/* #css-pages: playground */
 /* ---------- /playground: full-viewport workbench ---------- */
 .playground-page {
   padding-top: 0;
@@ -2163,6 +2207,8 @@ html.dark .chart-tooltip .chart-tooltip-fail {
   }
 }
 
+/* #css-pages-end */
+/* #css-pages: home playground */
 /* ---------- demo controls in the panel bar ---------- */
 .demo-check {
   display: inline-flex;
@@ -2254,6 +2300,8 @@ html.dark .chart-tooltip .chart-tooltip-fail {
   background: rgba(248, 81, 73, 0.15);
 }
 
+/* #css-pages-end */
+/* #css-pages: none */
 /* ---------- /logos picker ---------- */
 .logos-intro {
   max-width: 1152px;
@@ -2344,6 +2392,8 @@ html.dark .chart-tooltip .chart-tooltip-fail {
   font-family: var(--font-mono);
 }
 
+/* #css-pages-end */
+/* #css-pages: home */
 .home-footer {
   border-top: 1px solid var(--c-divider);
   padding: 24px 24px 28px;
@@ -2364,6 +2414,7 @@ html.dark .chart-tooltip .chart-tooltip-fail {
   margin: 4px 0;
 }
 
+/* #css-pages-end */
 /* ---------- search dialog ---------- */
 .search-dialog {
   width: min(560px, calc(100vw - 32px));
@@ -2472,6 +2523,7 @@ html.dark .search-results a[aria-selected="true"] {
   color: var(--c-text-3);
 }
 
+/* #css-pages: doc */
 /* ---------- syntax highlighting (shiki dual themes) ---------- */
 .code-block .shiki,
 .code-block .shiki span {
@@ -2483,6 +2535,7 @@ html.dark .code-block .shiki span {
   color: var(--shiki-dark);
 }
 
+/* #css-pages-end */
 /* ---------- responsive ---------- */
 @media (max-width: 1279px) {
   .aside {
@@ -2590,6 +2643,7 @@ body.home-page .menu-toggle {
   outline-offset: 2px;
 }
 
+/* #css-pages: home */
 .home-bench-sub {
   margin: 44px 0 14px;
   font-family: var(--font-display);
@@ -2984,6 +3038,8 @@ html.dark .gate-status {
   }
 }
 
+/* #css-pages-end */
+/* #css-pages: home playground */
 /* ---------- completion menu layout (name + kind) ---------- */
 .demo-completions li {
   display: flex;
@@ -3003,6 +3059,8 @@ html.dark .gate-status {
   gap: 6px;
 }
 
+/* #css-pages-end */
+/* #css-pages: doc */
 /* Explorer panels: shiki dual-theme colors + wrap instead of overflow. */
 .explorer-panel .shiki,
 .explorer-panel .shiki span {
@@ -3298,6 +3356,8 @@ html.dark .explorer-panel .shiki span {
   outline-offset: 2px;
 }
 
+/* #css-pages-end */
+/* #css-pages: home playground */
 /* ---------- clickable examples bar ---------- */
 .pg-examples-bar {
   display: block;
@@ -3349,6 +3409,8 @@ html.dark .explorer-panel .shiki span {
   line-height: 1.5;
 }
 
+/* #css-pages-end */
+/* #css-pages: doc */
 /* ---------- matrix filter + review route (Upstreaming to OXC) ---------- */
 .matrix-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
 .matrix-chips button { display: inline-flex; align-items: center; gap: 7px; border-radius: 999px; color: var(--c-text-2); }
@@ -3702,3 +3764,5 @@ html.dark .page-status-label {
   font-size: 14px;
   color: var(--c-text-2);
 }
+
+/* #css-pages-end */
