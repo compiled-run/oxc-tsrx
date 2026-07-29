@@ -2208,9 +2208,24 @@ async function build() {
   // Ship one stylesheet per page shell, without comments (the source keeps
   // them). The home page has a hard transfer budget in docs/verify.mjs, and
   // every byte here is on its critical path, so a page gets the rules it can
-  // match and nothing else. The unsplit source is not shipped: no page links
-  // it, and leaving it in the output invites something to start.
-  await rm(path.join(outDir, 'assets', 'style.css'), { force: true })
+  // match and nothing else.
+  //
+  // The unsplit stylesheet still ships, at the path it has always had, and it is
+  // deliberately not linked by anything this build emits. It is here for the
+  // documents that were served BEFORE the split, which link
+  // `/assets/style.css`: HTML is served `max-age=0, must-revalidate`, but an
+  // open tab, a back/forward entry, or a within-session memory hit can still
+  // render a pre-split document, and when this file was deleted from the output
+  // that document lost every rule it had and came out as naked HTML. Deleting it
+  // was the tidier output and the worse deploy.
+  //
+  // It costs a new visitor nothing, because no shell references it. If you are
+  // adding a page, link a `style-<shell>.css` bundle; this copy is compatibility
+  // ballast, not the stylesheet.
+  await writeFile(
+    path.join(outDir, 'assets', 'style.css'),
+    styleSource.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\n{3,}/g, '\n\n'),
+  )
   for (const [shell, lines] of styleBundles) {
     await writeFile(
       path.join(outDir, 'assets', `style-${shell}.css`),
