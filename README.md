@@ -9,19 +9,21 @@
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/npm/l/oxc-tsrx.svg"></a>
 </p>
 
-OXC for TSRX is a linter, formatter, and language server for `.tsrx` files,
-written in Rust. A `.tsrx` file is TypeScript and JSX plus template control
-flow like `@if` and `@for`, and OXC is the toolchain behind Oxlint and Oxfmt.
+OXC for TSRX is a linter and a formatter for `.tsrx` files, written in Rust.
+A linter warns you about likely mistakes in your code. A formatter rewrites
+spacing and punctuation so every file in the project looks the same. You get
+both on the command line and inside your editor. A `.tsrx` file is TypeScript
+with JSX markup, plus template blocks like `@if` and `@for`.
 
 _OXC for TSRX is an independent community project. It is not affiliated with,
 endorsed by, or a product of VoidZero or the OXC team._
 
 [**Docs**](https://oxc-tsrx.dev/) &nbsp;·&nbsp; [**Getting started**](https://oxc-tsrx.dev/guide/getting-started) &nbsp;·&nbsp; [**Playground**](https://oxc-tsrx.dev/playground)
 
-- **One install for the command line and your editor.** You get `oxlint` and `oxfmt` commands that understand `.tsrx`. No config file, no ignore file, no install script.
-- **Errors point at what you wrote.** Real Oxlint rules run on a temporary copy of your file, but every line and column you see is in your own `.tsrx` source.
-- **Your other files are untouched.** `.js`, `.ts`, `.jsx`, and `.tsx` take the official OXC code paths, at official Oxlint speed ([the numbers](docs/acceptance/matrix.md)).
-- **No fork and no patches.** OXC is an ordinary pinned dependency, and every call into it lives in one small adapter crate. [How that works](https://oxc-tsrx.dev/architecture/rust-oxc-core).
+- **One install for the command line and your editor.** You get `oxlint` and `oxfmt`, the real [OXC](https://oxc.rs) commands, now able to read `.tsrx`. No config file, no ignore file, no install script.
+- **Errors point at what you wrote.** Your file is translated behind the scenes so OXC can read it, but every line and column number you see is in your own `.tsrx` file.
+- **Your other files are untouched.** `.js`, `.ts`, `.jsx`, and `.tsx` go straight to OXC, exactly as they would without this package ([the numbers](docs/acceptance/matrix.md)).
+- **Not a fork.** This does not ship a changed copy of OXC. It installs the real thing and calls it. [How that works](https://oxc-tsrx.dev/architecture/rust-oxc-core).
 - **Works with the official OXC [VS Code extension](https://oxc-tsrx.dev/integrations/editor) and with [Vite+](https://oxc-tsrx.dev/integrations/vite-plus).**
 
 ## Install
@@ -30,17 +32,17 @@ endorsed by, or a product of VoidZero or the OXC team._
 npm install --save-dev oxc-tsrx@latest
 ```
 
-Node.js 20.19+ (in the 20.x line) or 22.12+. You do not need Rust installed: a
-normal install downloads one prebuilt binary, the one matching your platform.
-Those cover macOS, Linux (glibc and musl), and Windows, on x64 and arm64. There
-is no JavaScript or WebAssembly fallback, so anything else has to build from
-source. [Platform support](https://oxc-tsrx.dev/reference/platform-support) says
-which of the eight targets get a real run on every change.
+Node.js 20.19+ (in the 20.x line) or 22.12+. You do not need Rust installed:
+the install downloads a ready-built program for your machine. macOS, Linux, and
+Windows are covered. There is no JavaScript or WebAssembly fallback, so any
+other machine has to build from source.
+[Platform support](https://oxc-tsrx.dev/reference/platform-support) has the full list.
 
 ## Usage
 
-Save this as `src/Cart.tsrx`. `Props`, `Row`, and `Empty` stand in for your own
-type and components, and `var total` and `debugger` give the linter work to do.
+Save this as `src/Cart.tsrx`. `Props`, `Row`, and `Empty` stand in for your
+own type and components. `var total` and `debugger` are there on purpose: they
+give the linter something to catch, so your first run has warnings to show you.
 
 ```tsx
 export function Cart({ items }: Props) @{
@@ -65,62 +67,55 @@ npx oxfmt --check src/Cart.tsrx # Show what formatting would change.
 npx oxfmt --write src/Cart.tsrx # Apply it.
 ```
 
-Give `oxlint` a path. A bare `npx oxlint` also lints `node_modules`, and `--fix`
-will rewrite files in there. The [CLI
-reference](https://oxc-tsrx.dev/reference/cli#npx-oxlint-with-no-path-also-lints-nodemodules) has the measured cost, every flag, and the exit codes.
+Give `oxlint` a path. With no path it also checks `node_modules`, and `--fix`
+(the flag that lets `oxlint` edit your files) will rewrite files in there. The
+[CLI reference](https://oxc-tsrx.dev/reference/cli#npx-oxlint-with-no-path-also-lints-nodemodules) has the count it measured, every flag, and the exit codes.
 
 `oxfmt` formats a `.tsrx` file the way it formats TypeScript, and CSS inside a
-raw `<style>` element is copied through untouched. The [formatting
-guide](https://oxc-tsrx.dev/guide/formatting) shows a committed fixture before
-and after, and the settings you can change.
+`<style>` block is copied through untouched. The [formatting
+guide](https://oxc-tsrx.dev/guide/formatting) shows a committed fixture before and after.
 
 ## What works today
 
-`.tsrx` support covers `@{` statement containers, `@if` / `@else if` / `@else`,
-`@for` / `@empty`, `@switch` / `@case` / `@default`, `@try` / `@pending` /
-`@catch`, dynamic JSX tags written as `<{expression}>`, and lowercase raw
-`<style>` elements. Anything outside that list **fails closed**: the command
-stops and says what it found and where, rather than guessing and maybe producing
-wrong output.
+These are the TSRX blocks the linter and formatter understand:
+`@{` blocks, `@if` / `@else if` / `@else`, `@for` / `@empty`, `@switch` /
+`@case` / `@default`, `@try` / `@pending` / `@catch`, tags whose name is an
+expression, `<{expression}>`, and plain `<style>` blocks. Anything outside that
+list **fails closed**: the command stops and says what it found and where,
+rather than guessing and maybe producing wrong output.
 
-**This package compiles nothing.** It lints, formats, parses, and powers your
-editor. Building and running `.tsrx` belongs to your framework's TSRX plugin,
-which the TSRX toolchain ships for React, Preact, Solid, Vue, Ripple, and Octane
-across Vite, Rspack, Turbopack, and Bun. See
+**This package compiles nothing.** It never builds or runs your app. Turning
+`.tsrx` into something a browser can run is your framework's TSRX plugin's job,
+and the TSRX toolchain ships one for React, Preact, Solid, Vue, Ripple, and
+Octane across Vite, Rspack, Turbopack, and Bun. See
 [tsrx.dev/getting-started](https://tsrx.dev/getting-started). Without one, your
-bundler reads `.tsrx` as ordinary TypeScript and fails on the first `@{`.
+build tool reads `.tsrx` as plain TypeScript and stops at the first `@{`.
 
-Three smaller limits are worth knowing: CSS inside a raw `<style>` element is
-preserved rather than reformatted, your own JavaScript lint plugins see a TSX
-copy of your file, and a dynamic tag whose name holds more dynamic JSX is not
-supported yet. [Limitations](https://oxc-tsrx.dev/reference/limitations) explains each one.
+Three smaller limits are worth knowing: CSS inside a `<style>` block is left
+alone rather than reformatted, custom JavaScript lint rules see a translated
+copy of your file, and a dynamic tag name that itself contains more markup is
+not supported yet. [Limitations](https://oxc-tsrx.dev/reference/limitations) explains each one.
 
 ## In your editor
 
 Install the official OXC extension, `oxc.oxc-vscode`. With `oxc-tsrx` in the
-project there is nothing else to install or configure. The extension does not
-start on a `.tsrx` file, so open any JavaScript, TypeScript, or JSON file in the
-workspace once, and `.tsrx` is served for the rest of the session. The [editor
-guide](https://oxc-tsrx.dev/integrations/editor) has the settings.
+project there is nothing else to install or configure, and your editor
+underlines the same problems the terminal reports. One catch: the extension
+does not wake up on a `.tsrx` file, so open any JavaScript, TypeScript, or
+JSON file in the project once, and `.tsrx` works for the rest of the session.
+The [editor guide](https://oxc-tsrx.dev/integrations/editor) has the settings.
 
 ## Vite and Vite+
 
-This project adds no Vite transform and no Vite parser. Your framework's own
-TSRX Vite plugin still owns compilation, CSS, source maps, and HMR, and your
-build and dev server are unchanged. Vite+ needs one extra step:
-
-```sh
-npm install --save-dev vite-plus oxc-tsrx@latest
-npx oxc-tsrx setup
-```
-
-Run both lines with your own package manager. `setup` is explicit, reversible
-with `oxc-tsrx remove`, and works inside `node_modules`, so a later install
-undoes it. The [Vite+ guide](https://oxc-tsrx.dev/integrations/vite-plus) has
-the recovery and the one line `setup` writes in your own project.
+This package changes nothing about your build. Your framework's TSRX plugin still
+owns compiling, CSS, source maps, and live reload, and your build and dev server
+work exactly as before. If you use [Vite+](https://oxc-tsrx.dev/integrations/vite-plus),
+there is one extra command after installing, `npx oxc-tsrx setup`, and that page
+has what it writes and how to undo it.
 
 ## Documentation
 
+- [Introduction](https://oxc-tsrx.dev/guide/introduction): what this is, in plain terms.
 - [Getting started](https://oxc-tsrx.dev/guide/getting-started): install, first file, first run.
 - [TSRX syntax](https://oxc-tsrx.dev/guide/tsrx-syntax): every supported block.
 - [Configuration](https://oxc-tsrx.dev/integrations/configuration): every supported setting.
