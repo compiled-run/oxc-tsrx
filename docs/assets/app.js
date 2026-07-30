@@ -864,9 +864,142 @@ async function fetchPage(href) {
   return pageCache.get(url.pathname)
 }
 
-function swapPage(html, url) {
-  cleanupPage()
+// Each shell ships its own stylesheet (CSS_SHELLS in docs/build.mjs), and the
+// head is not part of the routed region, so swapping the body alone leaves the
+// destination page wearing the origin shell's CSS — a doc page laid out by the
+// home rules, forward and on every back/forward traversal. The head has to be
+// reconciled too, and it has to happen before the swap so nothing is ever
+// painted, or measured by initPage(), under the wrong rules.
+//
+// Two taps in quick succession turn that reconciliation into a shared-resource
+// problem. The second navigation supersedes the first, but the first keeps
+// running, and its idea of "stale" is a snapshot of the head taken before the
+// winner existed — so it deleted the winner's stylesheet, and the winner, still
+// waiting on a load event from a link that no longer existed, waited out the
+// full timeout and then deleted the loser's. The live page was left with an
+// empty <head> and its body text in Times, permanently, which is worse than the
+// wrong-shell render this whole block exists to prevent.
+//
+// So exactly one navigation owns document.head at a time:
+//   - every head mutation is guarded by a generation check, and a superseded
+//     navigation performs none of them (it cannot know what the winner wants);
+//   - the owner reconciles against the LIVE head instead of a snapshot, so a
+//     link a superseded navigation left behind is cleaned up by whoever wins;
+//   - removing a link settles its pending load immediately, because a detached
+//     link never fires load or error and nothing may block on one.
+const STYLESHEET_TIMEOUT_MS = 4000
+
+const stylesheetLinks = (root) => [...root.querySelectorAll('link[rel="stylesheet"]')]
+
+// Every intercepted navigation takes a ticket in dispatch order. Only the
+// holder of the newest one may touch the head; the rest unwind without a trace.
+let navigationGeneration = 0
+function claimNavigation(signal) {
+  const generation = ++navigationGeneration
+  // event.signal aborts the moment a newer navigation starts, so it agrees with
+  // the counter; it is read as well because it also covers a navigation that was
+  // cancelled outright and never replaced.
+  return () => navigationGeneration === generation && signal?.aborted !== true
+}
+
+// href -> the link this router appended for it and that link's pending or
+// settled load. A navigation that adopts a link an earlier one appended waits on
+// the same load instead of assuming it is ready, so a stylesheet cannot be
+// committed while it is still in flight or after it has failed.
+const stylesheetLoads = new Map()
+// The settle function of every in-flight link, so detaching one resolves its
+// waiters at once instead of leaving them to time out.
+const stylesheetSettles = new WeakMap()
+
+function appendStylesheet(href) {
+  const link = document.createElement('link')
+  link.rel = 'stylesheet'
+  link.href = href
+  const load = new Promise((resolve) => {
+    let done = false
+    const settle = (outcome) => {
+      if (done) return
+      done = true
+      clearTimeout(timer)
+      stylesheetSettles.delete(link)
+      resolve(outcome)
+    }
+    // A stylesheet that never answers must not wedge the router. Navigating
+    // with it still pending is safe: it is already in the head and applies the
+    // moment it lands.
+    const timer = setTimeout(() => settle('timeout'), STYLESHEET_TIMEOUT_MS)
+    link.addEventListener('load', () => settle('load'), { once: true })
+    link.addEventListener('error', () => settle('error'), { once: true })
+    stylesheetSettles.set(link, settle)
+  })
+  const entry = { link, load }
+  stylesheetLoads.set(href, entry)
+  document.head.append(link)
+  return entry
+}
+
+// The only way a stylesheet link ever leaves the head.
+function removeStylesheet(link) {
+  stylesheetSettles.get(link)?.('detached')
+  const href = link.href
+  if (stylesheetLoads.get(href)?.link === link) stylesheetLoads.delete(href)
+  link.remove()
+}
+
+// Waits for the stylesheets the destination asks for, appending the ones the
+// head does not have yet, then hands back the callback that makes the head
+// exactly the destination's set. Add first, drop last: dropping first flashes
+// the page unstyled. Throwing on a failed load lets the caller fall back to a
+// real navigation — a full page load renders correctly, the destination under
+// the origin's stylesheet does not. Returns null when this navigation has been
+// superseded, which means it must touch nothing at all.
+async function syncStylesheets(doc, url, ownsHead) {
+  const wanted = stylesheetLinks(doc).map((link) => new URL(link.getAttribute('href'), url).href)
+  // This check and the appends below are one synchronous run, so no other
+  // navigation can slip between them. That is what makes "anything this
+  // navigation appended was appended before any newer navigation's cleanup"
+  // true, and therefore what guarantees the winner sweeps up after the losers.
+  if (!ownsHead()) return null
+  const appended = []
+  const loads = wanted.map((href) => {
+    const live = stylesheetLinks(document).find((link) => link.href === href)
+    const known = stylesheetLoads.get(href)
+    // A link the document itself shipped with is already applied and has no
+    // load to wait for; one this router appended does.
+    if (live) return known?.link === live ? known.load : Promise.resolve('load')
+    const entry = appendStylesheet(href)
+    appended.push(entry)
+    return entry.load
+  })
+  const outcomes = await Promise.all(loads)
+  if (!ownsHead()) return null
+  if (outcomes.includes('error')) {
+    for (const entry of appended) removeStylesheet(entry.link)
+    throw new Error(`stylesheet failed to load for ${url.pathname}`)
+  }
+  return () => {
+    if (!ownsHead()) return
+    for (const link of stylesheetLinks(document)) {
+      if (!wanted.includes(link.href)) removeStylesheet(link)
+    }
+    // Belt and braces: whatever happened while this navigation was in flight,
+    // the head it commits is exactly the destination's set.
+    for (const href of wanted) {
+      if (!stylesheetLinks(document).some((link) => link.href === href)) appendStylesheet(href)
+    }
+  }
+}
+
+// Resolves false when this navigation was superseded before it could commit:
+// the newer one owns the page, and this one must leave the DOM and the head
+// exactly as it found them.
+async function swapPage(html, url, ownsHead) {
   const doc = new DOMParser().parseFromString(html, 'text/html')
+  const commitStylesheets = await syncStylesheets(doc, url, ownsHead)
+  if (!commitStylesheets) return false
+  // From here to commitStylesheets() there is no await, so the swap and the
+  // head reconciliation are atomic against any other navigation.
+  cleanupPage()
   const newMain = doc.querySelector('.layout .content')
   const currentMain = document.querySelector('.layout .content')
   if (newMain && currentMain) {
@@ -885,6 +1018,7 @@ function swapPage(html, url) {
   }
   document.title = doc.title
   document.body.className = doc.body.className
+  commitStylesheets()
   setSidebarOpen(false)
   initPage()
   const announcer = document.getElementById('route-announcer')
@@ -900,6 +1034,7 @@ function swapPage(html, url) {
     main.tabIndex = -1
     main.focus({ preventScroll: true })
   }
+  return true
 }
 
 if ('navigation' in window) {
@@ -911,13 +1046,23 @@ if ('navigation' in window) {
     // with another file extension is an asset the router must not intercept.
     const lastSegment = url.pathname.split('/').at(-1) ?? ''
     if (lastSegment.includes('.') && !lastSegment.endsWith('.html')) return
+    // Claimed here rather than inside the handler: the navigate events arrive in
+    // navigation order, so the ticket order is the browser's order and not the
+    // order in which the handlers happen to be scheduled.
+    const ownsHead = claimNavigation(event.signal)
     event.intercept({
       scroll: 'manual',
       focusReset: 'manual',
       async handler() {
         try {
-          swapPage(await fetchPage(url.href), url)
+          const html = await fetchPage(url.href)
+          if (!ownsHead()) return
+          await swapPage(html, url, ownsHead)
         } catch {
+          // A superseded navigation must not drag the page anywhere: the one
+          // that replaced it is already rendering, and a location.assign here
+          // would throw the reader back to the destination they left.
+          if (!ownsHead()) return
           location.assign(url.href) // fall back to a full navigation
         }
       },
