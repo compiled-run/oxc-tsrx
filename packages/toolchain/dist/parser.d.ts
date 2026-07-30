@@ -143,6 +143,12 @@ export interface ParseResult {
   readonly errors: OxcError[];
 }
 
+/**
+ * What the installed native build supports. Every flag here answers a question
+ * about *this build*, never about the language or the AST in general: the
+ * canonical build and the compatibility build set them differently, and each
+ * flag is the discriminator for one option the two builds disagree about.
+ */
 export interface ParserCapabilities {
   readonly apiVersion: 1;
   readonly languages: readonly Language[];
@@ -152,7 +158,27 @@ export interface ParserCapabilities {
   readonly oxcRevision: string;
   readonly lazy: true;
   readonly async: true;
+  /**
+   * Whether `recovery: "editor"` is available. `false` means that one option is
+   * refused with `ERR_TSRX_CAPABILITY_RECOVERY`; a file that does not parse
+   * still reports every error it found in `result.errors`, as it always does.
+   */
   readonly editorRecovery: boolean;
+  /**
+   * Whether the CSS inside a `<style>` element is materialized down to its
+   * individual components. **`false` does not mean there is no CSS tree.** The
+   * canonical build always gives a `<style>` element a `css` string and a
+   * `StyleSheet` child holding a `Rule` per rule, each with a `SelectorList`
+   * prelude of `ComplexSelector` nodes and a `Block`, all carrying exact
+   * offsets relative to the CSS payload. That is enough to scope selectors, and
+   * consumers do it today.
+   *
+   * What `false` withholds is the level below that: the `ComplexSelector` and
+   * `Block` children arrays are empty, so there are no compound-selector parts
+   * and no per-declaration nodes. Read those out of the `source`/`css` text, or
+   * hand it to a CSS parser. The compatibility build reports `true` and
+   * materializes them.
+   */
   readonly cssMaterialization: false;
   readonly rawTransfer: boolean;
 }
