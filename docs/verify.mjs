@@ -270,6 +270,538 @@ check(
   'spa: home to doc swaps layout without reload',
 )
 
+// ---------- the stylesheet travels with the route ----------
+// Every page shell ships its own stylesheet, and <head> is not part of the
+// routed region, so a router that swaps the body alone leaves the destination
+// page wearing the origin shell's CSS: /guide/getting-started laid out by
+// style-home.css with its sidebar 237.891px wide instead of 288px, and the same
+// on the way back. It looked like missing styles, so it invited a CSS rewrite;
+// it was the router.
+//
+// A screenshot is not evidence here. The two things that are: which stylesheet
+// the head holds, and a computed value that only the right shell can produce,
+// compared against a direct load of the same URL in the same run. window
+// .__spaMarker has to survive too — without it this silently degrades into
+// testing full page loads, which were never broken.
+const shellProbe = () =>
+  page.evaluate(() => {
+    const links = [...document.querySelectorAll('link[rel="stylesheet"]')]
+    const computed = (selector, properties) => {
+      const element = document.querySelector(selector)
+      if (!element) return null
+      const style = getComputedStyle(element)
+      return Object.fromEntries(properties.map((property) => [property, style[property]]))
+    }
+    let ruleCount = -1
+    try {
+      ruleCount = document.styleSheets[0]?.cssRules.length ?? -1
+    } catch {
+      ruleCount = -2
+    }
+    return {
+      spa: window.__spaMarker === true,
+      sheets: links.map((link) => new URL(link.href).pathname),
+      ruleCount,
+      firstSheetIsHeadLink: links.length > 0 && document.styleSheets[0]?.ownerNode === links[0],
+      // Each of these is styled by exactly one shell's rules and left at the
+      // browser default by the other two.
+      style: {
+        sidebar: computed('.sidebar', ['width']),
+        pgSide: computed('#pg-side', ['paddingTop', 'paddingLeft', 'borderBottomWidth']),
+        pgTitle: computed('.pg-title', ['fontSize', 'letterSpacing']),
+        hero: computed('.hero-name', ['fontSize']),
+      },
+    }
+  })
+
+const flattenStyle = (style) =>
+  Object.entries(style).flatMap(([element, properties]) =>
+    properties === null
+      ? [[element, '(element absent)']]
+      : Object.entries(properties).map(([name, value]) => [`${element}.${name}`, value]),
+  )
+
+const directShells = new Map()
+for (const [route, shell] of [
+  ['/', 'home'],
+  ['/guide/getting-started', 'doc'],
+  ['/playground', 'playground'],
+]) {
+  await page.goto(`${baseUrl}${route}`, { waitUntil: 'load' })
+  const state = await shellProbe()
+  check(
+    state.sheets.length === 1 &&
+      state.sheets[0] === `/assets/style-${shell}.css` &&
+      state.firstSheetIsHeadLink &&
+      state.ruleCount > 0,
+    `stylesheet: direct load of ${route} links only the ${shell} shell`,
+    `${state.sheets.join(', ') || 'no stylesheet'} · ${state.ruleCount} rules`,
+  )
+  directShells.set(route, { shell, ...state })
+}
+
+const checkShell = (label, route, state) => {
+  const direct = directShells.get(route)
+  check(state.spa, `stylesheet: ${label} stayed a client-side navigation (no reload)`)
+  check(
+    state.sheets.length === 1 && state.sheets[0] === `/assets/style-${direct.shell}.css`,
+    `stylesheet: ${label} leaves the ${direct.shell} shell as the only stylesheet`,
+    `${state.sheets.join(', ') || 'no stylesheet'} (expected exactly /assets/style-${direct.shell}.css)`,
+  )
+  check(
+    state.firstSheetIsHeadLink && state.ruleCount === direct.ruleCount,
+    `stylesheet: ${label} applies the rule count of a direct load`,
+    `${state.ruleCount} rules vs ${direct.ruleCount} direct`,
+  )
+  const after = new Map(flattenStyle(state.style))
+  const differences = flattenStyle(direct.style)
+    .filter(([key, value]) => after.get(key) !== value)
+    .map(([key, value]) => `${key}: ${after.get(key)} vs ${value} direct`)
+  check(
+    differences.length === 0,
+    `stylesheet: ${label} computes the same shell layout as a direct load`,
+    differences.join('; '),
+  )
+}
+
+await page.goto(`${baseUrl}/`, { waitUntil: 'load' })
+await page.evaluate(() => {
+  window.__spaMarker = true
+})
+await page.getByRole('link', { name: 'Get Started' }).click()
+await page.waitForURL('**/guide/getting-started')
+await page.waitForFunction(
+  () => document.querySelector('article h1')?.textContent.trim() === 'Getting Started',
+)
+checkShell('home to doc', '/guide/getting-started', await shellProbe())
+
+await page.locator('.top-nav a[href$="/playground"]').first().click()
+await page.waitForURL('**/playground')
+await page.waitForFunction(() => Boolean(document.querySelector('.pg-title')))
+checkShell('doc to playground', '/playground', await shellProbe())
+
+// Back and forward run through the same interceptor, which is exactly why they
+// broke the same way and why they are asserted separately.
+await page.evaluate(() => navigation.back())
+await page.waitForURL('**/guide/getting-started')
+await page.waitForFunction(
+  () => document.querySelector('article h1')?.textContent.trim() === 'Getting Started',
+)
+checkShell('back to doc', '/guide/getting-started', await shellProbe())
+
+await page.evaluate(() => navigation.back())
+await page.waitForURL((url) => url.pathname === '/')
+await page.waitForFunction(() => Boolean(document.querySelector('.hero-name')))
+checkShell('back to home', '/', await shellProbe())
+
+// Back to where the session started is the one traversal a head-blind router
+// gets right by accident, so a forward traversal is asserted too.
+await page.evaluate(() => navigation.forward())
+await page.waitForURL('**/guide/getting-started')
+await page.waitForFunction(
+  () => document.querySelector('article h1')?.textContent.trim() === 'Getting Started',
+)
+checkShell('forward to doc', '/guide/getting-started', await shellProbe())
+
+// ---------- two taps at once: document.head has exactly one owner ----------
+// Every crossing above is driven to completion before the next one starts, and
+// that is not how a phone gets used. A reader touches the Playground link (the
+// router prefetches it into its page cache on pointerover/touchstart), changes
+// their mind and taps a sidebar doc link, then taps Playground again a fraction
+// of a second later. On the live deploy that left the page with NO stylesheet at
+// all, permanently — body font-family resolved to Times — because the superseded
+// navigation removed the winner's stylesheet using a snapshot of the head taken
+// before the winner existed, and the winner, still waiting on a load event from
+// a link that had been detached, waited out its four-second timeout and then
+// removed the loser's.
+//
+// Reproducing that needs the live shape, not just two navigate() calls: the
+// SECOND target pre-warmed in the page cache and the FIRST one uncached, so the
+// loser finishes after the winner. Locally every fetch is instant, so the first
+// route's HTML and the winner's stylesheet are delayed at the network layer.
+// That is reproducing a phone's latency, not testing this machine's speed: the
+// property under test is "the end state does not depend on the interleaving".
+// STYLESHEET_TIMEOUT_MS in docs/assets/app.js. The worst of these end states
+// arrives one full router timeout after the last held-back response, because
+// that is how long a navigation waits on a load event from a link that is no
+// longer in the document, so nothing here may conclude before then.
+const ROUTER_STYLESHEET_TIMEOUT_MS = 4000
+const routeDelays = new Map()
+const delayedRoute = (url) => routeDelays.has(url.pathname)
+await page.route(delayedRoute, async (route) => {
+  const delay = routeDelays.get(new URL(route.request().url()).pathname) ?? 0
+  await new Promise((resolve) => setTimeout(resolve, delay))
+  await route.continue().catch(() => {})
+})
+
+const watchHead = () =>
+  page.evaluate(() => {
+    window.__headLog = []
+    window.__raceStartedAt = performance.now()
+    window.__headSettledAt = performance.now()
+    new MutationObserver((records) => {
+      let touched = false
+      for (const record of records) {
+        for (const [nodes, verb] of [
+          [record.addedNodes, 'ADD'],
+          [record.removedNodes, 'REMOVE'],
+        ]) {
+          for (const node of nodes) {
+            if (node.tagName !== 'LINK' || node.rel !== 'stylesheet') continue
+            touched = true
+            window.__headLog.push(
+              `${Math.round(performance.now())} ${verb} ${new URL(node.href).pathname}`,
+            )
+          }
+        }
+      }
+      if (touched) window.__headSettledAt = performance.now()
+    }).observe(document.head, { childList: true })
+  })
+
+// The broken end state arrives late — the winner's stylesheet is removed when
+// the loser finishes, and the loser's four seconds after that, when the winner
+// gives up waiting for a load event from a link that is no longer in the
+// document. So the probe never samples on a timer that happens to look right: it
+// waits for the destination's content to render, then for the head to stop
+// changing, and never earlier than every held-back response has been delivered.
+const settleHead = async (floorMs) => {
+  await page
+    .waitForFunction(
+      (floor) =>
+        performance.now() - window.__headSettledAt > 700 &&
+        performance.now() - window.__raceStartedAt > floor,
+      floorMs,
+      { timeout: 20_000, polling: 100 },
+    )
+    .catch(() => {})
+  return page.evaluate(() => window.__headLog.join(' | '))
+}
+
+// Hovering is how the router's cache gets warmed in the wild (pointerover, and
+// touchstart on a phone); waiting for the response is how we know it actually
+// happened before the race starts, which is the condition that made the live
+// window wide enough to hit.
+const warmCache = async (pathname) => {
+  const link = page
+    .locator(`.top-nav a[href$="${pathname}"], .sidebar a[href$="${pathname}"]`)
+    .first()
+  const [response] = await Promise.all([
+    page.waitForResponse((r) => new URL(r.url()).pathname === pathname, { timeout: 10_000 }),
+    link.hover(),
+  ])
+  return response.ok()
+}
+
+const raceNavigations = (steps) =>
+  page.evaluate((plan) => {
+    // navigate() rejects both of its promises when a later navigation supersedes
+    // it. That is the expected outcome here and must not surface as an unhandled
+    // rejection, which the console-error check would (rightly) fail on.
+    const go = (href) => {
+      const result = navigation.navigate(href)
+      result.committed?.catch(() => {})
+      result.finished?.catch(() => {})
+    }
+    go(plan[0].href)
+    let elapsed = 0
+    for (const step of plan.slice(1)) {
+      elapsed += step.afterMs
+      setTimeout(() => go(step.href), elapsed)
+    }
+  }, steps)
+
+const overlapCase = async ({ label, start, warm, steps, delays, finalRoute, marker }) => {
+  await page.goto(`${baseUrl}${start}`, { waitUntil: 'load' })
+  routeDelays.clear()
+  for (const pathname of warm) {
+    check(
+      await warmCache(pathname),
+      `${label}: prefetch warms ${pathname} into the router's page cache`,
+    )
+  }
+  for (const [pathname, ms] of delays) routeDelays.set(pathname, ms)
+  await page.evaluate(() => {
+    window.__spaMarker = true
+  })
+  await watchHead()
+  await raceNavigations(steps)
+  await page.waitForURL(`**${finalRoute}`, { timeout: 15_000 }).catch(() => {})
+  await page
+    .waitForFunction(
+      ({ selector, text }) => document.querySelector(selector)?.textContent.trim() === text,
+      marker,
+      { timeout: 15_000 },
+    )
+    .catch(() => {})
+  const floorMs =
+    Math.max(0, ...delays.map(([, ms]) => ms)) + ROUTER_STYLESHEET_TIMEOUT_MS + 400
+  const headLog = await settleHead(floorMs)
+  routeDelays.clear()
+  const state = await shellProbe()
+  const rendered = await page.evaluate(
+    (selector) => document.querySelector(selector)?.textContent.trim() ?? null,
+    marker.selector,
+  )
+  const landed = new URL(page.url()).pathname
+  check(
+    landed === finalRoute && rendered === marker.text,
+    `${label}: settles on the final destination, not a superseded one`,
+    `${landed} showing ${JSON.stringify(rendered)} (expected ${finalRoute} showing ${JSON.stringify(marker.text)})`,
+  )
+  // checkShell already asserts the head; this repeats the single most important
+  // half of it with the head's mutation log attached, because "which link was
+  // removed, by whom, and when" is the whole diagnosis when it fails.
+  const shell = directShells.get(finalRoute).shell
+  check(
+    state.sheets.length === 1 && state.sheets[0] === `/assets/style-${shell}.css`,
+    `${label}: leaves exactly one stylesheet in the head, the ${shell} shell's`,
+    `${state.sheets.join(', ') || 'NO STYLESHEET AT ALL'} · head log: ${headLog || '(no head mutations)'}`,
+  )
+  checkShell(label, finalRoute, state)
+}
+
+// 1. The live sequence, in order: an uncached doc link, then the prefetched
+//    playground 100 ms later. The playground stylesheet is held open past the
+//    moment the doc navigation finishes, which is exactly the window in which
+//    the superseded handler used to delete it.
+await overlapCase({
+  label: 'overlapping doc then playground',
+  start: '/guide/getting-started',
+  warm: ['/playground'],
+  delays: [
+    ['/guide/linting', 600],
+    ['/assets/style-playground.css', 1200],
+  ],
+  steps: [{ href: '/guide/linting' }, { href: '/playground', afterMs: 100 }],
+  finalRoute: '/playground',
+  marker: { selector: '.pg-title', text: 'TSRX Playground' },
+})
+
+// 2. The other order, and the other failure mode: the first navigation runs to
+//    completion and the second is still in flight. The winner has to sweep up
+//    the stylesheet the loser appended before it was superseded, which no
+//    snapshot taken at the loser's start could account for.
+await overlapCase({
+  label: 'overlapping playground then doc',
+  start: '/guide/introduction',
+  warm: ['/playground'],
+  delays: [
+    ['/guide/getting-started', 600],
+    ['/assets/style-playground.css', 1200],
+  ],
+  steps: [{ href: '/playground' }, { href: '/guide/getting-started', afterMs: 60 }],
+  finalRoute: '/guide/getting-started',
+  marker: { selector: 'article h1', text: 'Getting Started' },
+})
+
+// 3. Three deep. Two losers, one of which crosses a shell boundary and one of
+//    which does not, and a winner that shares its stylesheet with the page the
+//    session started on — so the head can only be right if the sweep runs
+//    against the live head rather than against anybody's snapshot.
+await overlapCase({
+  label: 'three overlapping navigations',
+  start: '/guide/introduction',
+  warm: ['/playground', '/guide/getting-started'],
+  delays: [
+    ['/guide/linting', 600],
+    ['/assets/style-playground.css', 1200],
+  ],
+  steps: [
+    { href: '/guide/linting' },
+    { href: '/playground', afterMs: 60 },
+    { href: '/guide/getting-started', afterMs: 60 },
+  ],
+  finalRoute: '/guide/getting-started',
+  marker: { selector: 'article h1', text: 'Getting Started' },
+})
+
+routeDelays.clear()
+await page.unroute(delayedRoute)
+
+// ---------- the playground survives its own boot window ----------
+// The example buttons used to be `hidden` until the demo module had been
+// fetched, parsed, and had answered a capability request. On a Pixel 5 over Fast
+// 3G that took 3.3 s, and a tap inside that window hit nothing and left no
+// trace, which is what "sometimes didn't work at all" was. The page now ships
+// the controls visible and marked as starting, an inline script in the head
+// records a tap that lands before the module does, and the module replays it
+// once it is wired.
+//
+// Those are three separate mechanisms, each of which can be lost on its own
+// while the page still photographs perfectly, so each is asserted on its own,
+// against DOM state and computed style. The module is held at the network layer
+// rather than raced against a timer: the property is "does not depend on the
+// module", and a wall-clock wait would only be testing this machine's speed.
+const bootProbe = (target) =>
+  target.evaluate(() => {
+    const bar = document.getElementById('pg-side')
+    const button = document.getElementById('pg-scenario-lint')
+    if (!bar || !button) return { present: false }
+    const barStyle = getComputedStyle(bar)
+    const buttonStyle = getComputedStyle(button)
+    const rect = button.getBoundingClientRect()
+    return {
+      present: true,
+      engine: bar.dataset.engine ?? null,
+      hidden: bar.hasAttribute('hidden'),
+      busy: bar.querySelector('.pg-examples')?.getAttribute('aria-busy') ?? null,
+      legible:
+        barStyle.display !== 'none' &&
+        barStyle.visibility === 'visible' &&
+        buttonStyle.display !== 'none' &&
+        buttonStyle.visibility === 'visible' &&
+        Number.parseFloat(barStyle.opacity) > 0.25 &&
+        Number.parseFloat(buttonStyle.opacity) > 0.25 &&
+        rect.width > 20 &&
+        rect.height > 10 &&
+        button.textContent.trim() === 'Lint findings',
+      geometry: `${Math.round(rect.width)}x${Math.round(rect.height)} at ${Math.round(rect.x)},${Math.round(rect.y)}`,
+      label: document.getElementById('pg-engine-label')?.textContent.trim() ?? null,
+      note: document.getElementById('pg-scenario-note')?.textContent.trim() ?? null,
+      queued: button.dataset.queued ?? null,
+      moduleRan: Boolean(document.getElementById('demo-input')),
+      source: document.getElementById('demo-input')?.value ?? null,
+    }
+  })
+
+if (mode === 'wasm') {
+  // 1. No script at all. If the controls need JavaScript to become visible,
+  //    they need it to become visible late, which is the whole defect.
+  const scriptless = await browser.newContext({
+    javaScriptEnabled: false,
+    viewport: { width: 1440, height: 900 },
+  })
+  const scriptlessPage = await scriptless.newPage()
+  await scriptlessPage.goto(`${baseUrl}/playground`, { waitUntil: 'load' })
+  const staticBar = await bootProbe(scriptlessPage)
+  check(
+    staticBar.present && staticBar.legible && !staticBar.hidden,
+    'boot window: the playground ships its controls visible in the HTML, before any script',
+    `${staticBar.geometry ?? 'absent'} · hidden=${staticBar.hidden}`,
+  )
+  check(
+    staticBar.engine === 'starting' &&
+      staticBar.busy === 'true' &&
+      /starting/i.test(staticBar.label ?? '') &&
+      /still starting/i.test(staticBar.note ?? ''),
+    'boot window: the controls say they are still starting rather than pretending to be live',
+    `data-engine=${staticBar.engine} aria-busy=${staticBar.busy} label=${staticBar.label} · ${(staticBar.note ?? '').slice(0, 60)}`,
+  )
+  await scriptless.close()
+
+  // 2. Script on, but the demo module held on the wire: this is the real boot
+  //    window, reproduced deterministically.
+  const bootPage = await context.newPage()
+  let releaseModule
+  const moduleHeld = new Promise((resolve) => {
+    releaseModule = resolve
+  })
+  let moduleRequested = false
+  await bootPage.route('**/assets/playground.js*', async (route) => {
+    moduleRequested = true
+    await moduleHeld
+    await route.continue()
+  })
+  const navigationStarted = Date.now()
+  await bootPage.goto(`${baseUrl}/playground`, { waitUntil: 'commit' })
+  await bootPage.waitForFunction(() => Boolean(document.getElementById('pg-scenario-lint')))
+  const controlsAt = Date.now() - navigationStarted
+  const heldState = await bootProbe(bootPage)
+  check(
+    heldState.legible && !heldState.moduleRan && controlsAt < 1500,
+    'boot window: the controls are legible with the demo module still in flight',
+    `${controlsAt} ms, module initialised=${heldState.moduleRan}, ${heldState.geometry}`,
+  )
+
+  // Tolerated rather than awaited: if the controls have gone back to being
+  // hidden, the tap cannot land at all, and that has to read as these checks
+  // failing, not as the whole verification run aborting on a click timeout.
+  let tapError = null
+  try {
+    await bootPage.locator('#pg-scenario-lint').click({ timeout: 5000 })
+    await bootPage.waitForFunction(
+      () => document.getElementById('pg-scenario-lint')?.dataset.queued === '1',
+      null,
+      { timeout: 5000 },
+    )
+  } catch (error) {
+    tapError = error.message.split('\n')[0]
+  }
+  const tapped = await bootProbe(bootPage)
+  check(
+    !tapError &&
+      tapped.queued === '1' &&
+      /queued/i.test(tapped.note ?? '') &&
+      /Lint findings/.test(tapped.note ?? ''),
+    'boot window: a tap taken before the module arrives is acknowledged, not swallowed',
+    tapError ?? `queued=${tapped.queued} · ${(tapped.note ?? 'no note').slice(0, 70)}`,
+  )
+  check(
+    moduleRequested && !tapped.moduleRan,
+    'boot window: that acknowledgement came from the page itself, not from the demo module',
+    `module requested=${moduleRequested}, initialised=${tapped.moduleRan}`,
+  )
+
+  releaseModule()
+  await bootPage
+    .waitForFunction(() => document.getElementById('pg-side')?.dataset.engine === 'ready', null, {
+      timeout: 30_000,
+    })
+    .catch(() => {})
+  const drained = await bootPage
+    .waitForFunction(
+      () => (document.getElementById('demo-input')?.value ?? '').includes('debugger;'),
+      null,
+      { timeout: 30_000 },
+    )
+    .then(() => true)
+    .catch(() => false)
+  const readyState = await bootProbe(bootPage)
+  check(
+    drained,
+    'boot window: the queued tap runs once the engine is up instead of being dropped',
+    `editor holds the "Lint findings" source: ${drained}`,
+  )
+  check(
+    readyState.engine === 'ready' &&
+      readyState.busy === null &&
+      readyState.label === 'Examples' &&
+      readyState.queued === null,
+    'boot window: the pending affordance clears when the controls go live',
+    `data-engine=${readyState.engine} aria-busy=${readyState.busy} label=${readyState.label}`,
+  )
+  await bootPage.unroute('**/assets/playground.js*')
+  await bootPage.close()
+
+  // 3. Arriving through a client-side navigation is the other way in, and the
+  //    page's own inline scripts do not re-run for it. The controls still have
+  //    to be there, and the bar still has to declare a state: a swapped-in
+  //    playground that reverted to `hidden` would be the same six-second hole.
+  await page.locator('.top-nav a[href$="/playground"]').first().click()
+  await page.waitForURL('**/playground')
+  await page.waitForFunction(() => Boolean(document.getElementById('pg-scenario-lint')))
+  const swappedIn = await bootProbe(page)
+  check(
+    swappedIn.legible &&
+      !swappedIn.hidden &&
+      ['starting', 'ready'].includes(swappedIn.engine ?? ''),
+    'boot window: a playground reached by client-side navigation arrives with its controls up',
+    `data-engine=${swappedIn.engine} hidden=${swappedIn.hidden} ${swappedIn.geometry}`,
+  )
+} else {
+  // A build without the in-browser engine must NOT ship a pending affordance:
+  // there the controls never become usable, so promising an engine would be a
+  // lie the reader cannot tell from the live case.
+  await page.goto(`${baseUrl}/playground`, { waitUntil: 'load' })
+  const staticBar = await bootProbe(page)
+  check(
+    staticBar.present && staticBar.hidden && staticBar.engine === null,
+    'boot window: a build without the in-browser engine promises nothing and stays hidden',
+    `hidden=${staticBar.hidden} data-engine=${staticBar.engine}`,
+  )
+}
+
 // ---------- outline scroll spy ----------
 await page.goto(`${baseUrl}/architecture/rust-oxc-core`, { waitUntil: 'load' })
 await page.evaluate(() => document.getElementById('performance-evidence').scrollIntoView())

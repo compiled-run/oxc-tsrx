@@ -97,12 +97,25 @@ export async function initDemo(panel) {
   const statusEl = panel.querySelector('#demo-status')
   const metaEl = panel.querySelector('#demo-meta')
   const shared = readShareHash()
+  // A build that ships the engine sends the playground's example bar down
+  // visible and pending, so a tap during boot has something to land on and gets
+  // queued (see the tail of this function). When the demo turns out not to be
+  // runnable here at all, take the bar back down instead of leaving it promising
+  // an engine that is never going to start.
+  const standDownControls = () => {
+    const bar = document.getElementById('pg-side')
+    if (!bar || bar.dataset.engine !== 'starting') return
+    bar.dataset.engine = 'unavailable'
+    window.__pgQueuedScenario = null
+    bar.hidden = true
+  }
   let health = null
   try {
     health = await (await fetch(capabilitiesUrl)).json()
   } catch {}
   const wasmMode = Boolean(health?.ok && !health.native && health.wasm)
   if (!health?.ok || (!health.native && !wasmMode)) {
+    standDownControls()
     statusEl.textContent = 'pre-generated example · static preview'
     metaEl.textContent = 'native lint and format run only on the local development server'
     if (shared.code) {
@@ -117,9 +130,10 @@ export async function initDemo(panel) {
     return
   }
 
-  // The Shiki bundle is ~770 KiB; it starts loading immediately everywhere
-  // except the wasm-mode home hero, which arms it on first interaction so the
-  // landing page keeps its transfer budget.
+  // The Shiki bundle is ~770 KiB. Native mode starts it immediately; both wasm
+  // surfaces wait for the first editor interaction, so the landing page keeps
+  // its transfer budget and the playground leaves the pipe to the engine
+  // (see armClientHighlighter below).
   let clientHighlighterPromise = null
   const startClientHighlighter = () =>
     (clientHighlighterPromise ??= import(new URL('./demo-highlighter.js', import.meta.url))
@@ -138,6 +152,7 @@ export async function initDemo(panel) {
 
   if (wasmMode) {
     if (typeof SharedArrayBuffer === 'undefined') {
+      standDownControls()
       statusEl.textContent = 'pre-generated example · the in-browser engine could not load'
       metaEl.textContent = 'this browser cannot run the WebAssembly demo engine'
       if (hint) hint.textContent = 'static preview'
@@ -170,6 +185,9 @@ export async function initDemo(panel) {
     filters: shared.filters ?? [],
   }
 
+  // A build that ships the engine already sent this bar down visible and marked
+  // `data-engine="starting"`; a build without it kept the bar hidden until here.
+  // Either way it is on screen from this point.
   if (sidePanel) sidePanel.hidden = false
   const modeNote = document.getElementById('pg-mode-note')
   if (modeNote) {
@@ -424,7 +442,10 @@ export async function initDemo(panel) {
     })
   }
 
-  const armClientHighlighter = () =>
+  let highlighterArmed = false
+  const armClientHighlighter = () => {
+    if (highlighterArmed) return
+    highlighterArmed = true
     void startClientHighlighter().then((highlighter) => {
       if (!highlighter) return
       clearTimeout(highlightTimer)
@@ -433,8 +454,22 @@ export async function initDemo(panel) {
       editor.dataset.highlighter = 'client'
       renderEditor(textarea.value)
     })
-  // Home hero in wasm mode defers this to the first interaction (see boot).
-  if (!(wasmMode && !sidePanel)) armClientHighlighter()
+  }
+  // In wasm mode the Shiki bundle and the multi-megabyte engine share one mobile
+  // pipe, and the bundle was asking for it first: it is not needed to make the
+  // buttons work, only to re-highlight text the reader has changed, and the page
+  // arrives already highlighted by the build. So both wasm surfaces arm it on
+  // the first editor interaction instead — the home hero from its boot handler
+  // below, the playground workbench from these listeners — and the engine gets
+  // the whole pipe until someone actually edits. Anything that needs a highlight
+  // sooner goes through api('highlight'), which loads the bundle on demand.
+  if (!wasmMode) {
+    armClientHighlighter()
+  } else if (sidePanel) {
+    for (const event of ['focus', 'pointerdown']) {
+      textarea.addEventListener(event, armClientHighlighter, { once: true })
+    }
+  }
 
   // ---- diagnostics ----
   let segments = []
@@ -531,6 +566,14 @@ export async function initDemo(panel) {
         api('format', text).catch(() => ({ error: 'format request failed' })),
       ])
       if (generation !== outputGeneration || textarea.value !== text) return
+      // The reader can leave the playground through a client-side navigation
+      // while these two engine calls are still in flight, and that takes the
+      // output panes out of the document. Writing to them then threw
+      // "Cannot set properties of null" into the console of whatever page they
+      // had moved on to.
+      if (!document.getElementById('pg-projected') || !document.getElementById('pg-structure')) {
+        return
+      }
       if (projection.error) {
         document.getElementById('pg-projected').innerHTML =
           `<p class="pg-note pg-output-error">✗ ${escapeHtml(projection.error)}</p>`
@@ -548,8 +591,10 @@ export async function initDemo(panel) {
           `<p class="pg-note">${projection.counts.controls} control${projection.counts.controls === 1 ? '' : 's'} · ${projection.counts.dynamicTags} dynamic tag${projection.counts.dynamicTags === 1 ? '' : 's'} · ${projection.counts.styleBlocks} raw style block${projection.counts.styleBlocks === 1 ? '' : 's'}</p>`
       }
       if (format.error) {
-        document.getElementById('pg-formatted').innerHTML =
-          `<p class="pg-note pg-output-error">✗ ${escapeHtml(format.error)}</p>`
+        const formattedPane = document.getElementById('pg-formatted')
+        if (formattedPane) {
+          formattedPane.innerHTML = `<p class="pg-note pg-output-error">✗ ${escapeHtml(format.error)}</p>`
+        }
       } else {
         void renderCodeInto('pg-formatted', format.formatted, 'tsrx', generation)
       }
@@ -1322,5 +1367,27 @@ export async function initDemo(panel) {
   } else {
     if (wasmMode) setStatus('loading the in-browser WebAssembly engine…', 'ok')
     lint(original, true)
+  }
+
+  // ---- the controls stop being pending, and any tap taken while they were
+  // still starting is replayed rather than dropped. This is deliberately the
+  // last thing initDemo does: draining earlier would have the boot lint above
+  // supersede the replayed example's own lint, and the tap would look ignored
+  // all over again. The queue itself is installed by an inline script in the
+  // page head (docs/build.mjs), which is why it can catch a tap that lands
+  // before this module has even been fetched.
+  if (sidePanel) {
+    sidePanel.dataset.engine = 'ready'
+    sidePanel.querySelector('.pg-examples')?.removeAttribute('aria-busy')
+    const engineLabel = document.getElementById('pg-engine-label')
+    if (engineLabel) engineLabel.textContent = 'Examples'
+    if (scenarioNote?.dataset.idle) scenarioNote.textContent = scenarioNote.dataset.idle
+    const queued = window.__pgQueuedScenario
+    window.__pgQueuedScenario = null
+    if (queued) {
+      const button = sidePanel.querySelector(`#${CSS.escape(queued)}`)
+      button?.removeAttribute('data-queued')
+      button?.click()
+    }
   }
 }
