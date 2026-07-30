@@ -769,14 +769,38 @@ test("a batch of nothing but .tsrx files still closes with both summary lines", 
 test("a nonexistent .tsrx positional reports canonical Oxlint's unmatched-pattern error", async () => {
   const cwd = await mixedProject("report-unmatched");
 
-  // Canonical Oxlint on a nonexistent ordinary file is the precedent: one line
-  // on stdout and exit 1, and no summary at all - it prints its `Found ...` and
-  // `Finished in ...` pair for a run it really made, and this is the invocation
-  // where it made none. A wrapper that answers before starting either half is in
-  // exactly that position, so it must stay silent in exactly the same way. This
-  // used to be compared with the `Finished in ` lines filtered out of both
-  // sides, which would have hidden a summary invented for a run that never
-  // happened; the streams are compared whole instead.
+  // Canonical Oxlint on a nonexistent ordinary file is the precedent: this
+  // message on stdout and exit 1. What it prints *after* the message is its
+  // reporter's business rather than this path's, and the reporters disagree -
+  // `agent` closes with the message alone, while `default` and `github` add
+  // `Finished in <elapsed> on 0 files with <n> rules using <n> threads.` for
+  // the empty run canonical started anyway. That is the same stock 1.74.0
+  // binary on the same machine, so comparing the streams whole compares
+  // whichever reporter the ambient environment happened to pick: green under a
+  // coding agent, red under GITHUB_ACTIONS.
+  //
+  // The streams are therefore compared with the summary held apart from the
+  // message. The message must still match canonical byte for byte, in
+  // canonical's own live wording rather than a sentence copied into this file;
+  // the wrapper's own summary must be empty, and that is asserted directly on
+  // the wrapper instead of by filtering both sides.
+  //
+  // Empty is the point of the test, not a concession to make it pass. This
+  // wrapper answers the invocation before starting either half, so it has no
+  // elapsed run, no rule count and no thread count: a `Found ...` or `Finished
+  // in ...` line here could only be numbers nobody measured, which is exactly
+  // what the rest of this file spends its effort making impossible. Filtering
+  // `Finished in ` out of both streams, as this test once did, would let such a
+  // line through unseen - hence the positive assertion below, which fails on
+  // any summary line at all rather than only on a mismatched one.
+  const summaryOf = (stdout) =>
+    stdout.split("\n").filter((line) => /^(?:Found |Finished in )/u.test(line));
+  const messageOf = (stdout) =>
+    stdout
+      .split("\n")
+      .filter((line) => !/^(?:Found |Finished in )/u.test(line))
+      .join("\n");
+
   const control = await run(cwd, ["src/Missing.ts"], stock);
   assert.equal(control.code, 1, control.stderr || control.stdout);
   assert.match(control.stdout, /No files found to lint/u, control.stdout);
@@ -787,7 +811,12 @@ test("a nonexistent .tsrx positional reports canonical Oxlint's unmatched-patter
     control.code,
     `a mistyped .tsrx filename exited ${missing.code} with stdout:\n${missing.stdout}`,
   );
-  assert.equal(missing.stdout, control.stdout);
+  assert.equal(messageOf(missing.stdout), messageOf(control.stdout));
+  assert.deepEqual(
+    summaryOf(missing.stdout),
+    [],
+    `a run that never started summarised itself:\n${missing.stdout}`,
+  );
 
   // The opt-out canonical Oxlint already publishes keeps working.
   const controlAllowed = await run(
@@ -798,7 +827,12 @@ test("a nonexistent .tsrx positional reports canonical Oxlint's unmatched-patter
   assert.equal(controlAllowed.code, 0, controlAllowed.stderr || controlAllowed.stdout);
   const allowed = await runCompanion(cwd, ["--no-error-on-unmatched-pattern", "src/Missing.tsrx"]);
   assert.equal(allowed.code, controlAllowed.code, allowed.stderr || allowed.stdout);
-  assert.equal(allowed.stdout, controlAllowed.stdout);
+  assert.equal(messageOf(allowed.stdout), messageOf(controlAllowed.stdout));
+  assert.deepEqual(
+    summaryOf(allowed.stdout),
+    [],
+    `an opted-out run that never started summarised itself:\n${allowed.stdout}`,
+  );
 
   // Canonical Oxlint only errors when the whole invocation matched nothing, so a
   // batch that still has work to do must keep exiting on that work alone.
