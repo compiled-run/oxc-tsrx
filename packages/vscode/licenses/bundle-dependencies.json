@@ -3,7 +3,7 @@
   "generatedBy": "scripts/generate-vscode-license-inventory.mjs",
   "bundle": "packages/vscode/dist/extension.bundle.cjs",
   "bundleSha256": "d150ab2c63e02c7db02faf4bf771d6b4bde43ca6ba2df77bfa2267f96f712756",
-  "lockfileSha256": "4a6704689a0de7944fa419f1eecfbbf4779b57a4c77fc98dc2250ae3205bc8da",
+  "lockfileSha256": "409b7d2bbd9019a8ac8f3d3608c92eb918c5d55e8830ec072231b48ffadfbd52",
   "packageCount": 12,
   "packages": [
     {
