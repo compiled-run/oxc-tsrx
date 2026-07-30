@@ -223,4 +223,4 @@ nearest `package.json` and decides for itself.
 a *package* named `oxlint`, which a bin name cannot answer. Having to rerun it
 after a clean install is the clearest sign it is a shim rather than the target
 design, because install-only discovery has nothing to rerun.
-[Vite and Vite+](/integrations/vite-plus) has the command.
+[Try it with Vite+](/guide/getting-started#try-it-with-vite) has the command.

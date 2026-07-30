@@ -172,7 +172,7 @@ Vite+ project that lookup reaches Vite+'s own wrapper, which knows nothing about
 Reload the window afterwards. Everything else in the file is preserved, a value
 you set yourself is reported rather than overwritten, and `oxc-tsrx remove`
 takes back only that key. [The Vite+
-page](/integrations/vite-plus#setup-writes-one-file-in-your-own-project)
+page](/guide/getting-started#if-something-goes-wrong)
 has the full rules.
 
 Outside Vite+ the ordinary lookup does find this package, so nothing is written

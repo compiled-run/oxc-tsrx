@@ -88,19 +88,20 @@ install:
 - TypeScript at `>=5.9 <6`
 
 See [Vite and
-Vite+](/integrations/vite-plus#setup-writes-one-file-in-your-own-project).
+Vite+](/guide/getting-started#if-something-goes-wrong).
 
 ### `status` says `missing` in a healthy project
 
 ```text
 $ npx oxc-tsrx status
-oxc-tsrx 0.1.3 compatibility (npm)
-- oxc-parser: missing
-- oxlint: missing
-- oxfmt: missing
-- oxc.path.oxlint: unnecessary (editor)
-  …/node_modules/.bin/oxlint already resolves into this package, so the editor
-  needs no setting and none was written.
+oxc-tsrx 0.1.5 compatibility (npm)
+
+  oxc-parser:       missing
+  oxlint:           missing
+  oxfmt:            missing
+  oxc.path.oxlint:  unnecessary (editor)
+      …/node_modules/.bin/oxlint already resolves into this package, so the
+      editor needs no setting and none was written.
 ```
 
 That output is correct and the exit code is 0: `status` only ever talks about the

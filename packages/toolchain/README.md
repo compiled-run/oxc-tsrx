@@ -36,7 +36,7 @@ npm install --save-dev oxc-tsrx
 That is the whole setup, for the command line and for your editor. You get
 `oxlint` and `oxfmt`, the real [OXC](https://oxc.rs) commands, now able to read
 `.tsrx`, with no config file, no ignore file, and no install script. [Vite+ needs
-one more command](https://oxc-tsrx.dev/integrations/vite-plus).
+one more command](https://oxc-tsrx.dev/guide/getting-started#try-it-with-vite).
 
 You do not need Rust installed: the install downloads a ready-built program for
 your machine, one of eight published for macOS, Linux, and Windows. See

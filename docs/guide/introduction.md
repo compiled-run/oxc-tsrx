@@ -79,7 +79,7 @@ subcommand. See [Getting Started](/guide/getting-started) to install it and the
 - **Not a compiler.** Your framework's TSRX plugin, installed from
   [tsrx.dev/getting-started](https://tsrx.dev/getting-started), owns
   compilation, CSS, source maps, and HMR. Nothing here touches your build or dev
-  server. See [Vite and Vite+](/integrations/vite-plus).
+  server. See [Try it with Vite+](/guide/getting-started#try-it-with-vite).
 - **Not a CSS formatter.** Anything inside a raw `<style>` block is left alone,
   byte for byte.
 - **Not finished.** Some syntax and config options aren't supported yet. They

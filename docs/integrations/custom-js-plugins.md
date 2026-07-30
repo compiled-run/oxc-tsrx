@@ -152,7 +152,7 @@ is in the examples directory.
 
 Making `.tsrx` a *language* in the editor is a separate job owned by the TSRX
 toolchain. [Vite and
-Vite+](/integrations/vite-plus#setup-reports-the-editor-prerequisites-but-does-not-install-them) has that
+Vite+](/guide/getting-started#if-something-goes-wrong) has that
 list and the type-aware dependency the scaffold needs.
 
 ## What your rule sees on `.tsrx`

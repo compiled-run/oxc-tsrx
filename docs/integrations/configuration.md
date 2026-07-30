@@ -131,7 +131,7 @@ Your own plugins run on `.tsrx`, but only from two of the three commands:
 | Command | `jsPlugins` on a `.tsrx` file |
 | --- | --- |
 | `oxlint`, and the language server | Runs them. |
-| `vp lint` | Runs them, and reaches this package through `oxlint`. Declare them in [`vite.config.ts`](/integrations/vite-plus#vp-lint-and-your-editor-read-different-files). |
+| `vp lint` | Runs them, and reaches this package through `oxlint`. Declare them in [`vite.config.ts`](/guide/getting-started#if-something-goes-wrong). |
 | `oxc-tsrx-lint`, the standalone binary | Refuses, and exits 2 naming `oxlint` as the command that can. |
 
 - **How they run.** Your plugins see a legal-TSX copy of the file, with your own

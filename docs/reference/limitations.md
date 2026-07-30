@@ -56,7 +56,7 @@ TSRX, and neither is code a bundler can consume.
   exact supported `oxlint-tsgolint` executable. Any other version fails rather
   than guess at the protocol, which is what a fresh Vite+ scaffold runs into when
   it resolves Vite+'s own runner instead. See [the type-aware template
-  default](/integrations/vite-plus#type-aware-lint-may-need-one-dependency).
+  default](/guide/getting-started#if-something-goes-wrong).
 - **`vp lint` and your editor read different config files.** Vite+ owns lint
   configuration in the `lint` block of `vite.config.ts`, and the language server
   reads `.oxlintrc.json`, so a rule you want on both surfaces has to be declared
@@ -77,7 +77,7 @@ TSRX, and neither is code a bundler can consume.
   its lint and format tools by the literal package names `oxlint` and `oxfmt`, so
   `setup` writes those slots inside `node_modules`, and a clean install wipes
   them. That rerun is real and is not scheduled to go away. See [the one extra
-  step Vite+ needs](/integrations/vite-plus#the-one-extra-step-vite-needs).
+  step Vite+ needs](/guide/getting-started#try-it-with-vite).
 - **A project that pins official `oxlint` or `oxfmt` keeps official behavior for
   those command names.** Breaking a pinned setup would be worse. `.tsrx` is then
   reachable through `oxc-tsrx-lint` and `oxc-tsrx-fmt`, which are always

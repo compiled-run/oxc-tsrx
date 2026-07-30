@@ -33,7 +33,7 @@ npm install --save-dev oxc-tsrx@latest
 
 That is the whole setup, for the command line and for your editor. There is no
 config file to write and no install script to run. [Vite+ needs one more
-command](https://oxc-tsrx.dev/integrations/vite-plus).
+command](https://oxc-tsrx.dev/guide/getting-started#try-it-with-vite).
 
 You do not need Rust. Installing downloads one ready-built program for your
 computer, one of eight built for macOS, Linux, and Windows. Anything else has

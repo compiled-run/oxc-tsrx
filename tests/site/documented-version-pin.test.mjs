@@ -30,7 +30,6 @@ const readerFacingSources = [
   "docs/guide/getting-started.md",
   "docs/guide/parsing.md",
   "docs/integrations/custom-js-plugins.md",
-  "docs/integrations/vite-plus.md",
   "docs/integrations/configuration.md",
   "docs/integrations/editor.md",
   "docs/reference/cli.md",

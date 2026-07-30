@@ -49,7 +49,6 @@ test("launch-facing performance links point only at each aggregate-selected repo
     "docs/architecture/rust-oxc-core.md",
     "docs/integrations/configuration.md",
     "docs/integrations/editor.md",
-    "docs/integrations/vite-plus.md",
     "docs/releasing/v0.1.0.md",
   ]) {
     const source = await readFile(join(root, relative), "utf8");

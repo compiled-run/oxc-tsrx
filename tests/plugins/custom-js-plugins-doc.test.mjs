@@ -205,7 +205,7 @@ test("the Vite+ section still answers the questions it exists for", () => {
   );
   assert.match(
     section,
-    /integrations\/vite-plus/u,
+    /guide\/getting-started/u,
     "the section stopped linking the page that owns the rest of the Vite+ setup",
   );
 });
@@ -235,7 +235,6 @@ test("no page reintroduces the retracted TypeScript 6 failure claim", async () =
   for (const path of [
     pagePath,
     editorPagePath,
-    join(root, "docs/integrations/vite-plus.md"),
     join(root, "docs/guide/getting-started.md"),
     join(root, "docs/reference/limitations.md"),
   ]) {

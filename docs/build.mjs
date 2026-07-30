@@ -1679,13 +1679,25 @@ function brandIconHtml(name) {
   return `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="${path}"/></svg>`
 }
 
+// A tabbed block may carry ordinary shell around the command that changes per
+// manager: the Vite+ walkthrough needs `mkdir`, `cd`, and an `export PATH` in
+// the same fence as its install. So each line is translated on its own and
+// anything unrecognised is copied through, rather than the fence being required
+// to begin with npm.
+function translateShellLine(line, pm) {
+  const variant = PM_INSTALL_VARIANTS.find((entry) => line.startsWith(entry.npm))
+  if (variant) return `${variant[pm]}${line.slice(variant.npm.length)}`
+  if (line.startsWith('npx ')) return `${PM_EXEC_PREFIXES[pm]}${line.slice('npx'.length)}`
+  return line
+}
+
 function pmInstallTabsHtml(npmCommand, groupId) {
-  const PM_INSTALL_PREFIXES = PM_INSTALL_VARIANTS.find((variant) =>
-    npmCommand.startsWith(variant.npm),
-  )
-  if (!PM_INSTALL_PREFIXES && !/^npx /.test(npmCommand)) {
+  const lines = npmCommand.split('\n')
+  // A block whose every line is passed through would render four identical
+  // tabs, which is a marker someone added by mistake.
+  if (!lines.some((line) => translateShellLine(line, 'pnpm') !== line)) {
     throw new Error(
-      `pm tabs block must start with "npm install --save-dev", "npm install", or "npx", got: ${npmCommand.split('\n')[0]}`,
+      `pm tabs block needs a line starting with "npm install --save-dev", "npm install", or "npx", got: ${lines[0]}`,
     )
   }
   const managers = Object.keys(PM_EXEC_PREFIXES)
@@ -1698,12 +1710,7 @@ function pmInstallTabsHtml(npmCommand, groupId) {
   const panels = managers
     .map((pm, index) => {
       const command =
-        pm === 'npm'
-          ? npmCommand
-          : (PM_INSTALL_PREFIXES
-              ? npmCommand.replace(PM_INSTALL_PREFIXES.npm, PM_INSTALL_PREFIXES[pm])
-              : npmCommand
-            ).replace(/^npx(?= )/gm, PM_EXEC_PREFIXES[pm])
+        pm === 'npm' ? npmCommand : lines.map((line) => translateShellLine(line, pm)).join('\n')
       return `<div role="tabpanel" id="pm-panel-${groupId}-${pm}" aria-labelledby="pm-tab-${groupId}-${pm}" data-pm="${pm}"${index === 0 ? '' : ' hidden'}><div class="code-block" data-lang="sh">${highlightHtml(command, 'sh')}</div></div>`
     })
     .join('')
@@ -2370,6 +2377,17 @@ async function build() {
     `${JSON.stringify({
       cleanUrls: true,
       trailingSlash: false,
+      // /integrations/vite-plus was folded into the getting-started guide. The
+      // README published in oxc-tsrx@0.1.5 links the old path, and an npm
+      // tarball is immutable, so that link can never be corrected at the
+      // source. This redirect is the only thing keeping it alive.
+      redirects: [
+        {
+          source: '/integrations/vite-plus',
+          destination: '/guide/getting-started#try-it-with-vite',
+          permanent: true,
+        },
+      ],
       headers: [
         {
           source: '/(.*)',
