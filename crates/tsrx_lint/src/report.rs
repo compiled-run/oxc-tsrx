@@ -1,7 +1,9 @@
 //! The serialized shape the CLI, the editor, and the benchmarks all consume, and the aggregation
 //! that folds a whole batch into one of them.
 
+use std::collections::HashSet;
 use std::path::Path;
+use std::thread::{self, ThreadId};
 
 use oxc_adapter::{EngineDiagnostic, OXC_REVISION};
 use serde::Serialize;
@@ -96,6 +98,23 @@ pub struct Output {
     pub diagnostics: Vec<DiagnosticOutput>,
     pub number_of_files: u32,
     pub number_of_rules: usize,
+    /// How many threads this run actually linted on.
+    ///
+    /// Canonical Oxlint closes a report with `Finished in <t> on <n> files with <r> rules using
+    /// <threads> threads.`, and the tools that read Oxlint - Vite+ among them - want the whole
+    /// pair of summary lines. A batch of nothing but `.tsrx` files never reaches canonical Oxlint
+    /// at all, so this is the only half that can supply the number for it, and a report that
+    /// invents one is the class of defect this field exists to remove.
+    ///
+    /// It is counted, never assumed. Every per-file output records the thread that produced it and
+    /// [`aggregate_outputs`] counts the distinct ones, so the value follows the code: today the
+    /// batch is walked sequentially and the answer is 1, and if that walk is ever parallelised the
+    /// report says so without anyone remembering to update it here.
+    pub threads_count: u32,
+    /// The thread this output was produced on, folded into `threads_count` by
+    /// [`aggregate_outputs`] and never serialized - the report carries the count, not the ids.
+    #[serde(skip)]
+    pub(crate) lint_thread: ThreadId,
     #[serde(rename = "oxcTsrx")]
     pub metadata: Metadata,
 }
@@ -114,7 +133,11 @@ pub(crate) fn aggregate_outputs(session: &LintSession, outputs: Vec<Output>) -> 
     let mut fix_counts = FixOutput { applied: 0, rejected: 0 };
     let mut type_aware_files = 0_u32;
     let mut type_aware_processes = 0_u32;
+    // Seeded with the folding thread so a batch that linted nothing still reports the one thread
+    // that ran it, rather than the zero threads a summary line would then have to print.
+    let mut lint_threads = HashSet::from([thread::current().id()]);
     for output in outputs {
+        lint_threads.insert(output.lint_thread);
         number_of_files = number_of_files.saturating_add(output.number_of_files);
         parse_count = parse_count.saturating_add(output.metadata.parse_count);
         reparse_count = reparse_count.saturating_add(output.metadata.reparse_count);
@@ -143,6 +166,8 @@ pub(crate) fn aggregate_outputs(session: &LintSession, outputs: Vec<Output>) -> 
         diagnostics,
         number_of_files,
         number_of_rules: session.engine.number_of_rules(),
+        threads_count: u32::try_from(lint_threads.len()).unwrap_or(u32::MAX),
+        lint_thread: thread::current().id(),
         metadata: Metadata {
             native: true,
             engine: "oxc_linter",
@@ -195,6 +220,8 @@ pub(crate) fn projection_failure_output(
         }],
         number_of_files: 1,
         number_of_rules: session.engine.number_of_rules(),
+        threads_count: 1,
+        lint_thread: thread::current().id(),
         metadata: Metadata {
             native: true,
             engine: "oxc_linter",

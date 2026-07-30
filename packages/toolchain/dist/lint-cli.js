@@ -267,6 +267,17 @@ function combine(upstream, native) {
     diagnostics: [...(upstream.diagnostics ?? []), ...(native.diagnostics ?? [])],
     number_of_files: (upstream.number_of_files ?? 0) + (native.number_of_files ?? 0),
     number_of_rules: Math.max(upstream.number_of_rules ?? 0, native.number_of_rules ?? 0),
+    // A batch whose every positional was a `.tsrx` path never starts canonical
+    // Oxlint, and canonical Oxlint used to be the only half reporting a thread
+    // count - so that one shape lost the whole second summary line, and with it
+    // lost `vp check` to `error: Linting could not start`. It is exactly the
+    // shape a `staged: {'*': 'vp check --fix'}` pre-commit hook produces when a
+    // commit stages only `.tsrx` files. The native leaf now counts the threads
+    // it really linted on, so this fallback is a measured number and not one
+    // invented to fill the line. Canonical Oxlint still wins whenever it ran:
+    // it owns the thread pool that did the work, which also leaves the mixed
+    // and TypeScript-only shapes printing exactly what they printed before.
+    threads_count: upstream.threads_count ?? native.threads_count,
     oxcTsrx: native.oxcTsrx,
   };
 }
@@ -349,9 +360,8 @@ function sortedDiagnostics(result) {
   });
 }
 
-function renderCompact(result, cwd) {
+function renderCompact(result, cwd, elapsedMilliseconds) {
   const diagnostics = sortedDiagnostics(result);
-  if (diagnostics.length === 0) return "";
   const lines = diagnostics.map((diagnostic) => {
     const location = primaryLocation(diagnostic);
     const filename = relative(cwd, diagnostic.filename) || diagnostic.filename;
@@ -368,14 +378,61 @@ function renderCompact(result, cwd) {
     const prefix = `${filename}:${location.line}:${location.column}: ${diagnostic.severity}`;
     return `${prefix}${code ? ` ${code}` : ""}: ${diagnostic.message}${help}`.trimEnd();
   });
-  const errors = diagnostics.filter((diagnostic) => diagnostic.severity === "error").length;
-  const warnings = diagnostics.filter((diagnostic) => diagnostic.severity === "warning").length;
-  lines.push(`Found ${errors} error(s) and ${warnings} warning(s).`);
+  lines.push(...summaryLines(result, elapsedMilliseconds));
   return `${lines.join("\n")}\n`;
 }
 
 function plural(count, noun) {
   return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+
+// Canonical Oxlint's own elapsed spelling: whole milliseconds below a second,
+// one decimal of seconds above it.
+function elapsedDisplay(milliseconds) {
+  return milliseconds < 1000
+    ? `${Math.round(milliseconds)}ms`
+    : `${(milliseconds / 1000).toFixed(1)}s`;
+}
+
+// Canonical Oxlint closes a report with TWO lines, not one:
+//
+//   Found 3 warnings and 1 error.
+//   Finished in 92ms on 40 files with 95 rules using 18 threads.
+//
+// and the tools that read Oxlint's output read the pair. Vite+ 0.1.20 prints
+// `error: Linting could not start` and reports the run as failed whenever the
+// second line is missing, however the first one is worded, so a composed batch
+// that stopped after the counts turned every `vp check` in a project that
+// installs this wrapper into a failed check - including runs over nothing but
+// ordinary TypeScript, because only explicit ordinary-file positionals skip
+// composition. Warnings come first and the nouns are pluralised by count:
+// `Found 1 warning and 0 errors.`, never `warning(s)`.
+//
+// This renderer used to stop after the counts on the grounds that the second
+// line reports one process's own run and a composed batch is two processes.
+// Three of its four numbers are already merged across both halves by
+// `combine()`, and the fourth, the elapsed time, is this command's own wall
+// clock over both halves, which is the wait the user actually had.
+function summaryLines(result, elapsedMilliseconds) {
+  const diagnostics = result.diagnostics ?? [];
+  const errors = diagnostics.filter((diagnostic) => diagnostic.severity === "error").length;
+  const warnings = diagnostics.filter((diagnostic) => diagnostic.severity === "warning").length;
+  const lines = [`Found ${plural(warnings, "warning")} and ${plural(errors, "error")}.`];
+  // Both halves report a thread count now - canonical Oxlint for its own pool,
+  // the native leaf by counting the threads it actually linted on - so
+  // `combine()` has a measured number for every invocation shape and this line
+  // is always printed. The guard stays because it is what makes the number a
+  // measurement: a report that arrives without one, from a native binary older
+  // than this file, prints one honest line rather than a second line filled in
+  // with a count nobody took.
+  if (typeof result.threads_count === "number") {
+    const files = plural(result.number_of_files ?? 0, "file");
+    const rules = plural(result.number_of_rules ?? 0, "rule");
+    const threads = plural(result.threads_count, "thread");
+    const elapsed = elapsedDisplay(elapsedMilliseconds);
+    lines.push(`Finished in ${elapsed} on ${files} with ${rules} using ${threads}.`);
+  }
+  return lines;
 }
 
 // A GitHub workflow command, reproduced from canonical Oxlint's own annotation
@@ -387,7 +444,7 @@ function plural(count, noun) {
 // none, which is what canonical Oxlint prints for a parse error. The help text
 // is not part of an annotation. The end position is the label span's end, which
 // this file resolves from `offset + length` the same way it resolves the start.
-function renderGitHub(result, cwd) {
+function renderGitHub(result, cwd, elapsedMilliseconds) {
   const diagnostics = sortedDiagnostics(result);
   const lines = diagnostics.map((diagnostic) => {
     const span = diagnostic.labels?.[0]?.span;
@@ -403,15 +460,10 @@ function renderGitHub(result, cwd) {
     const location = `file=${filename},line=${line},endLine=${endLine},col=${column},endColumn=${endColumn}`;
     return `::${severity} ${location},title=${title}::${diagnostic.message}`;
   });
-  const errors = diagnostics.filter((diagnostic) => diagnostic.severity === "error").length;
-  const warnings = diagnostics.filter((diagnostic) => diagnostic.severity === "warning").length;
   // Canonical Oxlint separates the annotations from its summary with a blank
-  // line and words it warnings first. Its second summary line, `Finished in
-  // <elapsed> on <n> files with <n> rules using <n> threads.`, reports one
-  // process's own run; a composed batch is two processes, so this renderer
-  // stops after the counts rather than inventing a number for it.
+  // line, and prints the same two summary lines the compact reporter prints.
   if (lines.length > 0) lines.push("");
-  lines.push(`Found ${plural(warnings, "warning")} and ${plural(errors, "error")}.`);
+  lines.push(...summaryLines(result, elapsedMilliseconds));
   return `${lines.join("\n")}\n`;
 }
 
@@ -444,9 +496,9 @@ async function addEndPositions(diagnostics) {
   }
 }
 
-async function renderReport(report, cwd, format) {
+async function renderReport(report, cwd, format, elapsedMilliseconds) {
   if (format === "json") return `${JSON.stringify(report)}\n`;
-  if (format !== "github") return renderCompact(report, cwd);
+  if (format !== "github") return renderCompact(report, cwd, elapsedMilliseconds);
   try {
     await addEndPositions(report.diagnostics ?? []);
   } catch {
@@ -454,7 +506,7 @@ async function renderReport(report, cwd, format) {
     // the failure that produced this report may have made unreadable. An
     // annotation that ends where it starts still points at the right place.
   }
-  return renderGitHub(report, cwd);
+  return renderGitHub(report, cwd, elapsedMilliseconds);
 }
 
 async function delegate(args, cwd) {
@@ -474,6 +526,10 @@ async function delegate(args, cwd) {
 
 export async function runCli(args, options = {}) {
   const cwd = options.cwd ?? process.cwd();
+  // The elapsed time the summary reports. Canonical Oxlint times its own run,
+  // and the run this command's summary describes is everything below: file
+  // discovery, the configuration bridge, and both halves.
+  const startedAt = performance.now();
   if (args.some((argument) => DELEGATE_ONLY.has(argument.split("=")[0]))) {
     return delegate(args, cwd);
   }
@@ -618,7 +674,8 @@ export async function runCli(args, options = {}) {
         upstreamHalf.report && nativeHalf.report
           ? combine(upstreamHalf.report, nativeHalf.report)
           : (upstreamHalf.report ?? nativeHalf.report);
-      const rendered = report === null ? "" : await renderReport(report, cwd, format);
+      const elapsed = performance.now() - startedAt;
+      const rendered = report === null ? "" : await renderReport(report, cwd, format, elapsed);
       process.stdout.write(upstreamHalf.passthrough + nativeHalf.passthrough + rendered);
       process.stderr.write(upstreamResult.stderr + attributeNativeErrors(nativeResult.stderr));
       return Math.max(upstreamResult.status, nativeResult.status);
@@ -668,7 +725,7 @@ export async function runCli(args, options = {}) {
 
     if (!args.includes("--silent")) {
       process.stderr.write(upstreamResult.stderr + attributeNativeErrors(nativeResult.stderr));
-      process.stdout.write(await renderReport(result, cwd, format));
+      process.stdout.write(await renderReport(result, cwd, format, performance.now() - startedAt));
     }
 
     const warnings = result.diagnostics.filter(

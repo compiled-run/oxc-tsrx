@@ -656,7 +656,8 @@ mod tests {
 
     use super::{
         EMBEDDED_CSS_FORMAT_NS, EMBEDDED_CSS_MODE, EMBEDDED_CSS_PARSE_COUNT,
-        EMBEDDED_CSS_USES_SUBPROCESS, FormatMode, format_text,
+        EMBEDDED_CSS_USES_SUBPROCESS, EngineFormatOptions, FileFormatOptions, FormatMode,
+        format_text, format_text_with_options,
     };
 
     #[test]
@@ -813,5 +814,102 @@ mod tests {
         assert_eq!(first.code.matches("/* raw {label} */").count(), 32);
         let second = format_text(Path::new("Repeated.tsrx"), &first.code).unwrap();
         assert_eq!(second.code, first.code);
+    }
+
+    #[test]
+    fn wide_keyed_header_survives_the_formatter_breaking_its_scaffold_call() {
+        // A `key` expression wide enough that the projected header call cannot fit the
+        // print width. The formatter then breaks that call across lines and writes a
+        // trailing comma after its last argument, which the checked lift has to read
+        // back. Before this was handled the whole file was refused with
+        // "Oxfmt changed TSRX scaffold 0" and left byte-identical.
+        let source = concat!(
+            "export function View({rows}:{rows:Row[]}) @{<ul>",
+            "@for(const row of rows;key row.aVeryLongPropertyNameSegment",
+            "aVeryLongPropertyNameSegmentaVeryLongPropertyNameSegment)",
+            "{<li>{row.label}</li>}</ul>}\n"
+        );
+        let first = format_text(Path::new("Wide.tsrx"), source).unwrap();
+        assert!(
+            first.code.contains(
+                "key row.aVeryLongPropertyNameSegmentaVeryLongPropertyNameSegment\
+                 aVeryLongPropertyNameSegment"
+            ),
+            "{}",
+            first.code
+        );
+        assert!(!first.code.contains("_t"), "{}", first.code);
+        let second = format_text(Path::new("Wide.tsrx"), &first.code).unwrap();
+        assert_eq!(second.code, first.code);
+        assert!(!second.changed);
+    }
+
+    #[test]
+    fn wide_indexed_header_survives_the_formatter_breaking_its_scaffold_call() {
+        let source = concat!(
+            "export function View({rows}:{rows:Row[]}) @{<ul>",
+            "@for(const row of rows;index positionOfThisRowWithinTheCollection",
+            "ThatIsBeingIteratedOverHere)",
+            "{<li>{row.label}</li>}</ul>}\n"
+        );
+        let first = format_text(Path::new("Indexed.tsrx"), source).unwrap();
+        assert!(
+            first
+                .code
+                .contains("index positionOfThisRowWithinTheCollectionThatIsBeingIteratedOverHere"),
+            "{}",
+            first.code
+        );
+        let second = format_text(Path::new("Indexed.tsrx"), &first.code).unwrap();
+        assert_eq!(second.code, first.code);
+    }
+
+    #[test]
+    fn keyed_header_inside_a_try_arm_formats_at_a_wider_tab_width() {
+        // The shape three real files hit: a keyed `@for` two element levels inside a
+        // `@try` arm. At the default two-space indent the projected header still fits
+        // the print width; at four the same header runs long, the formatter breaks its
+        // scaffold call, and the lift has to read the break back. Indent width alone
+        // decided whether the file could be formatted at all.
+        let source = concat!(
+            "export default function Page({rows}:{rows:Row[]}) @{\n",
+            "\t<div data-page>\n",
+            "\t\t@try {\n",
+            "\t\t\t<ContextFrame>\n",
+            "\t\t\t\t<ul>\n",
+            "\t\t\t\t\t@for (const row of rows; key row.id) {\n",
+            "\t\t\t\t\t\t<li data-row>{row.label}</li>\n",
+            "\t\t\t\t\t}\n",
+            "\t\t\t\t</ul>\n",
+            "\t\t\t</ContextFrame>\n",
+            "\t\t} @pending {\n",
+            "\t\t\t<p>loading</p>\n",
+            "\t\t} @catch {\n",
+            "\t\t\t<p>failed</p>\n",
+            "\t\t}\n",
+            "\t</div>\n",
+            "}\n",
+        );
+        let options = FileFormatOptions {
+            engine: EngineFormatOptions {
+                use_tabs: Some(true),
+                tab_width: Some(4),
+                ..EngineFormatOptions::default()
+            },
+            insert_final_newline: None,
+        };
+        let first =
+            format_text_with_options(Path::new("Page.tsrx"), source, Some(&options)).unwrap();
+        assert_eq!(first.metadata.mode, FormatMode::Projected);
+        assert!(first.code.contains("@for (const row of rows; key row.id) {"), "{}", first.code);
+        assert!(first.code.contains("} @pending {"), "{}", first.code);
+        assert!(first.code.contains("} @catch {"), "{}", first.code);
+        assert!(first.code.contains("<ContextFrame>"), "{}", first.code);
+        assert!(!first.code.contains("_t"), "{}", first.code);
+
+        let second =
+            format_text_with_options(Path::new("Page.tsrx"), &first.code, Some(&options)).unwrap();
+        assert_eq!(second.code, first.code);
+        assert!(!second.changed);
     }
 }

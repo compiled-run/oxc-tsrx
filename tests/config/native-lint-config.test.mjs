@@ -716,28 +716,91 @@ test("a .tsrx syntax error is a positioned diagnostic that leaves the rest of th
     `the syntax error did not render as a positioned diagnostic:\n${result.stdout}`,
   );
 
+  // Canonical Oxlint closes a report with two lines, and the tools that read
+  // its output read the pair: Vite+ reports `Linting could not start` and fails
+  // the run whenever the second one is missing, however the first is worded.
+  // Both lines are asserted here, in canonical Oxlint's own spelling - warnings
+  // first, nouns pluralised by count, never `warning(s)` - because a composed
+  // batch that words its summary its own way is a batch no Oxlint consumer can
+  // read. The elapsed time and the counts are this run's own, so the shapes are
+  // pinned and the numbers are not.
+  assert.match(result.stdout, /^Found 3 warnings and 1 error\.$/mu, result.stdout);
   assert.match(
     result.stdout,
-    composedReporter === "github"
-      ? /^Found 3 warnings and 1 error\.$/mu
-      : /^Found 1 error\(s\) and 3 warning\(s\)\.$/mu,
+    /^Finished in [0-9.]+(?:ms|s) on \d+ files? with \d+ rules? using \d+ threads?\.$/mu,
     result.stdout,
   );
+  assert.doesNotMatch(result.stdout, /warning\(s\)|error\(s\)/u, result.stdout);
+});
+
+test("a batch of nothing but .tsrx files still closes with both summary lines", async () => {
+  const cwd = await mixedProject("report-tsrx-only");
+
+  // The invocation shape that kept the second summary line missing after the
+  // rest of it was fixed. Every positional a `.tsrx` path is the one shape that
+  // never starts canonical Oxlint, and canonical Oxlint was the only half
+  // reporting a thread count, so this batch printed its counts and stopped -
+  // which is exactly the missing line Vite+ answers with `error: Linting could
+  // not start`. It is also the shape a `staged: {'*': 'vp check --fix'}`
+  // pre-commit hook produces on a commit that stages only `.tsrx` files, so it
+  // is the shape the fix mattered most on and the one it reached last.
+  const result = await runCompanion(cwd, ["src/Counter.tsrx"]);
+  assert.equal(result.code, 0, result.stderr || result.stdout);
+  assert.match(result.stdout, /^Found 1 warning and 0 errors\.$/mu, result.stdout);
+  const finished =
+    /^Finished in [0-9.]+(?:ms|s) on 1 file with \d+ rules using (\d+) threads?\.$/mu.exec(
+      result.stdout,
+    );
+  assert.ok(
+    finished,
+    `a batch of nothing but .tsrx files stopped after the counts:\n${result.stdout}`,
+  );
+  // The count comes from the native leaf, which counts the threads it really
+  // linted on. Any positive integer is that measurement working; what must
+  // never come back is a batch with no number at all, or a number pinned here
+  // that the leaf never took.
+  assert.ok(
+    Number.parseInt(finished[1], 10) >= 1,
+    `the .tsrx-only batch reported an unmeasured thread count:\n${result.stdout}`,
+  );
+  assert.doesNotMatch(result.stdout, /warning\(s\)|error\(s\)/u, result.stdout);
 });
 
 test("a nonexistent .tsrx positional reports canonical Oxlint's unmatched-pattern error", async () => {
   const cwd = await mixedProject("report-unmatched");
 
-  // Canonical Oxlint on a nonexistent ordinary file is the precedent: one line
-  // on stdout and exit 1. Its `Finished in <elapsed> on <n> files with <n> rules
-  // using <n> threads.` footer reports the run it did anyway, which a wrapper
-  // that answered before starting either half never had; the message and the
-  // exit code are the contract, so compare those.
-  const withoutTiming = (stdout) =>
+  // Canonical Oxlint on a nonexistent ordinary file is the precedent: this
+  // message on stdout and exit 1. What it prints *after* the message is its
+  // reporter's business rather than this path's, and the reporters disagree -
+  // `agent` closes with the message alone, while `default` and `github` add
+  // `Finished in <elapsed> on 0 files with <n> rules using <n> threads.` for
+  // the empty run canonical started anyway. That is the same stock 1.74.0
+  // binary on the same machine, so comparing the streams whole compares
+  // whichever reporter the ambient environment happened to pick: green under a
+  // coding agent, red under GITHUB_ACTIONS.
+  //
+  // The streams are therefore compared with the summary held apart from the
+  // message. The message must still match canonical byte for byte, in
+  // canonical's own live wording rather than a sentence copied into this file;
+  // the wrapper's own summary must be empty, and that is asserted directly on
+  // the wrapper instead of by filtering both sides.
+  //
+  // Empty is the point of the test, not a concession to make it pass. This
+  // wrapper answers the invocation before starting either half, so it has no
+  // elapsed run, no rule count and no thread count: a `Found ...` or `Finished
+  // in ...` line here could only be numbers nobody measured, which is exactly
+  // what the rest of this file spends its effort making impossible. Filtering
+  // `Finished in ` out of both streams, as this test once did, would let such a
+  // line through unseen - hence the positive assertion below, which fails on
+  // any summary line at all rather than only on a mismatched one.
+  const summaryOf = (stdout) =>
+    stdout.split("\n").filter((line) => /^(?:Found |Finished in )/u.test(line));
+  const messageOf = (stdout) =>
     stdout
       .split("\n")
-      .filter((line) => !/^Finished in /u.test(line))
+      .filter((line) => !/^(?:Found |Finished in )/u.test(line))
       .join("\n");
+
   const control = await run(cwd, ["src/Missing.ts"], stock);
   assert.equal(control.code, 1, control.stderr || control.stdout);
   assert.match(control.stdout, /No files found to lint/u, control.stdout);
@@ -748,7 +811,12 @@ test("a nonexistent .tsrx positional reports canonical Oxlint's unmatched-patter
     control.code,
     `a mistyped .tsrx filename exited ${missing.code} with stdout:\n${missing.stdout}`,
   );
-  assert.equal(withoutTiming(missing.stdout), withoutTiming(control.stdout));
+  assert.equal(messageOf(missing.stdout), messageOf(control.stdout));
+  assert.deepEqual(
+    summaryOf(missing.stdout),
+    [],
+    `a run that never started summarised itself:\n${missing.stdout}`,
+  );
 
   // The opt-out canonical Oxlint already publishes keeps working.
   const controlAllowed = await run(
@@ -759,7 +827,12 @@ test("a nonexistent .tsrx positional reports canonical Oxlint's unmatched-patter
   assert.equal(controlAllowed.code, 0, controlAllowed.stderr || controlAllowed.stdout);
   const allowed = await runCompanion(cwd, ["--no-error-on-unmatched-pattern", "src/Missing.tsrx"]);
   assert.equal(allowed.code, controlAllowed.code, allowed.stderr || allowed.stdout);
-  assert.equal(withoutTiming(allowed.stdout), withoutTiming(controlAllowed.stdout));
+  assert.equal(messageOf(allowed.stdout), messageOf(controlAllowed.stdout));
+  assert.deepEqual(
+    summaryOf(allowed.stdout),
+    [],
+    `an opted-out run that never started summarised itself:\n${allowed.stdout}`,
+  );
 
   // Canonical Oxlint only errors when the whole invocation matched nothing, so a
   // batch that still has work to do must keep exiting on that work alone.

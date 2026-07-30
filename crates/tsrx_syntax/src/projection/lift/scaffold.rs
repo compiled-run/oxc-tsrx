@@ -483,6 +483,15 @@ fn parse_marker_occurrence(
     Some((ordinal, side, ScaffoldSpan { start: prefix_start - 2, end: digits_end + 5 }))
 }
 
+// A projected `@for` header is one helper call wrapping up to two more:
+// `_H0_(right, _IH0_(index), _KH0_(key), _HE0_)`. Canonical Oxfmt breaks any call
+// whose arguments do not fit the print width, and a broken call gets a trailing
+// comma after its last argument. That happens to the two inner calls exactly when
+// the header sits deep enough to run long, which is why a wide `key` expression or
+// a header nested a couple of element levels inside a `@try` arm reached this code
+// with a comma between the key expression and the inner `)`. Every other scaffold
+// close here already tolerates that comma through `scaffold_call_end`; the two
+// inner header calls are read with it for the same reason.
 fn append_header_edits(
     source: &str,
     manifest: HeaderManifest,
@@ -503,8 +512,7 @@ fn append_header_edits(
         let _ = expect_span_after_whitespace(source, cursor, positions.index_start, index)?;
         let content =
             trimmed_content_range(source, positions.index_start.end, positions.index_end.start)?;
-        cursor = positions.index_end.end;
-        cursor = expect_byte_after_whitespace(source, cursor, b')', index)?;
+        cursor = scaffold_call_end(source, positions.index_end.end, index)?;
         Some(content)
     } else {
         None
@@ -516,8 +524,7 @@ fn append_header_edits(
         let _ = expect_span_after_whitespace(source, cursor, positions.key_start, index)?;
         let content =
             trimmed_content_range(source, positions.key_start.end, positions.key_end.start)?;
-        cursor = positions.key_end.end;
-        cursor = expect_byte_after_whitespace(source, cursor, b')', index)?;
+        cursor = scaffold_call_end(source, positions.key_end.end, index)?;
         Some(content)
     } else {
         None

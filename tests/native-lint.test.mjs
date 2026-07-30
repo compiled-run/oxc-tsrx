@@ -185,6 +185,30 @@ test('an unprojectable .tsrx becomes its own diagnostic and the rest of the batc
   );
 });
 
+test('the report carries the number of threads the run really linted on', async () => {
+  // Canonical Oxlint closes every report with `Finished in <t> on <n> files
+  // with <r> rules using <threads> threads.`, and the tools that read Oxlint
+  // want that line. A batch of nothing but `.tsrx` files never reaches
+  // canonical Oxlint at all, so this leaf is the only half that can supply the
+  // thread count for it - which is why the field is here and why the wrapper
+  // stopped after the counts without it.
+  //
+  // The value is counted, not assumed: `aggregate_outputs` folds the distinct
+  // threads its per-file outputs were produced on. So this asserts the shape of
+  // a real measurement rather than the literal 1 today's sequential walk
+  // produces, because a future parallel walk reporting 8 would be this field
+  // working, not this test failing.
+  for (const files of [[tsrxFixture], [tsrxFixture, tsxFixture]]) {
+    const result = await run(['--format=json', ...files]);
+    const output = parseJsonOutput(result);
+    assert.equal(output.number_of_files, files.length, result.stdout);
+    assert.ok(
+      Number.isInteger(output.threads_count) && output.threads_count >= 1,
+      `a ${files.length}-file batch reported no measured thread count:\n${result.stdout}`,
+    );
+  }
+});
+
 test('ordinary TSX bypasses the TSRX scan and projection allocation', async () => {
   const result = await run(['--format=json', '--deny', 'no-debugger', tsxFixture]);
   assert.equal(result.code, 1, result.stderr || result.stdout);

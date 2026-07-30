@@ -198,13 +198,44 @@ before you rely on something:
 ```js
 import { capabilities } from "oxc-tsrx/parser";
 
-capabilities.languages;       // which languages it parses
-capabilities.editorRecovery;  // whether recovery: "editor" works here
-capabilities.oxcRevision;     // the OXC version it was built from
+capabilities.languages;          // which languages it parses
+capabilities.editorRecovery;     // whether recovery: "editor" works here
+capabilities.cssMaterialization; // whether CSS is broken down to its components
+capabilities.oxcRevision;        // the OXC version it was built from
 ```
 
 Asking for something the installed build cannot do throws, rather than parsing
 with less than you asked for and letting you find out later.
+
+Each flag answers a question about **this build**, not about the language. There
+are two builds, a canonical one and a compatibility one, and every flag here is
+the difference between them for one option. So read a `false` narrowly. It tells
+you that one option is off, and nothing more.
+
+`cssMaterialization: false` is the one worth spelling out, because it is easy to
+read as "there is no CSS tree". There is. On the canonical build a `<style>`
+element always comes back with its CSS text on `css`, plus a `StyleSheet` child:
+
+```js
+const { program } = parseSync(
+  "Card.tsrx",
+  'const x = <style>.a, .b > p:hover { color: red }</style>;\n',
+);
+// The <style> element's StyleSheet child holds:
+//   Rule
+//     prelude: SelectorList -> ComplexSelector, ComplexSelector
+//     block:   Block
+// Every one of those carries start/end offsets into the CSS text.
+```
+
+That is enough to find each selector and rewrite it, which is what scoping
+styles needs, and consumers do exactly that today.
+
+What the `false` withholds is the level below. The `ComplexSelector` and `Block`
+nodes arrive with empty `children`, so you get no compound-selector parts and no
+node per declaration. If you need those, read them out of the `source` text on
+the node or hand it to a CSS parser. The compatibility build reports `true` here
+and materializes them for you.
 
 ## What is tested
 
