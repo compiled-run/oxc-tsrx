@@ -17,16 +17,19 @@ independent: this package never touches your build or dev server.
 
 ## Install
 
-You need Node.js 20.19 or newer. Install one dev dependency:
+You need Node.js 20.19 or newer on the 20.x line, or Node.js 22.12 or newer.
+Node 21 and Node 22.0 through 22.11 are not supported. Install one dev
+dependency:
 
 <!-- pm-install -->
 ```sh
 npm install --save-dev oxc-tsrx@latest
 ```
 
-That is the whole setup. The tools are Rust, but you get a prebuilt binary for
-your platform: no Rust needed, no install scripts, nothing fetched later. It
-works on CI that blocks postinstall.
+That is the whole setup. There is no config file and no ignore file to write.
+The tools are Rust, but you get a prebuilt binary for your platform: no Rust
+needed, no install scripts, nothing fetched later. It works on CI that blocks
+postinstall.
 
 Eight platforms have binaries.
 [Platform Support](/reference/platform-support) says which is yours and how
