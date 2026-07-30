@@ -11,11 +11,16 @@
   <a href="https://github.com/markless-dev/oxc-tsrx/blob/HEAD/LICENSE"><img alt="MIT license" src="https://img.shields.io/npm/l/oxc-tsrx.svg"></a>
 </p>
 
-`oxc-tsrx` is a linter and a formatter for `.tsrx` files, written in Rust.
-A linter warns you about likely mistakes in your code. A formatter rewrites
-spacing and punctuation so every file in the project looks the same. You get
-both on the command line and inside your editor. A `.tsrx` file is TypeScript
-with JSX markup, plus template blocks like `@if` and `@for`.
+`oxc-tsrx` gives you three tools for `.tsrx` files:
+
+- a **linter**, which warns you about likely mistakes before you run your code
+- a **formatter**, which fixes spacing and punctuation so every file matches
+- a **parser**, which reads a file into a form your own tools can work with
+
+A `.tsrx` file is TypeScript with HTML-like markup in it, plus blocks like `@if`
+and `@for` for showing something only sometimes, or once per item in a list.
+[OXC](https://oxc.rs) is a set of fast tools for JavaScript and TypeScript,
+written in Rust. This package teaches them to read `.tsrx` too.
 
 _OXC for TSRX is an independent community project. It is not affiliated with,
 endorsed by, or a product of VoidZero or the OXC team._
@@ -78,7 +83,7 @@ activation event for it, so it does not start on its own. Open any JavaScript,
 TypeScript, or JSON file in the project once, and `.tsrx` works for the rest of
 the session. See the [editor guide](https://oxc-tsrx.dev/integrations/editor).
 
-## API
+## Using it from your own code
 
 ```js
 import { parseSync } from "oxc-tsrx/parser";
@@ -86,9 +91,11 @@ import { defineConfig } from "oxc-tsrx/lint";
 import { format } from "oxc-tsrx/format";
 ```
 
-These hand you a syntax tree and formatted text, so you can build your own
-tooling on the same reader the commands use. None of them compiles `.tsrx`
-either; that stays your framework's TSRX plugin's job.
+The parser hands back the structure of your file and the formatter hands back
+tidied text, so you can build your own tools on the same reader the commands
+use. [Parsing](https://oxc-tsrx.dev/guide/parsing) has the shape it returns.
+None of these compiles `.tsrx` either; that stays your framework's TSRX
+plugin's job.
 
 ## Your own JavaScript lint plugins
 
