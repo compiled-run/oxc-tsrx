@@ -854,9 +854,9 @@ mod tests {
         );
         let first = format_text(Path::new("Indexed.tsrx"), source).unwrap();
         assert!(
-            first.code.contains(
-                "index positionOfThisRowWithinTheCollectionThatIsBeingIteratedOverHere"
-            ),
+            first
+                .code
+                .contains("index positionOfThisRowWithinTheCollectionThatIsBeingIteratedOverHere"),
             "{}",
             first.code
         );
