@@ -267,6 +267,17 @@ function combine(upstream, native) {
     diagnostics: [...(upstream.diagnostics ?? []), ...(native.diagnostics ?? [])],
     number_of_files: (upstream.number_of_files ?? 0) + (native.number_of_files ?? 0),
     number_of_rules: Math.max(upstream.number_of_rules ?? 0, native.number_of_rules ?? 0),
+    // A batch whose every positional was a `.tsrx` path never starts canonical
+    // Oxlint, and canonical Oxlint used to be the only half reporting a thread
+    // count - so that one shape lost the whole second summary line, and with it
+    // lost `vp check` to `error: Linting could not start`. It is exactly the
+    // shape a `staged: {'*': 'vp check --fix'}` pre-commit hook produces when a
+    // commit stages only `.tsrx` files. The native leaf now counts the threads
+    // it really linted on, so this fallback is a measured number and not one
+    // invented to fill the line. Canonical Oxlint still wins whenever it ran:
+    // it owns the thread pool that did the work, which also leaves the mixed
+    // and TypeScript-only shapes printing exactly what they printed before.
+    threads_count: upstream.threads_count ?? native.threads_count,
     oxcTsrx: native.oxcTsrx,
   };
 }
@@ -407,11 +418,13 @@ function summaryLines(result, elapsedMilliseconds) {
   const errors = diagnostics.filter((diagnostic) => diagnostic.severity === "error").length;
   const warnings = diagnostics.filter((diagnostic) => diagnostic.severity === "warning").length;
   const lines = [`Found ${plural(warnings, "warning")} and ${plural(errors, "error")}.`];
-  // Canonical Oxlint is the only half that reports a thread count, so a batch
-  // it never ran in - every positional was a `.tsrx` path - has no measured
-  // number to print here. Leaving the line out is the only alternative to
-  // inventing one, and an invented count in a report is the defect this file
-  // is being changed to remove, not one to add.
+  // Both halves report a thread count now - canonical Oxlint for its own pool,
+  // the native leaf by counting the threads it actually linted on - so
+  // `combine()` has a measured number for every invocation shape and this line
+  // is always printed. The guard stays because it is what makes the number a
+  // measurement: a report that arrives without one, from a native binary older
+  // than this file, prints one honest line rather than a second line filled in
+  // with a count nobody took.
   if (typeof result.threads_count === "number") {
     const files = plural(result.number_of_files ?? 0, "file");
     const rules = plural(result.number_of_rules ?? 0, "rule");

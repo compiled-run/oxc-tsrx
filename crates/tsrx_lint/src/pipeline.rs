@@ -189,6 +189,12 @@ pub(crate) fn finish_lint(
         diagnostics,
         number_of_files: 1,
         number_of_rules: session.engine.number_of_rules(),
+        // One file is read, projected, linted, and finished on a single thread, so this half of
+        // the report is always 1. The batch-wide figure is the count of the DISTINCT threads that
+        // reached here, folded by `aggregate_outputs`; recording the thread rather than writing a
+        // number is what keeps that figure measured instead of assumed.
+        threads_count: 1,
+        lint_thread: std::thread::current().id(),
         metadata: Metadata {
             native: true,
             engine: "oxc_linter",

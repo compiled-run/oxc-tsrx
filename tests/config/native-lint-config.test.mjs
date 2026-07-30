@@ -733,6 +733,39 @@ test("a .tsrx syntax error is a positioned diagnostic that leaves the rest of th
   assert.doesNotMatch(result.stdout, /warning\(s\)|error\(s\)/u, result.stdout);
 });
 
+test("a batch of nothing but .tsrx files still closes with both summary lines", async () => {
+  const cwd = await mixedProject("report-tsrx-only");
+
+  // The invocation shape that kept the second summary line missing after the
+  // rest of it was fixed. Every positional a `.tsrx` path is the one shape that
+  // never starts canonical Oxlint, and canonical Oxlint was the only half
+  // reporting a thread count, so this batch printed its counts and stopped -
+  // which is exactly the missing line Vite+ answers with `error: Linting could
+  // not start`. It is also the shape a `staged: {'*': 'vp check --fix'}`
+  // pre-commit hook produces on a commit that stages only `.tsrx` files, so it
+  // is the shape the fix mattered most on and the one it reached last.
+  const result = await runCompanion(cwd, ["src/Counter.tsrx"]);
+  assert.equal(result.code, 0, result.stderr || result.stdout);
+  assert.match(result.stdout, /^Found 1 warning and 0 errors\.$/mu, result.stdout);
+  const finished =
+    /^Finished in [0-9.]+(?:ms|s) on 1 file with \d+ rules using (\d+) threads?\.$/mu.exec(
+      result.stdout,
+    );
+  assert.ok(
+    finished,
+    `a batch of nothing but .tsrx files stopped after the counts:\n${result.stdout}`,
+  );
+  // The count comes from the native leaf, which counts the threads it really
+  // linted on. Any positive integer is that measurement working; what must
+  // never come back is a batch with no number at all, or a number pinned here
+  // that the leaf never took.
+  assert.ok(
+    Number.parseInt(finished[1], 10) >= 1,
+    `the .tsrx-only batch reported an unmeasured thread count:\n${result.stdout}`,
+  );
+  assert.doesNotMatch(result.stdout, /warning\(s\)|error\(s\)/u, result.stdout);
+});
+
 test("a nonexistent .tsrx positional reports canonical Oxlint's unmatched-pattern error", async () => {
   const cwd = await mixedProject("report-unmatched");
 
