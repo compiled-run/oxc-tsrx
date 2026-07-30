@@ -7,12 +7,12 @@
         {
           "comment": "Lint .tsrx and ordinary JS/TS with real OXC rules",
           "command": "npx oxlint src/Counter.tsrx src/View.tsx",
-          "output": "src/Counter.tsrx:4:3: warning eslint(no-debugger): `debugger` statement is not allowed\nsrc/View.tsx:2:7: warning eslint(no-unused-vars): Variable 'seen' is declared but never used. Unused variables should start with a '_'. help: Consider removing this declaration.\nFound 0 error(s) and 2 warning(s).\n"
+          "output": "src/Counter.tsrx:4:3: warning eslint(no-debugger): `debugger` statement is not allowed\nsrc/View.tsx:2:7: warning eslint(no-unused-vars): Variable 'seen' is declared but never used. Unused variables should start with a '_'. help: Consider removing this declaration.\nFound 2 warnings and 0 errors.\nFinished in 109ms on 2 files with 95 rules using 18 threads.\n"
         },
         {
           "comment": "Format .tsrx and ordinary JS/TS with real Oxfmt layout",
           "command": "npx oxfmt --check src/Counter.tsrx src/View.tsx",
-          "output": "Checking formatting...\n\nsrc/View.tsx (0ms)\nsrc/Counter.tsrx (0ms)\n\nFormat issues found in above 2 files. Run without `--check` to fix.\nFinished in 77ms on 2 files using 18 threads.\nNo config found, using defaults. Please add a config file or try `oxfmt --init` if needed.\n"
+          "output": "Checking formatting...\n\nsrc/View.tsx (0ms)\nsrc/Counter.tsrx (0ms)\n\nFormat issues found in above 2 files. Run without `--check` to fix.\nFinished in 97ms on 2 files using 18 threads.\nNo config found, using defaults. Please add a config file or try `oxfmt --init` if needed.\n"
         }
       ]
     },
@@ -162,7 +162,7 @@
         {
           "comment": "The oxlint that oxc-tsrx installs already reads .tsrx",
           "command": "npx oxlint src/TaskList.tsrx",
-          "output": "src/TaskList.tsrx:4:3: warning eslint(no-debugger): `debugger` statement is not allowed\nFound 0 error(s) and 1 warning(s).\n"
+          "output": "src/TaskList.tsrx:4:3: warning eslint(no-debugger): `debugger` statement is not allowed\nFound 1 warning and 0 errors.\n"
         }
       ]
     },
@@ -192,7 +192,7 @@
         {
           "comment": "Same plugin, same config, one .tsrx file",
           "command": "npx oxlint src/TaskList.tsrx",
-          "output": "src/TaskList.tsrx:4:3: warning eslint(no-debugger): `debugger` statement is not allowed\nFound 0 error(s) and 1 warning(s).\noxlint (oxc-tsrx): running JS plugins on 1 .tsrx file(s) by linting the TSX projection; this parses each of those files once more. Disable with \"settings\": { \"oxcTsrx\": { \"jsPluginsOnTsrx\": false } }.\n"
+          "output": "src/TaskList.tsrx:4:3: warning eslint(no-debugger): `debugger` statement is not allowed\nFound 1 warning and 0 errors.\noxlint (oxc-tsrx): running JS plugins on 1 .tsrx file(s) by linting the TSX projection; this parses each of those files once more. Disable with \"settings\": { \"oxcTsrx\": { \"jsPluginsOnTsrx\": false } }.\n"
         }
       ]
     },
@@ -202,7 +202,7 @@
         {
           "comment": "Your own rule, reporting on the .tsrx file you wrote",
           "command": "npx oxlint src/TaskFeed.tsrx",
-          "output": "src/TaskFeed.tsrx:4:36: error tsrx-demo(require-keyed-map): JSX returned from .map() should declare a `key` prop.\nFound 1 error(s) and 0 warning(s).\noxlint (oxc-tsrx): running JS plugins on 1 .tsrx file(s) by linting the TSX projection; this parses each of those files once more. Disable with \"settings\": { \"oxcTsrx\": { \"jsPluginsOnTsrx\": false } }.\n"
+          "output": "src/TaskFeed.tsrx:4:36: error tsrx-demo(require-keyed-map): JSX returned from .map() should declare a `key` prop.\nFound 0 warnings and 1 error.\noxlint (oxc-tsrx): running JS plugins on 1 .tsrx file(s) by linting the TSX projection; this parses each of those files once more. Disable with \"settings\": { \"oxcTsrx\": { \"jsPluginsOnTsrx\": false } }.\n"
         }
       ]
     },
@@ -212,7 +212,7 @@
         {
           "comment": "Both file types at once, one plugin, one command",
           "command": "npx oxlint src",
-          "output": "src/TaskFeed.tsrx:4:36: error tsrx-demo(require-keyed-map): JSX returned from .map() should declare a `key` prop.\nsrc/TaskList.tsrx:4:3: warning eslint(no-debugger): `debugger` statement is not allowed\nsrc/TaskRow.tsx:11:9: error tsrx-demo(require-keyed-map): JSX returned from .map() should declare a `key` prop.\nFound 2 error(s) and 1 warning(s).\noxlint (oxc-tsrx): running JS plugins on 2 .tsrx file(s) by linting the TSX projection; this parses each of those files once more. Disable with \"settings\": { \"oxcTsrx\": { \"jsPluginsOnTsrx\": false } }.\n"
+          "output": "src/TaskFeed.tsrx:4:36: error tsrx-demo(require-keyed-map): JSX returned from .map() should declare a `key` prop.\nsrc/TaskList.tsrx:4:3: warning eslint(no-debugger): `debugger` statement is not allowed\nsrc/TaskRow.tsx:11:9: error tsrx-demo(require-keyed-map): JSX returned from .map() should declare a `key` prop.\nFound 1 warning and 2 errors.\nFinished in 86ms on 3 files with 96 rules using 18 threads.\noxlint (oxc-tsrx): running JS plugins on 2 .tsrx file(s) by linting the TSX projection; this parses each of those files once more. Disable with \"settings\": { \"oxcTsrx\": { \"jsPluginsOnTsrx\": false } }.\n"
         }
       ]
     },
@@ -242,7 +242,7 @@
         {
           "comment": "One command, one top-level jsPlugins, both file types",
           "command": "node_modules/oxc-tsrx/bin/oxlint src",
-          "output": "src/Greeting.tsrx:5:9: warning house-rules(no-inline-style-object): Inline `style={{ ... }}` object. Use a class instead.\nsrc/Panel.tsx:2:19: warning house-rules(no-inline-style-object): Inline `style={{ ... }}` object. Use a class instead.\nFound 0 error(s) and 2 warning(s).\noxlint (oxc-tsrx): running JS plugins on 1 .tsrx file(s) by linting the TSX projection; this parses each of those files once more. Disable with \"settings\": { \"oxcTsrx\": { \"jsPluginsOnTsrx\": false } }.\n"
+          "output": "src/Greeting.tsrx:5:9: warning house-rules(no-inline-style-object): Inline `style={{ ... }}` object. Use a class instead.\nsrc/Panel.tsx:2:19: warning house-rules(no-inline-style-object): Inline `style={{ ... }}` object. Use a class instead.\nFound 2 warnings and 0 errors.\nFinished in 82ms on 2 files with 96 rules using 18 threads.\noxlint (oxc-tsrx): running JS plugins on 1 .tsrx file(s) by linting the TSX projection; this parses each of those files once more. Disable with \"settings\": { \"oxcTsrx\": { \"jsPluginsOnTsrx\": false } }.\n"
         }
       ]
     },
@@ -252,7 +252,7 @@
         {
           "comment": "The .tsrx half refuses; exit 2 is the configuration refusal",
           "command": "node_modules/oxc-tsrx/bin/oxlint src",
-          "output": "src/Panel.tsx:2:19: warning house-rules(no-inline-style-object): Inline `style={{ ... }}` object. Use a class instead.\nFound 0 error(s) and 1 warning(s).\noxlint (oxc-tsrx): running JS plugins on 1 .tsrx file(s) by linting the TSX projection; this parses each of those files once more. Disable with \"settings\": { \"oxcTsrx\": { \"jsPluginsOnTsrx\": false } }.\noxlint (oxc-tsrx): type-aware tsgolint/type-check mode requires the explicit --type-aware or --type-check opt-in; it is never started or silently disabled by config alone\n"
+          "output": "src/Panel.tsx:2:19: warning house-rules(no-inline-style-object): Inline `style={{ ... }}` object. Use a class instead.\nFound 1 warning and 0 errors.\nFinished in 101ms on 1 file with 111 rules using 18 threads.\noxlint (oxc-tsrx): running JS plugins on 1 .tsrx file(s) by linting the TSX projection; this parses each of those files once more. Disable with \"settings\": { \"oxcTsrx\": { \"jsPluginsOnTsrx\": false } }.\noxlint (oxc-tsrx): type-aware tsgolint/type-check mode requires the explicit --type-aware or --type-check opt-in; it is never started or silently disabled by config alone\n"
         }
       ]
     },
@@ -287,13 +287,8 @@
       ]
     },
     "parsing-quickstart": {
-      "caption": "Real output, captured at build time, from the file and the script above plus a Broken.tsrx with an unterminated closing tag.",
+      "caption": "Real output, captured at build time, from a Broken.tsrx whose closing tag is unterminated.",
       "transcript": [
-        {
-          "comment": "The script above, run against the file above",
-          "command": "node example.mjs",
-          "output": "errors: 0\nimports: [ './Row' ]\ntop level: [ 'ImportDeclaration', 'ExportNamedDeclaration' ]\nfound: JSXForExpression\nsource.slice gives back exactly what you wrote:\n@for (const item of items; key item.id) {\n"
-        },
         {
           "comment": "Parse errors land in result.errors and point at your file",
           "command": "node errors.mjs",
