@@ -122,7 +122,7 @@ jobs:
     permissions: {}
     environment:
       name: production
-      url: https://oxc-tsrx-docs.vercel.app
+      url: https://oxc-tsrx.dev
     env:
       # The static docs project. Vercel's Git integration is deliberately not
       # connected: the site cannot be built on Vercel's image, so the artifact
@@ -155,7 +155,7 @@ jobs:
       - name: Prove production is serving this build
         run: |
           set -euo pipefail
-          origin="https://oxc-tsrx-docs.vercel.app"
+          origin="https://oxc-tsrx.dev"
           for attempt in 1 2 3 4 5; do
             if curl -fsS "${origin}/demo-capabilities.json" -o capabilities.json; then
               break

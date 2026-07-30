@@ -9,7 +9,7 @@ import { join, relative, resolve, sep } from "node:path";
 import test from "node:test";
 
 const root = resolve(import.meta.dirname, "../..");
-const origin = "https://oxc-tsrx-docs.vercel.app";
+const origin = "https://oxc-tsrx.dev";
 const base = "/";
 const siteUrl = `${origin}${base}`;
 

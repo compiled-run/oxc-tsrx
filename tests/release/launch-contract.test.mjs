@@ -10,7 +10,7 @@ import { parseNpmPackResponse } from "../../scripts/npm-pack-response.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 const repository = "https://github.com/markless-dev/oxc-tsrx";
-const homepage = "https://oxc-tsrx-docs.vercel.app/";
+const homepage = "https://oxc-tsrx.dev/";
 const publicDirectories = ["toolchain"];
 
 const readJson = async (path) => JSON.parse(await readFile(path, "utf8"));
@@ -114,7 +114,7 @@ test("launch manifest names every byte set and keeps external actions approval-g
   assert.match(runbook, /zero `?\/api`? engine requests/u);
   assert.doesNotMatch(runbook, /GitHub Pages|thejackshelton\.github\.io/u);
   assert.match(prerequisites, /^## Vercel$/mu);
-  assert.match(prerequisites, /oxc-tsrx-docs\.vercel\.app/u);
+  assert.match(prerequisites, /oxc-tsrx\.dev/u);
   assert.match(prerequisites, /docs\/dist\/vercel\.json/u);
   assert.match(workflow, /workflow_dispatch:/u);
   assert.match(workflow, /rustup target add wasm32-wasip1-threads/u);
