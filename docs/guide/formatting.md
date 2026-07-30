@@ -9,6 +9,35 @@ description: How oxc-tsrx formats .tsrx files with real Oxfmt layout and convert
 result back into TSRX. Ordinary JS/TS files go straight to Oxfmt, and the output
 is byte-for-byte identical to running `oxfmt` yourself.
 
+## Input and output
+
+Here is one of the files this project tests against, exactly as it is committed
+before formatting:
+
+```tsrx
+type Item={id:string;label:string};export function Rows({items}:{items:Item[]})@{<ul>@for(item of items;index i;key item.id){<li data-index={i}>{item.label}</li>}@empty{<li>Empty</li>}</ul>}
+```
+
+becomes:
+
+```tsrx
+type Item = { id: string; label: string };
+export function Rows({ items }: { items: Item[] }) @{
+  <ul>
+    @for (item of items; index i; key item.id) {
+      <li data-index={i}>{item.label}</li>;
+    } @empty {
+      <li>Empty</li>;
+    }
+  </ul>;
+}
+```
+
+Both files are committed fixtures, and the test suite formats the first one and
+compares it against the second on every run, so this is real output rather than
+a hand-written example. You can read them in
+[tests/fixtures/control](https://github.com/markless-dev/oxc-tsrx/tree/main/tests/fixtures/control).
+
 ## How a format run works
 
 <!-- pipeline:format -->
