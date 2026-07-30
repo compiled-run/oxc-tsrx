@@ -369,9 +369,17 @@ jobs:
           git --no-pager show --stat --oneline HEAD | head -60
 
       # changelogen for the sections it parses well, plus every commit it
-      # dropped. `--to HEAD~1` excludes the release commit itself, so the notes
-      # describe the work rather than the bump. The script refuses to write the
-      # file unless every commit in the range appears in it.
+      # dropped. The range ends at HEAD~1, which excludes the release commit
+      # itself, so the notes describe the work rather than the bump. The script
+      # refuses to write the file unless every commit in the range appears in
+      # it.
+      #
+      # HEAD~1 is resolved to a SHA first, and that is not cosmetic. changelogen
+      # interpolates whatever it is given as `--to` verbatim into the compare
+      # link on the first line of the body, and GitHub cannot resolve `HEAD~1`,
+      # so passing the literal string opened every Release with
+      # `.../compare/<sha>...HEAD~1`, a dead link. The commit range is identical
+      # either way; only the rendered link changes.
       - name: Generate the release notes
         id: notes
         shell: bash
@@ -379,9 +387,11 @@ jobs:
           PREVIOUS_TAG: ${{ steps.previous.outputs.tag }}
         run: |
           set -euo pipefail
+          NOTES_TO=$(git rev-parse --verify "HEAD~1")
+          echo "notes cover $PREVIOUS_TAG..$NOTES_TO (the commit before the release commit)"
           node scripts/release-notes.mjs \
             --from "$PREVIOUS_TAG" \
-            --to HEAD~1 \
+            --to "$NOTES_TO" \
             --out "${RUNNER_TEMP}/release-notes.md"
           {
             echo "## Release notes"

@@ -164,7 +164,21 @@ test("all platform-independent npm payloads pass pack dry-run", async () => {
       // npm must not inherit pnpm's `npm_config_*` settings; it warns about
       // every one it does not recognise, and this assertion is that a clean
       // pack prints nothing.
-      env: { ...npmChildEnvironment(), npm_config_cache: npmCache },
+      env: {
+        ...npmChildEnvironment(),
+        npm_config_cache: npmCache,
+        // npm's update notifier writes to stderr whenever a newer npm exists,
+        // which has nothing to do with this payload. npm skips it when
+        // `ciInfo.isCI`, so CI is quiet by construction and only a local run
+        // ever saw it, non-deterministically: the check is a race against the
+        // registry that npm deliberately does not await. Turning the notifier
+        // off at its own config key (lib/cli/update-notifier.js bails on
+        // `!npm.config.get('update-notifier')`) keeps every other byte npm
+        // writes to stderr failing this assertion. Filtering the notice out of
+        // stderr instead would have to keep pace with npm's wording and could
+        // swallow a real warning that happened to match.
+        npm_config_update_notifier: "false",
+      },
     });
     assert.equal(stderr, "", directory);
     const result = parseNpmPackResponse(stdout);
