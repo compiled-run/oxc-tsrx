@@ -3,7 +3,7 @@ export default {
   title: 'OXC for TSRX',
   description:
     'Rust-native parsing, linting, formatting, and editor support for .tsrx source through canonical OXC. No fork, no patches, one parse.',
-  origin: 'https://oxc-tsrx-docs.vercel.app',
+  origin: 'https://oxc-tsrx.dev',
   // Root-absolute base path the site is served under, with trailing slash.
   base: '/',
   repository: 'https://github.com/markless-dev/oxc-tsrx',

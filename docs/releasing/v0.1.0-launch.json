@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "repository": "https://github.com/markless-dev/oxc-tsrx",
   "site": {
-    "url": "https://oxc-tsrx-docs.vercel.app/",
+    "url": "https://oxc-tsrx.dev/",
     "artifact": "docs/dist",
     "provider": "vercel",
     "config": "docs/dist/vercel.json",
@@ -45,7 +45,7 @@
   "social": {
     "channel": "X",
     "image": "docs/assets/social-card.png",
-    "text": "OXC for TSRX 0.1.0 is out: one oxc-tsrx package for native parsing, Oxlint + Oxfmt, Vite/Vite+, and .tsrx diagnostics, formatting, and quick fixes through the official OXC extension—all without forking OXC. Install oxc-tsrx: https://oxc-tsrx-docs.vercel.app/"
+    "text": "OXC for TSRX 0.1.0 is out: one oxc-tsrx package for native parsing, Oxlint + Oxfmt, Vite/Vite+, and .tsrx diagnostics, formatting, and quick fixes through the official OXC extension—all without forking OXC. Install oxc-tsrx: https://oxc-tsrx.dev/"
   },
   "requiredApprovals": [
     "repository-push",

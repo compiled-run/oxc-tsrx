@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://oxc-tsrx-docs.vercel.app/">
+  <a href="https://oxc-tsrx.dev/">
     <img alt="OXC for TSRX" width="600" src="https://raw.githubusercontent.com/markless-dev/oxc-tsrx/HEAD/.github/assets/readme-hero.png">
   </a>
 </p>
@@ -19,7 +19,7 @@ linter and the Oxfmt formatter.
 _An independent community project. Not affiliated with, endorsed by, or a
 product of VoidZero or the OXC team._
 
-[**Docs**](https://oxc-tsrx-docs.vercel.app/) &nbsp;·&nbsp; [**Getting started**](https://oxc-tsrx-docs.vercel.app/guide/getting-started) &nbsp;·&nbsp; [**Playground**](https://oxc-tsrx-docs.vercel.app/playground)
+[**Docs**](https://oxc-tsrx.dev/) &nbsp;·&nbsp; [**Getting started**](https://oxc-tsrx.dev/guide/getting-started) &nbsp;·&nbsp; [**Playground**](https://oxc-tsrx.dev/playground)
 
 ## Install
 
@@ -30,7 +30,7 @@ npm install --save-dev oxc-tsrx
 That is the whole setup, for the command line and for your editor. You get
 `oxlint` and `oxfmt` commands that understand `.tsrx`, with no config file, no
 ignore file, and no install script. [Vite+ needs one more
-command](https://oxc-tsrx-docs.vercel.app/integrations/vite-plus).
+command](https://oxc-tsrx.dev/integrations/vite-plus).
 
 You do not need Rust installed. Your package manager downloads the one prebuilt
 binary that matches your platform, out of eight published ones.
@@ -60,8 +60,7 @@ One thing to know: the official extension lists no `.tsrx` activation event, and
 the TSRX toolchain's extension owns `.tsrx` under its own language id, so
 opening a `.tsrx` file first does not start it. Open any JavaScript, TypeScript,
 or JSON file once, and `.tsrx` is served for the rest of the session. See the
-[editor
-guide](https://oxc-tsrx-docs.vercel.app/integrations/editor).
+[editor guide](https://oxc-tsrx.dev/integrations/editor).
 
 ## API
 
@@ -86,16 +85,16 @@ lanes announce, and `settings.oxcTsrx.jsPluginsOnTsrx: false` turns it off.
 runtime, so it refuses `jsPlugins` and names `oxlint` as the command that can.
 `oxc-tsrx/lint/plugins-dev` is for *writing* a plugin, since it re-exports
 Oxlint's `RuleTester`. See [Custom JavaScript
-plugins](https://oxc-tsrx-docs.vercel.app/integrations/custom-js-plugins).
+plugins](https://oxc-tsrx.dev/integrations/custom-js-plugins).
 
 ## Documentation
 
-- [Getting started](https://oxc-tsrx-docs.vercel.app/guide/getting-started): install, first file, first run.
-- [Configuration](https://oxc-tsrx-docs.vercel.app/integrations/configuration): every supported setting.
-- [CLI reference](https://oxc-tsrx-docs.vercel.app/reference/cli): commands, flags, and exit codes.
-- [Platform support](https://oxc-tsrx-docs.vercel.app/reference/platform-support): which of the eight published platforms are tested on every change.
-- [Limitations](https://oxc-tsrx-docs.vercel.app/reference/limitations): what is not claimed yet.
-- [Provider protocol](https://oxc-tsrx-docs.vercel.app/architecture/provider-protocol): the `oxc.provider` block, what reads it today, and how a plain install reaches released hosts.
+- [Getting started](https://oxc-tsrx.dev/guide/getting-started): install, first file, first run.
+- [Configuration](https://oxc-tsrx.dev/integrations/configuration): every supported setting.
+- [CLI reference](https://oxc-tsrx.dev/reference/cli): commands, flags, and exit codes.
+- [Platform support](https://oxc-tsrx.dev/reference/platform-support): which of the eight published platforms are tested on every change.
+- [Limitations](https://oxc-tsrx.dev/reference/limitations): what is not claimed yet.
+- [Provider protocol](https://oxc-tsrx.dev/architecture/provider-protocol): the `oxc.provider` block, what reads it today, and how a plain install reaches released hosts.
 
 `oxc-tsrx` is the only package to depend on. The eight `@oxc-tsrx/native-*`
 packages are platform binaries in `optionalDependencies`, and you never name one

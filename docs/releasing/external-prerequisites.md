@@ -83,10 +83,10 @@ legacy-client release, recheck whether official activation events cover
 ## Vercel
 
 The owner must verify and control the Vercel project that serves
-`https://oxc-tsrx-docs.vercel.app/`, including its production-domain assignment
-and rollback access. The reviewed `docs/dist` artifact is deployed as the
-project root so `docs/dist/vercel.json` is present at the root of the upload and
-applies clean URLs plus the required cross-origin isolation headers.
+`https://oxc-tsrx.dev/`, including its production-domain assignment and rollback
+access. The reviewed `docs/dist` artifact is deployed as the project root so
+`docs/dist/vercel.json` is present at the root of the upload and applies clean
+URLs plus the required cross-origin isolation headers.
 
 Any automated production path needs a protected environment and a narrowly
 scoped Vercel authentication mechanism bound to the intended team and project.
