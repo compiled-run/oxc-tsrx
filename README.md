@@ -34,8 +34,8 @@ npm install --save-dev oxc-tsrx@latest
 
 Node.js 20.19+ (in the 20.x line) or 22.12+. You do not need Rust installed:
 the install downloads a ready-built program for your machine. macOS, Linux, and
-Windows are covered. There is no JavaScript or WebAssembly fallback, so any
-other machine has to build from source.
+Windows are covered, eight targets in all. There is no JavaScript or
+WebAssembly fallback, so any other machine has to build from source.
 [Platform support](https://oxc-tsrx.dev/reference/platform-support) has the full list.
 
 ## Usage
@@ -93,17 +93,20 @@ build tool reads `.tsrx` as plain TypeScript and stops at the first `@{`.
 
 Three smaller limits are worth knowing: CSS inside a `<style>` block is left
 alone rather than reformatted, custom JavaScript lint rules see a translated
-copy of your file, and a dynamic tag name that itself contains more markup is
-not supported yet. [Limitations](https://oxc-tsrx.dev/reference/limitations) explains each one.
+copy of your file and cost one extra parse to do it, and a dynamic tag name
+that itself contains more markup is not supported yet.
+[Limitations](https://oxc-tsrx.dev/reference/limitations) explains each one.
 
 ## In your editor
 
 Install the official OXC extension, `oxc.oxc-vscode`. With `oxc-tsrx` in the
 project there is nothing else to install or configure, and your editor
-underlines the same problems the terminal reports. One catch: the extension
-does not wake up on a `.tsrx` file, so open any JavaScript, TypeScript, or
-JSON file in the project once, and `.tsrx` works for the rest of the session.
-The [editor guide](https://oxc-tsrx.dev/integrations/editor) has the settings.
+underlines the same problems the terminal reports. One catch: the TSRX
+toolchain's own extension owns `.tsrx`, and the OXC extension lists no
+activation event for it, so it does not start on its own. Open any
+JavaScript, TypeScript, or JSON file in the project once, and `.tsrx` works
+for the rest of the session. The [editor
+guide](https://oxc-tsrx.dev/integrations/editor) has the settings.
 
 ## Vite and Vite+
 
