@@ -93,7 +93,7 @@ build tool reads `.tsrx` as plain TypeScript and stops at the first `@{`.
 
 Three smaller limits are worth knowing: CSS inside a `<style>` block is left
 alone rather than reformatted, custom JavaScript lint rules see a translated
-copy of your file and cost one extra parse to do it, and a dynamic tag name
+copy of your file, so each one is read once more, and a dynamic tag name
 that itself contains more markup is not supported yet.
 [Limitations](https://oxc-tsrx.dev/reference/limitations) explains each one.
 

@@ -11,13 +11,14 @@
   <a href="https://github.com/markless-dev/oxc-tsrx/blob/HEAD/LICENSE"><img alt="MIT license" src="https://img.shields.io/npm/l/oxc-tsrx.svg"></a>
 </p>
 
-`oxc-tsrx` is a linter, formatter, parser, and language server for `.tsrx`
-files, written in Rust. A `.tsrx` file is TypeScript and JSX plus template
-control flow like `@if` and `@for`, and OXC is the toolchain behind the Oxlint
-linter and the Oxfmt formatter.
+`oxc-tsrx` is a linter and a formatter for `.tsrx` files, written in Rust.
+A linter warns you about likely mistakes in your code. A formatter rewrites
+spacing and punctuation so every file in the project looks the same. You get
+both on the command line and inside your editor. A `.tsrx` file is TypeScript
+with JSX markup, plus template blocks like `@if` and `@for`.
 
-_An independent community project. Not affiliated with, endorsed by, or a
-product of VoidZero or the OXC team._
+_OXC for TSRX is an independent community project. It is not affiliated with,
+endorsed by, or a product of VoidZero or the OXC team._
 
 [**Docs**](https://oxc-tsrx.dev/) &nbsp;·&nbsp; [**Getting started**](https://oxc-tsrx.dev/guide/getting-started) &nbsp;·&nbsp; [**Playground**](https://oxc-tsrx.dev/playground)
 
@@ -28,12 +29,13 @@ npm install --save-dev oxc-tsrx
 ```
 
 That is the whole setup, for the command line and for your editor. You get
-`oxlint` and `oxfmt` commands that understand `.tsrx`, with no config file, no
-ignore file, and no install script. [Vite+ needs one more
-command](https://oxc-tsrx.dev/integrations/vite-plus).
+`oxlint` and `oxfmt`, the real [OXC](https://oxc.rs) commands, now able to read
+`.tsrx`, with no config file, no ignore file, and no install script. [Vite+ needs
+one more command](https://oxc-tsrx.dev/integrations/vite-plus).
 
-You do not need Rust installed. Your package manager downloads the one prebuilt
-binary that matches your platform, out of eight published ones.
+You do not need Rust installed: the install downloads a ready-built program for
+your machine, one of eight published for macOS, Linux, and Windows. See
+[Platform support](https://oxc-tsrx.dev/reference/platform-support).
 
 ## Usage
 
@@ -43,24 +45,38 @@ npx oxfmt --check src/Cart.tsrx # Show what formatting would change.
 npx oxfmt --write src/Cart.tsrx # Apply it.
 ```
 
-Always give these commands a path. A bare `npx oxlint` also lints
-`node_modules`, and `--fix` will rewrite files in there.
+Always give these commands a path. A bare `npx oxlint` also checks
+`node_modules`, and `--fix` (the flag that lets `oxlint` edit your files) will
+rewrite files in there.
 
-Your `.js`, `.jsx`, `.ts`, and `.tsx` files take the official OXC code paths
-unchanged. Only `.tsrx` files do anything TSRX-specific.
+Your `.js`, `.jsx`, `.ts`, and `.tsx` files go straight to OXC, exactly as they
+would without this package. Only `.tsrx` files do anything TSRX-specific.
+
+## What works today
+
+These are the TSRX blocks the linter and formatter understand: `@{` blocks,
+`@if` / `@else if` / `@else`, `@for` / `@empty`, `@switch` / `@case` /
+`@default`, `@try` / `@pending` / `@catch`, tags whose name is an expression,
+`<{expression}>`, and plain `<style>` blocks
+([TSRX syntax](https://oxc-tsrx.dev/guide/tsrx-syntax) shows each one). Anything
+outside that list **fails closed**: the command stops and says what it found and
+where, rather than guessing and maybe producing wrong output.
+
+**This package compiles nothing.** It never builds or runs your app. Turning
+`.tsrx` into something a browser can run is your framework's TSRX plugin's job,
+such as `@tsrx/vite-plugin-react`. See
+[tsrx.dev/getting-started](https://tsrx.dev/getting-started). Without one, your
+build tool reads `.tsrx` as plain TypeScript and stops at the first `@{`.
 
 ## In your editor
 
 Install the official OXC extension, `oxc.oxc-vscode`. With `oxc-tsrx` in the
-project there is nothing else to install or configure: you get `.tsrx`
-diagnostics, formatting, quick fixes, and your own Oxlint JavaScript plugin
-rules.
-
-One thing to know: the official extension lists no `.tsrx` activation event, and
-the TSRX toolchain's extension owns `.tsrx` under its own language id, so
-opening a `.tsrx` file first does not start it. Open any JavaScript, TypeScript,
-or JSON file once, and `.tsrx` is served for the rest of the session. See the
-[editor guide](https://oxc-tsrx.dev/integrations/editor).
+project there is nothing else to install or configure, and your editor
+underlines the same problems the terminal reports. One catch: the TSRX
+toolchain's own extension owns `.tsrx`, and the OXC extension lists no
+activation event for it, so it does not start on its own. Open any JavaScript,
+TypeScript, or JSON file in the project once, and `.tsrx` works for the rest of
+the session. See the [editor guide](https://oxc-tsrx.dev/integrations/editor).
 
 ## API
 
@@ -70,21 +86,22 @@ import { defineConfig } from "oxc-tsrx/lint";
 import { format } from "oxc-tsrx/format";
 ```
 
-These give you an AST and formatted text. Neither one compiles `.tsrx`: building
-and running it belongs to your framework's TSRX plugin, such as
-`@tsrx/vite-plugin-react`. See
-[tsrx.dev/getting-started](https://tsrx.dev/getting-started).
+These hand you a syntax tree and formatted text, so you can build your own
+tooling on the same reader the commands use. None of them compiles `.tsrx`
+either; that stays your framework's TSRX plugin's job.
 
 ## Your own JavaScript lint plugins
 
 A plugin listed in `jsPlugins` runs on `.tsrx` from the `oxlint` command and
-from the language server, but it sees a legal-TSX copy of your file rather than
-the TSRX you wrote. That costs one extra parse per `.tsrx` file, which both
-lanes announce, and `settings.oxcTsrx.jsPluginsOnTsrx: false` turns it off.
-`oxc-tsrx-lint`, the standalone binary, is a Rust process with no Node.js
-runtime, so it refuses `jsPlugins` and names `oxlint` as the command that can.
-`oxc-tsrx/lint/plugins-dev` is for *writing* a plugin, since it re-exports
-Oxlint's `RuleTester`. See [Custom JavaScript
+inside your editor, but it sees a translated copy of your file rather than the
+TSRX you wrote, so each `.tsrx` file is read once more. The command and the
+editor both say when they have done that, and
+`settings.oxcTsrx.jsPluginsOnTsrx: false` turns it off.
+
+`oxc-tsrx-lint`, the standalone Rust command, has no Node.js to run a plugin in,
+so it refuses `jsPlugins` and names `oxlint` as the command that can.
+`oxc-tsrx/lint/plugins-dev` is for *writing* a plugin, since it re-exports the
+`RuleTester` from `oxlint`. See [Custom JavaScript
 plugins](https://oxc-tsrx.dev/integrations/custom-js-plugins).
 
 ## Documentation
