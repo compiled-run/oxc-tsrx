@@ -2686,11 +2686,11 @@ p.home-bench-caption {
 }
 .comp-name {
   font-size: 13.5px;
+  font-weight: 600;
   color: var(--c-text-2);
 }
 .comp-row.comp-ours .comp-name {
   color: var(--c-text-1);
-  font-weight: 600;
 }
 .comp-time {
   font-family: var(--font-display);

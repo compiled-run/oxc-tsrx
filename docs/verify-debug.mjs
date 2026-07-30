@@ -1416,12 +1416,12 @@ const compLabels = await page.evaluate(() =>
 // Our own matched lane is now called "Oxlint + TSRX", which itself contains
 // the substring "Oxlint". A substring test for the official competitor lane
 // would therefore pass even if that lane were dropped from the chart, so both
-// non-ESLint clauses match the exact label instead: 'official Oxlint' can only
+// non-ESLint clauses match the exact label instead: 'Official Oxlint' can only
 // be the upstream tool, and 'Oxlint + TSRX' can only be our matched all-TSX
 // lane, never the longer mixed-file label.
 check(
   compLabels.some((l) => l.includes('ESLint')) &&
-    compLabels.some((l) => l === 'official Oxlint') &&
+    compLabels.some((l) => l === 'Official Oxlint') &&
     compLabels.some((l) => l === 'Oxlint + TSRX'),
   'comparative: home shows the matched ESLint, official Oxlint, and Oxlint + TSRX lanes',
   compLabels.filter((l) => /ESLint|Oxlint/.test(l)).join(' | '),

@@ -966,7 +966,7 @@ export async function comparativeChartHtml() {
     },
     {
       key: 'oxlint',
-      name: 'official Oxlint',
+      name: 'Official Oxlint',
       ms: report.tools.oxlint.medianMs,
       cls: 'other',
       pass: assertions.nearOxlintParity,
