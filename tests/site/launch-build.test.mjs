@@ -127,8 +127,11 @@ test("static launch build has canonical and social metadata on every public page
   // listed. A literal on purpose: adding or removing a public page should be a
   // deliberate edit here, not a number that quietly follows along. It went from
   // 20 to 19 when /integrations/vite-plus was folded into the getting-started
-  // guide, which is why that path now has a redirect in vercel.json.
-  assert.equal(htmlFiles.length, 19);
+  // guide, and back to 20 when the walkthrough moved out again: that guide was
+  // 467 bytes under the page-weight budget with it, so nothing else could be
+  // added there. The vercel.json redirect that stood in for the page is gone
+  // with it.
+  assert.equal(htmlFiles.length, 20);
   assert.equal(htmlFiles.some((path) => path.endsWith(`${sep}logos.html`)), false);
 
   for (const path of htmlFiles) {
@@ -183,7 +186,7 @@ test("static launch build has a scoped base, crawl metadata, and no internal des
     `User-agent: *\nAllow: /\nSitemap: ${siteUrl}sitemap.xml\n`,
   );
   assert.match(sitemap, /^<\?xml version="1\.0" encoding="UTF-8"\?>/u);
-  assert.equal([...sitemap.matchAll(/<loc>/gu)].length, 19);
+  assert.equal([...sitemap.matchAll(/<loc>/gu)].length, 20);
   assert.match(sitemap, new RegExp(`<loc>${siteUrl}</loc>`));
   assert.equal(sitemap.includes("logos.html"), false);
   assert.equal(sitemap.includes(".html"), false);

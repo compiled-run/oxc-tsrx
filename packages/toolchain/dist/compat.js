@@ -12,7 +12,7 @@ import {
   rmdir,
   writeFile,
 } from "node:fs/promises";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 const COMPATIBILITY_SCHEMA = 1;
 const PROVIDER = "oxc-tsrx";
@@ -236,11 +236,16 @@ function parseJsoncValue(text) {
  * `null` for anything that is not a single top-level object, which is the shape
  * both settings files always have and the only shape this package will edit.
  */
-function readTopLevelObject(text) {
-  const tokens = tokenizeJsonc(text);
-  if (!tokens || tokens.length === 0 || tokens[0].kind !== "{") return null;
+// Reads the object whose opening `{` is `tokens[start]`. The top-level document
+// is just the case where that is token 0, so `readTopLevelObject` is a wrapper
+// that additionally insists the object is the whole file. Splitting it this way
+// is what lets `compilerOptions` be edited as surgically as the top level:
+// `plugins` has to be written one level down, and rewriting the document
+// through `JSON.parse` would throw away every comment a scaffold ships.
+function readObjectAt(tokens, start) {
+  if (!tokens || tokens[start]?.kind !== "{") return null;
   const entries = [];
-  let position = 1;
+  let position = start + 1;
   while (position < tokens.length && tokens[position].kind !== "}") {
     const key = tokens[position];
     if (key.kind !== "string" || tokens[position + 1]?.kind !== ":") return null;
@@ -275,12 +280,41 @@ function readTopLevelObject(text) {
       valueStart: tokens[valueStart].start,
       valueEnd: tokens[valueEnd].end,
       valueTokens: tokens.slice(valueStart, valueEnd + 1),
+      valueStartToken: valueStart,
+      valueEndToken: valueEnd,
       commaEnd: comma ? comma.end : null,
     });
     position = comma ? valueEnd + 2 : valueEnd + 1;
   }
-  if (tokens[position]?.kind !== "}" || position !== tokens.length - 1) return null;
-  return { entries, openEnd: tokens[0].end, closeStart: tokens[position].start };
+  if (tokens[position]?.kind !== "}") return null;
+  return {
+    entries,
+    openEnd: tokens[start].end,
+    closeStart: tokens[position].start,
+    endToken: position,
+  };
+}
+
+function readTopLevelObject(text) {
+  const tokens = tokenizeJsonc(text);
+  if (!tokens || tokens.length === 0) return null;
+  const object = readObjectAt(tokens, 0);
+  return object && object.endToken === tokens.length - 1 ? object : null;
+}
+
+// The `compilerOptions` object inside a tsconfig, located the same way, so
+// `plugins` can be inserted into it without disturbing anything else in the
+// file. Returns null unless the document is one object and `compilerOptions`
+// is an object literal inside it, which is the only shape worth editing.
+function readCompilerOptions(text) {
+  const tokens = tokenizeJsonc(text);
+  if (!tokens || tokens.length === 0) return null;
+  const root = readObjectAt(tokens, 0);
+  if (!root || root.endToken !== tokens.length - 1) return null;
+  const entry = root.entries.find((candidate) => candidate.key === "compilerOptions");
+  if (!entry) return null;
+  const object = readObjectAt(tokens, entry.valueStartToken);
+  return object && object.endToken === entry.valueEndToken ? object : null;
 }
 
 function stringEntryValue(entry) {
@@ -301,8 +335,15 @@ function detectIndent(text, structure) {
 }
 
 function insertTopLevelEntry(text, structure, key, value) {
+  return insertObjectEntry(text, structure, key, JSON.stringify(value));
+}
+
+// `rawValue` is already-rendered JSON rather than a value to stringify, because
+// the tsconfig entry is written the way the documentation prints it rather than
+// the way `JSON.stringify` would compact it.
+function insertObjectEntry(text, structure, key, rawValue) {
   const indent = detectIndent(text, structure);
-  const literal = `${JSON.stringify(key)}: ${JSON.stringify(value)}`;
+  const literal = `${JSON.stringify(key)}: ${rawValue}`;
   if (structure.entries.length === 0) {
     const inner = text.slice(structure.openEnd, structure.closeStart);
     if (inner.trim().length === 0) {
@@ -867,6 +908,45 @@ async function referencedSourceProject(tsconfigPath, tsconfig) {
   return null;
 }
 
+// `setup --write-tsconfig` is the one thing that edits a tsconfig, and it is
+// opt-in for that reason: without the flag this package still never touches the
+// file, it only reports the gap. The entry is written to match what the
+// documentation prints, so a reader who ran the flag and a reader who typed it
+// by hand end up with the same line.
+const TSCONFIG_PLUGIN_LITERAL = `[{ "name": ${JSON.stringify(TSRX_TYPESCRIPT_PLUGIN)} }]`;
+
+async function writeTsconfigPlugin(tsconfigPath) {
+  const text = await readFile(tsconfigPath, "utf8").catch(() => null);
+  if (text === null) {
+    throw new Error(`refusing to edit ${tsconfigPath}: it could not be read`);
+  }
+  const options = readCompilerOptions(text);
+  if (!options) {
+    throw new Error(
+      `refusing to edit ${tsconfigPath}: its "compilerOptions" object could not be located, so add "plugins": ${TSCONFIG_PLUGIN_LITERAL} yourself`,
+    );
+  }
+  const existing = options.entries.find((entry) => entry.key === "plugins");
+  if (existing) {
+    // An existing list is somebody else's, and TypeScript takes several
+    // plugins, so the right edit is an append. Appending inside an array by
+    // text surgery is a good way to quietly corrupt a config, so this refuses
+    // and says what to add instead, the same way a taken package slot does.
+    const already = text
+      .slice(existing.valueStart, existing.valueEnd)
+      .includes(TSRX_TYPESCRIPT_PLUGIN);
+    if (already) return "present";
+    throw new Error(
+      `refusing to edit ${tsconfigPath}: "compilerOptions.plugins" already exists, so add { "name": ${JSON.stringify(TSRX_TYPESCRIPT_PLUGIN)} } to it yourself`,
+    );
+  }
+  await writeFile(
+    tsconfigPath,
+    insertObjectEntry(text, options, "plugins", TSCONFIG_PLUGIN_LITERAL),
+  );
+  return "written";
+}
+
 function typescriptSupported(version) {
   const [major, minor] = String(version ?? "")
     .split(".")
@@ -953,16 +1033,16 @@ async function inspectLanguageSupport(projectRoot, modules) {
     report.tsconfig.delegate = delegate?.path ?? null;
     if (delegate === null) {
       report.notes.push(
-        `${report.tsconfig.path} is solution-style ("files": [], "references": [...]), so a plugin declared there is inert. Add "plugins": [{ "name": "${TSRX_TYPESCRIPT_PLUGIN}" }] to whichever referenced project includes your source; oxc-tsrx never edits tsconfig.json`,
+        `${report.tsconfig.path} is solution-style ("files": [], "references": [...]), so a plugin declared there is inert. Add "plugins": [{ "name": "${TSRX_TYPESCRIPT_PLUGIN}" }] to whichever referenced project includes your source; setup --write-tsconfig cannot pick one for you here`,
       );
     } else if (!delegate.declaresPlugin) {
       report.notes.push(
-        `add "plugins": [{ "name": "${TSRX_TYPESCRIPT_PLUGIN}" }] under compilerOptions in ${delegate.path} yourself. Not ${report.tsconfig.path}: that one is solution-style ("files": [], "references": [...]) and a plugin declared there is inert. oxc-tsrx never edits tsconfig.json`,
+        `add "plugins": [{ "name": "${TSRX_TYPESCRIPT_PLUGIN}" }] under compilerOptions in ${delegate.path}, or rerun setup with --write-tsconfig to have it added for you. Not ${report.tsconfig.path}: that one is solution-style ("files": [], "references": [...]) and a plugin declared there is inert`,
       );
     }
   } else if (!report.tsconfig.declaresPlugin) {
     report.notes.push(
-      `add "plugins": [{ "name": "${TSRX_TYPESCRIPT_PLUGIN}" }] under compilerOptions in ${report.tsconfig.path} yourself; oxc-tsrx never edits tsconfig.json`,
+      `add "plugins": [{ "name": "${TSRX_TYPESCRIPT_PLUGIN}" }] under compilerOptions in ${report.tsconfig.path}, or rerun setup with --write-tsconfig to have it added for you`,
     );
   }
   if (!report.typescript.present) {
@@ -1016,6 +1096,34 @@ export async function setupCompatibility(options = {}) {
   if (!(await exists(modules))) {
     throw new Error(`node_modules is missing under ${status.projectRoot}; install dependencies first`);
   }
+  // Before the slots, so a refusal here aborts without having half-bridged
+  // `node_modules`. A solution-style root owns no files, so the plugin has to
+  // land in the referenced project that includes your source instead.
+  let tsconfigWrite = null;
+  if (options.writeTsconfig) {
+    const { path: rootPath, solutionStyle, delegate } = status.languageSupport.tsconfig;
+    if (!rootPath) {
+      throw new Error(
+        `no tsconfig.json was found at or above ${status.projectRoot}, so there is nothing to write`,
+      );
+    }
+    if (solutionStyle && !delegate) {
+      throw new Error(
+        `refusing to edit ${rootPath}: it is solution-style ("files": [], "references": [...]), so a plugin declared there is inert, and no referenced project including your source was found`,
+      );
+    }
+    const target = delegate ?? rootPath;
+    tsconfigWrite = {
+      path: target,
+      state: options.dryRun ? "preview" : await writeTsconfigPlugin(target),
+    };
+  }
+  // The status was read before the write, so its prerequisite notes still say
+  // the entry is missing. Re-reading is what stops the report telling you to
+  // add by hand the line it just added for you.
+  const languageSupport = tsconfigWrite && tsconfigWrite.state === "written"
+    ? await inspectLanguageSupport(status.projectRoot, modules)
+    : status.languageSupport;
   const changed = status.slots
     .filter((slot) => ["missing", "replaceable", "stale"].includes(slot.state))
     .map((slot) => slot.name);
@@ -1058,6 +1166,8 @@ export async function setupCompatibility(options = {}) {
       !options.dryRun && changed.includes(slot.name) ? { ...slot, state: "active" } : slot,
     ),
     editorSlot,
+    languageSupport,
+    ...(tsconfigWrite ? { tsconfigWrite } : {}),
     changed,
     unchanged: [
       ...status.slots.filter((slot) => slot.state === "active").map((slot) => slot.name),
@@ -1138,35 +1248,158 @@ const EDITOR_SLOT_EXPLANATION = Object.freeze({
 });
 
 /**
+ * The width the report wraps to. A terminal reports its own; anything else,
+ * including the pipe a transcript is captured through, gets a fixed 80 so the
+ * recorded output is identical on every machine.
+ */
+function reportWidth() {
+  const columns = process.stdout?.columns;
+  if (!Number.isInteger(columns) || columns <= 0) return 80;
+  return Math.min(Math.max(columns, 60), 100);
+}
+
+/**
+ * Colour is for a human at a terminal and nobody else. A pipe, a CI log, a
+ * captured transcript, or `NO_COLOR` all get plain text, so the only consumer
+ * that ever sees an escape sequence is the one that can render it.
+ * `FORCE_COLOR` is honoured because that is how you ask for it through a pipe.
+ */
+function reportColorEnabled() {
+  if (process.env.NO_COLOR !== undefined && process.env.NO_COLOR !== "") return false;
+  if (process.env.FORCE_COLOR !== undefined && process.env.FORCE_COLOR !== "0") return true;
+  return process.stdout?.isTTY === true;
+}
+
+const REPORT_STYLES = {
+  bold: "1",
+  dim: "2",
+  green: "32",
+  yellow: "33",
+  cyan: "36",
+};
+
+function paint(text, style, enabled) {
+  if (!enabled || !REPORT_STYLES[style]) return text;
+  return `[${REPORT_STYLES[style]}m${text}[0m`;
+}
+
+/**
+ * `missing` is the healthy answer outside Vite+, so no state here is coloured
+ * as an error. Green marks a slot this package has taken over, dim marks one
+ * that needs nothing, and yellow marks the states that are asking the reader
+ * to look at something.
+ */
+const SLOT_STATE_STYLE = {
+  active: "green",
+  unnecessary: "dim",
+  missing: "yellow",
+  collision: "yellow",
+  unreadable: "yellow",
+  removed: "dim",
+};
+
+/**
+ * Wraps at spaces only. A path, a version range, or a `"plugins": [{ ... }]`
+ * fragment must survive intact, because the reader's next move is to copy it
+ * out of the terminal.
+ */
+function wrapReportText(text, firstPrefix, restPrefix, width) {
+  const limit = Math.max(width - restPrefix.length, 24);
+  const lines = [];
+  let current = "";
+  for (const word of text.split(" ")) {
+    if (current === "") current = word;
+    else if (`${current} ${word}`.length <= limit) current = `${current} ${word}`;
+    else {
+      lines.push(current);
+      current = word;
+    }
+  }
+  if (current !== "") lines.push(current);
+  return lines.map((line, index) => `${index === 0 ? firstPrefix : restPrefix}${line}`);
+}
+
+/**
  * One text report for `status`, `setup`, and `remove`, so all three describe the
  * same four slots and the same unowned editor prerequisites in the same words.
+ *
+ * The states are padded into a column and every prose line is wrapped: this
+ * report is read in a terminal after an install has already scrolled past, and
+ * an unwrapped wall of it hid a single `missing` among three `active`.
  */
 export function formatCompatibilityReport(result) {
+  const width = reportWidth();
+  const color = reportColorEnabled();
   const lines = [];
   const changes = result.changed ?? result.removed ?? null;
   if (changes) {
     const verb = result.action === "remove" ? "removed" : result.action;
+    const noun = changes.length === 1 ? "slot" : "slots";
     lines.push(
-      `${verb} ${changes.length} compatibility slot(s) for ${PROVIDER} ${result.providerVersion} (${result.packageManager})`,
+      paint(
+        `${verb} ${changes.length} compatibility ${noun} for ${PROVIDER} ${result.providerVersion} (${result.packageManager})`,
+        "bold",
+        color,
+      ),
     );
   } else {
     lines.push(
-      `${PROVIDER} ${result.providerVersion} compatibility (${result.packageManager})`,
+      paint(
+        `${PROVIDER} ${result.providerVersion} compatibility (${result.packageManager})`,
+        "bold",
+        color,
+      ),
     );
   }
-  for (const slot of result.slots) lines.push(`- ${slot.name}: ${slot.state}`);
+
   const editor = result.editorSlot;
-  if (editor) {
-    lines.push(`- ${editor.name}: ${editor.state} (editor)`);
-    const explain = EDITOR_SLOT_EXPLANATION[editor.state];
-    if (explain) lines.push(`  ${explain(editor, result.projectRoot)}`);
+  const rows = result.slots.map((slot) => [slot.name, slot.state, slot.state]);
+  if (editor) rows.push([editor.name, `${editor.state} (editor)`, editor.state]);
+  if (result.tsconfigWrite) {
+    const { path, state } = result.tsconfigWrite;
+    rows.push([basename(path), `${state} (tsconfig)`, state === "preview" ? "stale" : "active"]);
   }
+  const nameWidth = Math.max(...rows.map(([name]) => name.length));
+  lines.push("");
+  for (const [name, label, state] of rows) {
+    const gutter = `  ${`${name}:`.padEnd(nameWidth + 1)}  `;
+    lines.push(`${gutter}${paint(label, SLOT_STATE_STYLE[state] ?? "cyan", color)}`);
+  }
+  if (editor) {
+    const explain = EDITOR_SLOT_EXPLANATION[editor.state];
+    if (explain) {
+      lines.push("");
+      for (const line of wrapReportText(
+        explain(editor, result.projectRoot),
+        "      ",
+        "      ",
+        width,
+      )) {
+        lines.push(paint(line, "dim", color));
+      }
+    }
+  }
+
   const support = result.languageSupport;
   if (support && !support.ok) {
+    lines.push("");
     lines.push(
-      "TSRX language support in the editor belongs to the TSRX toolchain, not to this package. Nothing below was installed, changed, or configured:",
+      ...wrapReportText(
+        "TSRX language support in the editor belongs to the TSRX toolchain, not to this package. Nothing below was installed, changed, or configured:",
+        "",
+        "",
+        width,
+      ).map((line) => paint(line, "dim", color)),
     );
-    for (const note of support.notes) lines.push(`  ! ${note}`);
+    // A blank line between the notes, not just around the block. Four of these
+    // run together as one paragraph otherwise, and each one is a separate thing
+    // the reader has to go and do.
+    for (const note of support.notes) {
+      lines.push("");
+      const [first, ...rest] = wrapReportText(note, "", "    ", width);
+      lines.push(`  ${paint("!", "yellow", color)} ${first}`);
+      lines.push(...rest);
+    }
   }
   return `${lines.join("\n")}\n`;
 }

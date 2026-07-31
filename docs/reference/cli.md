@@ -54,7 +54,7 @@ Official Oxlint behaves identically, so this is upstream behavior.
 
 ```text
 Usage: oxc-tsrx providers [--project <directory>] [--json]
-       oxc-tsrx setup     [--project <directory>] [--dry-run] [--json]
+       oxc-tsrx setup     [--project <directory>] [--dry-run] [--write-tsconfig] [--json]
        oxc-tsrx status    [--project <directory>] [--json]
        oxc-tsrx remove    [--project <directory>] [--dry-run] [--json]
 ```
@@ -77,7 +77,8 @@ setting in your own tree: `"oxc.path.oxlint": "node_modules/oxc-tsrx/bin/oxlint"
 in `.vscode/settings.json`, written only when `node_modules/.bin/oxlint` does not
 already resolve into this package. The key is merged without disturbing another
 key or a comment, never overwrites a value you set, and `remove` takes back
-exactly it. `package.json` and `tsconfig.json` are never edited.
+exactly it. `package.json` is never edited, and neither is `tsconfig.json`
+unless you pass `--write-tsconfig`.
 
 `setup` and `status` also report four TSRX editor prerequisites they never
 install:
@@ -86,6 +87,18 @@ install:
 - a framework binding
 - the nearest `tsconfig.json`, which has to declare that plugin
 - TypeScript at `>=5.9 <6`
+
+### `setup --write-tsconfig`
+
+The one flag that edits a tsconfig, opt-in so that the default stays
+report-only. It adds `"plugins": [{ "name": "@tsrx/typescript-plugin" }]` under
+`compilerOptions`, splicing in that single entry and leaving every other byte,
+comments included, exactly as written. A solution-style root owns no files, so a
+plugin declared there is inert; the flag follows the reference to the project
+that includes your source and writes there instead. It refuses rather than
+guesses in two cases: a `compilerOptions.plugins` list it did not write is
+reported instead of appended to, and a file whose `compilerOptions` object
+cannot be located is left alone. Running it twice is a no-op.
 
 See [Vite and
 Vite+](/guide/getting-started#if-something-goes-wrong).

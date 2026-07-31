@@ -21,6 +21,7 @@ export default {
       items: [
         { text: 'Introduction', link: '/guide/introduction' },
         { text: 'Getting Started', link: '/guide/getting-started' },
+        { text: 'Walkthrough (Vite+)', link: '/integrations/vite-plus' },
         { text: 'TSRX Syntax Support', link: '/guide/tsrx-syntax' },
         { text: 'Linting', link: '/guide/linting' },
         { text: 'Formatting', link: '/guide/formatting' },
@@ -31,7 +32,7 @@ export default {
       text: 'Integrations',
       items: [
         { text: 'Configuration', link: '/integrations/configuration' },
-                { text: 'Editor', link: '/integrations/editor' },
+        { text: 'Editor', link: '/integrations/editor' },
         { text: 'Custom JS Plugins', link: '/integrations/custom-js-plugins' },
       ],
     },

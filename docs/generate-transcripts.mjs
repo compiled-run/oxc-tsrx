@@ -479,6 +479,59 @@ function sanitize(output, workspace) {
     .replaceAll(workspace, '.')
 }
 
+// `oxc-tsrx setup|status|remove` wrap their own report to 80 columns, and they
+// do it while the absolute path of this throwaway workspace is still in the
+// text. `sanitize` then deletes that path, which leaves the tail of a wrapped
+// note stranded on a line of its own. Re-flowing the two block shapes that
+// report indents gives the page the wrapping a reader with short paths sees.
+// Scoped to those commands so no other demo's indented output is touched.
+const REPORT_COMMAND = /oxc-tsrx (?:setup|status|remove)\b/
+
+function wrapCaptured(text, firstPrefix, restPrefix, width) {
+  const limit = Math.max(width - restPrefix.length, 24)
+  const lines = []
+  let current = ''
+  for (const word of text.split(' ')) {
+    if (current === '') current = word
+    else if (`${current} ${word}`.length <= limit) current = `${current} ${word}`
+    else {
+      lines.push(current)
+      current = word
+    }
+  }
+  if (current !== '') lines.push(current)
+  return lines.map((line, index) => `${index === 0 ? firstPrefix : restPrefix}${line}`)
+}
+
+function reflowReport(output) {
+  const lines = output.split('\n')
+  const reflowed = []
+  let index = 0
+  const take = (matches) => {
+    const parts = [lines[index].trim()]
+    index += 1
+    while (index < lines.length && matches.test(lines[index])) {
+      parts.push(lines[index].trim())
+      index += 1
+    }
+    return parts.join(' ')
+  }
+  while (index < lines.length) {
+    if (/^ {2}! \S/.test(lines[index])) {
+      const text = take(/^ {4}\S/).replace(/^! /, '')
+      reflowed.push(...wrapCaptured(text, '  ! ', '    ', 80))
+      continue
+    }
+    if (/^ {6}\S/.test(lines[index])) {
+      reflowed.push(...wrapCaptured(take(/^ {6}\S/), '      ', '      ', 80))
+      continue
+    }
+    reflowed.push(lines[index])
+    index += 1
+  }
+  return reflowed.join('\n')
+}
+
 function captureDemo(demo) {
   const workspace = mkdtempSync(path.join(tmpdir(), 'oxc-tsrx-docs-demo-'))
   try {
@@ -503,7 +556,9 @@ function captureDemo(demo) {
       transcript: demo.entries.map((entry) => ({
         ...(entry.comment ? { comment: entry.comment } : {}),
         command: entry.command,
-        output: sanitize(runEntry(workspace, entry), workspace),
+        output: REPORT_COMMAND.test(entry.command)
+          ? reflowReport(sanitize(runEntry(workspace, entry), workspace))
+          : sanitize(runEntry(workspace, entry), workspace),
       })),
     }
   } finally {

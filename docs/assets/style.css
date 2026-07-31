@@ -52,6 +52,9 @@
   --c-text-3: #6e6e76;
   --c-code-bg: #ffffff;
   --c-mark: #fff3b8;
+  /* State colours, for the components that mirror what a CLI prints. */
+  --c-ok: #1a7f37;
+  --c-warn: #9a6700;
   --dg-surface: var(--c-bg);
   --dg-accent-soft: var(--c-brand-soft);
   --dg-text: var(--c-text-1);
@@ -81,6 +84,8 @@ html.dark {
   --c-text-3: #98989f;
   --c-code-bg: #161618;
   --c-mark: #5c4d00;
+  --c-ok: #3fb950;
+  --c-warn: #d29922;
   --dg-surface: var(--c-bg);
   --dg-accent-soft: var(--c-brand-soft);
   --dg-text: var(--c-text-1);
@@ -679,6 +684,229 @@ html.dark .code-block {
 /* Inline, not inline-flex: a flex container carries its own baseline, which
    lifts the label off the line it sits in. The mark is aligned to the text
    instead. */
+/* Disclosure: detail that is true and worth keeping, but not on the critical
+   path. Closed it reads as one quiet line; open it is ordinary prose. */
+/* One panel shape for the three block components below. The border is
+   load-bearing twice: it draws the panel, and it stops the last child's bottom
+   margin collapsing out of the box, which is what keeps a closing paragraph off
+   the bottom edge. */
+.disclosure,
+.filetree,
+.setup-report {
+  margin: 1.1rem 0;
+  border: 1px solid var(--c-divider);
+  border-radius: 9px;
+  background: var(--c-bg-alt);
+}
+.disclosure > summary {
+  cursor: pointer;
+  /* The summary is a control, not prose. Dragging across it to select text
+     just toggles the disclosure, so it should not look selectable either. */
+  user-select: none;
+  -webkit-user-select: none;
+  padding: 0.6rem 0.85rem;
+  font-size: 0.94rem;
+  font-weight: 600;
+  color: var(--c-text-2);
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 8px;
+}
+.disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+/* A rotating caret drawn in CSS, so the control needs no icon asset. */
+.disclosure > summary::before {
+  content: '';
+  flex: none;
+  width: 0.42em;
+  height: 0.42em;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 140ms ease;
+}
+.disclosure[open] > summary::before {
+  transform: rotate(45deg);
+}
+.disclosure > summary:hover,
+.disclosure[open] > summary {
+  color: var(--c-text-1);
+}
+.disclosure > summary:focus-visible {
+  outline: 2px solid var(--c-brand);
+  outline-offset: 2px;
+}
+.disclosure > :not(summary) {
+  margin-inline: 0.85rem;
+}
+.disclosure > :last-child {
+  margin-bottom: 0.85rem;
+}
+@media print {
+  .disclosure > :not(summary),
+  .filetree-file > :not(summary) {
+    display: revert;
+  }
+}
+
+/* File tree: the files a download is about to write, each row opening to the
+   bytes it writes. Rows are disclosures, so it works with JavaScript off. */
+.filetree {
+  padding: 0.85rem;
+}
+.doc .filetree-lead {
+  margin: 0 0 0.7rem;
+  font-size: 0.88rem;
+  color: var(--c-text-3);
+}
+.doc .filetree-level {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+/* The indent guide is the tree: one line per nesting level, drawn by the nested
+   list rather than by box-drawing characters a screen reader would read out. */
+.doc .filetree-level .filetree-level {
+  margin: 0.15rem 0 0.15rem 0.45rem;
+  padding-left: 0.8rem;
+  border-left: 1px solid var(--c-divider);
+}
+.filetree-entry {
+  margin: 0;
+}
+/* Caret, name, note, then the meta pinned right. A grid rather than a wrapping
+   flex row: the note is the only part that should reflow, and in a flex row a
+   long one pushed the line count onto a line of its own. */
+.filetree-file > summary {
+  display: grid;
+  grid-template-columns: auto auto 1fr auto;
+  align-items: baseline;
+  gap: 0.45rem;
+  border-radius: 6px;
+  cursor: pointer;
+  list-style: none;
+}
+.filetree-file > summary::-webkit-details-marker {
+  display: none;
+}
+.filetree-file > summary::before {
+  content: '';
+  align-self: center;
+  width: 0.36em;
+  height: 0.36em;
+  border-right: 2px solid var(--c-text-3);
+  border-bottom: 2px solid var(--c-text-3);
+  transform: rotate(-45deg);
+  transition: transform 140ms ease;
+}
+.filetree-file[open] > summary::before {
+  transform: rotate(45deg);
+}
+.filetree-file > summary:hover {
+  background: var(--c-brand-soft);
+}
+.filetree-file > summary:focus-visible {
+  outline: 2px solid var(--c-brand);
+  outline-offset: 2px;
+}
+.filetree-dir > .filetree-name,
+.filetree-file > summary {
+  padding: 0.25rem 0.35rem;
+}
+.filetree-name,
+.setup-slot,
+.setup-state {
+  font-family: var(--font-mono);
+  font-size: 0.86rem;
+  color: var(--c-text-1);
+}
+.filetree-dir > .filetree-name {
+  display: inline-block;
+  color: var(--c-text-3);
+}
+.filetree-note {
+  font-size: 0.86rem;
+  color: var(--c-text-2);
+}
+.filetree-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  white-space: nowrap;
+}
+.filetree-lines {
+  font-size: 0.76rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--c-text-3);
+}
+.doc .filetree-file .code-block {
+  margin: 0.3rem 0 0.6rem 0.35rem;
+}
+/* Narrow: four columns in a phone's width leaves the note a few characters
+   wide, so the row becomes three stacked lines under one caret. */
+@media (max-width: 640px) {
+  .filetree-file > summary {
+    grid-template-columns: auto minmax(0, 1fr);
+    row-gap: 0.15rem;
+  }
+  .filetree-file > summary::before {
+    grid-area: 1 / 1;
+  }
+  .filetree-file .filetree-name {
+    grid-area: 1 / 2;
+  }
+  .filetree-note {
+    grid-area: 2 / 2;
+  }
+  .filetree-meta {
+    grid-area: 3 / 2;
+    flex-wrap: wrap;
+    white-space: normal;
+  }
+}
+
+/* Setup report: the slot states `oxc-tsrx setup` prints, in the colours it uses
+   at a terminal. Green is a slot this package took over, dim needed nothing,
+   amber is asking you to look. Two shared columns, so the states line up the
+   way they do in the terminal. Subgrid rather than one grid with
+   `display: contents` on the rows, which would drop the list semantics. */
+.setup-report {
+  padding: 0.7rem 0.85rem;
+}
+.doc .setup-report ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: max-content max-content;
+  gap: 0.35rem 0.9rem;
+}
+.doc .setup-report li {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: baseline;
+  margin: 0;
+}
+.setup-state {
+  font-weight: 600;
+}
+.setup-state[data-tone='taken'] {
+  color: var(--c-ok);
+}
+.setup-state[data-tone='quiet'] {
+  color: var(--c-text-3);
+}
+.setup-state[data-tone='attention'] {
+  color: var(--c-warn);
+}
+.setup-scope {
+  font-weight: 400;
+  color: var(--c-text-3);
+}
 .brand-link {
   border-radius: 5px;
   padding: 0 3px;
@@ -686,13 +914,21 @@ html.dark .code-block {
   text-decoration: none;
   white-space: nowrap;
 }
-.brand-link svg {
+.brand-link svg,
+.brand-link img {
   width: 0.95em;
   height: 0.95em;
   vertical-align: -0.14em;
   margin-right: 0.32em;
   opacity: 0.7;
   transition: opacity 120ms ease;
+}
+/* An image mark is a fixed bitmap rather than a currentColor path: it needs the
+   rounding the icon it was cut from already has, and the resting dim that suits
+   a mark tinted by the link washes this one out, so it sits a little brighter. */
+.brand-link img {
+  border-radius: 3px;
+  opacity: 0.85;
 }
 /* Same reason as the extension card: a background/colour transition on the
    resting rule animates the theme flip too, and axe sampled this link mid-flip
@@ -704,7 +940,9 @@ html.dark .code-block {
   transition: background 120ms ease, color 120ms ease;
 }
 .brand-link:hover svg,
-.brand-link:focus-visible svg {
+.brand-link:focus-visible svg,
+.brand-link:hover img,
+.brand-link:focus-visible img {
   opacity: 1;
 }
 .pm-tabs-bar [role='tab'][aria-selected='true'] {

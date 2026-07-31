@@ -23,8 +23,8 @@ Four facts set up the rest:
   onto the authored bytes. It is the shape of a Vite plugin transform, except
   the copy never reaches disk.
 - The reusable core is one crate, `crates/tsrx_syntax`. Its one direct
-  dependency, `unicode-id-start = "1"`, is the standalone Unicode table behind
-  ECMAScript `IdentifierPart` semantics, not an OXC API dependency.
+  dependency is `unicode-id-start = "1"`, a standalone Unicode table, not an
+  OXC API.
 - There is no fork. All twelve OXC dependencies sit behind `crates/oxc_adapter`
   at one exact commit pin.
 - At the audited revision, OXC has no merged whole-file language hook that could
@@ -45,6 +45,8 @@ ideas run through it: the **copy**, a temporary legal-TSX version OXC reads
 while your file is never touched, and **mapping back**, the return trip that
 puts OXC's output into TSRX and checks itself before anything is written.
 
+<!-- details:The module tree, and what each part owns -->
+
 | Module | Owns |
 | --- | --- |
 | `scanner/mod.rs` | the borrowed source, scanner state, and the main loop |
@@ -53,6 +55,8 @@ puts OXC's output into TSRX and checks itself before anything is written.
 | `projection/mapping.rs`, `builder.rs`, `marker.rs` | which byte of the copy came from which byte of your file, building the copy, and naming its placeholders |
 | `projection/lint.rs`, `types.rs`, `format.rs`, `lift/*` | one path per job. `projection/lift/scaffold.rs` is the formatter's return trip: it maps output back into TSRX and verifies it |
 | `diagnostics.rs`, `model.rs` | the error shapes, and the compact records |
+
+<!-- /details -->
 
 ## What could move upstream
 
@@ -95,12 +99,16 @@ the whole file becomes a copy in which some ranges are yours and some are
 placeholders the tool wrote, and the two have to stay told apart. Treating it as
 a partial-loader case would quietly lose accuracy.
 
-Three unmerged research threads exist. They are research,
-not runtime dependencies: [Language Plugins RFC #21936](https://github.com/oxc-project/oxc/discussions/21936),
+<!-- details:Unmerged research threads upstream -->
+
+Three exist. They are research, not runtime dependencies:
+[Language Plugins RFC #21936](https://github.com/oxc-project/oxc/discussions/21936),
 [custom-template issue #19918](https://github.com/oxc-project/oxc/issues/19918),
 and [draft custom-parser PR #24262](https://github.com/oxc-project/oxc/pull/24262),
 which as of 2026-07-24 reaches past a bare AST hook into editor routing but is
 still Oxlint-only.
+
+<!-- /details -->
 
 ## Provider discovery patches, built locally
 
@@ -126,19 +134,19 @@ installed the wrapper is unchanged. With one, it sends the paths that provider
 claims to its binary in pass-through mode and takes the worst exit code, and in
 `--lsp` mode composes both language servers behind the editor's one stdio
 connection. See [the calling
-convention](./provider-protocol.md#capability-calling-convention).
-
-Two results worth knowing before repeating the work. With `node_modules/.bin`
-deleted, every tool name shadowed on `PATH`, and no `oxc.path.*` setting, the
-released official OXC extension still found the patched wrapper by ordinary Node
+convention](./provider-protocol.md#capability-calling-convention). With
+`node_modules/.bin` deleted and every tool name shadowed on `PATH`, the released
+official OXC extension still found that patched wrapper by ordinary Node
 resolution and started the provider's language server, which proves the protocol
-implementable and nothing more. And Vite+ needs no patch of its own, because it
-resolves the `oxlint` package and runs `bin/oxlint` from it without reading file
-extensions, so patching the resolved wrapper reaches Vite+ users. That second
-one holds only while Vite+ pins `"oxlint": "=1.72.0"` exactly;
-`tests/packaging/vite-plus-provider.test.mjs` records the measurements, and the
-limit of a JavaScript-only patch, which is that a directory argument goes to the
-native walker and never enumerates provider extensions.
+implementable and nothing more.
+
+Vite+ needs no patch of its own, because it resolves the `oxlint` package and
+runs `bin/oxlint` from it without reading file extensions, so patching the
+resolved wrapper reaches Vite+ users. That holds only while Vite+ pins one exact
+`oxlint` version, and the pinned number moves between Vite+ releases.
+`tests/packaging/vite-plus-provider.test.mjs` records which version, the rest of
+the measurements, and the limit of a JavaScript-only patch: a directory argument
+goes to the native walker and never enumerates provider extensions.
 
 ## Landing order
 
@@ -178,33 +186,17 @@ matrix](../acceptance/matrix.md).
 
 ## Reproducible evidence
 
-A reviewer can rerun everything from a clean checkout:
+<!-- details:Every command, to rerun it from a clean checkout -->
 
 ```sh
 cargo test --locked -p tsrx_syntax --test architecture
 cargo test --locked -p tsrx_syntax --all-targets
-cargo test --locked --workspace --all-targets
-cargo clippy --locked --workspace --all-targets -- -D warnings
-pnpm test
-pnpm run test:packaging:unit
 pnpm run benchmark:native-lint
 pnpm run benchmark:native-format
-pnpm run benchmark:type-aware
-pnpm run benchmark:editor
-node benchmarks/vite/run.mjs
-pnpm run benchmark:comparative
-# optional, needs a compatible external Markless checkout, read-only:
-MARKLESS_ROOT=/path/to/markless pnpm run test:markless-control
 ```
 
 The architecture test checks the private module tree, the public API, and the
-dependency boundary. All six benchmark families were regenerated after the
-Unicode fix.
+dependency boundary. The two benchmarks are the ones the budgets above are
+measured against.
 
-## OXC contribution hygiene
-
-Real upstream work would follow OXC's own
-[`AGENTS.md`](https://github.com/oxc-project/oxc/blob/8e0ed2ebb96137fb1611cdbd5742d5cb46037d40/AGENTS.md):
-its generators, its repository gates, and its rule that a human contributor
-reviews, tests, understands, discloses AI use, and takes responsibility for
-everything submitted. Nothing here replaces maintainer design review.
+<!-- /details -->

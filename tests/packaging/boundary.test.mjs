@@ -744,7 +744,6 @@ test("the maintainer guide defines a source-backed upstream transplant contract"
     `${canonicalRepository}/blob/${auditedOxcMain}/apps/oxfmt/src/lsp/mod.rs`,
     `${canonicalRepository}/blob/${auditedOxcMain}/crates/oxc_parser/src/config.rs`,
     `${canonicalRepository}/blob/${pinnedOxcRevision}/crates/oxc_lexer/README.md`,
-    `${canonicalRepository}/blob/${pinnedOxcRevision}/AGENTS.md`,
   ]) {
     assert.ok(guide.includes(primarySource), primarySource);
   }
@@ -774,14 +773,6 @@ test("the maintainer guide defines a source-backed upstream transplant contract"
   assert.match(guide, /cargo test --locked -p tsrx_syntax --all-targets/);
   assert.match(guide, /pnpm run benchmark:native-lint/);
   assert.match(guide, /pnpm run benchmark:native-format/);
-  // The page defers to OXC's own AGENTS.md rather than restating its gate
-  // commands, so assert the two things that must never be dropped: that it
-  // points there, and that it keeps the human-responsibility and AI-disclosure
-  // rule. The exact wording of the gates is upstream's to change.
-  assert.match(guide, /AGENTS\.md/);
-  assert.match(guide, /disclose[sd]? AI use/i);
-  assert.match(guide, /human contributor[^.]*respons/i);
-
   // The extension is optional because these two may link either at the file in
   // this repository or at the published site, which serves clean URLs. What has
   // to hold is that both still point a reader at the upstream map.

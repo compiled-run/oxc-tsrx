@@ -94,6 +94,12 @@ export interface OxcTsrxCompatibilityOptions {
   readonly projectRoot?: string;
   readonly userAgent?: string;
   readonly dryRun?: boolean;
+  /**
+   * Opt in to `setup` adding the `@tsrx/typescript-plugin` entry under
+   * `compilerOptions` in the tsconfig that owns your source. Without it,
+   * `setup` reports the missing entry and edits no tsconfig at all.
+   */
+  readonly writeTsconfig?: boolean;
 }
 
 export interface OxcTsrxCompatibilityStatus {
@@ -106,8 +112,16 @@ export interface OxcTsrxCompatibilityStatus {
   readonly languageSupport: OxcTsrxLanguageSupport;
 }
 
+export interface OxcTsrxTsconfigWrite {
+  readonly path: string;
+  /** `written` on a fresh entry, `present` when it already named the plugin. */
+  readonly state: "written" | "present" | "preview";
+}
+
 export interface OxcTsrxSetupResult extends OxcTsrxCompatibilityStatus {
   readonly action: "preview" | "setup";
+  /** Present only when `writeTsconfig` was requested. */
+  readonly tsconfigWrite?: OxcTsrxTsconfigWrite;
   readonly changed: readonly string[];
   readonly unchanged: readonly string[];
 }

@@ -54,6 +54,13 @@ window.addEventListener('keydown', (event) => {
 })
 
 // ---------- per-page: copy buttons on code blocks ----------
+// The button swaps its own glyph to a tick on a successful copy, because colour
+// alone said "copied" to nobody who does not already know the button.
+const COPY_ICON =
+  '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>'
+const COPIED_ICON =
+  '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>'
+
 function initCopyButtons() {
   for (const block of document.querySelectorAll('.code-block')) {
     if (block.querySelector('.copy-button')) continue
@@ -61,17 +68,22 @@ function initCopyButtons() {
     button.type = 'button'
     button.className = 'copy-button'
     button.setAttribute('aria-label', 'Copy code to clipboard')
-    button.innerHTML =
-      '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>'
+    button.innerHTML = COPY_ICON
+    // A second copy before the first has reset would otherwise be cut short by
+    // the older timer.
+    let resetTimer
     button.addEventListener('click', async () => {
       try {
         await navigator.clipboard.writeText(block.querySelector('code').textContent.trimEnd())
         button.classList.add('copied')
+        button.innerHTML = COPIED_ICON
         button.setAttribute('aria-label', 'Copied')
-        setTimeout(() => {
+        clearTimeout(resetTimer)
+        resetTimer = setTimeout(() => {
           button.classList.remove('copied')
+          button.innerHTML = COPY_ICON
           button.setAttribute('aria-label', 'Copy code to clipboard')
-        }, 2000)
+        }, 3000)
       } catch {}
     })
     block.appendChild(button)

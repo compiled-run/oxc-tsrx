@@ -32,6 +32,7 @@ const readerFacingSources = [
   "docs/integrations/custom-js-plugins.md",
   "docs/integrations/configuration.md",
   "docs/integrations/editor.md",
+  "docs/integrations/vite-plus.md",
   "docs/reference/cli.md",
   "docs/reference/limitations.md",
   "docs/terminal-transcripts.json",

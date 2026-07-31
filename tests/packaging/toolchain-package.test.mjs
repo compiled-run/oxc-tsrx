@@ -950,6 +950,108 @@ test("the editor slot merges into the user's settings and gives back only its ow
   }
 });
 
+// `setup` reports the missing tsconfig entry and refuses to write it. That is
+// still true without `--write-tsconfig`, and the flag is the single opt-in that
+// changes it. A tsconfig is the user's file and a scaffold's carries comments,
+// so the edit is held to the same standard as the settings file: splice one
+// entry in by byte offset, leave every other byte alone, and refuse rather than
+// guess whenever the shape is not the one this knows how to edit.
+test("setup writes the tsconfig plugin entry only when asked, and never guesses", async () => {
+  const { setupCompatibility } = await import(pathToFileURL(join(packageRoot, "dist/compat.js")));
+  const temporary = await temporaryDirectory("oxc-tsrx-write-tsconfig-");
+  const authored = [
+    "{",
+    "  // Scaffolds ship comments, and JSON.parse refuses them.",
+    '  "compilerOptions": {',
+    '    "target": "es2023",',
+    "    /* kept verbatim */",
+    '    "strict": true',
+    "  },",
+    '  "include": ["src"]',
+    "}",
+    "",
+  ].join("\n");
+  const fixture = async (name, text) => {
+    const created = await providerFixture(temporary, name, { ownsLinterShim: true });
+    const tsconfig = join(created.project, "tsconfig.json");
+    await writeFile(tsconfig, text);
+    return { ...created, tsconfig };
+  };
+  try {
+    // Without the flag nothing is touched, and the report still says so.
+    const untouched = await fixture("untouched", authored);
+    const reported = await setupCompatibility({ projectRoot: untouched.project });
+    assert.equal(reported.tsconfigWrite, undefined);
+    assert.equal(await readFile(untouched.tsconfig, "utf8"), authored);
+    assert.ok(
+      reported.languageSupport.notes.some((note) => note.includes("--write-tsconfig")),
+      "the report should name the flag that would do it for you",
+    );
+
+    // With it, the entry lands under compilerOptions and every comment lives.
+    const written = await fixture("written", authored);
+    const result = await setupCompatibility({
+      projectRoot: written.project,
+      writeTsconfig: true,
+    });
+    assert.equal(result.tsconfigWrite.state, "written");
+    assert.equal(result.tsconfigWrite.path, written.tsconfig);
+    const after = await readFile(written.tsconfig, "utf8");
+    assert.match(after, /"plugins": \[\{ "name": "@tsrx\/typescript-plugin" \}\]/u);
+    for (const preserved of [
+      "// Scaffolds ship comments, and JSON.parse refuses them.",
+      "/* kept verbatim */",
+      '"strict": true',
+      '"include": ["src"]',
+    ]) {
+      assert.ok(after.includes(preserved), preserved);
+    }
+    // It parses, and it declares exactly one plugin.
+    const parsed = JSON.parse(after.replaceAll(/\/\/[^\n]*|\/\*[\s\S]*?\*\//g, ""));
+    assert.deepEqual(parsed.compilerOptions.plugins, [{ name: "@tsrx/typescript-plugin" }]);
+    assert.equal(parsed.compilerOptions.strict, true);
+
+    // Twice is a no-op rather than a second entry.
+    const again = await setupCompatibility({
+      projectRoot: written.project,
+      writeTsconfig: true,
+    });
+    assert.equal(again.tsconfigWrite.state, "present");
+    assert.equal(await readFile(written.tsconfig, "utf8"), after);
+
+    // A dry run reports the file it would edit and writes nothing.
+    const preview = await fixture("preview", authored);
+    const previewed = await setupCompatibility({
+      projectRoot: preview.project,
+      writeTsconfig: true,
+      dryRun: true,
+    });
+    assert.equal(previewed.tsconfigWrite.state, "preview");
+    assert.equal(await readFile(preview.tsconfig, "utf8"), authored);
+
+    // Somebody else's plugins list is not appended to blind. It refuses and
+    // says what to add, the way a taken package slot does.
+    const taken = await fixture(
+      "taken",
+      '{\n  "compilerOptions": {\n    "plugins": [{ "name": "typescript-styled-plugin" }]\n  }\n}\n',
+    );
+    await assert.rejects(
+      setupCompatibility({ projectRoot: taken.project, writeTsconfig: true }),
+      /"compilerOptions\.plugins" already exists/u,
+    );
+    assert.ok((await readFile(taken.tsconfig, "utf8")).includes("typescript-styled-plugin"));
+
+    // A shape it cannot edit is refused rather than rewritten.
+    const opaque = await fixture("opaque", '{\n  "include": ["src"]\n}\n');
+    await assert.rejects(
+      setupCompatibility({ projectRoot: opaque.project, writeTsconfig: true }),
+      /"compilerOptions" object could not be located/u,
+    );
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
+});
+
 test("setup reports the TSRX editor prerequisites it deliberately does not own", async () => {
   const { setupCompatibility } = await import(pathToFileURL(join(packageRoot, "dist/compat.js")));
   const temporary = await temporaryDirectory("oxc-tsrx-editor-support-");

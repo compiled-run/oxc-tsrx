@@ -236,6 +236,7 @@ test("no page reintroduces the retracted TypeScript 6 failure claim", async () =
     pagePath,
     editorPagePath,
     join(root, "docs/guide/getting-started.md"),
+    join(root, "docs/integrations/vite-plus.md"),
     join(root, "docs/reference/limitations.md"),
   ]) {
     const text = await readFile(path, "utf8");

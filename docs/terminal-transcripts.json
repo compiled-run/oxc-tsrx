@@ -7,12 +7,12 @@
         {
           "comment": "Lint .tsrx and ordinary JS/TS with real OXC rules",
           "command": "npx oxlint src/Counter.tsrx src/View.tsx",
-          "output": "src/Counter.tsrx:4:3: warning eslint(no-debugger): `debugger` statement is not allowed\nsrc/View.tsx:2:7: warning eslint(no-unused-vars): Variable 'seen' is declared but never used. Unused variables should start with a '_'. help: Consider removing this declaration.\nFound 2 warnings and 0 errors.\nFinished in 108ms on 2 files with 95 rules using 18 threads.\n"
+          "output": "src/Counter.tsrx:4:3: warning eslint(no-debugger): `debugger` statement is not allowed\nsrc/View.tsx:2:7: warning eslint(no-unused-vars): Variable 'seen' is declared but never used. Unused variables should start with a '_'. help: Consider removing this declaration.\nFound 2 warnings and 0 errors.\nFinished in 91ms on 2 files with 95 rules using 18 threads.\n"
         },
         {
           "comment": "Format .tsrx and ordinary JS/TS with real Oxfmt layout",
           "command": "npx oxfmt --check src/Counter.tsrx src/View.tsx",
-          "output": "Checking formatting...\n\nsrc/View.tsx (3ms)\nsrc/Counter.tsrx (1ms)\n\nFormat issues found in above 2 files. Run without `--check` to fix.\nFinished in 81ms on 2 files using 18 threads.\nNo config found, using defaults. Please add a config file or try `oxfmt --init` if needed.\n"
+          "output": "Checking formatting...\n\nsrc/View.tsx (0ms)\nsrc/Counter.tsrx (0ms)\n\nFormat issues found in above 2 files. Run without `--check` to fix.\nFinished in 81ms on 2 files using 18 threads.\nNo config found, using defaults. Please add a config file or try `oxfmt --init` if needed.\n"
         }
       ]
     },
@@ -162,7 +162,7 @@
         {
           "comment": "The oxlint that oxc-tsrx installs already reads .tsrx",
           "command": "npx oxlint src/TaskList.tsrx",
-          "output": "src/TaskList.tsrx:4:3: warning eslint(no-debugger): `debugger` statement is not allowed\nFound 1 warning and 0 errors.\nFinished in 38ms on 1 file with 95 rules using 1 thread.\n"
+          "output": "src/TaskList.tsrx:4:3: warning eslint(no-debugger): `debugger` statement is not allowed\nFound 1 warning and 0 errors.\nFinished in 35ms on 1 file with 95 rules using 1 thread.\n"
         }
       ]
     },
@@ -202,7 +202,7 @@
         {
           "comment": "Your own rule, reporting on the .tsrx file you wrote",
           "command": "npx oxlint src/TaskFeed.tsrx",
-          "output": "src/TaskFeed.tsrx:4:36: error tsrx-demo(require-keyed-map): JSX returned from .map() should declare a `key` prop.\nFound 0 warnings and 1 error.\nFinished in 69ms on 1 file with 95 rules using 1 thread.\noxlint (oxc-tsrx): running JS plugins on 1 .tsrx file(s) by linting the TSX projection; this parses each of those files once more. Disable with \"settings\": { \"oxcTsrx\": { \"jsPluginsOnTsrx\": false } }.\n"
+          "output": "src/TaskFeed.tsrx:4:36: error tsrx-demo(require-keyed-map): JSX returned from .map() should declare a `key` prop.\nFound 0 warnings and 1 error.\nFinished in 65ms on 1 file with 95 rules using 1 thread.\noxlint (oxc-tsrx): running JS plugins on 1 .tsrx file(s) by linting the TSX projection; this parses each of those files once more. Disable with \"settings\": { \"oxcTsrx\": { \"jsPluginsOnTsrx\": false } }.\n"
         }
       ]
     },
@@ -212,7 +212,7 @@
         {
           "comment": "Both file types at once, one plugin, one command",
           "command": "npx oxlint src",
-          "output": "src/TaskFeed.tsrx:4:36: error tsrx-demo(require-keyed-map): JSX returned from .map() should declare a `key` prop.\nsrc/TaskList.tsrx:4:3: warning eslint(no-debugger): `debugger` statement is not allowed\nsrc/TaskRow.tsx:11:9: error tsrx-demo(require-keyed-map): JSX returned from .map() should declare a `key` prop.\nFound 1 warning and 2 errors.\nFinished in 79ms on 3 files with 96 rules using 18 threads.\noxlint (oxc-tsrx): running JS plugins on 2 .tsrx file(s) by linting the TSX projection; this parses each of those files once more. Disable with \"settings\": { \"oxcTsrx\": { \"jsPluginsOnTsrx\": false } }.\n"
+          "output": "src/TaskFeed.tsrx:4:36: error tsrx-demo(require-keyed-map): JSX returned from .map() should declare a `key` prop.\nsrc/TaskList.tsrx:4:3: warning eslint(no-debugger): `debugger` statement is not allowed\nsrc/TaskRow.tsx:11:9: error tsrx-demo(require-keyed-map): JSX returned from .map() should declare a `key` prop.\nFound 1 warning and 2 errors.\nFinished in 70ms on 3 files with 96 rules using 18 threads.\noxlint (oxc-tsrx): running JS plugins on 2 .tsrx file(s) by linting the TSX projection; this parses each of those files once more. Disable with \"settings\": { \"oxcTsrx\": { \"jsPluginsOnTsrx\": false } }.\n"
         }
       ]
     },
@@ -222,7 +222,7 @@
         {
           "comment": "Four slots this package owns, then four things it will not touch",
           "command": "npx oxc-tsrx setup",
-          "output": "setup 4 compatibility slot(s) for oxc-tsrx 0.1.4 (pnpm)\n- oxc-parser: active\n- oxlint: active\n- oxfmt: active\n- oxc.path.oxlint: active (editor)\n  .vscode/settings.json carries \"oxc.path.oxlint\": \"node_modules/oxc-tsrx/bin/oxlint\". This is the one file setup writes outside node_modules; it merges that single key and never edits package.json or tsconfig.json.\nTSRX language support in the editor belongs to the TSRX toolchain, not to this package. Nothing below was installed, changed, or configured:\n  ! install @tsrx/typescript-plugin yourself: it is what gives an editor TSRX language support, and oxc-tsrx never installs it\n  ! install a TSRX framework binding yourself (one of @tsrx/react, @tsrx/vue, @tsrx/solid, @tsrx/preact, @tsrx/ripple, octane); oxc-tsrx does not choose one for you\n  ! add \"plugins\": [{ \"name\": \"@tsrx/typescript-plugin\" }] under compilerOptions in tsconfig.app.json yourself. Not tsconfig.json: that one is solution-style (\"files\": [], \"references\": [...]) and a plugin declared there is inert. oxc-tsrx never edits tsconfig.json\n  ! typescript 6.0.3 is outside @tsrx/typescript-plugin's declared peer range (>=5.9 <6). It may still work; if the editor misbehaves, pinning typescript into that range is the first thing to try. oxc-tsrx never changes your typescript version\n"
+          "output": "setup 4 compatibility slots for oxc-tsrx 0.1.5 (pnpm)\n\n  oxc-parser:       active\n  oxlint:           active\n  oxfmt:            active\n  oxc.path.oxlint:  active (editor)\n\n      .vscode/settings.json carries \"oxc.path.oxlint\":\n      \"node_modules/oxc-tsrx/bin/oxlint\". This is the one file setup writes\n      outside node_modules; it merges that single key and never edits\n      package.json or tsconfig.json.\n\nTSRX language support in the editor belongs to the TSRX toolchain, not to this\npackage. Nothing below was installed, changed, or configured:\n\n  ! install @tsrx/typescript-plugin yourself: it is what gives an editor TSRX\n    language support, and oxc-tsrx never installs it\n\n  ! install a TSRX framework binding yourself (one of @tsrx/react, @tsrx/vue,\n    @tsrx/solid, @tsrx/preact, @tsrx/ripple, octane); oxc-tsrx does not choose\n    one for you\n\n  ! add \"plugins\": [{ \"name\": \"@tsrx/typescript-plugin\" }] under compilerOptions\n    in tsconfig.app.json yourself. Not tsconfig.json: that one is solution-style\n    (\"files\": [], \"references\": [...]) and a plugin declared there is inert.\n    oxc-tsrx never edits tsconfig.json\n\n  ! typescript 6.0.3 is outside @tsrx/typescript-plugin's declared peer range\n    (>=5.9 <6). It may still work; if the editor misbehaves, pinning typescript\n    into that range is the first thing to try. oxc-tsrx never changes your\n    typescript version\n"
         }
       ]
     },
@@ -232,7 +232,7 @@
         {
           "comment": "Three of the four unowned prerequisites are done; one is left",
           "command": "npx oxc-tsrx status",
-          "output": "oxc-tsrx 0.1.4 compatibility (pnpm)\n- oxc-parser: active\n- oxlint: active\n- oxfmt: active\n- oxc.path.oxlint: active (editor)\n  .vscode/settings.json carries \"oxc.path.oxlint\": \"node_modules/oxc-tsrx/bin/oxlint\". This is the one file setup writes outside node_modules; it merges that single key and never edits package.json or tsconfig.json.\nTSRX language support in the editor belongs to the TSRX toolchain, not to this package. Nothing below was installed, changed, or configured:\n  ! typescript 6.0.3 is outside @tsrx/typescript-plugin's declared peer range (>=5.9 <6). It may still work; if the editor misbehaves, pinning typescript into that range is the first thing to try. oxc-tsrx never changes your typescript version\n"
+          "output": "oxc-tsrx 0.1.5 compatibility (pnpm)\n\n  oxc-parser:       active\n  oxlint:           active\n  oxfmt:            active\n  oxc.path.oxlint:  active (editor)\n\n      .vscode/settings.json carries \"oxc.path.oxlint\":\n      \"node_modules/oxc-tsrx/bin/oxlint\". This is the one file setup writes\n      outside node_modules; it merges that single key and never edits\n      package.json or tsconfig.json.\n\nTSRX language support in the editor belongs to the TSRX toolchain, not to this\npackage. Nothing below was installed, changed, or configured:\n\n  ! typescript 6.0.3 is outside @tsrx/typescript-plugin's declared peer range\n    (>=5.9 <6). It may still work; if the editor misbehaves, pinning typescript\n    into that range is the first thing to try. oxc-tsrx never changes your\n    typescript version\n"
         }
       ]
     },
@@ -242,7 +242,7 @@
         {
           "comment": "One command, one top-level jsPlugins, both file types",
           "command": "node_modules/oxc-tsrx/bin/oxlint src",
-          "output": "src/Greeting.tsrx:5:9: warning house-rules(no-inline-style-object): Inline `style={{ ... }}` object. Use a class instead.\nsrc/Panel.tsx:2:19: warning house-rules(no-inline-style-object): Inline `style={{ ... }}` object. Use a class instead.\nFound 2 warnings and 0 errors.\nFinished in 74ms on 2 files with 96 rules using 18 threads.\noxlint (oxc-tsrx): running JS plugins on 1 .tsrx file(s) by linting the TSX projection; this parses each of those files once more. Disable with \"settings\": { \"oxcTsrx\": { \"jsPluginsOnTsrx\": false } }.\n"
+          "output": "src/Greeting.tsrx:5:9: warning house-rules(no-inline-style-object): Inline `style={{ ... }}` object. Use a class instead.\nsrc/Panel.tsx:2:19: warning house-rules(no-inline-style-object): Inline `style={{ ... }}` object. Use a class instead.\nFound 2 warnings and 0 errors.\nFinished in 67ms on 2 files with 96 rules using 18 threads.\noxlint (oxc-tsrx): running JS plugins on 1 .tsrx file(s) by linting the TSX projection; this parses each of those files once more. Disable with \"settings\": { \"oxcTsrx\": { \"jsPluginsOnTsrx\": false } }.\n"
         }
       ]
     },
@@ -252,7 +252,7 @@
         {
           "comment": "The .tsrx half refuses; exit 2 is the configuration refusal",
           "command": "node_modules/oxc-tsrx/bin/oxlint src",
-          "output": "src/Panel.tsx:2:19: warning house-rules(no-inline-style-object): Inline `style={{ ... }}` object. Use a class instead.\nFound 1 warning and 0 errors.\nFinished in 99ms on 1 file with 111 rules using 18 threads.\noxlint (oxc-tsrx): running JS plugins on 1 .tsrx file(s) by linting the TSX projection; this parses each of those files once more. Disable with \"settings\": { \"oxcTsrx\": { \"jsPluginsOnTsrx\": false } }.\noxlint (oxc-tsrx): type-aware tsgolint/type-check mode requires the explicit --type-aware or --type-check opt-in; it is never started or silently disabled by config alone\n"
+          "output": "src/Panel.tsx:2:19: warning house-rules(no-inline-style-object): Inline `style={{ ... }}` object. Use a class instead.\nFound 1 warning and 0 errors.\nFinished in 88ms on 1 file with 111 rules using 18 threads.\noxlint (oxc-tsrx): running JS plugins on 1 .tsrx file(s) by linting the TSX projection; this parses each of those files once more. Disable with \"settings\": { \"oxcTsrx\": { \"jsPluginsOnTsrx\": false } }.\noxlint (oxc-tsrx): type-aware tsgolint/type-check mode requires the explicit --type-aware or --type-check opt-in; it is never started or silently disabled by config alone\n"
         }
       ]
     },

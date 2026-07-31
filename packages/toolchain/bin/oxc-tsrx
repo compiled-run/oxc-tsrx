@@ -5,7 +5,7 @@ function usage() {
 
 Usage:
   oxc-tsrx providers [--project <directory>] [--json]
-  oxc-tsrx setup [--project <directory>] [--dry-run] [--json]
+  oxc-tsrx setup [--project <directory>] [--dry-run] [--write-tsconfig] [--json]
   oxc-tsrx status [--project <directory>] [--json]
   oxc-tsrx remove [--project <directory>] [--dry-run] [--json]
 
@@ -26,13 +26,19 @@ node_modules/.bin/oxlint belongs to another tool, the official OXC extension
 finds that tool and serves no .tsrx diagnostics, so setup merges the single key
 "oxc.path.oxlint" into your .vscode/settings.json. Everything else in that file
 is preserved, an existing "oxc.path.oxlint" is reported rather than overwritten,
-and remove takes back only that key. It never edits package.json or
-tsconfig.json.
+and remove takes back only that key. It never edits package.json, and it never
+edits tsconfig.json unless you ask.
 
 setup also reports the TSRX editor prerequisites it deliberately does not own:
 @tsrx/typescript-plugin, a framework binding, the tsconfig.json plugins entry,
-and a TypeScript version the plugin supports. It installs and changes none of
-them.
+and a TypeScript version the plugin supports. It installs none of them.
+
+--write-tsconfig is the one exception, and it is opt-in for that reason. It adds
+"plugins": [{ "name": "@tsrx/typescript-plugin" }] under compilerOptions in the
+tsconfig that owns your source, keeping every comment and every other byte in
+the file. A solution-style root is skipped in favour of the referenced project
+that includes your source, and an existing "plugins" list is reported rather
+than appended to. Without the flag, setup only tells you the entry is missing.
 `;
 }
 
@@ -60,6 +66,8 @@ function parseArguments(argv) {
       options.projectRoot = argument.slice("--project=".length);
     } else if (argument === "--dry-run") {
       options.dryRun = true;
+    } else if (argument === "--write-tsconfig") {
+      options.writeTsconfig = true;
     } else if (argument === "--json") {
       options.json = true;
     } else if (HELP_FLAGS.has(argument)) {
