@@ -708,8 +708,9 @@ async function sync(target, { check }) {
     ...textTargets.flatMap(({ historical = [] }) => historical),
   ]);
 
-  for (const { file, paths } of jsonTargets) {
+  for (const { file, paths, optional } of jsonTargets) {
     const absolute = path.join(root, file);
+    if (optional && !existsSync(absolute)) continue;
     const text = await readFile(absolute, "utf8");
     const parsed = JSON.parse(text);
     let touched = 0;
