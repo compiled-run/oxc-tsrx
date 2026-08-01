@@ -1,6 +1,6 @@
 {
   "name": "oxc-tsrx",
-  "version": "0.1.5",
+  "version": "0.2.0",
   "description": "Rust-native Oxlint and Oxfmt for TSRX, JavaScript, TypeScript, and JSX",
   "keywords": [
     "formatter",
@@ -117,14 +117,14 @@
     "tinyglobby": "0.2.17"
   },
   "optionalDependencies": {
-    "@oxc-tsrx/native-darwin-arm64": "0.1.5",
-    "@oxc-tsrx/native-darwin-x64": "0.1.5",
-    "@oxc-tsrx/native-linux-arm64-gnu": "0.1.5",
-    "@oxc-tsrx/native-linux-arm64-musl": "0.1.5",
-    "@oxc-tsrx/native-linux-x64-gnu": "0.1.5",
-    "@oxc-tsrx/native-linux-x64-musl": "0.1.5",
-    "@oxc-tsrx/native-win32-arm64-msvc": "0.1.5",
-    "@oxc-tsrx/native-win32-x64-msvc": "0.1.5"
+    "@oxc-tsrx/native-darwin-arm64": "0.2.0",
+    "@oxc-tsrx/native-darwin-x64": "0.2.0",
+    "@oxc-tsrx/native-linux-arm64-gnu": "0.2.0",
+    "@oxc-tsrx/native-linux-arm64-musl": "0.2.0",
+    "@oxc-tsrx/native-linux-x64-gnu": "0.2.0",
+    "@oxc-tsrx/native-linux-x64-musl": "0.2.0",
+    "@oxc-tsrx/native-win32-arm64-msvc": "0.2.0",
+    "@oxc-tsrx/native-win32-x64-msvc": "0.2.0"
   },
   "engines": {
     "node": "^20.19.0 || >=22.12.0"

@@ -2,10 +2,10 @@
   "schemaVersion": 2,
   "generatedBy": "scripts/generate-rust-license-inventory.ts",
   "rootPackages": [
-    "oxc_tsrx_cli@0.1.5",
-    "parser_napi_binding@0.1.5"
+    "oxc_tsrx_cli@0.2.0",
+    "parser_napi_binding@0.2.0"
   ],
-  "cargoLockSha256": "8047c0771f006dd3be0836fc045a9956f05422c34c84153d377c3411434a81e2",
+  "cargoLockSha256": "702eba276f939401ad65e0795345d8caa4a6430032bfd7f10bfaba5ad62a5396",
   "oxcRevision": "8e0ed2ebb96137fb1611cdbd5742d5cb46037d40",
   "licenseSelectionPolicy": "Each Cargo expression is reviewed; selectedDistributionLicense records the basis used for binary distribution.",
   "packageCount": 220,
