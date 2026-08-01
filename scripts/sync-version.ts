@@ -63,6 +63,7 @@
 // runtime and asserts every package manifest equals it. If this script ever
 // drifts from the real surface, that test is what catches it.
 
+import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
@@ -231,9 +232,13 @@ const jsonTargets: any[] = [
   {
     // Written by scripts/build-parser-native.ts, but only this one field moves
     // on a version bump: the addon binary itself is not version stamped, so its
-    // `bytes` and `sha256` stay put and a one-field rewrite is safe.
+    // `bytes` and `sha256` stay put and a one-field rewrite is safe. The addon
+    // is a host-specific local build artifact and is not tracked, so a fresh
+    // checkout legitimately has neither file; the pin applies only when the
+    // artifact exists.
     file: "packages/toolchain/parser.node.json",
     paths: [["packageVersion"]],
+    optional: true,
   },
 ];
 
@@ -563,7 +568,8 @@ async function survey(target) {
   const locations = [];
   const audit = [];
 
-  for (const { file, paths } of jsonTargets) {
+  for (const { file, paths, optional } of jsonTargets) {
+    if (optional && !existsSync(path.join(root, file))) continue;
     const text = await readTarget(file);
     let parsed;
     try {
