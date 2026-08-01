@@ -167,7 +167,7 @@ jobs:
 
       # bumpp rewrites the root manifest and nothing else, and it is told not to
       # commit, tag or push. Everything downstream of the root version is
-      # scripts/sync-version.mjs's job, and the commit is made by hand further
+      # scripts/sync-version.ts's job, and the commit is made by hand further
       # down once every derived file has been regenerated. Letting bumpp commit
       # here would seal a half-updated tree.
       - name: Bump the root version
@@ -195,8 +195,8 @@ jobs:
       # changed shape rather than updating fewer files than it should.
       - name: Propagate the version across the rest of the surface
         run: |
-          node scripts/sync-version.mjs
-          node scripts/sync-version.mjs --check
+          node scripts/sync-version.ts
+          node scripts/sync-version.ts --check
 
       # Order matters and is not negotiable:
       #   Cargo.lock records the workspace crates' own versions, and the Rust
@@ -211,7 +211,7 @@ jobs:
       # The two docs Rust tools sit outside the product workspace and keep their
       # own Cargo.lock, each recording a resolved version for the crates/ path
       # dependencies it pulls in. A workspace bump leaves both stale, and
-      # scripts/build-docs-wasm.mjs builds with --locked, so a stale lock does
+      # scripts/build-docs-wasm.ts builds with --locked, so a stale lock does
       # not produce a wrong artifact: it fails the docs site build outright,
       # four minutes in, over one digit.
       #
@@ -256,7 +256,7 @@ jobs:
           set -euo pipefail
           cargo fetch --locked
           pnpm run build:native
-          node scripts/build-parser-native.mjs --out "${RUNNER_TEMP}/parser.node"
+          node scripts/build-parser-native.ts --out "${RUNNER_TEMP}/parser.node"
           ls -l target/release/oxc-tsrx "${RUNNER_TEMP}/parser.node"
 
       # 0.1.0 shipped every native package with no parser.node inside it, so a
@@ -323,7 +323,7 @@ jobs:
       # gated below.
       - name: Prove the cut is internally consistent
         run: |
-          node scripts/sync-version.mjs --check
+          node scripts/sync-version.ts --check
           pnpm run test:release
           pnpm run test:packaging:unit
           pnpm run licenses:check
@@ -389,7 +389,7 @@ jobs:
           set -euo pipefail
           NOTES_TO=$(git rev-parse --verify "HEAD~1")
           echo "notes cover $PREVIOUS_TAG..$NOTES_TO (the commit before the release commit)"
-          node scripts/release-notes.mjs \
+          node scripts/release-notes.ts \
             --from "$PREVIOUS_TAG" \
             --to "$NOTES_TO" \
             --out "${RUNNER_TEMP}/release-notes.md"

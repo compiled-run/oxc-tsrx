@@ -2,12 +2,12 @@
 
 const assert = require("node:assert/strict");
 const { execFileSync } = require("node:child_process");
-const { existsSync, readFileSync, realpathSync } = require("node:fs");
+const { existsSync, lstatSync, readFileSync, realpathSync } = require("node:fs");
 const nodePath = require("node:path");
 const vscode = require("vscode");
 
 /**
- * Two real VS Code sessions share this suite, selected by
+ * Several real VS Code sessions share this suite, selected by
  * `OXC_TSRX_SUITE_MODE`.
  *
  * - `compatibility` (default) is the long-standing proof: `oxc-tsrx setup` has
@@ -19,6 +19,13 @@ const vscode = require("vscode");
  *   decoy that records its own invocation. The TSRX language server can then
  *   only exist because the provider block in the installed package's own
  *   `package.json` was discovered and its declared `lsp` bin was started.
+ * - `patched-host` is `discovery` again with no `oxc.path.*` at all and a
+ *   locally patched upstream Oxlint in the tree.
+ * - `setup-value` and `setup-value-untrusted` are the pair that runs the
+ *   artifact a consumer actually gets: a synthetic Vite+ owns
+ *   `node_modules/.bin/oxlint`, `oxc-tsrx setup` wrote the relative
+ *   `oxc.path.oxlint` value itself, and the runner wrote no `oxc.path.*` and no
+ *   `oxc.useExecPath` of its own.
  *
  * The compatibility path still ships and its assertions are unchanged.
  */
@@ -447,7 +454,12 @@ async function runDiscovery(mode = "discovery") {
     const manifest = JSON.parse(
       readFileSync(nodePath.join(root, "package.json"), "utf8"),
     );
-    assert.deepEqual(manifest.dependencies, { "oxc-tsrx": "0.1.0" });
+    // The runner names the manifest it wrote, so cutting a release cannot leave
+    // this assertion pinned to a version nobody installs any more.
+    assert.deepEqual(
+      manifest.dependencies,
+      JSON.parse(process.env.OXC_TSRX_EXPECTED_DEPENDENCIES),
+    );
     assert.equal(manifest.scripts, undefined);
     const search = (process.env.PATH ?? "").split(nodePath.delimiter);
     assert.equal(
@@ -617,9 +629,300 @@ async function runDiscovery(mode = "discovery") {
   });
 }
 
+/**
+ * The value `oxc-tsrx setup` writes, read straight off disk. Nothing in this
+ * lane may write `oxc.path.*`, so this is the artifact under test rather than a
+ * fixture, and the assertions here describe it before anything is asked of it.
+ */
+function settingsUnderTest(root) {
+  const expected = process.env.OXC_TSRX_EXPECTED_EDITOR_VALUE;
+  assert.equal(typeof expected, "string");
+  const settings = JSON.parse(
+    readFileSync(nodePath.join(root, ".vscode", "settings.json"), "utf8"),
+  );
+  assert.equal(
+    settings["oxc.path.oxlint"],
+    expected,
+    "the workspace does not carry the value setup writes",
+  );
+  assert.equal(
+    nodePath.isAbsolute(expected),
+    false,
+    "the value under test must be the relative one, which the extension joins onto the first workspace folder",
+  );
+  assert.equal(
+    Object.keys(settings).filter((key) => key.startsWith("oxc.path")).length,
+    1,
+    "setup writes exactly one path key, and this lane adds none",
+  );
+  assert.equal(
+    "oxc.useExecPath" in settings,
+    false,
+    "oxc.useExecPath would route the value through the editor's own Node, which is the thing this lane must not lean on",
+  );
+  return { settings, expected };
+}
+
+/**
+ * `node_modules/.bin/oxlint` does not belong to this package. Every other lane
+ * either owns that name or deletes the directory; this one leaves a synthetic
+ * Vite+ holding it, so the extension's own lookup would find a binary that
+ * exits 3. Read here, inside the editor, rather than taken on trust from the
+ * runner.
+ */
+function assertLinterShimIsNotOurs(root) {
+  const provider = realpathSync(nodePath.join(root, "node_modules", "oxc-tsrx"));
+  const shim = nodePath.join(root, "node_modules", ".bin", "oxlint");
+  assert.ok(existsSync(shim), "the collider did not take node_modules/.bin/oxlint");
+  const info = lstatSync(shim);
+  const target = info.isSymbolicLink() ? realpathSync(shim) : null;
+  assert.equal(
+    target !== null && target.startsWith(`${provider}${nodePath.sep}`),
+    false,
+    `node_modules/.bin/oxlint resolves into this package (${target}), so auto-detection would have found us anyway`,
+  );
+  if (info.isFile() && !info.isSymbolicLink()) {
+    assert.equal(
+      /oxc-tsrx[\\/]bin[\\/]oxlint/u.test(readFileSync(shim, "utf8")),
+      false,
+      "node_modules/.bin/oxlint is a text shim naming this package, so auto-detection would have found us anyway",
+    );
+  }
+  return { provider, shim };
+}
+
+/**
+ * The setup-value lanes.
+ *
+ * `setup-value-untrusted` runs with the workspace-trust feature on and the
+ * folder not trusted. `oxc.path.oxlint` is listed in the extension's
+ * `capabilities.untrustedWorkspaces.restrictedConfigurations`, so VS Code must
+ * drop the workspace value and hand the extension the default instead. That is
+ * the whole of the lane: a written key is worth nothing in Restricted Mode, and
+ * this measures it rather than reasoning about it.
+ *
+ * `setup-value` is the proof. The window is trusted, the extension sees the
+ * relative value, and everything below is served by the file that value names:
+ * ordinary TypeScript still on canonical Oxlint, native `.tsrx` diagnostics, a
+ * live process started from the configured path, the dynamically registered
+ * formatter, and a quick fix.
+ */
+async function runSetupValue(mode) {
+  const root = process.env.OXC_TSRX_SETUP_VALUE_ROOT;
+  assert.equal(typeof root, "string");
+  const setupStep = createStep(mode);
+
+  await assertOnlyTheOfficialExtension();
+  const { expected } = settingsUnderTest(root);
+  const configuredPath = nodePath.join(root, expected);
+  const ordinaryUri = vscode.Uri.file(process.env.OXC_TSRX_ORDINARY_EDITOR_FILE);
+
+  // The released extension activates on `onLanguage:typescript`, so nothing it
+  // does can be observed until an ordinary TypeScript file is open.
+  const ordinary = await setupStep("activate the released extension", async () => {
+    const extension = vscode.extensions.getExtension("oxc.oxc-vscode");
+    const document = await vscode.workspace.openTextDocument(ordinaryUri);
+    await vscode.window.showTextDocument(document);
+    assert.equal(document.languageId, "typescript");
+    await waitFor(() => extension.isActive, Boolean, "official extension activation", 30000);
+    return document;
+  });
+  assert.ok(ordinary);
+
+  if (mode === "setup-value-untrusted") {
+    await setupStep("keep the window in Restricted Mode", async () => {
+      assert.equal(
+        vscode.workspace.isTrusted,
+        false,
+        "this lane only means something in an untrusted window, and this one is trusted",
+      );
+    });
+    await setupStep("drop the configured value the workspace carries", async () => {
+      const visible = vscode.workspace.getConfiguration().get("oxc.path.oxlint");
+      assert.notEqual(
+        visible,
+        expected,
+        "an untrusted window handed the extension the workspace value, so restricted configurations are not being enforced",
+      );
+      process.stdout.write(
+        `[${mode}] the extension sees ${JSON.stringify(visible)} while the workspace file says ${JSON.stringify(expected)}\n`,
+      );
+    });
+    // The negative control for the trusted lane, run on the same workspace, the
+    // same install and the same collider. With the key dropped the extension
+    // falls back to its own lookup, that lookup finds the collider, and no
+    // `.tsrx` diagnostic ever arrives. The trusted lane below gets them in
+    // under a second, so a green pair says the key is what carries the wiring
+    // rather than something else in the tree.
+    await setupStep("publish no TSRX diagnostics while the key is dropped", async () => {
+      const tsrxUri = vscode.Uri.file(process.env.OXC_TSRX_EDITOR_FILE);
+      const document = await vscode.workspace.openTextDocument(tsrxUri);
+      await vscode.window.showTextDocument(document);
+      const deadline = Date.now() + 15000;
+      while (Date.now() < deadline) {
+        const diagnostics = vscode.languages.getDiagnostics(tsrxUri);
+        assert.equal(
+          diagnostics.some((item) => item.source === "oxlint-tsrx"),
+          false,
+          `a dropped oxc.path.oxlint still produced TSRX diagnostics: ${JSON.stringify(diagnostics)}`,
+        );
+        await new Promise((settle) => setTimeout(settle, 250));
+      }
+    });
+    return;
+  }
+
+  assert.equal(mode, "setup-value", `unknown setup-value mode ${mode}`);
+
+  await setupStep("read the value setup wrote, in a trusted window", async () => {
+    assert.equal(vscode.workspace.isTrusted, true, "the window is not trusted");
+    assert.equal(
+      vscode.workspace.getConfiguration().get("oxc.path.oxlint"),
+      expected,
+      "the extension does not see the value setup wrote",
+    );
+    assert.ok(existsSync(configuredPath), `${configuredPath} is not installed`);
+  });
+
+  await setupStep("leave node_modules/.bin/oxlint to the collider", async () =>
+    assertLinterShimIsNotOurs(root),
+  );
+
+  await setupStep("keep ordinary TypeScript on canonical Oxlint", async () => {
+    const diagnostics = await waitFor(
+      () => vscode.languages.getDiagnostics(ordinaryUri),
+      (items) =>
+        items.some(
+          (item) => item.source === "oxc" && diagnosticCode(item).includes("no-debugger"),
+        ),
+      "canonical ordinary-file diagnostic",
+      30000,
+    );
+    assert.equal(diagnostics.some((item) => item.source === "oxlint-tsrx"), false);
+  });
+
+  const tsrxUri = vscode.Uri.file(process.env.OXC_TSRX_EDITOR_FILE);
+  const tsrx = await setupStep("publish native TSRX diagnostics", async () => {
+    const document = await vscode.workspace.openTextDocument(tsrxUri);
+    await vscode.window.showTextDocument(document);
+    const diagnostics = await waitFor(
+      () => vscode.languages.getDiagnostics(tsrxUri),
+      (items) =>
+        items.some(
+          (item) =>
+            item.source === "oxlint-tsrx" && diagnosticCode(item).includes("no-var"),
+        ) &&
+        items.some(
+          (item) =>
+            item.source === "oxlint-tsrx" && diagnosticCode(item).includes("no-debugger"),
+        ),
+      "native TSRX diagnostics from the configured linter",
+      30000,
+    );
+    assert.equal(diagnostics.some((item) => item.source === "oxc"), false);
+    return document;
+  });
+
+  await setupStep("spawn the configured path itself, with no exec-path help", async () => {
+    // The value is relative, `oxc.useExecPath` is absent, and the extension's
+    // own loader rule calls a path ending `oxc-tsrx/bin/oxlint` native, so this
+    // is the file being executed directly rather than handed to a Node.
+    const candidates = pathVariants(configuredPath);
+    const table = await waitFor(
+      () => processTable(),
+      (processes) =>
+        processes.some(
+          (entry) =>
+            entry.command.includes("--lsp") &&
+            candidates.some((candidate) => entry.command.includes(candidate)),
+        ),
+      `a live ${configuredPath} --lsp process`,
+      30000,
+    );
+    const host = table.find(
+      (entry) =>
+        entry.command.includes("--lsp") &&
+        candidates.some((candidate) => entry.command.includes(candidate)),
+    );
+    process.stdout.write(`[${mode}] the editor spawned ${host.command}\n`);
+  });
+
+  await setupStep("format TSRX through the dynamically registered provider", async () => {
+    const edits = await waitFor(
+      () =>
+        vscode.commands.executeCommand(
+          "vscode.executeFormatDocumentProvider",
+          tsrxUri,
+          { tabSize: 2, insertSpaces: true },
+        ),
+      (items) => Array.isArray(items) && items.length > 0,
+      "TSRX formatting edits",
+      30000,
+    );
+    const workspaceEdit = new vscode.WorkspaceEdit();
+    workspaceEdit.set(tsrxUri, edits);
+    assert.equal(await vscode.workspace.applyEdit(workspaceEdit), true);
+    await waitFor(
+      () => tsrx.getText(),
+      (text) =>
+        text.includes("export function View() @{") &&
+        text.includes("var count = 0;") &&
+        text.includes("<button>{count}</button>;"),
+      "formatted authored TSRX",
+    );
+  });
+
+  await setupStep("apply a native TSRX quick fix", async () => {
+    const diagnostic = (
+      await waitFor(
+        () => vscode.languages.getDiagnostics(tsrxUri),
+        (items) =>
+          items.some(
+            (item) =>
+              item.source === "oxlint-tsrx" && diagnosticCode(item).includes("no-var"),
+          ),
+        "no-var diagnostic after formatting",
+        30000,
+      )
+    ).find(
+      (item) => item.source === "oxlint-tsrx" && diagnosticCode(item).includes("no-var"),
+    );
+    const actions = await waitFor(
+      () =>
+        vscode.commands.executeCommand(
+          "vscode.executeCodeActionProvider",
+          tsrxUri,
+          diagnostic.range,
+          "quickfix",
+        ),
+      (items) => Array.isArray(items) && items.some((item) => /no-var/u.test(item.title)),
+      "a quick fix from the configured language server",
+      30000,
+    );
+    const action = actions.find((candidate) => /no-var/u.test(candidate.title));
+    assert.ok(action?.edit, "the configured language server returned no no-var quick fix");
+    assert.equal(await vscode.workspace.applyEdit(action.edit), true);
+    await waitFor(
+      () => tsrx.getText(),
+      (text) => !text.includes("var count"),
+      "applied no-var quick fix",
+    );
+    await waitFor(
+      () => vscode.languages.getDiagnostics(tsrxUri),
+      (items) =>
+        !items.some(
+          (item) =>
+            item.source === "oxlint-tsrx" && diagnosticCode(item).includes("no-var"),
+        ),
+      "updated diagnostics after the quick fix",
+    );
+  });
+}
+
 async function run() {
   const mode = process.env.OXC_TSRX_SUITE_MODE ?? "compatibility";
   if (mode === "discovery" || mode === "patched-host") return runDiscovery(mode);
+  if (mode === "setup-value" || mode === "setup-value-untrusted") return runSetupValue(mode);
   assert.equal(mode, "compatibility", `unknown suite mode ${mode}`);
   return runCompatibility();
 }

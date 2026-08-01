@@ -70,8 +70,8 @@ jobs:
             "crates/oxc_adapter/Cargo.toml",
             "crates/oxc_adapter/src/lib.rs",
             "packages/toolchain/dist/runtime.js",
-            "scripts/package-native.mjs",
-            "scripts/package-vscode.mjs",
+            "scripts/package-native.ts",
+            "scripts/package-vscode.ts",
           ];
           const manifest = await readFile(files[0], "utf8");
           const current = manifest.match(/rev = "([0-9a-f]{40})"/)?.[1];

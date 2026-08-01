@@ -19,9 +19,10 @@ import {
   resolveCommandInvocation,
   spawnCommand,
 } from "../../packages/toolchain/dist/spawn-command.js";
-import { parseNpmPackResponse } from "../../scripts/npm-pack-response.mjs";
+import { parseNpmPackResponse } from "../helpers/npm-pack-response.mjs";
 import { startLocalRegistry } from "./local-registry.mjs";
 import { temporaryDirectory } from "./temporary-directory.mjs";
+import { requireCts } from "../helpers/require-cts.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 const toolchainRoot = join(root, "packages/toolchain");
@@ -142,8 +143,8 @@ async function discoverFrom(consumer) {
 
 // The editor host's decision module, exercised against the very same installed
 // consumer: package presence alone must be enough to produce editor clients.
-const providerClient = createRequire(import.meta.url)(
-  join(root, "packages/vscode/dist/provider-client.cjs"),
+const providerClient = await requireCts(
+  join(root, "packages/vscode/src/provider-client.cts"),
 );
 
 const ORDINARY_DOCUMENTS = ["src/app.ts", "src/app.tsx", "src/app.js", "tsconfig.json"];
@@ -307,6 +308,7 @@ test(
         ["oxfmt-current", "oxfmt", "0.59.0"],
         ["types", "@oxc-project/types", "0.140.0"],
         ["tsgolint", "oxlint-tsgolint", "0.24.0"],
+        ["pathe", "pathe", "2.0.3"],
         ["tinyglobby", "tinyglobby", "0.2.17"],
       ].map(([directory, name, version]) =>
         writePackage(

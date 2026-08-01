@@ -16,8 +16,8 @@ import {
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { NATIVE_TARGETS, nativePackageName } from "../packages/toolchain/dist/native-targets.js";
-import { resolveNpmInvocation } from "./npm-invocation.mjs";
-import { parseNpmPackResponse } from "./npm-pack-response.mjs";
+import { resolveNpmInvocation } from "../tests/helpers/npm-invocation.mjs";
+import { parseNpmPackResponse } from "../tests/helpers/npm-pack-response.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const revision = "8e0ed2ebb96137fb1611cdbd5742d5cb46037d40";
@@ -34,7 +34,7 @@ const tools = [
   { name: "oxc-tsrx-lsp", subcommand: ["lsp"] },
 ];
 
-function parseArguments(argv) {
+function parseArguments(argv): any {
   const options = { "allow-missing-parser-addon": false };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
@@ -68,8 +68,8 @@ function parseArguments(argv) {
   return options;
 }
 
-function run(executable, args, options = {}) {
-  return new Promise((resolveRun, rejectRun) => {
+function run(executable, args, options: any = {}) {
+  return new Promise<any>((resolveRun, rejectRun) => {
     execFile(
       executable,
       args,
@@ -485,7 +485,7 @@ try {
       vscodeTarget: platform.vscodeTarget,
       lspSha256: lsp.sha256,
       lspBytes: lsp.bytes,
-      // POSIX separators, always: see the same note in package-vscode.mjs. The
+      // POSIX separators, always: see the same note in package-vscode.ts. The
       // filename is derived here, on the host that owns the native path.
       tarball: tarball.replaceAll("\\", "/"),
       filename: basename(tarball),

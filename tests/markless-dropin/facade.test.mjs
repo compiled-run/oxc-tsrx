@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-import { createTsrxCoreCompat } from "../../packages/tsrx-core-compat/facade.js";
+import { createTsrxCoreCompat } from "../../packages/tsrx-core-compat/dist/facade.js";
 
 function makeProgram() {
   return {

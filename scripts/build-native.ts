@@ -14,7 +14,7 @@
 // the linter, because that is the no-tool default.
 //
 // The aliases are a local build convenience only. The published platform
-// package still ships exactly one binary: scripts/package-native.mjs stages
+// package still ships exactly one binary: scripts/package-native.ts stages
 // `binaryStems = ["oxc-tsrx"]` and ignores everything else in the bin
 // directory.
 //

@@ -6,7 +6,8 @@ import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
-import { resolveNpmInvocation } from "../../scripts/npm-invocation.mjs";
+import { resolveNpmInvocation } from "../helpers/npm-invocation.mjs";
+import { scriptNode } from "../helpers/script-node.mjs";
 
 const require = createRequire(import.meta.url);
 const yauzl = require("yauzl");
@@ -121,8 +122,8 @@ async function assertLegalTree(read) {
 }
 
 test("locked Rust license inventory and canonical OXC legal files are deterministic", async () => {
-  const result = await run(process.execPath, [
-    "scripts/generate-rust-license-inventory.mjs",
+  const result = await run(scriptNode(), [
+    "scripts/generate-rust-license-inventory.ts",
     "--check",
   ]);
   assert.match(result.stdout, /^verified \d+ locked shipping dependency licenses\n$/u);
@@ -130,8 +131,8 @@ test("locked Rust license inventory and canonical OXC legal files are determinis
 });
 
 test("every npm package region in the Rolldown extension bundle has its exact license text", async () => {
-  const result = await run(process.execPath, [
-    "scripts/generate-vscode-license-inventory.mjs",
+  const result = await run(scriptNode(), [
+    "scripts/generate-vscode-license-inventory.ts",
     "--check",
   ]);
   assert.match(result.stdout, /^verified \d+ bundled VS Code dependency licenses\n$/u);
@@ -180,8 +181,8 @@ test("native npm artifact ships the exact legal tree and independent-project not
   const artifacts = await mkdtemp(join(tmpdir(), "oxc-tsrx-compliance-native-"));
   const packaged = JSON.parse(
     (
-      await run(process.execPath, [
-        "scripts/package-native.mjs",
+      await run(scriptNode(), [
+        "scripts/package-native.ts",
         "--allow-missing-parser-addon",
         "--target",
         hostTarget(),
@@ -226,8 +227,8 @@ test("platform VSIX ships the exact native legal tree", async () => {
   );
   const packaged = JSON.parse(
     (
-      await run(process.execPath, [
-        "scripts/package-vscode.mjs",
+      await run(scriptNode(), [
+        "scripts/package-vscode.ts",
         "--target",
         hostTarget(),
         "--lsp-bin",

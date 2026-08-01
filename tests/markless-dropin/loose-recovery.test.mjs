@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { parseSync } from "../../packages/toolchain/dist/parser.js";
-import { createTsrxCoreCompat } from "../../packages/tsrx-core-compat/facade.js";
+import { createTsrxCoreCompat } from "../../packages/tsrx-core-compat/dist/facade.js";
 
 const api = createTsrxCoreCompat({ parseSync });
 

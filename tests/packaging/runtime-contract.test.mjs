@@ -271,10 +271,12 @@ test("mixed routing does not depend on private Oxlint modules or descriptor capt
     "packages/toolchain/dist/process.js",
     "packages/toolchain/dist/package-binary.js",
     "packages/toolchain/bin/oxlint",
+    "packages/toolchain/dist/bin/oxlint.js",
     "packages/toolchain/dist/lint-cli.js",
     "packages/toolchain/dist/lint-prestart.js",
     "packages/toolchain/dist/lint-invocation.js",
     "packages/toolchain/bin/oxfmt",
+    "packages/toolchain/dist/bin/oxfmt.js",
     "packages/toolchain/dist/format-cli.js",
     "packages/toolchain/dist/format-invocation.js",
   ].map((pathname) => join(root, pathname));
@@ -303,11 +305,11 @@ test("mixed routing does not depend on private Oxlint modules or descriptor capt
   }
 
   assert.match(
-    sources.get(join(root, "packages/toolchain/bin/oxlint")),
+    sources.get(join(root, "packages/toolchain/dist/bin/oxlint.js")),
     /importDeclaredPackageBinary\("oxlint-current", "oxlint"/u,
   );
   assert.match(
-    sources.get(join(root, "packages/toolchain/bin/oxfmt")),
+    sources.get(join(root, "packages/toolchain/dist/bin/oxfmt.js")),
     /importDeclaredPackageBinary\("oxfmt-current", "oxfmt"/u,
   );
   const prestart = sources.get(join(root, "packages/toolchain/dist/lint-prestart.js"));

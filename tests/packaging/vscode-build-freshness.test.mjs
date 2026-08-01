@@ -37,7 +37,7 @@ async function linkPackage(fixtureRoot, packageName, source) {
 // (Rolldown warns UNRESOLVED_IMPORT and externalises the specifier) and the
 // freshness check would then only compare that degraded build against itself.
 const RESOLVER_REGION = "//#region packages/toolchain/dist/provider-resolve.js";
-const CLIENT_REGION = "//#region packages/vscode/dist/provider-client.cjs";
+const CLIENT_REGION = "//#region packages/vscode/src/provider-client.cts";
 const EXTERNALISED_RESOLVER = /require\(["']oxc-tsrx\/provider-resolve["']\)/u;
 
 const COMMITTED_BUNDLE = join(root, "packages/vscode/dist/extension.bundle.cjs");

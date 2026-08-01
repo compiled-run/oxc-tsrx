@@ -154,7 +154,7 @@ above fits the proposed configuration:
 
 That syntax is not valid released Oxlint configuration. It is exercised by the
 VS Code demo in `examples/vscode-lints` against a local build of the draft:
-`scripts/oxlint-custom-parser-lsp-proxy.mjs` forwards the official OXC
+`scripts/oxlint-custom-parser-lsp-proxy.ts` forwards the official OXC
 extension's LSP stream to draft Oxlint and dynamically registers `.tsrx`
 document sync and pull diagnostics, and `tsrx-demo/no-tsrx-if` appears as an
 `oxc` editor diagnostic. No companion VS Code extension is involved. The

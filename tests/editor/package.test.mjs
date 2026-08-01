@@ -53,13 +53,13 @@ test("editor package is additive, workspace-native, bundled, and VSIX-packaged",
 
 test("the extension host is provider-driven and never routes ordinary documents", async () => {
   const [host, decisions] = await Promise.all([
-    readFile(join(packageRoot, "dist/extension.cjs"), "utf8"),
-    readFile(join(packageRoot, "dist/provider-client.cjs"), "utf8"),
+    readFile(join(packageRoot, "src/extension.cts"), "utf8"),
+    readFile(join(packageRoot, "src/provider-client.cts"), "utf8"),
   ]);
 
   // Resolution comes from the shipped provider protocol, per workspace folder.
   assert.match(host, /require\("oxc-tsrx\/provider-resolve"\)/u);
-  assert.match(host, /require\("\.\/provider-client\.cjs"\)/u);
+  assert.match(host, /require\("\.\/provider-client\.cts"\)/u);
   assert.match(host, /discoverWorkspaceFolders/u);
   assert.doesNotMatch(
     host,
@@ -77,7 +77,7 @@ test("the extension host is provider-driven and never routes ordinary documents"
 
   // Both files are part of the committed bundle the VSIX ships.
   const bundle = await readFile(join(packageRoot, "dist/extension.bundle.cjs"), "utf8");
-  for (const region of ["packages/vscode/dist/extension.cjs", "packages/vscode/dist/provider-client.cjs"]) {
+  for (const region of ["packages/vscode/src/extension.cts", "packages/vscode/src/provider-client.cts"]) {
     assert.ok(bundle.includes(`//#region ${region}`), region);
   }
   assert.ok(bundle.includes("//#region packages/toolchain/dist/provider-resolve.js"));

@@ -6,8 +6,9 @@
 // small fraction of this repository's version surface: the toolchain package
 // pins all eight `@oxc-tsrx/native-*` platform packages to the exact version,
 // two more manifests pin `oxc-tsrx` itself, the Cargo workspace carries its own
-// version, `packages/toolchain/dist/` is committed source rather than build
-// output, and eighteen test files assert or install a literal version string.
+// version, `packages/toolchain/src/` is authored source and
+// `packages/toolchain/dist/` is committed build output, and eighteen test files
+// assert or install a literal version string.
 // Miss one of those and the cut still builds, still passes most of the suite,
 // and ships a tarball whose pins point at versions that do not exist.
 //
@@ -23,16 +24,16 @@
 // way a reader does rather than the way a `String.indexOf` does: `0.1.4`,
 // `0\.1\.4` inside a regex literal, `0[.]1[.]4`, and any mixture of those are
 // all the same version to it. A version reference that no slot covers fails the
-// run and names its file, line and spelling. That is what turns "73 locations
+// run and names its file, line and spelling. That is what turns "76 locations
 // all carry 0.1.4" from a statement about this script's own declarations into a
 // statement about the files.
 //
 // Usage:
-//   node scripts/sync-version.mjs            rewrite every declared location
-//   node scripts/sync-version.mjs --check    verify only; exit 1 and name any
+//   node scripts/sync-version.ts            rewrite every declared location
+//   node scripts/sync-version.ts --check    verify only; exit 1 and name any
 //                                            location still carrying a stale
 //                                            version (this is the CI gate)
-//   node scripts/sync-version.mjs --version 1.0.0
+//   node scripts/sync-version.ts --version 1.0.0
 //                                            use an explicit target instead of
 //                                            the root package.json version
 //
@@ -83,7 +84,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
  * cut. Before this existed, `tests/packaging/provider-discovery.test.mjs`
  * asserted `oxc-tsrx@0\.1\.4` and no slot could see it.
  */
-const SPELLINGS = {
+const SPELLINGS: any = {
   plain: {
     label: "plain",
     dot: String.raw`\.`,
@@ -121,7 +122,7 @@ const canonical = (raw) => raw.replace(/[\\[\]]/g, "");
  * that could hit the wrong occurrence inside a multi-line match.
  */
 const slot = (source, spelling = SPELLINGS.plain) => {
-  const regexp = new RegExp(source.replaceAll("<V>", `(${semverIn(spelling)})`), "gd");
+  const regexp: any = new RegExp(source.replaceAll("<V>", `(${semverIn(spelling)})`), "gd");
   regexp.spelling = spelling;
   return regexp;
 };
@@ -204,7 +205,7 @@ const PACKAGE_VERSION_CONST = () =>
  * here round-trips through `JSON.stringify(value, null, 2)` byte for byte, and
  * the script asserts that before it writes.
  */
-const jsonTargets = [
+const jsonTargets: any[] = [
   {
     file: "packages/toolchain/package.json",
     paths: [
@@ -228,7 +229,7 @@ const jsonTargets = [
     paths: [["version"], ["dependencies", "oxc-tsrx"]],
   },
   {
-    // Written by scripts/build-parser-native.mjs, but only this one field moves
+    // Written by scripts/build-parser-native.ts, but only this one field moves
     // on a version bump: the addon binary itself is not version stamped, so its
     // `bytes` and `sha256` stay put and a one-field rewrite is safe.
     file: "packages/toolchain/parser.node.json",
@@ -249,8 +250,9 @@ const jsonTargets = [
  * 0.1.4, and the declaration has not changed. A historical entry that silently
  * gets rewritten to the new version therefore fails the run too.
  */
-const textTargets = [
+const textTargets: any[] = [
   { file: "Cargo.toml", slots: [[CARGO_WORKSPACE_VERSION, 1]] },
+  { file: "packages/toolchain/src/parser.ts", slots: [[PACKAGE_VERSION_CONST, 1]] },
   { file: "packages/toolchain/dist/parser.js", slots: [[PACKAGE_VERSION_CONST, 1]] },
   {
     file: "docs/generate-transcripts.mjs",
@@ -317,7 +319,7 @@ const textTargets = [
       [DEP, 8],
       [FACADE_MANIFEST_VERSION, 1],
       [PROVIDER_VERSION, 1],
-      [INLINE_OXC_TSRX_MANIFEST, 1],
+      [INLINE_OXC_TSRX_MANIFEST, 2],
     ],
   },
   { file: "tests/packaging/vite-plus-matrix.test.mjs", slots: [[DEP, 1]] },
@@ -347,7 +349,7 @@ async function readTarget(file) {
   } catch (error) {
     if (error?.code === "ENOENT") {
       fail(
-        `${file}: declared in scripts/sync-version.mjs but not present. Either the file ` +
+        `${file}: declared in scripts/sync-version.ts but not present. Either the file ` +
           `moved and this script has to follow it, or the declaration is stale.`,
       );
     }
@@ -537,7 +539,7 @@ function reconcile(file, undeclared, historical) {
       `${undeclared.length} reference(s) sit outside every declared slot:\n${detail || "  (none)"}\n` +
       `and the file declares historical: ${JSON.stringify(declared)}.\n\n` +
       `Every version above has to be either covered by a slot shape in ` +
-      `scripts/sync-version.mjs — add one, in the spelling the file actually uses — or ` +
+      `scripts/sync-version.ts — add one, in the spelling the file actually uses — or ` +
       `declared historical because it is a true statement about an older release. ` +
       `Leaving it undeclared is how a cut ships a stale version while --check reports clean.`,
   );
@@ -604,7 +606,7 @@ async function survey(target) {
         fail(
           `${file}: expected ${expected} occurrence(s) of ${regexp.source} but found ` +
             `${found.length}. The file changed shape; update the declaration in ` +
-            `scripts/sync-version.mjs rather than letting the cut ship a stale version.`,
+            `scripts/sync-version.ts rather than letting the cut ship a stale version.`,
         );
       }
       for (const hit of found) {
@@ -672,7 +674,7 @@ async function sync(target, { check }) {
     for (const entry of stale) {
       console.error(`  ${entry.file} (${entry.where}): ${entry.value}`);
     }
-    console.error("\nRun: node scripts/sync-version.mjs");
+    console.error("\nRun: node scripts/sync-version.ts");
     return 1;
   }
 
@@ -682,7 +684,7 @@ async function sync(target, { check }) {
         .map((value) => JSON.stringify(value))
         .join(", ")} alongside the target ${target}.\n` +
         stale.map((entry) => `  ${entry.file} (${entry.where}): ${entry.value}`).join("\n") +
-        `\n\nThis usually means a slot shape in scripts/sync-version.mjs is matching ` +
+        `\n\nThis usually means a slot shape in scripts/sync-version.ts is matching ` +
         `something it should not. Refusing to rewrite anything.`,
     );
   }
@@ -760,7 +762,7 @@ async function sync(target, { check }) {
   if (after.staleVersions.size !== 0) {
     fail(
       `the rewrite did not stick: ${[...after.staleVersions].join(", ")} still present. ` +
-        `This is a bug in scripts/sync-version.mjs.`,
+        `This is a bug in scripts/sync-version.ts.`,
     );
   }
   return 0;

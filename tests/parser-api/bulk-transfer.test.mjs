@@ -7,6 +7,7 @@ import { join, resolve } from "node:path";
 import test from "node:test";
 
 import { parseTsrxProgram } from "../../packages/toolchain/dist/tsrx-transfer.js";
+import { scriptNode } from "../helpers/script-node.mjs";
 import { removeAddonFixture } from "./addon-fixture.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
@@ -31,8 +32,8 @@ test("TSRX crosses Node-API as one versioned Program payload", async () => {
   const previous = process.env.OXC_TSRX_PARSER_ADDON;
   try {
     const addon = join(temporary, "parser.node");
-    await run(process.execPath, [
-      "scripts/build-parser-native.mjs",
+    await run(scriptNode(), [
+      "scripts/build-parser-native.ts",
       "--skip-build",
       "--out",
       addon,

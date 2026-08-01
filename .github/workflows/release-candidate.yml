@@ -166,7 +166,7 @@ jobs:
           # Ships inside the same native package as the binaries. Without it npm
           # drops parser.node from the tarball and `oxc-tsrx/parser` fails its
           # integrity check on every consumer, which is exactly what 0.1.0 did.
-          node scripts/build-parser-native.mjs \
+          node scripts/build-parser-native.ts \
             --target "$TARGET" \
             --out "release/addon/parser.node" \
             --record "release/addon/parser-addon-$PACKAGE_SUFFIX.json"
@@ -207,13 +207,13 @@ jobs:
           mkdir -p "release/$PACKAGE_SUFFIX"
           suffix=""
           if [[ "$EXPECTED_PLATFORM" == "win32" ]]; then suffix=".exe"; fi
-          node scripts/package-native.mjs \
+          node scripts/package-native.ts \
             --target "$TARGET" \
             --bin-dir "target/$TARGET/release" \
             --parser-addon "release/addon/parser.node" \
             --out-dir "release/$PACKAGE_SUFFIX" \
             | tee "release/$PACKAGE_SUFFIX/native-package-$PACKAGE_SUFFIX.json"
-          node scripts/package-vscode.mjs \
+          node scripts/package-vscode.ts \
             --target "$TARGET" \
             --lsp-bin "target/$TARGET/release/oxc-tsrx$suffix" \
             --out-dir "release/$PACKAGE_SUFFIX" \
@@ -357,7 +357,7 @@ jobs:
           assert.equal(nativeTargets.size, NATIVE_TARGETS.length);
           assert.equal(vscodeTargets.size, NATIVE_TARGETS.length);
           NODE
-          node scripts/vsix-archive.mjs release/*.vsix
+          node scripts/vsix-archive.ts release/*.vsix
 
       - name: Stage legal texts and locked dependency inventory
         shell: bash

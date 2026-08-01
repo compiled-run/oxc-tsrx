@@ -25,22 +25,9 @@ env:
 
 jobs:
   correctness:
-    name: Node ${{ matrix.node }} / Rust ${{ matrix.rust }} (${{ matrix.lane }})
+    name: Node 24.15.0 / Rust 1.97.0 (correctness)
     runs-on: ubuntu-24.04
     timeout-minutes: 50
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - lane: node-20-floor
-            node: 20.19.0
-            rust: 1.95.0
-          - lane: node-22-floor
-            node: 22.12.0
-            rust: 1.95.0
-          - lane: current
-            node: 24.15.0
-            rust: 1.97.0
     steps:
       - name: Check out the exact source revision
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -51,28 +38,26 @@ jobs:
       - name: Install the pinned pnpm
         uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
 
-      - name: Install the pinned Node.js lane
+      - name: Install Node.js 24.15.0
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: ${{ matrix.node }}
+          node-version: 24.15.0
           cache: pnpm
 
-      - name: Install the pinned Rust lane
+      - name: Install Rust 1.97.0
         shell: bash
         run: |
-          rustup toolchain install "${{ matrix.rust }}" --profile minimal --component clippy,rustfmt
-          rustup default "${{ matrix.rust }}"
+          rustup toolchain install 1.97.0 --profile minimal --component clippy,rustfmt
+          rustup default 1.97.0
           rustc -Vv
           cargo -V
 
       # Without this every job recompiles the whole oxc dependency graph from
       # scratch, which is what pushed these lanes into the 50 minute timeout.
-      # Keyed by lane so the two Rust versions never share an incompatible
-      # target directory.
       - name: Cache the Rust build
         uses: Swatinem/rust-cache@f13886b937689c021905a6b90929199931d60db1 # v2.8.1
         with:
-          key: ${{ matrix.lane }}
+          key: correctness
           cache-all-crates: true
 
       - name: Install the locked JavaScript graph without lifecycle scripts
@@ -86,11 +71,7 @@ jobs:
           pnpm run licenses:check
           node --test tests/packaging/boundary.test.mjs
 
-      # node-20-floor and node-22-floor both pin Rust 1.95.0, so running the
-      # workspace lint and test on both is the same work twice. These lanes vary
-      # the Node floor; Rust is covered once per distinct toolchain.
       - name: Lint and test the Rust workspace
-        if: matrix.lane != 'node-22-floor'
         shell: bash
         run: |
           cargo clippy --workspace --all-targets --locked -- -D warnings
@@ -105,7 +86,7 @@ jobs:
           # workspace first or the offline build fails on a clean runner.
           cargo fetch --locked
           cargo build --release --locked -p oxc_tsrx_cli --bins
-          pnpm run build:parser-native
+          node scripts/build-parser-native.ts
 
       - name: Test the product and package contracts
         shell: bash
@@ -115,6 +96,79 @@ jobs:
           # The parser addon's own suite. It packs and installs the real
           # tarballs, so it is the only lane that would have caught 0.1.0
           # shipping every native package without parser.node.
+          pnpm run test:parser-api
+
+  product-floor:
+    name: Product floor / Node ${{ matrix.node }} / Rust 1.95.0
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    strategy:
+      fail-fast: false
+      matrix:
+        node:
+          - 20.19.0
+          - 22.12.0
+    steps:
+      - name: Check out the exact source revision
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Install the pinned pnpm
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+
+      - name: Install the tooling Node.js 24.15.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.15.0
+
+      - name: Capture the tooling Node.js executable
+        shell: bash
+        run: echo "TSRX_SCRIPT_NODE=$(node -p process.execPath)" >> "$GITHUB_ENV"
+
+      - name: Install the product-floor Node.js lane
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+
+      - name: Install Rust 1.95.0
+        shell: bash
+        run: |
+          rustup toolchain install 1.95.0 --profile minimal --component clippy
+          rustup default 1.95.0
+          rustc -Vv
+          cargo -V
+
+      - name: Cache the Rust build
+        uses: Swatinem/rust-cache@f13886b937689c021905a6b90929199931d60db1 # v2.8.1
+        with:
+          key: product-floor-node-${{ matrix.node }}
+          cache-all-crates: true
+
+      # Both product-floor lanes pin Rust 1.95.0, so running the workspace lint
+      # and test on both is the same work twice. These lanes vary the Node floor;
+      # Rust is covered once per distinct toolchain.
+      - name: Lint and test the Rust workspace
+        if: matrix.node == '20.19.0'
+        shell: bash
+        run: |
+          cargo clippy --workspace --all-targets --locked -- -D warnings
+          cargo test --workspace --all-targets --locked
+
+      - name: Install the locked JavaScript graph without lifecycle scripts
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Build the distributable native executables and parser addon
+        shell: bash
+        run: |
+          cargo fetch --locked
+          cargo build --release --locked -p oxc_tsrx_cli --bins
+          "$TSRX_SCRIPT_NODE" scripts/build-parser-native.ts
+
+      - name: Test the published-product floor
+        shell: bash
+        run: |
+          pnpm test
+          pnpm run test:packaging:unit:floor
           pnpm run test:parser-api
 
   install-arbitration:
@@ -253,7 +307,7 @@ jobs:
         # step is what makes it fail on the pull request that broke packaging
         # rather than on release day, and it is the only place the gate runs on
         # win32-x64-msvc and darwin-arm64 at all.
-        run: node scripts/check-publish-artifacts.mjs --pack-host
+        run: node scripts/check-publish-artifacts.ts --pack-host
 
       - name: Exercise a plain install against released hosts
         run: pnpm run test:packaging:released-hosts
@@ -319,6 +373,21 @@ jobs:
         env:
           OXC_TSRX_RETAIN_MATRIX_REPORT: "1"
         run: node --test tests/packaging/vite-plus-matrix.test.mjs
+
+      - name: Prove the explicit bridge survives npm, pnpm and Bun isolation
+        # This script existed and no workflow ran it, which is the same as not
+        # having it. It is the unit-level companion to the survival lane below.
+        run: pnpm run test:packaging:compat
+
+      - name: Prove the editor wiring survives dependency reinstall
+        # The owner's non-negotiable, as a gate: install alongside a package that
+        # takes `node_modules/.bin/oxlint` the way Vite+ does, run `setup` once,
+        # then `pnpm add`, `remove`, `install`, `install --frozen-lockfile` and
+        # `rebuild`, and require the editor to still resolve `.tsrx` linting into
+        # `node_modules/oxc-tsrx` every time, with `setup` never run again. The
+        # suite's last case breaks the wiring on purpose and fails if the check
+        # stays green.
+        run: pnpm run test:packaging:reinstall
 
       - name: Retain consumer evidence
         if: always()

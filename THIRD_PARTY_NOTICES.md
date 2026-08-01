@@ -11,7 +11,7 @@ vendored, patched, or forked in this repository. The complete normal/build
 dependency closure of the distributed Rust binaries, including locked versions,
 Cargo license expressions, source identities, and registry checksums, is shipped
 as `licenses/rust-dependencies.json` and `licenses/RUST_DEPENDENCIES.md`.
-`scripts/generate-rust-license-inventory.mjs --check` fails if that report,
+`scripts/generate-rust-license-inventory.ts --check` fails if that report,
 `Cargo.lock`, the accepted-expression policy, or either canonical OXC legal file
 drifts.
 

@@ -199,6 +199,17 @@ can see. An empty list means the gap is on the editor's side, not your
 project's. [The editor page](/integrations/editor) covers both extensions in
 full.
 
+The `setup` report back in step 4 says `unnecessary (editor)` because this
+walkthrough's tree needs no setting at all. `setup` checks that rather than
+assuming it: it replays the extension's own lookup from `my-app` and from every
+folder above it that looks like a workspace root, and if one of them would run a
+different `oxlint` the report says `inert (editor)` and names it. When `setup`
+does write `oxc.path.oxlint`, open the folder holding that
+`.vscode/settings.json`, meaning `my-app` itself: VS Code reads the file only
+from the folder you open, so opening a folder above it makes the key inert and
+`status` says so. [When the key does not take
+effect](/integrations/editor#when-the-key-does-not-take-effect) has the rest.
+
 <!-- details:When typescript.tsdk actually matters -->
 
 Not for `.tsrx` files. Version 2.0.69 of the TSRX extension ships its own

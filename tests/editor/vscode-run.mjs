@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join, resolve } from "node:path";
 import { runTests } from "@vscode/test-electron";
+import { scriptNode } from "../helpers/script-node.mjs";
 import { startLocalRegistry } from "../packaging/local-registry.mjs";
 import {
   DECOY_STATUS,
@@ -100,7 +101,7 @@ await writeFile(
  * Session 2: this repository's own VS Code client, with no pointer at all.
  *
  * The workspace above hands the extension `OXC_TSRX_LSP_BIN`, so it only ever
- * exercises the compatibility fallback in `packages/vscode/dist/extension.cjs`.
+ * exercises the compatibility fallback in `packages/vscode/src/extension.cts`.
  * This second session removes every pointer: the packed toolchain is installed
  * as an ordinary dependency from a local registry, `node_modules/.bin` is
  * deleted, every tool name is shadowed on `PATH` by a decoy proven to fire
@@ -130,9 +131,9 @@ async function runInstallOnlyDiscoverySession() {
   let registry;
   try {
     const nativeResult = await mustRun(
-      process.execPath,
+      scriptNode(),
       [
-        "scripts/package-native.mjs",
+        "scripts/package-native.ts",
         "--target",
         hostTarget(),
         "--bin-dir",

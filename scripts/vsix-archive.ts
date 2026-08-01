@@ -463,12 +463,12 @@ export async function readVsixEntries(path, limits = DEFAULT_VSIX_LIMITS) {
   });
 }
 
-export async function verifyVsixArchive(path, expected, options = {}) {
+export async function verifyVsixArchive(path, expected, options: any = {}) {
   const entries = await readVsixEntries(path, options.limits ?? DEFAULT_VSIX_LIMITS);
   return verifyVsixEntries(entries, expected);
 }
 
-export async function verifyAndPromoteVsix(candidate, finalPath, expected, options = {}) {
+export async function verifyAndPromoteVsix(candidate, finalPath, expected, options: any = {}) {
   try {
     await rm(finalPath, { force: true });
     const verification = await verifyVsixArchive(candidate, expected, options);
@@ -496,7 +496,7 @@ function requireReport(condition, message) {
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const paths = process.argv.slice(2);
   if (paths.length === 0)
-    throw new Error("usage: node scripts/vsix-archive.mjs <artifact.vsix> [...]");
+    throw new Error("usage: node scripts/vsix-archive.ts <artifact.vsix> [...]");
   const root = resolve(import.meta.dirname, "..");
   const [sourcePackage, bundle, inventory, report] = await Promise.all([
     readFile(resolve(root, "packages/vscode/package.json")),

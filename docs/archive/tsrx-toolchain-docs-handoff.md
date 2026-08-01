@@ -12,7 +12,7 @@ not been rewritten. Its research findings still hold. Its package names do not.
 - Four first-party wrapper packages were folded into `oxc-tsrx`:
   `@oxc-tsrx/runtime`, `@oxc-tsrx/parser`, `oxlint-tsrx`, and `oxfmt-tsrx`.
   They will never be published. The parser is now the `oxc-tsrx/parser` export,
-  and source-local callers import `packages/toolchain/dist/parser.js`.
+  and in-repo callers import `packages/toolchain/dist/parser.js`.
 - The published set is nine names: `oxc-tsrx` plus the eight
   `@oxc-tsrx/native-*` platform packages.
 - The three native executables were merged into one, `oxc-tsrx`, which selects

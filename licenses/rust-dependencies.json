@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedBy": "scripts/generate-rust-license-inventory.mjs",
+  "generatedBy": "scripts/generate-rust-license-inventory.ts",
   "rootPackages": [
     "oxc_tsrx_cli@0.1.5",
     "parser_napi_binding@0.1.5"

@@ -18,7 +18,7 @@ point at `target/release/oxc-tsrx`, because with no tool in `argv[0]` and no
 subcommand that binary runs the linter, which would silently measure the wrong
 tool.
 
-`scripts/build-native.mjs` therefore rebuilds a fresh copy at
+`scripts/build-native.ts` therefore rebuilds a fresh copy at
 `target/release/oxc-tsrx-fmt` after every build and checks that it reports
 `oxc-tsrx-fmt --version` before it is used. It is a copy rather than a hardlink
 because cargo replaces the binary with a new inode, so a link made once would

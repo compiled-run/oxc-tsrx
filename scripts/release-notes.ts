@@ -16,7 +16,7 @@
 // file unless the two together account for every commit in the range.
 //
 // Usage:
-//   node scripts/release-notes.mjs [--from <ref>] [--to <ref>] [--out <path>]
+//   node scripts/release-notes.ts [--from <ref>] [--to <ref>] [--out <path>]
 //
 //   --from  defaults to the most recent tag reachable from --to, and to the
 //           repository's first commit when no tag exists yet. The first release

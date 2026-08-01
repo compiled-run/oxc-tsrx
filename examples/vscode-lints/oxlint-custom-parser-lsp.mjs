@@ -1,1 +1,1 @@
-import "../../scripts/oxlint-custom-parser-lsp-proxy.mjs";
+import "../../scripts/oxlint-custom-parser-lsp-proxy.ts";

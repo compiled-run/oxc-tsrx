@@ -47,13 +47,18 @@ import {
   resolveCommandInvocation,
   spawnCommand,
 } from "../../packages/toolchain/dist/spawn-command.js";
-import { parseNpmPackResponse } from "../../scripts/npm-pack-response.mjs";
+import { parseNpmPackResponse } from "../helpers/npm-pack-response.mjs";
 import { startLocalRegistry } from "./local-registry.mjs";
+import { transpileCts } from "../helpers/require-cts.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 const toolchainRoot = join(root, "packages/toolchain");
 const repositoryResolver = join(toolchainRoot, "dist/provider-resolve.js");
-const providerClient = join(root, "packages/vscode/dist/provider-client.cjs");
+const providerClientArtifact = await transpileCts(
+  join(root, "packages/vscode/src/provider-client.cts"),
+);
+test.after(() => providerClientArtifact.dispose());
+const providerClient = providerClientArtifact.modulePath;
 const npm = process.platform === "win32" ? "npm.cmd" : "npm";
 const pnpm = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 const bun = process.platform === "win32" ? "bun.exe" : "bun";
@@ -104,7 +109,7 @@ const DOCUMENTS = [...ORDINARY_DOCUMENTS, ...PROVIDER_DOCUMENTS];
  * The host, run out of process so that every lane is measured the same way and
  * so the Plug'n'Play lane can be given a real PnP runtime with `--require`.
  *
- * It is deliberately the shipped editor decision module (`provider-client.cjs`)
+ * It is deliberately the shipped editor decision module (`provider-client.cts`)
  * driving the shipped resolver: `loadFolderResolver` picks up a folder's
  * `.pnp.cjs` when there is one and hands its `resolveRequest` straight to
  * discovery, which is the whole reason the protocol is package-manager neutral.
@@ -532,6 +537,7 @@ test(
         ["oxfmt-current", "oxfmt", "0.59.0"],
         ["types", "@oxc-project/types", "0.140.0"],
         ["tsgolint", "oxlint-tsgolint", "0.24.0"],
+        ["pathe", "pathe", "2.0.3"],
         ["tinyglobby", "tinyglobby", "0.2.17"],
         // The eight-platform split is declared by `oxc-tsrx` itself. Yarn
         // resolves optional dependencies for every platform, not just this
@@ -938,6 +944,7 @@ test(
         ["oxfmt-current", "oxfmt", "0.59.0"],
         ["types", "@oxc-project/types", "0.140.0"],
         ["tsgolint", "oxlint-tsgolint", "0.24.0"],
+        ["pathe", "pathe", "2.0.3"],
         ["tinyglobby", "tinyglobby", "0.2.17"],
         // The eight-platform split is declared by `oxc-tsrx` itself. Yarn
         // resolves optional dependencies for every platform, not just this
