@@ -465,7 +465,7 @@ impl EditorTool for TsrxEditorTool {
 // execute a JavaScript rule: it is a Rust process with no Node runtime.
 //
 // So the missing half is borrowed rather than rebuilt. One Node host per
-// workspace — `packages/toolchain/dist/lint-js-plugins.js`, the same file the
+// workspace — `packages/toolchain/src/lint-js-plugins.js`, the same file the
 // `oxlint` command's lane lives in — is started lazily the first time a `.tsrx`
 // file is linted in a project that declares `jsPlugins`. It receives a
 // projection, runs the published Oxlint binary over it with the project's own
@@ -484,8 +484,22 @@ const LANE_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 /// exported `LANE_HOST_FLAG`.
 const LANE_HOST_FLAG: &str = "--oxc-tsrx-js-plugin-lane-host";
 /// Where the lane host lives, relative to a directory that may contain it.
-const LANE_HOST_PATHS: [&str; 2] =
-    ["node_modules/oxc-tsrx/dist/lint-js-plugins.js", "packages/toolchain/dist/lint-js-plugins.js"];
+///
+/// The `dist/` entries are the current layout and are tried first: the package
+/// authors TypeScript in `src/` and ships only the built `dist/`, so a project on
+/// the current package always resolves to `dist/`. The `src/` entries are a
+/// compatibility fallback, not a second supported layout: this constant is compiled
+/// into the native binary, and the native binary and the `oxc-tsrx` JavaScript
+/// package are installed as separate packages that can skew by a version. A binary
+/// compiled while the package briefly shipped authored `src/` JavaScript would
+/// otherwise fail to find a current package's lane host, and a current binary would
+/// otherwise fail to find that older package's. Both directions resolve here instead.
+const LANE_HOST_PATHS: [&str; 4] = [
+    "node_modules/oxc-tsrx/dist/lint-js-plugins.js",
+    "node_modules/oxc-tsrx/src/lint-js-plugins.js",
+    "packages/toolchain/dist/lint-js-plugins.js",
+    "packages/toolchain/src/lint-js-plugins.js",
+];
 
 /// One diagnostic the project's plugins produced, still measured in projection bytes.
 struct LanePluginDiagnostic {
