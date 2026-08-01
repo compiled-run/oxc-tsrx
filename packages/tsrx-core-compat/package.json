@@ -17,27 +17,24 @@
     "directory": "packages/tsrx-core-compat"
   },
   "type": "module",
-  "main": "./index.js",
-  "types": "./index.d.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./index.d.ts",
-      "import": "./index.js",
-      "default": "./index.js"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
     },
     "./types": {
-      "types": "./types/index.d.ts"
+      "types": "./dist/types/index.d.ts"
     },
     "./types/estree": {
-      "types": "./types/estree.d.ts"
+      "types": "./dist/types/estree.d.ts"
     },
     "./package.json": "./package.json"
   },
   "files": [
-    "facade.js",
-    "index.js",
-    "index.d.ts",
-    "types",
+    "dist",
     "LICENSE",
     "README.md"
   ],

@@ -18,7 +18,7 @@ process.chdir(resolve(root, "../.."));
 
 async function buildBundle(file) {
   await build({
-    input: resolve(root, "dist/extension.cjs"),
+    input: resolve(root, "src/extension.cts"),
     platform: "node",
     external: ["vscode"],
     output: {

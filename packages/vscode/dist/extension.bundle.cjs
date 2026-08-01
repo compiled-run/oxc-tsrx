@@ -45,11 +45,11 @@ let node_fs = require("node:fs");
 let fs = require("fs");
 fs = __toESM(fs, 1);
 let path = require("path");
-let node_fs_promises = require("node:fs/promises");
 let node_module = require("node:module");
-let node_os = require("node:os");
+let node_fs_promises = require("node:fs/promises");
 let node_url = require("node:url");
 let node_child_process = require("node:child_process");
+let node_os = require("node:os");
 let url = require("url");
 let module$1 = require("module");
 //#region node_modules/.pnpm/vscode-languageclient@10.1.0/node_modules/vscode-languageclient/lib/common/utils/is.js
@@ -21966,7 +21966,7 @@ function readCapabilities(declared, context) {
 	return capabilities;
 }
 function readCapabilityTarget(capability, value, context) {
-	const { name, providerRoot, manifest, diagnostics, resolve, issuer } = context;
+	const { name, providerRoot, manifest, diagnostics, resolve: resolve$1, issuer } = context;
 	if (!isPlainObject(value)) {
 		diagnostics.push(diagnostic("warning", "invalid-capability", `package ${name} declares a non-object ${capability} capability`, {
 			packages: [name],
@@ -22001,7 +22001,7 @@ function readCapabilityTarget(capability, value, context) {
 		const specifier = moduleSpecifier(name, value.module);
 		let path = null;
 		try {
-			path = resolve(specifier, issuer);
+			path = resolve$1(specifier, issuer);
 		} catch {
 			diagnostics.push(diagnostic("warning", "unresolved-capability", `package ${name} declares the ${capability} capability at ${specifier}, which its exports map does not resolve for this host`, {
 				packages: [name],
@@ -22169,7 +22169,7 @@ async function inspectAncestors(root, directNames, context) {
 async function discoverProviders$1(options = {}) {
 	const root = (0, node_path.resolve)(options.root ?? process.cwd());
 	const readFile = options.readFile ?? defaultReadFile;
-	const resolve = options.resolve ?? createDefaultResolver();
+	const resolve$2 = options.resolve ?? createDefaultResolver();
 	const protocols = new Set(options.protocols ?? SUPPORTED_PROTOCOLS);
 	const throwOnError = options.throwOnError !== false;
 	const manifestPath = (0, node_path.join)(root, "package.json");
@@ -22178,13 +22178,13 @@ async function discoverProviders$1(options = {}) {
 	const context = {
 		diagnostics,
 		protocols,
-		resolve,
+		resolve: resolve$2,
 		readFile,
 		issuer: manifestPath
 	};
 	const declared = [];
 	for (const name of names) {
-		const record = await readDependencyManifest(name, manifestPath, resolve, readFile, diagnostics);
+		const record = await readDependencyManifest(name, manifestPath, resolve$2, readFile, diagnostics);
 		if (record === null) continue;
 		const declaration = providerDeclaration(record.manifest);
 		if (declaration === null) continue;
@@ -22317,6 +22317,7 @@ var init_provider_resolve = __esmMin((() => {
 		"reserved-extension"
 	]);
 	ProviderProtocolError = class extends Error {
+		diagnostics;
 		constructor(diagnostics) {
 			const failures = diagnostics.filter((diagnostic) => diagnostic.severity === "error");
 			super(`the declared language providers cannot be indexed:\n${failures.map((diagnostic) => `- ${diagnostic.message}`).join("\n")}`);
@@ -22326,7 +22327,7 @@ var init_provider_resolve = __esmMin((() => {
 	};
 }));
 //#endregion
-//#region packages/vscode/dist/provider-client.cjs
+//#region packages/vscode/src/provider-client.cts
 var require_provider_client = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	/**
 	* Provider-driven language client decisions for an editor host.
@@ -22558,8 +22559,6 @@ var require_provider_client = /* @__PURE__ */ __commonJSMin(((exports, module) =
 	}
 	module.exports = {
 		LANGUAGE_SERVER_ARGUMENTS,
-		LANGUAGE_SERVER_CAPABILITY,
-		PLUG_AND_PLAY_FILES,
 		clientForDocument,
 		discoverWorkspaceFolder,
 		discoverWorkspaceFolders,
@@ -25464,10 +25463,7 @@ var runtime_exports = /* @__PURE__ */ __exportAll({
 	discoverTsrxFiles: () => discoverTsrxFiles,
 	ensureSupportedOutput: () => ensureSupportedOutput,
 	isViteConfigPath: () => isViteConfigPath,
-	nativeSubcommand: () => nativeSubcommand,
-	pathExists: () => pathExists,
 	platformPackage: () => platformPackage,
-	positionalIndices: () => positionalIndices,
 	prepareVitePlusConfig: () => prepareVitePlusConfig,
 	removeExplicitTsrx: () => removeExplicitTsrx,
 	replaceConfigArgument: () => replaceConfigArgument,
@@ -25762,9 +25758,6 @@ function argumentValue(args, names) {
 function ensureSupportedOutput(format, files) {
 	if (files.length > 0 && format !== "default" && format !== "json") throw new Error(`OXC for TSRX currently combines default and json lint output; ${format} is unavailable for mixed .tsrx runs`);
 }
-function pathExists(path) {
-	return (0, node_fs.existsSync)(path);
-}
 var require$1, runtimeManifest, NATIVE_PROTOCOL_VERSION, OXC_REVISION, ENVIRONMENTS, EXECUTABLE, SUBCOMMANDS, VITE_CONFIG_FILES;
 var init_runtime = __esmMin((() => {
 	init_native_targets();
@@ -25795,7 +25788,7 @@ var init_runtime = __esmMin((() => {
 	];
 }));
 //#endregion
-//#region packages/vscode/dist/extension.cjs
+//#region packages/vscode/src/extension.cts
 const { isAbsolute, join, resolve } = require("node:path");
 const { existsSync, statSync } = require("node:fs");
 const vscode = require("vscode");
@@ -25805,7 +25798,7 @@ const { LANGUAGE_SERVER_ARGUMENTS, clientForDocument, discoverWorkspaceFolders, 
 /**
 * This extension is a provider-driven host, not a client for one language.
 *
-* Every decision below comes from `./provider-client.cjs`, which knows nothing
+* Every decision below comes from `./provider-client.cts`, which knows nothing
 * about any particular provider: discovery runs once per workspace folder, one
 * language client exists per discovered provider that declares a language
 * server, and a client is created only when a document whose extension that
@@ -25911,7 +25904,7 @@ async function descriptorForDocument(state, documentPath) {
 }
 /**
 * A provider bin with a Node shebang is started under this editor's own runtime,
-* which `provider-client.cjs` reports as `process.execPath`. In an Electron host
+* which `provider-client.cts` reports as `process.execPath`. In an Electron host
 * that path is the editor binary, and it only behaves as Node when
 * `ELECTRON_RUN_AS_NODE` is set. That is host knowledge, so the host supplies it
 * here instead of the vendor-neutral decision module guessing at it. Any other
