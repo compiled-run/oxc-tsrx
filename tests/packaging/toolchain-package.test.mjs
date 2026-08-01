@@ -10,7 +10,7 @@ import {
   symlink,
   writeFile,
 } from "node:fs/promises";
-import { join, relative, resolve } from "node:path";
+import { basename, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
 import { temporaryDirectory } from "./temporary-directory.mjs";
@@ -150,7 +150,7 @@ test("every capability executor is a leaf: no discovery, no extension dispatch",
 
   for (const [capability, target] of Object.entries(language.capabilities)) {
     if (typeof target.bin !== "string") continue;
-    const source = await readFile(join(packageRoot, manifest.bin[target.bin]), "utf8");
+    const source = await readFile(join(packageRoot, "dist", "bin", `${target.bin}.js`), "utf8");
     assert.ok(source.length > 0, target.bin);
     for (const { label, pattern } of LEAF_FORBIDDEN) {
       assert.doesNotMatch(
@@ -168,7 +168,9 @@ test("every capability executor is a leaf: no discovery, no extension dispatch",
   // The same markers really are what separates a leaf from a host, so the
   // assertion above cannot pass by matching nothing anywhere.
   const hosts = await Promise.all(
-    GENERAL_HOST_BINS.map((name) => readFile(join(packageRoot, manifest.bin[name]), "utf8")),
+    GENERAL_HOST_BINS.map((name) =>
+      readFile(join(packageRoot, "dist", "bin", `${name}.js`), "utf8")
+    ),
   );
   const combined = hosts.join("\n");
   for (const { label, pattern } of HOST_MARKERS) {
@@ -290,6 +292,13 @@ test("an isolated consumer resolves every public export and bin from the package
         "",
       ].join("\n"),
     );
+
+    // The toolchain's real runtime dependency, copied from the workspace install
+    // so the isolated consumer resolves it exactly as a registry install would.
+    await cp(join(packageRoot, "node_modules", "pathe"), join(nested, "pathe"), {
+      recursive: true,
+      dereference: true,
+    });
 
     // The two third-party packages this one pins by npm alias. Ordinary files
     // are still their work, and the canonical command names still enter their
@@ -776,7 +785,15 @@ async function providerFixture(temporary, name, { ownsLinterShim }) {
   await writeFile(
     join(project, "package.json"),
     `${JSON.stringify(
-      { name, private: true, type: "module", devDependencies: { "oxc-tsrx": "0.1.5" } },
+      {
+        // `name` may be a nested path, so that a fixture can put the project
+        // below the folder a user would open. The manifest still needs a plain
+        // package name.
+        name: basename(name),
+        private: true,
+        type: "module",
+        devDependencies: { "oxc-tsrx": "0.1.5" },
+      },
       null,
       2,
     )}\n`,
@@ -803,6 +820,20 @@ async function providerFixture(temporary, name, { ownsLinterShim }) {
   }
   return { project, modules, settings: join(project, ".vscode", "settings.json") };
 }
+
+/**
+ * What a correctly wired editor slot reports *on this machine*.
+ *
+ * Everywhere except Windows that is `active`. On Windows it is not, and
+ * deliberately so: the value this package writes ends in `oxc-tsrx/bin/oxlint`,
+ * which the extension classifies as a native binary rather than a Node script,
+ * and it spawns a native binary through `cmd.exe`, which can only run `.exe`,
+ * `.com`, `.bat` and `.cmd`. An extensionless file is none of those, so the
+ * spawn fails and the editor goes quiet. Reporting `active` there would be the
+ * exact silence this slot exists to end. The platform-pinned tests below assert
+ * both answers on every machine.
+ */
+const WIRED = process.platform === "win32" ? "unresolvable" : "active";
 
 test("the editor slot is written only when another tool owns the linter lookup", async () => {
   const { compatibilityStatus, removeCompatibility, setupCompatibility } = await import(
@@ -832,7 +863,7 @@ test("the editor slot is written only when another tool owns the linter lookup",
     assert.equal(await readdir(bridged.project).then((names) => names.includes(".vscode")), false);
 
     const written = await setupCompatibility({ projectRoot: bridged.project });
-    assert.equal(written.editorSlot.state, "active");
+    assert.equal(written.editorSlot.state, WIRED);
     assert.equal(written.changed.includes("oxc.path.oxlint"), true);
     assert.deepEqual(JSON.parse(await readFile(bridged.settings, "utf8")), {
       "oxc.path.oxlint": "node_modules/oxc-tsrx/bin/oxlint",
@@ -842,7 +873,7 @@ test("the editor slot is written only when another tool owns the linter lookup",
     const first = await readFile(bridged.settings, "utf8");
     const again = await setupCompatibility({ projectRoot: bridged.project });
     assert.deepEqual(again.changed, []);
-    assert.equal(again.editorSlot.state, "active");
+    assert.equal(again.editorSlot.state, WIRED);
     assert.equal(await readFile(bridged.settings, "utf8"), first);
 
     // `remove` takes the key back, and the file and directory with it, because
@@ -945,6 +976,500 @@ test("the editor slot merges into the user's settings and gives back only its ow
     assert.equal(refused.editorSlot.state, "unreadable");
     assert.equal(refused.changed.includes("oxc.path.oxlint"), false);
     assert.equal(await readFile(opaque.settings, "utf8"), "[1, 2, 3]\n");
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
+});
+
+/**
+ * The gap this whole slice exists for.
+ *
+ * `setup` writes at the project root, meaning the nearest `package.json`. VS
+ * Code reads `.vscode/settings.json` only from the folder you open as the
+ * workspace root, never from a subfolder of it. Every monorepo puts those two in
+ * different places, and in that window the key is simply not read: the extension
+ * falls back to its own lookup, finds whichever tool owns
+ * `node_modules/.bin/oxlint`, and nothing anywhere says why there are no
+ * diagnostics. Reporting `active` for that was the lie.
+ */
+test("a workspace root above the project root is reported instead of claimed active", async () => {
+  const {
+    compatibilityStatus,
+    formatCompatibilityReport,
+    removeCompatibility,
+    setupCompatibility,
+  } = await import(pathToFileURL(join(packageRoot, "dist/compat.js")));
+  const temporary = await temporaryDirectory("oxc-tsrx-editor-folder-");
+  try {
+    const nested = await providerFixture(temporary, join("mono", "apps", "web"), {
+      ownsLinterShim: false,
+    });
+    const monorepo = join(temporary, "mono");
+    await writeFile(join(monorepo, "pnpm-workspace.yaml"), 'packages:\n  - "apps/*"\n');
+
+    // `platform` is pinned so this asserts the folder answer rather than the
+    // Windows spawn answer, which has its own test below.
+    const options = { projectRoot: nested.project, platform: "linux" };
+
+    const before = await compatibilityStatus(options);
+    assert.equal(before.editorSlot.state, "missing");
+    assert.deepEqual(before.editorSlot.workspaceRoots, [
+      { path: monorepo, evidence: "pnpm-workspace.yaml" },
+    ]);
+
+    const written = await setupCompatibility(options);
+    assert.equal(written.changed.includes("oxc.path.oxlint"), true);
+    // Written at the project root, with the value that is correct for it, and
+    // nothing at all above it. The flag is the only way up.
+    assert.deepEqual(JSON.parse(await readFile(nested.settings, "utf8")), {
+      "oxc.path.oxlint": "node_modules/oxc-tsrx/bin/oxlint",
+    });
+    assert.equal(written.editorSlot.settingsRoot, nested.project);
+    assert.equal((await readdir(monorepo)).includes(".vscode"), false);
+
+    // Written is not wired, and the slot says which of the two it is.
+    assert.equal(written.editorSlot.state, "inert");
+    assert.equal(written.editorSlot.reach.state, "inert");
+    assert.equal(written.editorSlot.reach.resolution.reason, "resolved");
+    assert.equal(written.editorSlot.notes.length, 2);
+    assert.match(
+      written.editorSlot.notes[0],
+      /VS Code reads \.vscode\/settings\.json only from the folder you open/u,
+    );
+    assert.ok(written.editorSlot.notes[0].includes(`${monorepo} (pnpm-workspace.yaml)`));
+    // The two remedies, in the order the reader should try them.
+    assert.match(
+      written.editorSlot.notes[1],
+      new RegExp(
+        `open ${escapeForRegExp(nested.project)} as the folder in your editor, or run oxc-tsrx setup --workspace-root <folder>`,
+        "u",
+      ),
+    );
+
+    const report = formatCompatibilityReport(written);
+    assert.match(report, /oxc\.path\.oxlint:\s+inert \(editor\)/u);
+    for (const fragment of [monorepo, "pnpm-workspace.yaml", "--workspace-root", nested.project]) {
+      assert.ok(report.includes(fragment), `${fragment} is missing from:\n${report}`);
+    }
+
+    // `status` says the same thing on its own, with no setup re-run, and never
+    // drifts back to active.
+    const after = await compatibilityStatus(options);
+    assert.equal(after.editorSlot.state, "inert");
+    assert.equal(after.editorSlot.currentValue, "node_modules/oxc-tsrx/bin/oxlint");
+
+    // A key that cannot be claimed is still a key this package wrote, so
+    // `remove` still takes it back and the file it created with it.
+    const removed = await removeCompatibility(options);
+    assert.equal(removed.removed.includes("oxc.path.oxlint"), true);
+    assert.equal((await readdir(nested.project)).includes(".vscode"), false);
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
+});
+
+function escapeForRegExp(text) {
+  return text.replaceAll(/[.*+?^${}()|[\]\\]/gu, String.raw`\$&`);
+}
+
+test("--workspace-root is the only way to write above the project root", async () => {
+  const {
+    compatibilityStatus,
+    formatCompatibilityReport,
+    removeCompatibility,
+    setupCompatibility,
+  } = await import(pathToFileURL(join(packageRoot, "dist/compat.js")));
+  const temporary = await temporaryDirectory("oxc-tsrx-editor-root-flag-");
+  try {
+    const nested = await providerFixture(temporary, join("mono", "apps", "web"), {
+      ownsLinterShim: false,
+    });
+    const monorepo = join(temporary, "mono");
+    await writeFile(join(monorepo, "pnpm-workspace.yaml"), 'packages:\n  - "apps/*"\n');
+    const ancestorSettings = join(monorepo, ".vscode", "settings.json");
+
+    const written = await setupCompatibility({
+      projectRoot: nested.project,
+      workspaceRoot: monorepo,
+      platform: "linux",
+    });
+    // The value is relative to the folder that was named, not to the project.
+    assert.deepEqual(JSON.parse(await readFile(ancestorSettings, "utf8")), {
+      "oxc.path.oxlint": "apps/web/node_modules/oxc-tsrx/bin/oxlint",
+    });
+    assert.equal(written.editorSlot.state, "active");
+    assert.equal(written.editorSlot.settingsRoot, monorepo);
+    assert.equal(written.editorSlot.path, ancestorSettings);
+    assert.equal((await readdir(nested.project)).includes(".vscode"), false);
+
+    // The caveat that makes this a flag rather than a default.
+    const caveat = written.editorSlot.notes.find((note) => note.includes("FIRST folder"));
+    assert.ok(caveat, JSON.stringify(written.editorSlot.notes));
+    assert.match(caveat, /multi-root window resolves a relative "oxc\.path\.oxlint"/u);
+    // "FIRST" on its own: the report wraps at spaces, so the phrase around it
+    // may be split across two lines.
+    assert.ok(formatCompatibilityReport(written).includes("FIRST"));
+
+    // `status` and `remove` find that file again from the receipt alone, with
+    // no flag repeated, which is what keeps remove symmetric with setup.
+    const status = await compatibilityStatus({ projectRoot: nested.project, platform: "linux" });
+    assert.equal(status.editorSlot.path, ancestorSettings);
+    assert.equal(status.editorSlot.state, "active");
+
+    // A folder that is not a directory, and a folder that does not contain the
+    // project, are both refused: a relative value has no way to climb out,
+    // because the extension rejects any value containing "..".
+    await assert.rejects(
+      setupCompatibility({ projectRoot: nested.project, workspaceRoot: join(temporary, "absent") }),
+      /--workspace-root .* is not a directory/u,
+    );
+    const sibling = join(temporary, "sibling");
+    await mkdir(sibling, { recursive: true });
+    await assert.rejects(
+      setupCompatibility({ projectRoot: nested.project, workspaceRoot: sibling }),
+      /does not contain/u,
+    );
+    // Re-aiming at a different folder would orphan the key already written.
+    await assert.rejects(
+      setupCompatibility({ projectRoot: nested.project, workspaceRoot: nested.project }),
+      /already wrote "oxc\.path\.oxlint"/u,
+    );
+
+    const removed = await removeCompatibility({ projectRoot: nested.project, platform: "linux" });
+    assert.equal(removed.removed.includes("oxc.path.oxlint"), true);
+    assert.equal((await readdir(monorepo)).includes(".vscode"), false);
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
+});
+
+test("every candidate workspace root is named with the file that made it a candidate", async () => {
+  const { compatibilityStatus, formatCompatibilityReport, setupCompatibility } = await import(
+    pathToFileURL(join(packageRoot, "dist/compat.js"))
+  );
+  const temporary = await temporaryDirectory("oxc-tsrx-editor-candidates-");
+  try {
+    const nested = await providerFixture(temporary, join("root", "repo", "apps", "web"), {
+      ownsLinterShim: false,
+    });
+    const outer = join(temporary, "root");
+    const repo = join(outer, "repo");
+    const apps = join(repo, "apps");
+    // Three ancestors, three different kinds of evidence, and `.git` sitting in
+    // the same folder as a `workspaces` field so the stronger one wins there.
+    await writeFile(join(outer, "team.code-workspace"), '{ "folders": [{ "path": "repo" }] }\n');
+    await mkdir(join(repo, ".git"), { recursive: true });
+    await writeFile(
+      join(repo, "package.json"),
+      `${JSON.stringify({ name: "repo", private: true, workspaces: ["apps/*"] }, null, 2)}\n`,
+    );
+    await writeFile(join(apps, "turbo.json"), "{}\n");
+
+    const options = { projectRoot: nested.project, platform: "linux" };
+    const status = await compatibilityStatus(options);
+    assert.deepEqual(status.editorSlot.workspaceRoots, [
+      { path: outer, evidence: "team.code-workspace" },
+      { path: repo, evidence: "package.json" },
+      { path: apps, evidence: "turbo.json" },
+    ]);
+    assert.equal(
+      status.editorSlot.workspaceRoots.some((candidate) => candidate.evidence === ".git"),
+      false,
+      "a folder that declares workspaces should be named by that, not by .git",
+    );
+
+    const written = await setupCompatibility(options);
+    assert.equal(written.editorSlot.state, "inert");
+    const report = formatCompatibilityReport(written);
+    for (const fragment of [
+      `${outer} (team.code-workspace)`,
+      `${repo} (package.json)`,
+      `${apps} (turbo.json)`,
+    ]) {
+      assert.ok(written.editorSlot.notes[0].includes(fragment), fragment);
+    }
+    assert.ok(report.includes("team.code-workspace"), report);
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
+});
+
+/**
+ * Another tool's `oxlint`, in the `.bin` of whichever folder is named. This is
+ * the thing that makes an ancestor dangerous rather than merely present.
+ */
+async function competingLinterShim(root, owner = "vite-plus") {
+  const modules = join(root, "node_modules");
+  const source = join(modules, owner, "bin", "oxlint");
+  await mkdir(join(modules, owner, "bin"), { recursive: true });
+  await mkdir(join(modules, ".bin"), { recursive: true });
+  await writeFile(
+    join(modules, owner, "package.json"),
+    `${JSON.stringify({ name: owner, version: "1.0.0", bin: { oxlint: "./bin/oxlint" } }, null, 2)}\n`,
+  );
+  await writeFile(source, "#!/usr/bin/env node\n");
+  const shim = join(modules, ".bin", "oxlint");
+  try {
+    await symlink(source, shim);
+  } catch {
+    await writeFile(shim, `@"%~dp0\\..\\${relative(modules, source)}" %*\r\n`);
+  }
+  return shim;
+}
+
+/**
+ * The other half of the same lie.
+ *
+ * `active` was demoted for a key the editor would never read. `unnecessary` was
+ * not demoted at all: `node_modules/.bin/oxlint` being ours ended the enquiry,
+ * and the report said "the editor needs no setting and none was written" for a
+ * monorepo whose root carries a competing `oxlint`. The extension searches each
+ * opened folder's own `node_modules/.bin` first, so opening that root runs the
+ * other tool and there are no `.tsrx` diagnostics at all. Green report, silent
+ * editor, which is the failure this slot exists to end.
+ *
+ * Both directions are asserted on one tree, so the only difference between them
+ * is the competing binary itself. A monorepo without one must stay
+ * `unnecessary`: a false alarm here would be worse than the gap.
+ */
+test("unnecessary is proven from every folder that might be opened, not assumed", async () => {
+  const { compatibilityStatus, formatCompatibilityReport, removeCompatibility, setupCompatibility } =
+    await import(pathToFileURL(join(packageRoot, "dist/compat.js")));
+  const { resolveEditorLinter } = await import(
+    pathToFileURL(join(packageRoot, "dist/editor-resolution.js"))
+  );
+  const temporary = await temporaryDirectory("oxc-tsrx-editor-unnecessary-");
+  try {
+    const nested = await providerFixture(temporary, join("mono", "packages", "app"), {
+      ownsLinterShim: true,
+    });
+    const monorepo = join(temporary, "mono");
+    await writeFile(join(monorepo, "pnpm-workspace.yaml"), 'packages:\n  - "packages/*"\n');
+    const options = { projectRoot: nested.project, platform: "linux" };
+
+    // Direction one: the ancestor is a workspace root and has no oxlint of its
+    // own, so opening it still lands in this package through the extension's
+    // `**/package.json` step. Nothing is wrong and nothing is claimed.
+    const healthy = await setupCompatibility(options);
+    assert.equal(healthy.editorSlot.state, "unnecessary");
+    assert.deepEqual(healthy.editorSlot.notes, []);
+    assert.deepEqual(healthy.editorSlot.workspaceRoots, [
+      { path: monorepo, evidence: "pnpm-workspace.yaml" },
+    ]);
+    assert.equal(healthy.changed.includes("oxc.path.oxlint"), false);
+    assert.equal((await readdir(nested.project)).includes(".vscode"), false);
+    assert.ok(
+      healthy.editorSlot.reach.autoDetection.every((candidate) => candidate.reaches),
+      JSON.stringify(healthy.editorSlot.reach.autoDetection),
+    );
+
+    // Still direction one, and the shape that a path-based answer gets wrong.
+    // pnpm 10 writes `.bin/oxlint` as a shell script rather than a symlink, so
+    // the file that stats is the launcher itself and the nearest `package.json`
+    // above it is the consumer's own. A root shim that is really ours must not
+    // be read as a foreign linter: measured on a real pnpm install, where every
+    // path-shaped test called this tree diverged.
+    const hoisted = join(monorepo, "node_modules", "oxc-tsrx");
+    await mkdir(join(hoisted, "bin"), { recursive: true });
+    await mkdir(join(monorepo, "node_modules", ".bin"), { recursive: true });
+    await writeFile(
+      join(hoisted, "package.json"),
+      `${JSON.stringify({ name: "oxc-tsrx", version: "0.1.5", bin: { oxlint: "./bin/oxlint" } }, null, 2)}\n`,
+    );
+    await writeFile(join(hoisted, "bin", "oxlint"), "#!/usr/bin/env node\n");
+    const rootShim = join(monorepo, "node_modules", ".bin", "oxlint");
+    await writeFile(
+      rootShim,
+      '#!/bin/sh\nbasedir=$(dirname "$0")\nexec node "$basedir/../oxc-tsrx/bin/oxlint" "$@"\n',
+    );
+    const alsoOurs = await compatibilityStatus(options);
+    assert.equal(alsoOurs.editorSlot.state, "unnecessary");
+    assert.deepEqual(alsoOurs.editorSlot.notes, []);
+    assert.equal(alsoOurs.editorSlot.reach.autoDetection.at(-1).path, rootShim);
+    assert.equal(alsoOurs.editorSlot.reach.autoDetection.at(-1).tsrxAware, false);
+    assert.equal(
+      alsoOurs.editorSlot.reach.autoDetection.at(-1).reaches,
+      true,
+      "a launcher naming this package's binary inline is this package's launcher",
+    );
+
+    // Direction two: the same tree, one competing binary at the root.
+    await rm(rootShim, { force: true });
+    const competing = await competingLinterShim(monorepo);
+    const status = await compatibilityStatus(options);
+    assert.equal(status.editorSlot.state, "inert");
+    assert.equal(status.editorSlot.currentValue, null);
+    assert.equal(status.editorSlot.linterShim.owner, "oxc-tsrx");
+
+    // The evidence file that made the ancestor a candidate, and the binary it
+    // would really run, both named.
+    assert.equal(status.editorSlot.notes.length, 2);
+    for (const fragment of [
+      `${monorepo} (pnpm-workspace.yaml)`,
+      competing,
+      "does not understand .tsrx",
+    ]) {
+      assert.ok(status.editorSlot.notes[0].includes(fragment), fragment);
+    }
+    assert.match(
+      status.editorSlot.notes[1],
+      new RegExp(
+        `open ${escapeForRegExp(nested.project)} as the folder in your editor, or run oxc-tsrx setup --workspace-root <folder>`,
+        "u",
+      ),
+    );
+    const report = formatCompatibilityReport(status);
+    assert.match(report, /oxc\.path\.oxlint:\s+inert \(editor\)/u);
+    for (const fragment of [monorepo, "pnpm-workspace.yaml", "--workspace-root"]) {
+      assert.ok(report.includes(fragment), `${fragment} is missing from:\n${report}`);
+    }
+
+    // This package's own oracle, asked the same tree the way the extension asks
+    // it. `status` used to contradict this answer; now it reports it.
+    const oracle = await resolveEditorLinter({
+      name: "oxlint",
+      configured: null,
+      workspaceFolders: [monorepo],
+      packageJsonDirectories: [nested.project],
+      stat: async (candidate) => {
+        const real = await realpath(candidate).catch(() => null);
+        if (!real) return null;
+        return {
+          realPath: real,
+          content: candidate.endsWith("package.json")
+            ? await readFile(candidate, "utf8").catch(() => null)
+            : null,
+        };
+      },
+    });
+    assert.equal(oracle.path, competing);
+    assert.equal(oracle.tsrxAware, false);
+    assert.equal(status.editorSlot.reach.autoDetection.at(-1).path, oracle.path);
+
+    // `setup` on its own still writes nothing: a key at the project root would
+    // not change which linter that other folder finds.
+    const unwritten = await setupCompatibility(options);
+    assert.equal(unwritten.editorSlot.state, "inert");
+    assert.equal(unwritten.changed.includes("oxc.path.oxlint"), false);
+    assert.equal((await readdir(nested.project)).includes(".vscode"), false);
+
+    // The second remedy the note prints has to be a real one. Naming the folder
+    // writes the key into it, and only then is the slot wired.
+    const wired = await setupCompatibility({ ...options, workspaceRoot: monorepo });
+    assert.equal(wired.changed.includes("oxc.path.oxlint"), true);
+    assert.deepEqual(JSON.parse(await readFile(join(monorepo, ".vscode/settings.json"), "utf8")), {
+      "oxc.path.oxlint": "packages/app/node_modules/oxc-tsrx/bin/oxlint",
+    });
+    assert.equal(wired.editorSlot.state, "active");
+    assert.equal(wired.editorSlot.settingsRoot, monorepo);
+
+    // And `remove` follows the receipt back up to it, with no flag repeated.
+    const removed = await removeCompatibility(options);
+    assert.equal(removed.removed.includes("oxc.path.oxlint"), true);
+    assert.equal((await readdir(monorepo)).includes(".vscode"), false);
+
+    // A slot that never wrote anything has nothing for `remove` to take back,
+    // so it is not reported as removed either.
+    const nothing = await removeCompatibility(options);
+    assert.equal(nothing.editorSlot.state, "inert");
+    assert.equal(nothing.removed.includes("oxc.path.oxlint"), false);
+
+    // Owning `.bin/oxlint` does not make somebody else's key invisible either.
+    // The editor runs what the key names, so it is a collision, not "no setting
+    // needed".
+    const opinionated = await providerFixture(temporary, "opinionated", { ownsLinterShim: true });
+    await mkdir(join(opinionated.project, ".vscode"), { recursive: true });
+    await writeFile(
+      opinionated.settings,
+      '{\n  "oxc.path.oxlint": "/opt/homebrew/bin/oxlint"\n}\n',
+    );
+    const collided = await compatibilityStatus({
+      projectRoot: opinionated.project,
+      platform: "linux",
+    });
+    assert.equal(collided.editorSlot.state, "collision");
+    assert.equal(collided.editorSlot.currentValue, "/opt/homebrew/bin/oxlint");
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
+});
+
+/**
+ * A configured `oxc.path.oxlint` does not win the extension's lookup, it
+ * replaces it: `searchBinaryPath` is `e ? se(t,e) : ...`, with no fallback. So a
+ * value the extension refuses is worse than no value at all, and a slot that
+ * reports it active is the worst outcome of the three.
+ */
+test("status refuses to call a key active when the extension would refuse the value", async () => {
+  const { compatibilityStatus, formatCompatibilityReport, setupCompatibility } = await import(
+    pathToFileURL(join(packageRoot, "dist/compat.js"))
+  );
+  const temporary = await temporaryDirectory("oxc-tsrx-editor-unresolvable-");
+  try {
+    // A value that points at exactly the right file and still never reaches a
+    // linter, because `T()` rejects any value containing "..".
+    const traversal = await providerFixture(temporary, "traversal", { ownsLinterShim: false });
+    await mkdir(join(traversal.project, ".vscode"), { recursive: true });
+    await writeFile(
+      traversal.settings,
+      '{\n  "oxc.path.oxlint": "node_modules/oxc-tsrx/bin/../bin/oxlint"\n}\n',
+    );
+    const rejected = await compatibilityStatus({
+      projectRoot: traversal.project,
+      platform: "linux",
+    });
+    assert.equal(rejected.editorSlot.state, "unresolvable");
+    assert.equal(rejected.editorSlot.reach.rejection, "configured-rejected-traversal");
+    assert.match(rejected.editorSlot.notes[0], /refuses any "oxc\.path\.oxlint" containing/u);
+    assert.ok(formatCompatibilityReport(rejected).includes("unresolvable (editor)"));
+
+    // The same again for the shell metacharacters, which reject a value that
+    // resolves to a real, correct, executable file.
+    const metacharacter = await providerFixture(temporary, "metacharacter", {
+      ownsLinterShim: false,
+    });
+    await writeFile(join(metacharacter.modules, "oxc-tsrx", "bin", "oxlint!"), "#!/bin/sh\n");
+    await mkdir(join(metacharacter.project, ".vscode"), { recursive: true });
+    await writeFile(
+      metacharacter.settings,
+      '{\n  "oxc.path.oxlint": "node_modules/oxc-tsrx/bin/oxlint!"\n}\n',
+    );
+    const refused = await compatibilityStatus({
+      projectRoot: metacharacter.project,
+      platform: "linux",
+    });
+    assert.equal(refused.editorSlot.state, "unresolvable");
+    assert.equal(refused.editorSlot.reach.rejection, "configured-rejected-metacharacter");
+
+    // N1, asserted from any machine: on Windows the value this package writes is
+    // extensionless with a native loader, and the extension spawns that through
+    // cmd.exe, which cannot execute it.
+    const windows = await providerFixture(temporary, "windows", { ownsLinterShim: false });
+    const onWindows = await setupCompatibility({
+      projectRoot: windows.project,
+      platform: "win32",
+    });
+    assert.equal(onWindows.changed.includes("oxc.path.oxlint"), true);
+    assert.equal(onWindows.editorSlot.state, "unresolvable");
+    assert.equal(onWindows.editorSlot.reach.resolution.reason, "resolved");
+    assert.equal(onWindows.editorSlot.reach.resolution.loader, "native");
+    assert.equal(onWindows.editorSlot.reach.resolution.spawnable, false);
+    assert.match(onWindows.editorSlot.notes[0], /cmd\.exe/u);
+    assert.match(onWindows.editorSlot.notes[0], /"oxc\.useExecPath": true/u);
+
+    // The identical tree, judged for a platform that can spawn it, is active.
+    // Nothing about the file changed: only the question being asked.
+    const elsewhere = await compatibilityStatus({
+      projectRoot: windows.project,
+      platform: "linux",
+    });
+    assert.equal(elsewhere.editorSlot.state, "active");
+    assert.deepEqual(elsewhere.editorSlot.notes, []);
+
+    // And a value this package wrote whose target has gone is still not active.
+    await rm(join(windows.modules, "oxc-tsrx", "bin", "oxlint"), { force: true });
+    const gone = await compatibilityStatus({ projectRoot: windows.project, platform: "linux" });
+    assert.equal(gone.editorSlot.state, "stale");
   } finally {
     await rm(temporary, { recursive: true, force: true });
   }

@@ -6,7 +6,8 @@ import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import test from "node:test";
 import { nativePackageName } from "../../packages/toolchain/dist/native-targets.js";
-import { resolveNpmInvocation } from "../../scripts/npm-invocation.mjs";
+import { resolveNpmInvocation } from "../helpers/npm-invocation.mjs";
+import { scriptNode } from "../helpers/script-node.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 
@@ -170,9 +171,9 @@ async function packWithStubbedNpm(response) {
     artifacts,
     target,
     result: run(
-      process.execPath,
+      scriptNode(),
       [
-        "scripts/package-native.mjs",
+        "scripts/package-native.ts",
         "--target",
         target,
         "--bin-dir",
@@ -256,8 +257,8 @@ test("a pack report that is not exactly one packed entry still fails with npm's 
 
 test("current native release stages a complete, checksummed, npm-installable platform package", async () => {
   const artifacts = await mkdtemp(join(tmpdir(), "oxc-tsrx-native-artifacts-"));
-  const { stdout } = await run(process.execPath, [
-    "scripts/package-native.mjs",
+  const { stdout } = await run(scriptNode(), [
+    "scripts/package-native.ts",
     "--target",
     hostTarget(),
     "--bin-dir",
@@ -338,8 +339,8 @@ test("packaging refuses to build a native package without the parser addon", asy
   const artifacts = await mkdtemp(join(tmpdir(), "oxc-tsrx-native-noaddon-"));
   await assert.rejects(
     () =>
-      run(process.execPath, [
-        "scripts/package-native.mjs",
+      run(scriptNode(), [
+        "scripts/package-native.ts",
         "--target",
         hostTarget(),
         "--bin-dir",
@@ -355,16 +356,16 @@ test("packaging refuses to build a native package without the parser addon", asy
 test("canonical parser packaging adds one verified schema-2 addon without changing the executable family", async () => {
   const temporary = await mkdtemp(join(tmpdir(), "oxc-tsrx-parser-native-package-"));
   const addon = join(temporary, "parser.node");
-  await run(process.execPath, [
-    "scripts/build-parser-native.mjs",
+  await run(scriptNode(), [
+    "scripts/build-parser-native.ts",
     "--skip-build",
     "--out",
     addon,
   ]);
   const artifacts = join(temporary, "artifacts");
   await mkdir(artifacts, { recursive: true });
-  const { stdout } = await run(process.execPath, [
-    "scripts/package-native.mjs",
+  const { stdout } = await run(scriptNode(), [
+    "scripts/package-native.ts",
     "--target",
     hostTarget(),
     "--bin-dir",
@@ -431,8 +432,8 @@ test("canonical parser packaging adds one verified schema-2 addon without changi
 test("native packaging rejects current-host object files labeled as another architecture", async () => {
   const artifacts = await mkdtemp(join(tmpdir(), "oxc-tsrx-native-wrong-target-"));
   await assert.rejects(
-    run(process.execPath, [
-      "scripts/package-native.mjs",
+    run(scriptNode(), [
+      "scripts/package-native.ts",
       "--allow-missing-parser-addon",
       "--target",
       differentArchitectureTarget(),
@@ -455,8 +456,8 @@ test("cross-package verification recognizes Mach-O, ELF, and PE headers without 
     const binaries = await mkdtemp(join(tmpdir(), `oxc-tsrx-${format}-fixtures-`));
     const artifacts = await mkdtemp(join(tmpdir(), `oxc-tsrx-${format}-artifacts-`));
     await writeExecutableFixtures(binaries, target, format);
-    const { stdout } = await run(process.execPath, [
-      "scripts/package-native.mjs",
+    const { stdout } = await run(scriptNode(), [
+      "scripts/package-native.ts",
       "--allow-missing-parser-addon",
       "--target",
       target,
@@ -480,8 +481,8 @@ test("all supported packages reject 32-bit executable headers", async () => {
     const artifacts = await mkdtemp(join(tmpdir(), `oxc-tsrx-${format}-32-artifacts-`));
     await writeExecutableFixtures(binaries, target, format, 32);
     await assert.rejects(
-      run(process.execPath, [
-        "scripts/package-native.mjs",
+      run(scriptNode(), [
+        "scripts/package-native.ts",
         "--allow-missing-parser-addon",
         "--target",
         target,

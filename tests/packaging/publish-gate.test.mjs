@@ -5,7 +5,8 @@ import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import test from "node:test";
 import { nativePackageName, nativeTargetForHost } from "../../packages/toolchain/dist/native-targets.js";
-import { npmChildEnvironment, resolveNpmInvocation } from "../../scripts/npm-invocation.mjs";
+import { npmChildEnvironment, resolveNpmInvocation } from "../helpers/npm-invocation.mjs";
+import { scriptNode } from "../helpers/script-node.mjs";
 import { temporaryDirectory } from "./temporary-directory.mjs";
 
 /**
@@ -30,7 +31,7 @@ import { temporaryDirectory } from "./temporary-directory.mjs";
  */
 
 const root = resolve(import.meta.dirname, "../..");
-const gate = join(root, "scripts/check-publish-artifacts.mjs");
+const gate = join(root, "scripts/check-publish-artifacts.ts");
 const FIXTURE_VERSION = "3.2.1";
 
 function linuxLibc() {
@@ -44,7 +45,7 @@ const binaryName = target.os === "win32" ? "oxc-tsrx.exe" : "oxc-tsrx";
 
 function run(args, options = {}) {
   return new Promise((resolveRun, rejectRun) => {
-    const child = spawn(process.execPath, args, {
+    const child = spawn(scriptNode(), args, {
       cwd: options.cwd ?? root,
       env: options.env ?? process.env,
       stdio: ["ignore", "pipe", "pipe"],
@@ -65,7 +66,7 @@ function sha256(contents) {
 }
 
 /**
- * A platform package with the shape `scripts/package-native.mjs` produces, small
+ * A platform package with the shape `scripts/package-native.ts` produces, small
  * enough to pack in milliseconds. `mutate` receives the staged package before it
  * is packed, which is where each deliberate break is introduced.
  */

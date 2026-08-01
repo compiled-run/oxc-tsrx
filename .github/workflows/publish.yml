@@ -302,7 +302,7 @@ jobs:
           VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
-          node scripts/check-publish-artifacts.mjs \
+          node scripts/check-publish-artifacts.ts \
             --artifacts release \
             --version "$VERSION" \
             --require-full-matrix \
@@ -348,7 +348,7 @@ jobs:
           VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
-          node scripts/verify-published-release.mjs \
+          node scripts/verify-published-release.ts \
             --version "$VERSION" \
             --order-file publish-order.txt \
             --attempts 2 \
@@ -426,6 +426,6 @@ jobs:
           VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
-          node scripts/verify-published-release.mjs \
+          node scripts/verify-published-release.ts \
             --version "$VERSION" \
             --order-file publish-order.txt

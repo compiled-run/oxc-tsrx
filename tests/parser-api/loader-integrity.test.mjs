@@ -8,8 +8,9 @@ import {
   nativePackageName,
   nativeTargetForHost,
 } from "../../packages/toolchain/dist/native-targets.js";
-import { resolveNpmInvocation } from "../../scripts/npm-invocation.mjs";
-import { parseNpmPackResponse } from "../../scripts/npm-pack-response.mjs";
+import { resolveNpmInvocation } from "../helpers/npm-invocation.mjs";
+import { parseNpmPackResponse } from "../helpers/npm-pack-response.mjs";
+import { scriptNode } from "../helpers/script-node.mjs";
 import { temporaryDirectory } from "../packaging/temporary-directory.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
@@ -173,16 +174,16 @@ test("the packed parser loader rejects every frozen identity and integrity mutat
     delete npmEnvironment.OXC_TSRX_PARSER_ADDON;
 
     const addon = join(temporary, "parser.node");
-    await run(process.execPath, [
-      "scripts/build-parser-native.mjs",
+    await run(scriptNode(), [
+      "scripts/build-parser-native.ts",
       "--skip-build",
       "--out",
       addon,
     ]);
     const nativePackage = JSON.parse(
       (
-        await run(process.execPath, [
-          "scripts/package-native.mjs",
+        await run(scriptNode(), [
+          "scripts/package-native.ts",
           "--target",
           hostTarget().target,
           "--bin-dir",

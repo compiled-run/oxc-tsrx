@@ -22,8 +22,8 @@ Two things to know before you start:
 - **It does not wake up on a `.tsrx` file.** Open any JavaScript, TypeScript, or
   JSON file once per session, and `.tsrx` is served from then on.
   [Why](#what-a-plain-install-actually-covers).
-- **A Vite+ project owns `node_modules/.bin/oxlint`**, which is where the
-  extension looks, so it needs one setup command.
+- **In a Vite+ project the extension's usual lookup does not reach this
+  package**, so it needs one setup command.
   [Which one](#in-a-vite-project-setup-writes-oxcpathoxlint).
 
 Syntax highlighting and IntelliSense for `.tsrx` are a different job, owned by
@@ -52,7 +52,18 @@ language id your framework contributes:
 }
 ```
 
-Settings come from your normal `.oxlintrc.json` and `.oxfmtrc.json`.
+`editor.defaultFormatter` matters when a `.tsrx` buffer has more than one
+formatter offering to serve it, which is what happens if you install the
+optional `oxc-tsrx-vscode` client next to the official extension. With only the
+official extension installed there is one provider and you can leave the key
+out. With both, name the one you want, and prefer disabling the other: two
+clients on the same `.tsrx` document is a setup to avoid rather than a feature.
+
+Settings come from your normal `.oxlintrc.json` and `.oxfmtrc.json`. Note that
+`.tsrx` formatting is served by the **linter** binary, on the same `oxlint --lsp`
+connection the diagnostics come from, so `oxc.enable.oxfmt` and `oxc.path.oxfmt`
+change nothing about `.tsrx`. Formatting a `.tsrx` file keeps working with
+`oxc.enable.oxfmt` set to `false`.
 
 ## What "a plain install" actually covers
 
@@ -155,11 +166,13 @@ cannot start, or a rule throws, the built-in diagnostics still publish and a
 `js-plugins-unavailable` warning carries the reason: fewer rules running is
 never silent.
 
-### In a Vite+ project, `setup` writes `oxc.path.oxlint`
+## In a Vite+ project, `setup` writes `oxc.path.oxlint`
 
 The extension finds its linter by looking for `oxlint` in `node_modules`. In a
-Vite+ project that lookup reaches Vite+'s own wrapper, which knows nothing about
-`.tsrx`, so you would get no `.tsrx` diagnostics and no error explaining why.
+Vite+ project that lookup does not reach this package: under pnpm it lands on
+Vite+'s own wrapper, which knows nothing about `.tsrx`, and a measured npm Vite+
+tree had no `node_modules/.bin/oxlint` entry at all. Either way you would get no
+`.tsrx` diagnostics and no error explaining why.
 
 `oxc-tsrx setup` handles it by merging one key into your `.vscode/settings.json`:
 
@@ -175,8 +188,37 @@ takes back only that key. [The Vite+
 page](/guide/getting-started#if-something-goes-wrong)
 has the full rules.
 
-Outside Vite+ the ordinary lookup does find this package, so nothing is written
-and `status` reports the slot as `unnecessary`.
+That relative value is what the editor spawns, exactly as written, with nothing
+else to add: no absolute path and no `oxc.useExecPath`. A live run proves it,
+[below](#reproducible-proof).
+
+Outside Vite+ the ordinary lookup usually finds this package on its own, and
+then nothing is written. `status` only calls that `unnecessary` once it has
+checked it. The extension searches each folder you open for its own
+`node_modules/.bin/oxlint` before it looks anywhere else, so `status` replays
+that search from your project root and from every folder above it that looks
+like a workspace root. If one of them would run a different `oxlint`, the slot
+is reported `inert (editor)` instead, naming the folder, the file that made it
+look like a workspace root, and the binary it would run. That is the same report
+you get for a key that was written into a folder nothing opens, and it has the
+same two fixes: open your project folder, or name the folder you do open with
+`oxc-tsrx setup --workspace-root <directory>`.
+
+### When the key does not take effect
+
+The key is one line, and four separate things can stop it working. `status`
+calls the first case `inert (editor)` and the third `unresolvable (editor)`,
+because a report that says `active` for wiring it cannot prove is the silence
+this key exists to end.
+
+<!-- chooser -->
+
+| What did you see? | What it means |
+| --- | --- |
+| Works in one project, not the one next to it | VS Code reads `.vscode/settings.json` only from the folder you opened as the workspace root, never from a subfolder of it. `setup` writes at your project root, meaning the nearest `package.json`, so in a monorepo you opened at the top, the key sits in a folder nothing reads. Open the project folder itself, or write the key at the folder you do open with `oxc-tsrx setup --workspace-root <directory>`. `setup` and `status` name each candidate root above your project and the file that made it a candidate. |
+| A multi-root workspace changed nothing | Adding the folder to a multi-root workspace does not rescue the key, because `oxc.path.oxlint` is a **window**-scoped setting. The extension reads one value for the whole window, so a value scoped to one folder of a multi-root workspace is never consulted. A relative value is resolved against the window's **first** folder, no matter which folder the file you are editing lives in. |
+| The path looks right, nothing resolves | Setting the key turns auto-detection off completely, and there is no fallback: if the file it names is missing, the extension looks nowhere else. A wrong value is worse than no value. The extension also rejects a value containing `..` or a shell metacharacter such as `$`, `&`, `;`, `<`, `>`, `!`, `%`, `^`, a backtick, or a vertical bar. |
+| Restricted Mode, no `.tsrx` squiggles | An untrusted window ignores the key: the extension is handed an empty string instead of your value, and no `.tsrx` diagnostic arrives. Trust the folder and reload. Measured live in the setup-value session below. |
 
 ## Reproducible proof
 
@@ -185,6 +227,15 @@ empty consumer whose only TSRX dependency is `oxc-tsrx`, loads the released
 official extension with no second TSRX client installed, and proves canonical
 TypeScript diagnostics, native TSRX diagnostics, an unsaved buffer update,
 formatting, and the validated `no-var` quick fix.
+
+A fourth session covers the Vite+ setting end to end. It installs a consumer
+alongside a package that takes `node_modules/.bin/oxlint`, runs `oxc-tsrx setup`
+so that `setup` itself writes the relative value, and then opens that folder in
+real VS Code twice, adding no `oxc.path.*` and no `oxc.useExecPath` of its own.
+Untrusted, the extension is handed an empty string and no `.tsrx` diagnostic
+arrives. Trusted, `.tsrx` diagnostics publish, the shim still belongs to the
+other package, ordinary TypeScript stays on canonical Oxlint, the formatter
+registered on the same connection formats, and the quick fix applies.
 
 There is no separate language-server executable to build. `crates/oxc_tsrx_cli`
 produces one binary, and its `lsp` subcommand serves an editor.

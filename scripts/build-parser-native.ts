@@ -57,7 +57,8 @@ function releaseLibrary(os) {
 
 function linuxLibc() {
   if (process.platform !== "linux") return undefined;
-  return process.report?.getReport?.().header?.glibcVersionRuntime ? "glibc" : "musl";
+  const report = process.report?.getReport?.() as any;
+  return report?.header?.glibcVersionRuntime ? "glibc" : "musl";
 }
 
 function expectedObject(target) {

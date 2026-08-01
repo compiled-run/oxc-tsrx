@@ -7,7 +7,7 @@ import { rm } from "node:fs/promises";
  * required it, so the `.node` file cannot be unlinked until that process exits
  * and `rm` fails with `EPERM: operation not permitted, unlink`. Retrying does
  * not help: `maxRetries` covers a transient lock, and this one is held until
- * exit by design. scripts/package-native.mjs sidesteps it by probing an addon
+ * exit by design. scripts/package-native.ts sidesteps it by probing an addon
  * in a child process, and these suites cannot, because what they assert is
  * in-process identity: the same lazily materialized graph handed back twice.
  *

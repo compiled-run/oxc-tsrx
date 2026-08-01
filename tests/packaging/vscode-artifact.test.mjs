@@ -6,7 +6,8 @@ import { mkdtemp, readFile, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
-import { DEFAULT_VSIX_LIMITS, readVsixEntries } from "../../scripts/vsix-archive.mjs";
+import { DEFAULT_VSIX_LIMITS, readVsixEntries } from "../../scripts/vsix-archive.ts";
+import { scriptNode } from "../helpers/script-node.mjs";
 
 const require = createRequire(import.meta.url);
 const yauzl = require("yauzl");
@@ -71,8 +72,8 @@ test("platform VSIX embeds exactly the matching native language server and notic
     "target/release",
     process.platform === "win32" ? "oxc-tsrx.exe" : "oxc-tsrx",
   );
-  const result = await run(process.execPath, [
-    "scripts/package-vscode.mjs",
+  const result = await run(scriptNode(), [
+    "scripts/package-vscode.ts",
     "--target",
     hostTarget(),
     "--lsp-bin",

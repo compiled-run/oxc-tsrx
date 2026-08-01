@@ -52,7 +52,7 @@ publicHoistPattern:
 # depended on these two postinstalls. `@vscode/vsce-sign` downloads a signing
 # binary used only by `vsce publish`, and `keytar` builds a native credential
 # store used only for `vsce login`. VSIX files are packaged by
-# scripts/package-vscode.mjs and nothing is signed or published from a developer
+# scripts/package-vscode.ts and nothing is signed or published from a developer
 # machine. Listing them keeps installs quiet and makes the decision reviewable.
 ignoredBuiltDependencies:
   - '@vscode/vsce-sign'

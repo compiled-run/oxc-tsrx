@@ -92,14 +92,14 @@ it again in `release` mode.
 
 `bumpp` rewrites the `version` field of a manifest. That is four files out of
 about thirty, so the workflow runs `bumpp` on the root manifest only and then
-hands the rest to `scripts/sync-version.mjs`.
+hands the rest to `scripts/sync-version.ts`.
 
-`sync-version.mjs` propagates the root version to 73 declared locations across
-25 files: the eight `@oxc-tsrx/native-*` pins in `packages/toolchain`, the two
+`sync-version.mjs` propagates the root version to 76 declared locations across
+26 files: the eight `@oxc-tsrx/native-*` pins in `packages/toolchain`, the two
 `oxc-tsrx` pins in `packages/tsrx-core-compat` and `packages/vscode`, the three
 package manifests' own `version` fields, the Cargo workspace version,
-`packages/toolchain/dist/parser.js` (that directory is committed source, not
-build output), `packages/toolchain/parser.node.json`, the scaffold fixture in
+`packages/toolchain/src/parser.ts` and the committed build output at
+`packages/toolchain/dist/parser.js`, `packages/toolchain/parser.node.json`, the scaffold fixture in
 `docs/generate-transcripts.mjs`, and eighteen test files that assert or install
 a literal version string.
 
@@ -122,7 +122,7 @@ before every push. It is not yet wired into `ci.yml`, which is worth doing.
 The order is forced by what each step reads:
 
 1. `bumpp package.json` (root manifest)
-2. `node scripts/sync-version.mjs`
+2. `node scripts/sync-version.ts`
 3. `cargo update -w`, which is what rewrites `Cargo.lock`
 4. `pnpm install --lockfile-only`, which rewrites `pnpm-lock.yaml`
 5. `cargo metadata` on `docs/tools/demo-wasm` and `docs/tools/projection-dump`,
@@ -133,7 +133,7 @@ The order is forced by what each step reads:
 Step 5 is easy to forget and expensive to forget. Those two tools sit outside
 the product workspace and keep their own `Cargo.lock`, each recording a
 resolved version for the crates in `crates/` that it depends on. A version bump
-leaves both stale, and `scripts/build-docs-wasm.mjs` builds with `--locked`, so
+leaves both stale, and `scripts/build-docs-wasm.ts` builds with `--locked`, so
 a stale lock does not produce a wrong artifact. It fails the docs site build
 outright, about four minutes in, over one digit.
 `tests/packaging/boundary.test.mjs` checks it in milliseconds instead.
@@ -160,7 +160,7 @@ Do both before the cut if you want the site to read correctly on release day.
 
 The workflow will not tag anything until all of these pass on the bumped tree:
 
-- `node scripts/sync-version.mjs --check`
+- `node scripts/sync-version.ts --check`
 - `pnpm run test:release`, the lockstep guard. It reads the root manifest at
   runtime and asserts every package manifest equals it, so a manifest the sync
   script missed fails here rather than shipping.
@@ -170,7 +170,7 @@ The workflow will not tag anything until all of these pass on the bumped tree:
 
 ### The release notes
 
-`scripts/release-notes.mjs` builds the Release body. It runs `changelogen` over
+`scripts/release-notes.ts` builds the Release body. It runs `changelogen` over
 the commit range and then appends an **Other changes** section listing every
 commit in the range `changelogen` did not emit.
 
@@ -230,7 +230,7 @@ What makes it work:
   publishing.
 - `repository.url` in each manifest must match the GitHub repository exactly.
   Every manifest here says `git+https://github.com/markless-dev/oxc-tsrx.git`,
-  including the generated platform manifests from `scripts/package-native.mjs`.
+  including the generated platform manifests from `scripts/package-native.ts`.
 
 Provenance comes for free. npm generates and publishes a provenance attestation
 automatically for a trusted publish from a public repository, so you do not need
@@ -482,7 +482,7 @@ What the workflow checks before it writes anything:
   `provenance: true`;
 - `oxc-tsrx`'s `optionalDependencies` are exactly the eight platform packages,
   each pinned to that version;
-- **the gate**, `scripts/check-publish-artifacts.mjs`, over all nine tarballs.
+- **the gate**, `scripts/check-publish-artifacts.ts`, over all nine tarballs.
 
 Then, in this order:
 
@@ -552,7 +552,7 @@ worth being exact about what it does and does not establish.
 | Rehearse the publish | asks npmjs.com to accept all nine | the version is free and npm accepts the tarball shape |
 
 The backstop rehearsal cannot install the version being rehearsed, because that
-version is not published yet. So `scripts/verify-published-release.mjs
+version is not published yet. So `scripts/verify-published-release.ts
 --rehearsal` retargets: if the requested version is not on the registry, it runs
 every stage against the current `latest` of `oxc-tsrx` instead, and says so in
 the log. If the requested version *is* already published, it runs against that.
@@ -594,7 +594,7 @@ view` checklist here; `npm view` resolving a version string is how 0.1.0 was
 called verified while every platform package was missing `parser.node`, so it is
 no longer the last word on anything.
 
-The last step of a `publish` run is `scripts/verify-published-release.mjs`, and
+The last step of a `publish` run is `scripts/verify-published-release.ts`, and
 it is a **backstop, not the gate**. npm versions are immutable and unpublish is
 restricted, so nothing after the publish can prevent a bad release. It can only
 notice one, and the only remedy is deprecate and patch. Prevention lives in the

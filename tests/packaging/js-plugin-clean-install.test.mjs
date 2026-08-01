@@ -5,7 +5,7 @@
 // where the native binary comes from `target/release` and the wrapper is read
 // out of `packages/toolchain`. That proves the behaviour and proves nothing
 // about the published product: the lane spans `bin/oxlint`,
-// `dist/lint-cli.js`, `dist/lint-js-plugins.js`, the `oxlint-current`
+// `src/lint-cli.js`, `src/lint-js-plugins.js`, the `oxlint-current`
 // dependency, and two argument modes of the native executable, and any one of
 // those falling out of a tarball would leave that suite green.
 //
@@ -23,7 +23,8 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
 import { LspClient, pathToFileUri } from "../editor/lsp-client.mjs";
-import { parseNpmPackResponse } from "../../scripts/npm-pack-response.mjs";
+import { parseNpmPackResponse } from "../helpers/npm-pack-response.mjs";
+import { scriptNode } from "../helpers/script-node.mjs";
 import { startLocalRegistry } from "./local-registry.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
@@ -220,9 +221,9 @@ test(
     // Exactly the two tarballs a release publishes for this host: the platform
     // package built from `target/release`, and the public toolchain.
     const nativeResult = await mustRun(
-      process.execPath,
+      scriptNode(),
       [
-        "scripts/package-native.mjs",
+        "scripts/package-native.ts",
         "--allow-missing-parser-addon",
         "--target",
         hostTarget(),

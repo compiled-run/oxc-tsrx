@@ -20,10 +20,10 @@ number does not match, search for the quoted text instead.
 
 ## 1. One version pin sits outside the bump script and has already drifted
 
-**Mostly fixed since this was written.** `scripts/sync-version.mjs` now owns the
+**Mostly fixed since this was written.** `scripts/sync-version.ts` now owns the
 version surface: 73 declared locations across 25 files, driven from the root
 manifest, run by `.github/workflows/manual-release.yml`, and gated by
-`node scripts/sync-version.mjs --check`. It is not a search and replace. Each
+`node scripts/sync-version.ts --check`. It is not a search and replace. Each
 location declares the shape it expects and how many times that shape occurs, so a
 file that moved or changed shape fails the run and gets named instead of silently
 not being updated. `pnpm run test:release` is the backstop: it reads the root
@@ -56,7 +56,7 @@ should not rush to fix it in isolation: it is a root `devDependency`, nothing
 published depends on it, and the pins that consumers actually resolve are
 asserted against the shipped version literal by
 `tests/packaging/public-package-metadata.test.mjs`, which
-`scripts/sync-version.mjs` rewrites on every cut. So the published surface is
+`scripts/sync-version.ts` rewrites on every cut. So the published surface is
 protected. What is not protected is this one pin. The drift is the visible
 symptom: a pin went stale for three releases and no check anywhere noticed, which
 is the same failure mode that let two out-of-workspace `Cargo.lock` files go

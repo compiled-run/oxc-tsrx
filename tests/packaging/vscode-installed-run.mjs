@@ -5,6 +5,7 @@ import { cp, mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from "
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { runTests } from "@vscode/test-electron";
+import { scriptNode } from "../helpers/script-node.mjs";
 
 await import("../../packages/vscode/build.mjs");
 
@@ -100,9 +101,9 @@ await writeFile(
 );
 
 const packageResult = execFileSync(
-  process.execPath,
+  scriptNode(),
   [
-    join(root, "scripts/package-vscode.mjs"),
+    join(root, "scripts/package-vscode.ts"),
     "--target",
     hostTarget(),
     "--lsp-bin",

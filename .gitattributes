@@ -3,8 +3,8 @@
 # Without this, a Windows checkout with the default `core.autocrlf=true` gets
 # CRLF in the working tree, and the license tooling then reads bytes that no
 # longer match what it recorded. `licenses/oxc/PROVENANCE.json` pins a SHA-256
-# per legal file, and `scripts/generate-rust-license-inventory.mjs` and
-# `scripts/generate-vscode-license-inventory.mjs` compare against it, so a CRLF
+# per legal file, and `scripts/generate-rust-license-inventory.ts` and
+# `scripts/generate-vscode-license-inventory.ts` compare against it, so a CRLF
 # checkout fails those checks and would publish a tarball whose provenance
 # hashes disagree with the files sitting beside them.
 * text=auto eol=lf

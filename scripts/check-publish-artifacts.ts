@@ -3,11 +3,11 @@ import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { NATIVE_TARGETS, nativePackageName } from "../packages/toolchain/dist/native-targets.js";
 import { spawnCommand } from "../packages/toolchain/dist/spawn-command.js";
-import { hostPlatformPackage, installAndExerciseRelease } from "./installed-release-check.mjs";
-import { npmChildEnvironment, resolveNpmInvocation } from "./npm-invocation.mjs";
-import { parseNpmPackResponse } from "./npm-pack-response.mjs";
-import { startStagingRegistry } from "./publish-staging-registry.mjs";
-import { readPackageTarball } from "./read-package-tarball.mjs";
+import { hostPlatformPackage, installAndExerciseRelease } from "./installed-release-check.ts";
+import { npmChildEnvironment, resolveNpmInvocation } from "../tests/helpers/npm-invocation.mjs";
+import { parseNpmPackResponse } from "../tests/helpers/npm-pack-response.mjs";
+import { startStagingRegistry } from "./publish-staging-registry.ts";
+import { readPackageTarball } from "./read-package-tarball.ts";
 
 /**
  * The pre-publish gate.
@@ -31,8 +31,8 @@ import { readPackageTarball } from "./read-package-tarball.mjs";
  *   4. Does `npm publish --dry-run` accept the artifact?
  *
  * Usage:
- *   node scripts/check-publish-artifacts.mjs --artifacts release --version 0.1.5
- *   node scripts/check-publish-artifacts.mjs --pack-host
+ *   node scripts/check-publish-artifacts.ts --artifacts release --version 0.1.5
+ *   node scripts/check-publish-artifacts.ts --pack-host
  *
  *   --artifacts <dir>      gate every .tgz in <dir>
  *   --pack-host            pack this host's platform package and the public
@@ -50,7 +50,7 @@ const PUBLIC_PACKAGE = "oxc-tsrx";
 const NATIVE_PREFIX = "@oxc-tsrx/native-";
 const LIFECYCLE_SCRIPTS = ["preinstall", "install", "postinstall", "prepare", "prepublish"];
 
-function parseArguments(argv) {
+function parseArguments(argv): any {
   const options = {
     artifacts: null,
     packHost: false,
@@ -137,8 +137,8 @@ function rehearsalEnvironment(registry) {
   return environment;
 }
 
-function run(file, args, options = {}) {
-  return new Promise((resolveRun, rejectRun) => {
+function run(file, args, options: any = {}) {
+  return new Promise<any>((resolveRun, rejectRun) => {
     const child = spawnCommand(file, args, {
       cwd: options.cwd ?? root,
       env: options.env ?? process.env,
@@ -167,7 +167,7 @@ async function packHostArtifacts(artifacts) {
   const packaged = await run(
     process.execPath,
     [
-      "scripts/package-native.mjs",
+      "scripts/package-native.ts",
       "--target",
       host.target.target,
       "--bin-dir",
@@ -266,7 +266,7 @@ function checkCommon(pkg, version) {
 
   for (const [binary, target] of Object.entries(
     typeof manifest.bin === "string" ? { [name]: manifest.bin } : (manifest.bin ?? {}),
-  )) {
+  ) as [string, string][]) {
     requireEntry(pkg, target.replace(/^\.\//u, ""), `the declared bin "${binary}"`);
   }
   return { declaredFiles: files.length, presentFiles: present };

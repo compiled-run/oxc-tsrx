@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
 import { pathToFileURL } from "node:url";
+import { scriptNode } from "../helpers/script-node.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 
@@ -79,8 +80,8 @@ test("deep TSRX materializes iteratively on a bounded worker stack", async () =>
   const temporary = await mkdtemp(join(tmpdir(), "oxc-tsrx-materializer-stack-"));
   try {
     const addon = join(temporary, "parser.node");
-    await run(process.execPath, [
-      "scripts/build-parser-native.mjs",
+    await run(scriptNode(), [
+      "scripts/build-parser-native.ts",
       "--skip-build",
       "--out",
       addon,

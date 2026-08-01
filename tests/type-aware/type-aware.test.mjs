@@ -13,7 +13,7 @@ import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { installPhysicalToolPackages } from "../vite/physical-consumer.mjs";
-import { resolveTsgolintExecutable } from "../../scripts/tsgolint-path.mjs";
+import { resolveTsgolintExecutable } from "../helpers/tsgolint-path.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, "../..");

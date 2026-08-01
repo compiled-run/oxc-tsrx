@@ -1,14 +1,13 @@
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
-import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import test from "node:test";
+import { requireCts } from "../helpers/require-cts.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
-const modulePath = join(root, "packages/vscode/dist/provider-client.cjs");
-const require = createRequire(import.meta.url);
-const providerClient = require(modulePath);
+const modulePath = join(root, "packages/vscode/src/provider-client.cts");
+const providerClient = await requireCts(modulePath);
 const { discoverProviders } = await import(
   join(root, "packages/toolchain/dist/provider-resolve.js")
 );

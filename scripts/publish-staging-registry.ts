@@ -36,7 +36,7 @@ export async function startStagingRegistry() {
     response.setHeader("content-type", "application/json");
     response.end(`${JSON.stringify({ error: "Not found" })}\n`);
   });
-  await new Promise((resolveListen, rejectListen) => {
+  await new Promise<void>((resolveListen, rejectListen) => {
     server.once("error", rejectListen);
     server.listen(0, "127.0.0.1", () => {
       server.off("error", rejectListen);
@@ -44,13 +44,13 @@ export async function startStagingRegistry() {
     });
   });
   server.unref();
-  const { port } = server.address();
+  const { port } = server.address() as any;
   return {
     url: `http://127.0.0.1:${port}/`,
     requests,
     writes: () => requests.filter((entry) => WRITE_METHODS.has(entry.method)),
     close: () =>
-      new Promise((resolveClose, rejectClose) => {
+      new Promise<void>((resolveClose, rejectClose) => {
         server.close((error) => (error ? rejectClose(error) : resolveClose()));
       }),
   };

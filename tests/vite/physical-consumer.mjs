@@ -96,6 +96,16 @@ export async function installPhysicalToolPackages(modules, vitePlusPackage) {
     "LICENSE",
   ]);
 
+  // The toolchain's runtime dependency must resolve from the physical copy the
+  // same way a real install provides it.
+  const toolchainRequire = createRequire(join(root, "packages/toolchain/package.json"));
+  const pathePackage = await resolvePackageRoot(toolchainRequire, "pathe");
+  await copyPackageEntries(pathePackage, join(toolchainDestination, "node_modules/pathe"), [
+    "package.json",
+    "dist",
+    "LICENSE",
+  ]);
+
   const canonicalLint = dirname(require.resolve("oxlint-current/package.json"));
   const canonicalFormat = dirname(require.resolve("oxfmt-current/package.json"));
   await Promise.all([

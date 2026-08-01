@@ -12,7 +12,8 @@ import {
   readVsixEntries,
   verifyAndPromoteVsix,
   verifyVsixEntries,
-} from "../../scripts/vsix-archive.mjs";
+} from "../../scripts/vsix-archive.ts";
+import { scriptNode } from "../helpers/script-node.mjs";
 
 const require = createRequire(import.meta.url);
 const { ZipFile } = require("yazl");
@@ -562,7 +563,7 @@ test("release verification rejects eight target names backed by one substituted 
   }
 
   await assert.rejects(
-    run(process.execPath, [join(root, "scripts/vsix-archive.mjs"), ...paths]),
+    run(scriptNode(), [join(root, "scripts/vsix-archive.ts"), ...paths]),
     /VSIX manifest target|native manifest/iu,
   );
 });

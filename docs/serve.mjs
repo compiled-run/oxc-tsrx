@@ -13,7 +13,7 @@ import http from 'node:http'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import config from './site.config.mjs'
-import { resolveTsgolintExecutable } from '../scripts/tsgolint-path.mjs'
+import { resolveTsgolintExecutable } from '../tests/helpers/tsgolint-path.mjs'
 import {
   DEMO_TSCONFIG,
   JSX_CONTRACT,

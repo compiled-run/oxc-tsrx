@@ -6,7 +6,8 @@ import { tmpdir } from "node:os";
 import { delimiter, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
-import { parseNpmPackResponse } from "../../scripts/npm-pack-response.mjs";
+import { parseNpmPackResponse } from "../helpers/npm-pack-response.mjs";
+import { scriptNode } from "../helpers/script-node.mjs";
 import { startLocalRegistry } from "./local-registry.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
@@ -94,9 +95,9 @@ test("untouched tarballs run the complete supported workflow from an empty consu
   const artifacts = await mkdtemp(join(tmpdir(), "oxc-tsrx-clean-artifacts-"));
   const cache = join(artifacts, ".npm-cache");
   const nativeResult = await mustRun(
-    process.execPath,
+    scriptNode(),
     [
-      "scripts/package-native.mjs",
+      "scripts/package-native.ts",
       "--allow-missing-parser-addon",
       "--target",
       hostTarget(),

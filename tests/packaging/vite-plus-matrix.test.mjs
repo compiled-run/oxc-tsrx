@@ -20,7 +20,8 @@ import { delimiter, dirname, join, relative, resolve } from "node:path";
 import { createServer as createNetServer } from "node:net";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
-import { parseNpmPackResponse } from "../../scripts/npm-pack-response.mjs";
+import { parseNpmPackResponse } from "../helpers/npm-pack-response.mjs";
+import { scriptNode } from "../helpers/script-node.mjs";
 import { startLocalRegistry } from "./local-registry.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
@@ -256,9 +257,9 @@ async function readResolvedManifest(consumer, parent, packageName) {
 
 async function installArtifacts(artifacts, environment) {
   const nativeResult = await mustRun(
-    process.execPath,
+    scriptNode(),
     [
-      "scripts/package-native.mjs",
+      "scripts/package-native.ts",
       "--allow-missing-parser-addon",
       "--target",
       hostTarget(),

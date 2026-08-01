@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { nativePackageName, nativeTargetForHost } from "../packages/toolchain/dist/native-targets.js";
 import { spawnCommand } from "../packages/toolchain/dist/spawn-command.js";
-import { npmChildEnvironment, resolveNpmInvocation } from "./npm-invocation.mjs";
+import { npmChildEnvironment, resolveNpmInvocation } from "../tests/helpers/npm-invocation.mjs";
 
 /**
  * Install a release the way a consumer installs it, then make it do real work.
@@ -26,7 +26,9 @@ import { npmChildEnvironment, resolveNpmInvocation } from "./npm-invocation.mjs"
 const root = resolve(import.meta.dirname, "..");
 
 export class ReleaseCheckError extends Error {
-  constructor(message, { project } = {}) {
+  project: string | null;
+
+  constructor(message, { project }: { project?: string } = {}) {
     super(message);
     this.name = "ReleaseCheckError";
     this.project = project ?? null;
@@ -35,7 +37,8 @@ export class ReleaseCheckError extends Error {
 
 function linuxLibc() {
   if (process.platform !== "linux") return undefined;
-  return process.report?.getReport?.().header?.glibcVersionRuntime ? "glibc" : "musl";
+  const report = process.report?.getReport?.() as any;
+  return report?.header?.glibcVersionRuntime ? "glibc" : "musl";
 }
 
 /** The platform package a consumer on this host is meant to resolve. */
@@ -44,8 +47,8 @@ export function hostPlatformPackage() {
   return { target, name: nativePackageName(target) };
 }
 
-function run(file, args, options = {}) {
-  return new Promise((resolveRun, rejectRun) => {
+function run(file, args, options: any = {}) {
+  return new Promise<any>((resolveRun, rejectRun) => {
     const child = spawnCommand(file, args, {
       cwd: options.cwd,
       env: options.env,
@@ -132,7 +135,7 @@ export async function installAndExerciseRelease({
   expectedVersion,
   expectedAddon = null,
   log = (line) => process.stdout.write(`${line}\n`),
-}) {
+}: any) {
   if (!Array.isArray(specs) || specs.length === 0) {
     throw new TypeError("installAndExerciseRelease needs at least one install spec");
   }
@@ -281,7 +284,7 @@ export async function installAndExerciseRelease({
         { project },
       );
     }
-    const diagnosed = new Set(
+    const diagnosed = new Set<string>(
       (lintReport.diagnostics ?? []).map((diagnostic) => diagnostic.filename.replaceAll("\\", "/")),
     );
     for (const file of ["View.tsrx", "ordinary.tsx"]) {

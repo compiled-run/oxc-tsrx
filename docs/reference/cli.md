@@ -54,7 +54,8 @@ Official Oxlint behaves identically, so this is upstream behavior.
 
 ```text
 Usage: oxc-tsrx providers [--project <directory>] [--json]
-       oxc-tsrx setup     [--project <directory>] [--dry-run] [--write-tsconfig] [--json]
+       oxc-tsrx setup     [--project <directory>] [--dry-run] [--write-tsconfig]
+                          [--workspace-root <directory>] [--json]
        oxc-tsrx status    [--project <directory>] [--json]
        oxc-tsrx remove    [--project <directory>] [--dry-run] [--json]
 ```
@@ -63,7 +64,7 @@ Usage: oxc-tsrx providers [--project <directory>] [--json]
 | --- | --- |
 | `providers` | Reads the `oxc.provider` block of your direct dependencies and prints the index. It writes nothing and spawns nothing. `routed extensions: .tsrx -> oxc-tsrx` is the line that proves your install works. |
 | `setup` | Writes the project-local `oxlint`, `oxfmt`, and `oxc-parser` facades that Vite+ resolves, plus the editor slot below. Only Vite+ needs it. |
-| `status` | Reports whether those four slots are present. |
+| `status` | Reports whether those four slots are present, and for the editor slot whether your editor would really read the key. |
 | `remove` | Removes them and restores any transitive official package it displaced. |
 
 Running it with no subcommand prints the usage block, and so do `--help`, `-h`,
@@ -87,6 +88,58 @@ install:
 - a framework binding
 - the nearest `tsconfig.json`, which has to declare that plugin
 - TypeScript at `>=5.9 <6`
+
+### The editor slot has eight states
+
+Only the first two mean the editor is already wired up. The last two exist so
+that the report never calls wiring `active` that it cannot prove.
+
+| State | What it means |
+| --- | --- |
+| `active (editor)` | The key is written at your project root, and the extension would resolve and run it. |
+| `unnecessary (editor)` | The extension's own lookup reaches this package from your project root and from every folder above it that looks like a workspace root, so no key was written. |
+| `missing (editor)` | The shim does not reach this package and no key is written yet. `setup` writes one. |
+| `stale (editor)` | A key this package wrote no longer resolves here. `setup` refreshes it. |
+| `collision (editor)` | The key is already set to a value you wrote. It is left alone and reported. |
+| `unreadable (editor)` | `.vscode/settings.json` is not a single top-level JSON object, so nothing was written. |
+| `inert (editor)` | Two shapes, one meaning: what is right for this folder is not what the folder you open would do. Either the value is right here and a folder above it looks like the workspace root you actually open, or no key was needed here and a folder above it would run a different `oxlint`. VS Code reads `.vscode/settings.json` only from the folder you open. |
+| `unresolvable (editor)` | The key is written and the extension would not run it, because the file is missing, the value contains a character the extension rejects, or it is not spawnable on this platform. A configured value replaces the extension's own lookup rather than adding to it, so this is worse than no key. |
+
+When a key is written and any folder above your project root looks like a
+workspace root, `setup`, `status`, and `remove` print a `!` note naming each one
+and the file that made it a candidate, in order: `.code-workspace`,
+`pnpm-workspace.yaml`, a `workspaces` field, `turbo.json`, `nx.json`,
+`lerna.json`, then `.git`. When no key is written, the same note appears only
+for a folder that would really run a different `oxlint`, and it names that
+binary too. Nothing is reported for a folder that would still reach this
+package, because a false alarm costs more than it is worth. Either way the note
+lists the two remedies, in order: open the project folder itself, or rerun
+`setup --workspace-root <directory>`.
+
+### `setup --workspace-root <directory>`
+
+The only way to write the key above your project root, and it is never implied.
+Use it when the folder you open in your editor is a monorepo root rather than
+the project that has the `package.json`.
+
+<!-- pm-exec -->
+```sh
+npx oxc-tsrx setup --workspace-root .
+```
+
+The path is resolved from your working directory, like `--project`, and it has
+to be a real directory that contains your project. The value is written relative
+to the folder you name, so a root two levels up gets
+`packages/app/node_modules/oxc-tsrx/bin/oxlint` rather than
+`node_modules/oxc-tsrx/bin/oxlint`. `remove` follows the receipt back to that
+same folder.
+
+One caveat the command prints for you: a multi-root window resolves a relative
+`oxc.path.oxlint` against its **first** folder, not against the folder holding
+the settings file. `oxc.path.oxlint` is window-scoped, so a multi-root workspace
+is not a way to rescue a folder-scoped value. [Editor
+integration](/integrations/editor#when-the-key-does-not-take-effect) has the
+rest.
 
 ### `setup --write-tsconfig`
 
@@ -119,8 +172,9 @@ oxc-tsrx 0.1.5 compatibility (npm)
 
 That output is correct and the exit code is 0: `status` only ever talks about the
 Vite+ compatibility slots, so `missing` means "not installed" and `unnecessary`
-means the ordinary lookup already reaches this package. Run `setup` only if you
-use Vite+, and run `npx oxc-tsrx providers` to confirm TSRX support is wired up.
+means the ordinary lookup reaches this package from every folder you might open,
+checked rather than assumed. Run `setup` only if you use Vite+, and run `npx
+oxc-tsrx providers` to confirm TSRX support is wired up.
 
 ## Exit codes
 

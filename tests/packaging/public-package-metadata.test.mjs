@@ -59,6 +59,7 @@ test("oxc-tsrx is the complete public toolchain boundary", async () => {
     "oxfmt-current": "npm:oxfmt@0.59.0",
     "oxlint-current": "npm:oxlint@1.74.0",
     "oxlint-tsgolint": "0.24.0",
+    pathe: "2.0.3",
     "tinyglobby": "0.2.17",
   });
   // The eight-platform split is what makes a user download one binary instead
@@ -89,6 +90,13 @@ test("oxc-tsrx is the complete public toolchain boundary", async () => {
   assert.ok(manifest.keywords.includes("tsrx"));
   assert.deepEqual(manifest.publishConfig, { access: "public", provenance: true });
   assert.equal(manifest.scripts, undefined);
+  assert.deepEqual(manifest.files, [
+    "bin",
+    "dist",
+    "LICENSE",
+    "README.md",
+    "THIRD_PARTY_NOTICES.md",
+  ]);
   for (const file of ["README.md", "LICENSE", "THIRD_PARTY_NOTICES.md"]) {
     assert.ok(manifest.files.includes(file));
     assert.ok((await readFile(join(packageRoot, file), "utf8")).length > 100);

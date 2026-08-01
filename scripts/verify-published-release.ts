@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { NATIVE_TARGETS, nativePackageName } from "../packages/toolchain/dist/native-targets.js";
-import { hostPlatformPackage, installAndExerciseRelease } from "./installed-release-check.mjs";
+import { hostPlatformPackage, installAndExerciseRelease } from "./installed-release-check.ts";
 
 /**
  * The post-publish backstop.
@@ -21,7 +21,7 @@ import { hostPlatformPackage, installAndExerciseRelease } from "./installed-rele
  * workspace, and made to produce a real diagnostic and a real AST.
  *
  * Usage:
- *   node scripts/verify-published-release.mjs --version 0.1.5
+ *   node scripts/verify-published-release.ts --version 0.1.5
  *
  *   --version <version>     the version that was just published
  *   --order-file <path>     "<name> <path>" lines naming the published packages

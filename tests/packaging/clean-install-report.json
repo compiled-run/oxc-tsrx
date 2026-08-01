@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "startedAt": "2026-07-26T20:26:43.820Z",
-  "completedAt": "2026-07-26T20:27:02.228Z",
+  "startedAt": "2026-08-01T21:05:35.264Z",
+  "completedAt": "2026-08-01T21:05:51.875Z",
   "host": {
     "platform": "darwin",
     "arch": "arm64",
@@ -17,14 +17,14 @@
   "packages": {
     "toolchain": {
       "name": "oxc-tsrx",
-      "version": "0.1.0",
-      "integrity": "sha512-+0CXUndP63Oh3Rjz57Uu6z9wLcVGGV1b4b6+AcOqxNRwf8BNBZW7b5cmQ6XXEpmgkn3jq1Y0nRiylHJ1ZKsccw=="
+      "version": "0.1.5",
+      "integrity": "sha512-l0KSDCQkrnX9vaqA3fGMjbtvzgrmpKKEoppQCMO9VDpbz2Uvxk7NHX+K2RJwMVrJCUy3Oni/e+fgrMM65VYvpA=="
     },
     "native": {
       "name": "@oxc-tsrx/native-darwin-arm64",
-      "version": "0.1.0",
+      "version": "0.1.5",
       "target": "aarch64-apple-darwin",
-      "integrity": "sha512-GJg/K6RBisFsT7o/DPRqbFuXZ5zxndiVDA8BPgoeMOoXx4sjlbyjUEN+gsSGJr8W+Nf9JGfteioXCwtokwTiUw=="
+      "integrity": "sha512-LepSreXv8Q4zLhUgtmzT4rsTLO7FlrFa+WSkR9KaxK8hnKtedI5jKrOqFyS5NA0BfWNl1NS5HhcuOpZcbcEEhg=="
     },
     "vitePlus": "0.2.4"
   },

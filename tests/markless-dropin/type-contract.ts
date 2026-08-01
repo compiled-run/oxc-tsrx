@@ -1,12 +1,12 @@
-import { parseModule } from '../../packages/tsrx-core-compat/index.js';
+import { parseModule } from '../../packages/tsrx-core-compat/dist/index.js';
 import type {
 	CodeMapping,
 	CompileError,
 	MappingData,
 	ParseOptions,
 	VolarMappingsResult,
-} from '../../packages/tsrx-core-compat/types/index.js';
-import type * as AST from '../../packages/tsrx-core-compat/types/estree.js';
+} from '../../packages/tsrx-core-compat/dist/types/index.js';
+import type * as AST from '../../packages/tsrx-core-compat/dist/types/estree.js';
 
 const mappingData: MappingData = {
 	verification: true,

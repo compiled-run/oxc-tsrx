@@ -31,7 +31,7 @@ import {
   TYPE_PREFIX_BYTES,
   normalizeDiagnostics,
 } from './demo-type-lane.mjs'
-import { resolveTsgolintExecutable } from '../scripts/tsgolint-path.mjs'
+import { resolveTsgolintExecutable } from '../tests/helpers/tsgolint-path.mjs'
 
 const docsDir = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.join(docsDir, '..')

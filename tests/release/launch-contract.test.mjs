@@ -5,8 +5,8 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
 import { NATIVE_TARGETS, nativePackageName } from "../../packages/toolchain/dist/native-targets.js";
-import { npmChildEnvironment, resolveNpmInvocation } from "../../scripts/npm-invocation.mjs";
-import { parseNpmPackResponse } from "../../scripts/npm-pack-response.mjs";
+import { npmChildEnvironment, resolveNpmInvocation } from "../helpers/npm-invocation.mjs";
+import { parseNpmPackResponse } from "../helpers/npm-pack-response.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 const repository = "https://github.com/markless-dev/oxc-tsrx";
@@ -216,11 +216,11 @@ test("all platform-independent npm payloads pass pack dry-run", async () => {
 test("every hosted VSIX validates its rebuilt bundle against the legal inventory", async () => {
   const [workflow, packager] = await Promise.all([
     readFile(join(root, ".github", "workflows", "release-candidate.yml"), "utf8"),
-    readFile(join(root, "scripts", "package-vscode.mjs"), "utf8"),
+    readFile(join(root, "scripts", "package-vscode.ts"), "utf8"),
   ]);
   const build = workflow.indexOf("pnpm run build:editor");
   const legalCheck = workflow.indexOf("pnpm run licenses:vscode:check", build);
-  const packageVsix = workflow.indexOf("node scripts/package-vscode.mjs", build);
+  const packageVsix = workflow.indexOf("node scripts/package-vscode.ts", build);
   assert.ok(build >= 0, "release candidates must rebuild the editor bundle");
   assert.ok(legalCheck > build, "the rebuilt bundle must be checked against its legal inventory");
   assert.ok(
@@ -238,7 +238,7 @@ test("every hosted VSIX validates its rebuilt bundle against the legal inventory
 
   const download = workflow.indexOf("actions/download-artifact");
   const assembledReadback = workflow.indexOf(
-    "node scripts/vsix-archive.mjs release/*.vsix",
+    "node scripts/vsix-archive.ts release/*.vsix",
     download,
   );
   const legalStage = workflow.indexOf(
@@ -255,7 +255,7 @@ test("every hosted VSIX validates its rebuilt bundle against the legal inventory
 test("hosted assembly cross-binds every native report to one target-specific VSIX", async () => {
   const [workflow, nativePackager] = await Promise.all([
     readFile(join(root, ".github", "workflows", "release-candidate.yml"), "utf8"),
-    readFile(join(root, "scripts", "package-native.mjs"), "utf8"),
+    readFile(join(root, "scripts", "package-native.ts"), "utf8"),
   ]);
 
   assert.match(nativePackager, /lspSha256:\s*lsp\.sha256/u);
@@ -291,7 +291,7 @@ test("hosted assembly cross-binds every native report to one target-specific VSI
 });
 
 test("native packaging invokes npm's declared JavaScript CLI through Node", async () => {
-  const packager = await readFile(join(root, "scripts", "package-native.mjs"), "utf8");
+  const packager = await readFile(join(root, "scripts", "package-native.ts"), "utf8");
 
   assert.match(packager, /resolveNpmInvocation\(\s*\[\s*"pack"/u);
   assert.match(packager, /run\(npmInvocation\.executable, npmInvocation\.args/u);

@@ -14,13 +14,13 @@ import {
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { NATIVE_TARGETS } from "../packages/toolchain/dist/native-targets.js";
-import { resolveVsceInvocation } from "./vsce-invocation.mjs";
-import { verifyAndPromoteVsix } from "./vsix-archive.mjs";
+import { resolveVsceInvocation } from "./vsce-invocation.ts";
+import { verifyAndPromoteVsix } from "./vsix-archive.ts";
 
 const root = resolve(import.meta.dirname, "..");
 const revision = "8e0ed2ebb96137fb1611cdbd5742d5cb46037d40";
 
-function parseArguments(argv) {
+function parseArguments(argv): any {
   const options = {};
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
@@ -37,8 +37,8 @@ function parseArguments(argv) {
   return options;
 }
 
-function run(executable, args, options = {}) {
-  return new Promise((resolveRun, rejectRun) => {
+function run(executable, args, options: any = {}) {
+  return new Promise<any>((resolveRun, rejectRun) => {
     execFile(
       executable,
       args,
@@ -65,7 +65,7 @@ if (!platform) throw new Error(`unsupported Rust target: ${options.target}`);
 const source = join(root, "packages/vscode");
 await run(process.execPath, [join(source, "build.mjs"), "--check"]);
 await run(process.execPath, [
-  join(root, "scripts/generate-vscode-license-inventory.mjs"),
+  join(root, "scripts/generate-vscode-license-inventory.ts"),
   "--check",
 ]);
 const [sourcePackage, sourceBundle, sourceInventory, sourceReport] = await Promise.all([
@@ -74,7 +74,7 @@ const [sourcePackage, sourceBundle, sourceInventory, sourceReport] = await Promi
   readFile(join(source, "licenses/bundle-dependencies.json")),
   readFile(join(source, "licenses/BUNDLE_DEPENDENCIES.md")),
 ]);
-const sourceManifest = JSON.parse(sourcePackage);
+const sourceManifest = JSON.parse(sourcePackage as any);
 const lspSource = resolve(root, options["lsp-bin"]);
 const lspMetadata = await stat(lspSource).catch(() => null);
 if (!lspMetadata?.isFile()) throw new Error(`language server is missing: ${lspSource}`);

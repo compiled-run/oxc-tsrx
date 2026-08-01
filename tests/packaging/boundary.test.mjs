@@ -3,8 +3,8 @@ import { mkdir, readdir, readFile, realpath, rm, symlink, writeFile } from "node
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
-import { resolveNpmInvocation } from "../../scripts/npm-invocation.mjs";
-import { resolveVsceInvocation } from "../../scripts/vsce-invocation.mjs";
+import { resolveNpmInvocation } from "../helpers/npm-invocation.mjs";
+import { resolveVsceInvocation } from "../../scripts/vsce-invocation.ts";
 import { temporaryDirectory } from "./temporary-directory.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
@@ -147,8 +147,8 @@ test("canonical OXC crates resolve through one exact adapter revision", async ()
       readFile(adapterSourcePath, "utf8"),
       readFile(join(root, "Cargo.lock"), "utf8"),
       readFile(join(root, "packages/toolchain/dist/runtime.js"), "utf8"),
-      readFile(join(root, "scripts/package-native.mjs"), "utf8"),
-      readFile(join(root, "scripts/package-vscode.mjs"), "utf8"),
+      readFile(join(root, "scripts/package-native.ts"), "utf8"),
+      readFile(join(root, "scripts/package-vscode.ts"), "utf8"),
     ]);
 
   const dependencies = dependencyTables(adapterManifest);
@@ -786,7 +786,7 @@ test("the maintainer guide defines a source-backed upstream transplant contract"
 // The docs Rust tools sit outside the product workspace, so each keeps its own
 // Cargo.lock. Those locks record a resolved version for every path dependency
 // they pull out of crates/, which means a workspace version bump leaves them
-// stale. build-docs-wasm.mjs refuses to let a build rewrite its lock, so a
+// stale. build-docs-wasm.ts refuses to let a build rewrite its lock, so a
 // stale lock does not produce a wrong artifact, it fails the docs site build
 // outright. That is the correct behaviour and a terrible way to find out: it
 // costs a four-minute cargo build to learn a version string is one digit off.

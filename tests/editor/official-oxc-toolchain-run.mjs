@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import {
   access,
+  chmod,
   cp,
+  lstat,
   mkdir,
   mkdtemp,
   readFile,
@@ -12,14 +14,15 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { delimiter, dirname, join, resolve } from "node:path";
+import { delimiter, dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runTests } from "@vscode/test-electron";
-import { parseNpmPackResponse } from "../../scripts/npm-pack-response.mjs";
+import { parseNpmPackResponse } from "../helpers/npm-pack-response.mjs";
+import { scriptNode } from "../helpers/script-node.mjs";
 import { startLocalRegistry } from "../packaging/local-registry.mjs";
 
 /**
- * Two real VS Code sessions run against the released `oxc.oxc-vscode` build.
+ * Real VS Code sessions run against the released `oxc.oxc-vscode` build.
  *
  * 1. The compatibility session: `oxc-tsrx setup` runs, the official extension
  *    finds `node_modules/.bin/oxlint`, and TSRX is served because this package
@@ -44,10 +47,19 @@ import { startLocalRegistry } from "../packaging/local-registry.mjs";
  *    reads the provider block and starts the declared server. The patch is
  *    built and verified locally. It has never been submitted, merged, or
  *    released, and this lane must never be described as evidence that it was.
+ * 4. The setup-value session, which is the only lane that runs the artifact a
+ *    consumer actually gets. A synthetic Vite+ takes `node_modules/.bin/oxlint`,
+ *    `oxc-tsrx setup` writes its own key, and this file never writes any
+ *    `oxc.path.*` or `oxc.useExecPath` of its own. It runs twice on the same
+ *    workspace: once with the workspace-trust feature on and the folder not
+ *    trusted, where the key must be invisible to the extension, and once with
+ *    the window trusted, where `.tsrx` diagnostics, formatting and a quick fix
+ *    must all work.
  */
 
 const root = resolve(import.meta.dirname, "../..");
 const npm = process.platform === "win32" ? "npm.cmd" : "npm";
+const pnpm = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 const executable =
   process.env.VSCODE_EXECUTABLE_PATH ??
   "/Applications/Visual Studio Code.app/Contents/MacOS/Electron";
@@ -94,15 +106,18 @@ async function mustRun(executablePath, args, options = {}) {
 }
 
 async function pack(packageRoot, artifacts, cache) {
+  // `resolve` so a caller may pass either a repository-relative directory or an
+  // absolute one, which is how the synthetic collider below is packed.
+  const directory = resolve(root, packageRoot);
   const result = await mustRun(
     npm,
-    ["pack", "--json", "--pack-destination", artifacts, resolve(root, packageRoot)],
+    ["pack", "--json", "--pack-destination", artifacts, directory],
     { cwd: root, env: { ...process.env, npm_config_cache: cache } },
   );
   const packed = parseNpmPackResponse(result.stdout);
   return {
     ...packed,
-    manifest: JSON.parse(await readFile(join(root, packageRoot, "package.json"), "utf8")),
+    manifest: JSON.parse(await readFile(join(directory, "package.json"), "utf8")),
     tarball: join(artifacts, packed.filename),
   };
 }
@@ -141,6 +156,60 @@ function cleanEnvironment(consumer, registry, extra = {}) {
     }
   }
   return { ...environment, ...extra };
+}
+
+/**
+ * Launch the released extension under a real VS Code, the way
+ * `@vscode/test-electron`'s `runTests` does, except that the caller decides
+ * whether the workspace-trust feature stays on.
+ *
+ * `runTests` appends `--disable-workspace-trust` to every launch it makes
+ * (`@vscode/test-electron/out/runTest.js`), so no lane built on it can observe
+ * what the extension does when trust is enabled. That flag is not "run
+ * untrusted": it turns the feature off, and `isWorkspaceTrustEnabled()` false
+ * makes every folder trusted, which is why the three sessions above see their
+ * `oxc.path.*` settings at all.
+ *
+ * `trustFeature: "on"` leaves the flag off, so the window is a genuine
+ * Restricted Mode window: VS Code drops every value the extension lists in
+ * `capabilities.untrustedWorkspaces.restrictedConfigurations`, which includes
+ * `oxc.path.oxlint`.
+ */
+function launchEditor({
+  executable: editor,
+  workspace,
+  officialExtension,
+  extensionDirectory,
+  userDirectory,
+  suiteEnvironment,
+  trustFeature,
+}) {
+  const args = [
+    workspace,
+    `--extensions-dir=${extensionDirectory}`,
+    `--user-data-dir=${userDirectory}`,
+    "--disable-extensions",
+    "--no-sandbox",
+    "--disable-gpu-sandbox",
+    "--disable-updates",
+    "--no-cached-data",
+    "--skip-welcome",
+    "--skip-release-notes",
+    `--extensionDevelopmentPath=${officialExtension}`,
+    `--extensionTestsPath=${join(root, "tests/editor/official-oxc-toolchain-suite.cjs")}`,
+  ];
+  if (trustFeature === "bypassed") args.push("--disable-workspace-trust");
+  return new Promise((resolveLaunch, rejectLaunch) => {
+    const child = spawn(editor, args, {
+      env: { ...process.env, ...suiteEnvironment },
+      stdio: "inherit",
+    });
+    child.on("error", rejectLaunch);
+    child.on("close", (status, signal) => {
+      if (status === 0) resolveLaunch(0);
+      else rejectLaunch(new Error(`VS Code exited with ${status ?? signal}`));
+    });
+  });
 }
 
 async function assertMissing(path, message) {
@@ -253,6 +322,7 @@ async function runPatchedHostSession({
   decoys,
   decoyMarker,
   search,
+  toolchainVersion,
 }) {
   const patchedPackage = process.env.OXC_TSRX_PATCHED_OXLINT_PACKAGE;
   if (!patchedPackage) {
@@ -345,6 +415,7 @@ async function runPatchedHostSession({
       SHELL: join(temporary, "absent-login-shell"),
       OXC_TSRX_SUITE_MODE: "patched-host",
       OXC_TSRX_DISCOVERY_ROOT: patched,
+      OXC_TSRX_EXPECTED_DEPENDENCIES: JSON.stringify({ "oxc-tsrx": toolchainVersion }),
       OXC_TSRX_PATH_DECOY_DIR: decoys,
       OXC_TSRX_PATH_DECOY_MARKER: decoyMarker,
       OXC_TSRX_EDITOR_FILE: fixtures.tsrxPath,
@@ -376,6 +447,235 @@ async function runPatchedHostSession({
 }
 
 /**
+ * A synthetic Vite+. It publishes the two bin names Vite+ publishes and sorts
+ * after `oxc-tsrx`, which is the shape `tests/packaging/reinstall-survival`
+ * measured taking both names under pnpm 10.33. Both of its shims fail loudly,
+ * so a `.tsrx` request that ever reached one would be unmistakable rather than
+ * merely diagnostic free.
+ */
+const COLLIDER = "vite-plus-bin-collider";
+const COLLIDER_VERSION = "9.9.9";
+/** Exactly what `oxc-tsrx setup` writes, and the only thing that may write it. */
+const EDITOR_KEY = "oxc.path.oxlint";
+const EDITOR_VALUE = "node_modules/oxc-tsrx/bin/oxlint";
+
+async function writeBinCollider(directory) {
+  await mkdir(join(directory, "bin"), { recursive: true });
+  await writeFile(
+    join(directory, "package.json"),
+    `${JSON.stringify(
+      {
+        name: COLLIDER,
+        version: COLLIDER_VERSION,
+        description: "Stands in for Vite+, which owns node_modules/.bin/oxlint in a real scaffold",
+        type: "module",
+        bin: { oxlint: "./bin/oxlint", oxfmt: "./bin/oxfmt" },
+        files: ["bin"],
+        license: "MIT",
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  for (const name of ["oxlint", "oxfmt"]) {
+    const shim = join(directory, "bin", name);
+    await writeFile(
+      shim,
+      `#!/usr/bin/env node\nconsole.error("${COLLIDER} owns ${name}; it knows nothing about .tsrx");\nprocess.exit(3);\n`,
+    );
+    await chmod(shim, 0o755);
+  }
+  return directory;
+}
+
+/**
+ * Whatever the package manager last wrote into `node_modules/.bin/oxlint`, and
+ * whether it belongs to this package. Read twice: once to prove the collider
+ * really took the name, and once at the end to prove it still has it, so a
+ * green session can never be explained by the shim quietly becoming ours.
+ */
+async function linterShimOwner(consumer, providerReal) {
+  const shim = join(consumer, "node_modules/.bin/oxlint");
+  const info = await lstat(shim).catch(() => null);
+  if (!info) return { present: false, ours: false, detail: "absent" };
+  const target = await realpath(shim).catch(() => null);
+  if (target && target.startsWith(`${providerReal}${sep}`)) {
+    return { present: true, ours: true, detail: `symlink -> ${target}` };
+  }
+  const source =
+    info.isFile() && !info.isSymbolicLink() ? await readFile(shim, "utf8").catch(() => "") : "";
+  if (/oxc-tsrx[\\/]bin[\\/]oxlint/u.test(source)) {
+    return { present: true, ours: true, detail: "text shim naming oxc-tsrx" };
+  }
+  return { present: true, ours: false, detail: target ?? "text shim naming another package" };
+}
+
+/**
+ * The session this whole board exists for: the exact artifact `setup` writes,
+ * in a real editor, in a tree where auto-detection would land on the wrong
+ * binary.
+ *
+ * Everything the other three sessions do to make the extension find our linter,
+ * this one refuses to do. It writes no `oxc.path.*`; `oxc-tsrx setup` writes
+ * its own key and the assertions read it back off disk. It writes no
+ * `oxc.useExecPath`, so the extension spawns the value as written rather than
+ * handing it to the editor's Node. And a synthetic Vite+ owns
+ * `node_modules/.bin/oxlint`, so the extension's own lookup would find a binary
+ * that exits 3 if the key were ignored.
+ *
+ * It runs the same workspace twice:
+ *
+ * - `setup-value-untrusted` keeps the workspace-trust feature on and does not
+ *   trust the folder. `oxc.path.oxlint` is a restricted configuration, so VS
+ *   Code drops it and the extension cannot see it. This is the measurement
+ *   behind the claim that the written key is worth nothing in Restricted Mode.
+ * - `setup-value` is the proof: a trusted window, the key visible, and `.tsrx`
+ *   diagnostics, formatting and a quick fix all served by the file the relative
+ *   value names.
+ */
+async function runSetupValueSession({
+  root: temporary,
+  registry,
+  executable: editor,
+  officialExtension,
+  toolchainVersion,
+}) {
+  assert.equal(
+    spawnSync(pnpm, ["--version"], { stdio: "ignore" }).status,
+    0,
+    "this session is about the tree pnpm builds, where another package owns .bin/oxlint, so pnpm is required rather than skipped",
+  );
+
+  const consumer = join(temporary, "setup-value");
+  await mkdir(consumer, { recursive: true });
+  const environment = cleanEnvironment(consumer, registry.url, {
+    XDG_CACHE_HOME: join(temporary, "setup-value-xdg-cache"),
+    XDG_DATA_HOME: join(temporary, "setup-value-xdg-data"),
+    XDG_STATE_HOME: join(temporary, "setup-value-xdg-state"),
+    PNPM_HOME: join(temporary, "setup-value-pnpm-home"),
+  });
+
+  await writeFile(
+    join(consumer, "package.json"),
+    `${JSON.stringify(
+      {
+        name: "oxc-tsrx-setup-value-proof",
+        private: true,
+        type: "module",
+        devDependencies: {
+          "oxc-tsrx": toolchainVersion,
+          [COLLIDER]: COLLIDER_VERSION,
+        },
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  // `pnpm remove` and `pnpm rebuild` reject `--registry` outright, so every
+  // command in this file carries the registry in `npm_config_registry` too.
+  await mustRun(
+    pnpm,
+    ["install", "--no-frozen-lockfile", "--ignore-scripts", `--registry=${registry.url}`],
+    { cwd: consumer, env: environment },
+  );
+
+  const providerReal = await realpath(join(consumer, "node_modules/oxc-tsrx"));
+  const initialShim = await linterShimOwner(consumer, providerReal);
+  assert.equal(
+    initialShim.present && !initialShim.ours,
+    true,
+    `${COLLIDER} must take node_modules/.bin/oxlint, otherwise the extension's own lookup would find us and this session proves nothing: ${JSON.stringify(initialShim)}`,
+  );
+
+  // The workspace is authored first, with nothing but the enable flags, and
+  // then `setup` merges its own key into it. That ordering is the point: the
+  // key under test is the one the shipped command produced.
+  const fixtures = await writeWorkspaceFixtures(consumer, {
+    "oxc.enable.oxlint": true,
+    "oxc.enable.oxfmt": false,
+    "oxc.requireConfig": false,
+  });
+  await mustRun(
+    process.execPath,
+    [join(consumer, "node_modules/oxc-tsrx/bin/oxc-tsrx"), "setup"],
+    { cwd: consumer, env: environment },
+  );
+
+  const settingsPath = join(consumer, ".vscode/settings.json");
+  const written = JSON.parse(await readFile(settingsPath, "utf8"));
+  assert.deepEqual(
+    written,
+    {
+      "oxc.enable.oxlint": true,
+      "oxc.enable.oxfmt": false,
+      "oxc.requireConfig": false,
+      [EDITOR_KEY]: EDITOR_VALUE,
+    },
+    "setup must merge exactly one key into the settings this session authored",
+  );
+  assert.equal(
+    isAbsolute(written[EDITOR_KEY]),
+    false,
+    "the value under test is the relative one setup writes, not an absolute path",
+  );
+  assert.equal(
+    Object.keys(written).some((key) => key === "oxc.useExecPath"),
+    false,
+    "this session must never add oxc.useExecPath: the point is whether the value is spawnable as written",
+  );
+
+  const suiteEnvironment = (mode) =>
+    cleanEnvironment(consumer, registry.url, {
+      OXC_TSRX_SUITE_MODE: mode,
+      OXC_TSRX_SETUP_VALUE_ROOT: consumer,
+      OXC_TSRX_EXPECTED_EDITOR_VALUE: EDITOR_VALUE,
+      OXC_TSRX_EDITOR_FILE: fixtures.tsrxPath,
+      OXC_TSRX_ORDINARY_EDITOR_FILE: fixtures.ordinaryPath,
+      OXC_TSRX_EXPECTED_EXTENSION_PATH: officialExtension,
+    });
+
+  await launchEditor({
+    executable: editor,
+    workspace: consumer,
+    officialExtension,
+    extensionDirectory: join(temporary, "setup-value-untrusted-extensions"),
+    userDirectory: join(temporary, "setup-value-untrusted-user"),
+    suiteEnvironment: suiteEnvironment("setup-value-untrusted"),
+    trustFeature: "on",
+  });
+
+  // A trusted window. `--disable-workspace-trust` is the only way to get one
+  // here: VS Code answers `useInMemoryStorage: !!extensionTestsLocationURI`
+  // when it builds its storage services, so a run driven by
+  // `--extensionTestsPath` cannot read a persisted grant out of
+  // `<shared-data-dir>/sharedStorage/state.vscdb`, and there is no API or
+  // command an extension can call to trust a folder without a modal. What the
+  // extension sees is what a real grant produces: the feature reports every
+  // folder trusted, `vscode.workspace.isTrusted` is true, and restricted
+  // configurations are handed over. The lane above is what proves the
+  // difference is being enforced at all.
+  await launchEditor({
+    executable: editor,
+    workspace: consumer,
+    officialExtension,
+    extensionDirectory: join(temporary, "setup-value-extensions"),
+    userDirectory: join(temporary, "setup-value-user"),
+    suiteEnvironment: suiteEnvironment("setup-value"),
+    trustFeature: "bypassed",
+  });
+
+  // Nothing about the mechanism moved while the editor was running: the key is
+  // still the one `setup` wrote, and the shim is still not ours.
+  assert.deepEqual(JSON.parse(await readFile(settingsPath, "utf8")), written);
+  const finalShim = await linterShimOwner(consumer, providerReal);
+  assert.equal(
+    finalShim.ours,
+    false,
+    `node_modules/.bin/oxlint became ours during the session, so this run would not prove the setting carried it: ${JSON.stringify(finalShim)}`,
+  );
+}
+
+/**
  * Drive the real VS Code sessions.
  *
  * Everything above is exported harness: `tests/editor/vscode-run.mjs` reuses it
@@ -393,20 +693,27 @@ async function main() {
   const cache = join(temporary, ".pack-cache");
   const extensionDirectory = join(temporary, "extensions");
   const userDirectory = join(temporary, "user");
+  const collider = join(temporary, "sources", COLLIDER);
   await Promise.all([
     mkdir(artifacts, { recursive: true }),
     mkdir(consumer, { recursive: true }),
     mkdir(discovery, { recursive: true }),
     mkdir(extensionDirectory, { recursive: true }),
     mkdir(join(consumer, ".vscode"), { recursive: true }),
+    writeBinCollider(collider),
   ]);
 
   let registry;
   try {
     const nativeResult = await mustRun(
-      process.execPath,
+      scriptNode(),
       [
-        "scripts/package-native.mjs",
+        "scripts/package-native.ts",
+        // The editor lanes never import `oxc-tsrx/parser`, and building the
+        // addon is a separate `build:parser-native` step this proof does not
+        // ask for. `tests/packaging/clean-install.test.mjs` opts out the same
+        // way.
+        "--allow-missing-parser-addon",
         "--target",
         hostTarget(),
         "--bin-dir",
@@ -417,7 +724,11 @@ async function main() {
       { cwd: root, env: { ...process.env, npm_config_cache: cache } },
     );
     const native = JSON.parse(nativeResult.stdout);
-    const packages = await Promise.all([pack("packages/toolchain", artifacts, cache)]);
+    const packages = await Promise.all([
+      pack("packages/toolchain", artifacts, cache),
+      pack(collider, artifacts, cache),
+    ]);
+    const toolchainVersion = packages[0].manifest.version;
     registry = await startLocalRegistry([
       ...packages,
       {
@@ -589,6 +900,7 @@ async function main() {
         SHELL: join(temporary, "absent-login-shell"),
         OXC_TSRX_SUITE_MODE: "discovery",
         OXC_TSRX_DISCOVERY_ROOT: discovery,
+        OXC_TSRX_EXPECTED_DEPENDENCIES: JSON.stringify({ "oxc-tsrx": toolchainVersion }),
         OXC_TSRX_PATH_DECOY_DIR: decoys,
         OXC_TSRX_PATH_DECOY_MARKER: decoyMarker,
         OXC_TSRX_EDITOR_FILE: discoveryFixtures.tsrxPath,
@@ -627,6 +939,19 @@ async function main() {
     );
 
     // ---------------------------------------------------------------------------
+    // The setup-value session: the artifact `setup` writes, in a tree where the
+    // extension's own lookup would find someone else's binary.
+    // ---------------------------------------------------------------------------
+
+    await runSetupValueSession({
+      root: temporary,
+      registry,
+      executable,
+      officialExtension,
+      toolchainVersion,
+    });
+
+    // ---------------------------------------------------------------------------
     // The patched-host session: the same workspace with no pointer at all.
     // ---------------------------------------------------------------------------
 
@@ -638,6 +963,7 @@ async function main() {
       decoys,
       decoyMarker,
       search,
+      toolchainVersion,
     });
   } finally {
     await registry?.close();
@@ -656,11 +982,14 @@ export {
   assertMissing,
   cleanEnvironment,
   hostTarget,
+  launchEditor,
   main,
   mustRun,
   pack,
   run,
   runPatchedHostSession,
+  runSetupValueSession,
+  writeBinCollider,
   writePathDecoys,
   writeWorkspaceFixtures,
 };

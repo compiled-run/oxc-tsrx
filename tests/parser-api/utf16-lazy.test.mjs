@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
 
+import { scriptNode } from "../helpers/script-node.mjs";
 import { removeAddonFixture } from "./addon-fixture.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
@@ -28,8 +29,8 @@ async function withParser(callback) {
   const previous = process.env.OXC_TSRX_PARSER_ADDON;
   try {
     const addon = join(temporary, "parser.node");
-    await run(process.execPath, [
-      "scripts/build-parser-native.mjs",
+    await run(scriptNode(), [
+      "scripts/build-parser-native.ts",
       "--skip-build",
       "--out",
       addon,

@@ -126,5 +126,5 @@ child.on("close", (status, signal) => {
 });
 
 for (const signal of ["SIGINT", "SIGTERM"]) {
-  process.on(signal, () => child.kill(signal));
+  process.on(signal, () => child.kill(signal as NodeJS.Signals));
 }
