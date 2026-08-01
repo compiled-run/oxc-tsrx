@@ -113,6 +113,7 @@
     "oxfmt-current": "npm:oxfmt@0.59.0",
     "oxlint-current": "npm:oxlint@1.74.0",
     "oxlint-tsgolint": "0.24.0",
+    "pathe": "2.0.3",
     "tinyglobby": "0.2.17"
   },
   "optionalDependencies": {

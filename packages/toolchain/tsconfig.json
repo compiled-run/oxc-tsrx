@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "strict": false,
+    "noImplicitAny": false,
+    "skipLibCheck": true,
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "target": "ES2022",
+    "noEmit": true
+  },
+  "include": ["src/**/*.ts", "types/**/*.d.ts"]
+}

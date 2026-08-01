@@ -46,6 +46,11 @@ TypeScript plugins, completions, navigation, and runtime compilation alone.
 
 Do not enable the legacy client for `.tsrx` at the same time as the public
 toolchain's official-extension integration; choose one TSRX document client.
+With both installed, a `.tsrx` buffer has two formatting providers, because the
+toolchain registers `textDocument/formatting` dynamically on the `oxlint --lsp`
+connection while this client registers its own. VS Code then needs
+`editor.defaultFormatter` on that language id to know which one to use, and
+format-on-save is ambiguous until it is set.
 
 During source development, set `OXC_TSRX_LSP_BIN` to the absolute release
 binary, `target/release/oxc-tsrx`. That one executable carries the linter, the

@@ -11,12 +11,12 @@ const {
   discoverWorkspaceFolders,
   documentExtension,
   providerDocumentSelector,
-} = require("./provider-client.cjs");
+} = require("./provider-client.cts");
 
 /**
  * This extension is a provider-driven host, not a client for one language.
  *
- * Every decision below comes from `./provider-client.cjs`, which knows nothing
+ * Every decision below comes from `./provider-client.cts`, which knows nothing
  * about any particular provider: discovery runs once per workspace folder, one
  * language client exists per discovered provider that declares a language
  * server, and a client is created only when a document whose extension that
@@ -146,7 +146,7 @@ async function descriptorForDocument(state, documentPath) {
 
 /**
  * A provider bin with a Node shebang is started under this editor's own runtime,
- * which `provider-client.cjs` reports as `process.execPath`. In an Electron host
+ * which `provider-client.cts` reports as `process.execPath`. In an Electron host
  * that path is the editor binary, and it only behaves as Node when
  * `ELECTRON_RUN_AS_NODE` is set. That is host knowledge, so the host supplies it
  * here instead of the vendor-neutral decision module guessing at it. Any other

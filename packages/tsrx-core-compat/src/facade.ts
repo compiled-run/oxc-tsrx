@@ -12,6 +12,16 @@ const EAGER_PARSER_OPTIONS = Object.freeze(
 );
 const EMPTY_ERRORS = Object.freeze([]);
 
+interface CompatSyntaxError extends SyntaxError {
+  code: string | undefined;
+  pos: number | undefined;
+  raisedAt: number | undefined;
+  end: number | undefined;
+  loc: unknown;
+  fileName: string | null;
+  type: "fatal" | "usage";
+}
+
 function parserResultProgram(result) {
   return result?.type === "Program" ? result : (result?.program ?? null);
 }
@@ -248,7 +258,7 @@ function compatibleDiagnosticMessage(error) {
 }
 
 function toCompileError(error, filename, positionAt, type, source) {
-  const translated = new SyntaxError(compatibleDiagnosticMessage(error));
+  const translated = new SyntaxError(compatibleDiagnosticMessage(error)) as CompatSyntaxError;
   const { start, end } = compatibleDiagnosticSpan(error, source);
   translated.code = typeof error?.code === "string" ? error.code : undefined;
   translated.pos = start;
@@ -901,7 +911,9 @@ function restoreSubmoduleSources(program, candidates) {
     if (node === null || typeof node !== "object" || seen.has(node)) continue;
     seen.add(node);
     if (SOURCE_DECLARATION_TYPES.has(node.type) && node.source !== null) {
-      const replacement = replacements.get(`${node.source?.start}:${node.source?.end}`);
+      const replacement = replacements.get(`${node.source?.start}:${node.source?.end}`) as
+        | { name: string; start: number; end: number }
+        | undefined;
       if (replacement !== undefined) {
         node.source = {
           type: "Identifier",
@@ -935,7 +947,7 @@ function compatibleComment(comment, positionAt) {
 }
 
 function missingProgramError(filename) {
-  const error = new SyntaxError(`oxc-tsrx/parser did not return a Program for ${filename}`);
+  const error = new SyntaxError(`oxc-tsrx/parser did not return a Program for ${filename}`) as CompatSyntaxError;
   error.code = undefined;
   error.pos = undefined;
   error.raisedAt = undefined;
@@ -1139,7 +1151,10 @@ export function createTsrxCoreCompat(parser) {
         ) {
           normalizeCompletionPlaceholderSiblings(program);
         }
-        if (program !== null && selectedParserOptions.showSemanticErrors === true) {
+        if (
+          program !== null &&
+          (selectedParserOptions as { showSemanticErrors?: boolean }).showSemanticErrors === true
+        ) {
           const compatibilityErrors = undefinedLocalExportDiagnostics(program);
           if (compatibilityErrors.length > 0) {
             nativeErrors = [...nativeErrors, ...compatibilityErrors];

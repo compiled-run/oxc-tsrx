@@ -1,5 +1,7 @@
 "use strict";
 
+type ProviderClientOptions = Record<string, any>;
+
 /**
  * Provider-driven language client decisions for an editor host.
  *
@@ -100,7 +102,7 @@ function indexExtensions(index) {
  * package: a descriptor is never built from a bin shim directory or a lookup
  * path.
  */
-function providerLanguageClients(index, options = {}) {
+function providerLanguageClients(index, options: ProviderClientOptions = {}) {
   const capability = options.capability ?? LANGUAGE_SERVER_CAPABILITY;
   const readShebang = options.readShebang ?? readShebangFromDisk;
   const interpreter = options.interpreter ?? process.execPath;
@@ -150,7 +152,7 @@ function defaultRequire(path) {
  * issuer)` has exactly the shape the discovery protocol injects, so the manifest
  * is loaded once per folder and handed straight through.
  */
-function loadFolderResolver(folder, options = {}) {
+function loadFolderResolver(folder, options: ProviderClientOptions = {}) {
   const exists = options.existsSync ?? existsSync;
   const load = options.requireModule ?? defaultRequire;
   for (const name of PLUG_AND_PLAY_FILES) {
@@ -181,7 +183,7 @@ function emptyIndex(root) {
  * A folder whose discovery fails outright degrades to an empty index, which is
  * the host's pre-existing behavior by construction.
  */
-async function discoverWorkspaceFolder(folder, options = {}) {
+async function discoverWorkspaceFolder(folder, options: ProviderClientOptions = {}) {
   const { discover } = options;
   if (typeof discover !== "function") {
     throw new TypeError("discoverWorkspaceFolder requires a discover(options) function");
@@ -243,7 +245,9 @@ function clientForDocument(state, documentPath) {
  * is why a session of ordinary source files starts no provider process at all.
  */
 function plannedClientStarts(states, documents) {
-  const byFolder = new Map((states ?? []).map((state) => [state.folder, state]));
+  const byFolder = new Map<string, any>(
+    (states ?? []).map((state): [string, any] => [state.folder, state]),
+  );
   const started = new Set();
   const starts = [];
   for (const document of documents ?? []) {
@@ -261,8 +265,6 @@ function plannedClientStarts(states, documents) {
 
 module.exports = {
   LANGUAGE_SERVER_ARGUMENTS,
-  LANGUAGE_SERVER_CAPABILITY,
-  PLUG_AND_PLAY_FILES,
   clientForDocument,
   discoverWorkspaceFolder,
   discoverWorkspaceFolders,

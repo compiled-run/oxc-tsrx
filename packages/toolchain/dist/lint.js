@@ -1,1 +1,2 @@
-export { defineConfig } from "oxlint-current";
+import { defineConfig } from "oxlint-current";
+export { defineConfig };
