@@ -267,40 +267,22 @@ jobs:
       # version stamped. This step asserts those grounds instead of trusting
       # them: the record still has to describe the committed addon exactly, and
       # the build above must not have touched either file.
-      - name: Prove the committed parser addon still matches its record
+      - name: Prove the tree carries no host-built parser addon
         shell: bash
         run: |
           set -euo pipefail
-          if [[ -n "$(git status --porcelain packages/toolchain/parser.node)" ]]; then
-            echo "the build rewrote the committed parser addon:" >&2
-            git status --porcelain packages/toolchain/parser.node >&2
-            echo "a release commit must not carry an addon rebuilt for the runner's platform" >&2
+          # The parser addon is a host-specific local build artifact and is not
+          # tracked; a release cut must not carry one for the runner's platform.
+          if git ls-files --error-unmatch packages/toolchain/parser.node 2>/dev/null; then
+            echo "packages/toolchain/parser.node is tracked; the addon must stay untracked" >&2
             exit 1
           fi
-          node -e '
-            const { createHash } = require("node:crypto");
-            const { readFileSync } = require("node:fs");
-            const file = "packages/toolchain/parser.node.json";
-            const record = JSON.parse(readFileSync(file, "utf8"));
-            const addon = readFileSync("packages/toolchain/parser.node");
-            const sha256 = createHash("sha256").update(addon).digest("hex");
-            const version = JSON.parse(readFileSync("packages/toolchain/package.json", "utf8")).version;
-            const problems = [];
-            if (record.bytes !== addon.length)
-              problems.push("records " + record.bytes + " bytes but the addon is " + addon.length);
-            if (record.sha256 !== sha256)
-              problems.push("records sha256 " + record.sha256 + " but the addon hashes to " + sha256);
-            if (record.packageVersion !== version)
-              problems.push("records packageVersion " + record.packageVersion + " but the cut is " + version);
-            if (problems.length > 0) {
-              console.error(file + ": " + problems.join("; "));
-              process.exit(1);
-            }
-            console.log(
-              "ok  " + file + " describes parser.node: " + record.bytes + " bytes, " +
-                record.target + ", packageVersion " + record.packageVersion,
-            );
-          '
+          if [[ -n "$(git status --porcelain packages/toolchain/parser.node packages/toolchain/parser.node.json)" ]]; then
+            echo "the build left addon artifacts in the release tree:" >&2
+            git status --porcelain packages/toolchain/parser.node packages/toolchain/parser.node.json >&2
+            exit 1
+          fi
+          echo "ok  no tracked or stray parser addon in the release tree"
 
       # What this workflow deliberately does NOT regenerate, and why:
       #
