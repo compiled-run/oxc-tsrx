@@ -95,6 +95,15 @@ test("the packed core-compat package works from an outside consumer", async (con
     pack("packages/tsrx-core-compat", artifacts, cache),
     pack("packages/toolchain", artifacts, cache),
   ]);
+  // The parser addon is a host-specific build artifact that is not tracked, and
+  // release workflows build it outside the tree; stage this run's own copy the
+  // way native-package.test.mjs does rather than trusting a checked-out path.
+  const parserAddon = join(artifacts, "parser.node");
+  await mustRun(
+    scriptNode(),
+    ["scripts/build-parser-native.ts", "--skip-build", "--out", parserAddon],
+    { cwd: root, env: { ...process.env, npm_config_cache: cache } },
+  );
   const nativeResult = await mustRun(
     scriptNode(),
     [
@@ -104,7 +113,7 @@ test("the packed core-compat package works from an outside consumer", async (con
       "--bin-dir",
       "target/release",
       "--parser-addon",
-      "packages/toolchain/parser.node",
+      parserAddon,
       "--out-dir",
       artifacts,
     ],

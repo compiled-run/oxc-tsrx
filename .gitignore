@@ -11,3 +11,7 @@ docs/tools/projection-dump/target/
 benchmarks/comparative/.corpus-*/
 .fable-codex/
 .vscode-test/
+
+# Host-specific parser addon built for local development; CI builds its own.
+packages/toolchain/parser.node
+packages/toolchain/parser.node.json
