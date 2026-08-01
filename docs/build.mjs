@@ -1880,6 +1880,36 @@ function brandIconHtml(name) {
   return `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="${path}"/></svg>`
 }
 
+// Package-manager tab groups repeat the same brand marks several times per
+// page, and the two round marks are ~2 KiB of path data each. After a page is
+// assembled, every repeated inline mark collapses to a `<use>` of one shared
+// `<symbol>` appended before `</body>`, which keeps the uncompressed payload
+// (what the wasm-mode perf budget measures) flat no matter how many tab groups
+// a page carries. Single-occurrence marks stay inline: a symbol block would
+// cost more bytes than it saves.
+const BRAND_ICON_BY_PATH = new Map(Object.entries(BRAND_ICONS).map(([name, d]) => [d, name]))
+
+function dedupeBrandIcons(html) {
+  const counts = new Map()
+  const pattern =
+    /<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="([^"]+)"\/><\/svg>/g
+  for (const [, d] of html.matchAll(pattern)) {
+    const name = BRAND_ICON_BY_PATH.get(d)
+    if (name) counts.set(name, (counts.get(name) ?? 0) + 1)
+  }
+  const shared = new Set([...counts].filter(([, n]) => n > 1).map(([name]) => name))
+  if (shared.size === 0) return html
+  const deduped = html.replace(pattern, (match, d) => {
+    const name = BRAND_ICON_BY_PATH.get(d)
+    if (!name || !shared.has(name)) return match
+    return `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><use href="#brand-icon-${name}"/></svg>`
+  })
+  const symbols = [...shared]
+    .map((name) => `<symbol id="brand-icon-${name}" viewBox="0 0 24 24"><path d="${BRAND_ICONS[name]}"/></symbol>`)
+    .join('')
+  return deduped.replace('</body>', `<svg hidden aria-hidden="true">${symbols}</svg></body>`)
+}
+
 // A tabbed block may carry ordinary shell around the command that changes per
 // manager: the Vite+ walkthrough needs `mkdir`, `cd`, and an `export PATH` in
 // the same fence as its install. So each line is translated on its own and
@@ -2460,7 +2490,7 @@ async function build() {
     })
     const outPath = path.join(outDir, `${item.link.replace(/^\//, '')}.html`)
     await mkdir(path.dirname(outPath), { recursive: true })
-    await writeFile(outPath, html)
+    await writeFile(outPath, dedupeBrandIcons(html))
     // Raw markdown twin for the copy-as-Markdown button and llms-full.txt.
     await writeFile(outPath.replace(/\.html$/, '.md'), exportedBody)
     markdownPages.push({ ...page, body: exportedBody })
@@ -2495,7 +2525,7 @@ async function build() {
   const home = parseFrontmatter(await readFile(path.join(docsDir, 'index.md'), 'utf8'))
   await writeFile(
     path.join(outDir, 'index.html'),
-    await renderHomePage({ description: home.data.description }),
+    dedupeBrandIcons(await renderHomePage({ description: home.data.description })),
   )
   await writeFile(path.join(outDir, 'playground.html'), renderPlaygroundPage())
 
