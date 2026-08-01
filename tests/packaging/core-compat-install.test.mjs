@@ -5,11 +5,19 @@ import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import test from "node:test";
 import { parseNpmPackResponse } from "../helpers/npm-pack-response.mjs";
+import { resolveNpmInvocation } from "../helpers/npm-invocation.mjs";
 import { scriptNode } from "../helpers/script-node.mjs";
 import { startLocalRegistry } from "./local-registry.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
-const npm = process.platform === "win32" ? "npm.cmd" : "npm";
+
+// Spawning `npm.cmd` directly EINVALs on current Windows Node; every npm call
+// goes through npm's manifest-declared JavaScript entry instead, exactly like
+// the other packaging suites.
+function runNpm(args, { cwd, env }) {
+  const invocation = resolveNpmInvocation(args, { env, cwd });
+  return mustRun(invocation.executable, invocation.args, { cwd, env });
+}
 
 function hostTarget() {
   if (process.platform === "darwin") {
@@ -51,8 +59,7 @@ async function mustRun(executable, args, options = {}) {
 }
 
 async function pack(packagePath, artifacts, cache) {
-  const result = await mustRun(
-    npm,
+  const result = await runNpm(
     ["pack", "--json", "--pack-destination", artifacts, resolve(root, packagePath)],
     { cwd: root, env: { ...process.env, npm_config_cache: cache } },
   );
@@ -136,7 +143,7 @@ test("the packed core-compat package works from an outside consumer", async (con
     npm_config_registry: registry.url,
   };
   delete environment.NODE_PATH;
-  await mustRun(npm, ["install", "--ignore-scripts", "--no-audit", "--no-fund"], {
+  await runNpm(["install", "--ignore-scripts", "--no-audit", "--no-fund"], {
     cwd: consumer,
     env: environment,
   });
