@@ -71,8 +71,25 @@ function run(executable, args, options = {}) {
   });
 }
 
+/**
+ * `STATUS_STACK_BUFFER_OVERRUN`, the Windows fast-fail exit. GitHub's hosted
+ * Windows runners intermittently kill a pnpm install with it mid-download —
+ * observed twice on identical trees that passed on rerun, always this exact
+ * code, never an assertion. It is a runner-environment crash, so that one code
+ * on that one platform earns a bounded retry; every other non-zero exit stays
+ * an immediate failure.
+ */
+const WINDOWS_FAST_FAIL = 3221226505;
+
 async function mustRun(executable, args, options = {}) {
-  const result = await run(executable, args, options);
+  let result = await run(executable, args, options);
+  for (
+    let retries = 0;
+    process.platform === "win32" && result.status === WINDOWS_FAST_FAIL && retries < 2;
+    retries += 1
+  ) {
+    result = await run(executable, args, options);
+  }
   assert.equal(result.status, 0, result.stderr || result.stdout);
   return result;
 }
