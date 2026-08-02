@@ -1194,6 +1194,39 @@ test("every candidate workspace root is named with the file that made it a candi
   }
 });
 
+test("an installed ancestor with no workspace declaration is still a named candidate", async () => {
+  // The Vite+ walkthrough manufactures exactly this shape: a demo folder made
+  // with --no-git holding only a package.json, a lockfile, and node_modules,
+  // with the real project scaffolded one level below. Opening the demo folder
+  // in the editor makes the project's own settings key inert, so the demo
+  // folder must be named even though it declares no workspace at all.
+  const { compatibilityStatus } = await import(pathToFileURL(join(packageRoot, "dist/compat.js")));
+  const temporary = await temporaryDirectory("oxc-tsrx-editor-installed-ancestor-");
+  try {
+    const nested = await providerFixture(temporary, join("demo", "my-app"), {
+      ownsLinterShim: false,
+    });
+    const demo = join(temporary, "demo");
+    await writeFile(
+      join(demo, "package.json"),
+      `${JSON.stringify({ name: "demo-shell", private: true, dependencies: { "vite-plus": "^0.2.6" } }, null, 2)}\n`,
+    );
+    await writeFile(join(demo, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n");
+    await mkdir(join(demo, "node_modules"), { recursive: true });
+    // A bare manifest with neither lockfile nor node_modules stays invisible:
+    // it is not an installed project, and naming it would be noise.
+    const bare = join(temporary, "demo", "my-app", "packages");
+    await mkdir(bare, { recursive: true });
+
+    const status = await compatibilityStatus({ projectRoot: nested.project, platform: "linux" });
+    assert.deepEqual(status.editorSlot.workspaceRoots, [
+      { path: demo, evidence: "pnpm-lock.yaml" },
+    ]);
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
+});
+
 /**
  * Another tool's `oxlint`, in the `.bin` of whichever folder is named. This is
  * the thing that makes an ancestor dangerous rather than merely present.

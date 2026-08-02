@@ -98,6 +98,27 @@ const WORKSPACE_ROOT_EVIDENCE = Object.freeze([
   "nx.json",
   "lerna.json",
   ".git",
+  // Weakest evidence, ranked last: an installed project with no workspace
+  // declaration at all. A folder holding a package.json next to a lockfile or
+  // node_modules is still a folder someone opens in the editor - the Vite+
+  // walkthrough manufactures exactly this shape above the project, with
+  // --no-git so nothing stronger exists to notice it by.
+  "package-lock.json",
+  "pnpm-lock.yaml",
+  "yarn.lock",
+  "bun.lock",
+  "bun.lockb",
+  "npm-shrinkwrap.json",
+  "node_modules",
+]);
+
+const LOCKFILE_EVIDENCE = Object.freeze([
+  "package-lock.json",
+  "pnpm-lock.yaml",
+  "yarn.lock",
+  "bun.lock",
+  "bun.lockb",
+  "npm-shrinkwrap.json",
 ]);
 
 const CODE_WORKSPACE_SUFFIX = ".code-workspace";
@@ -123,6 +144,16 @@ async function workspaceRootEvidence(directory) {
   if (manifest && manifest.workspaces !== undefined) return "package.json";
   for (const name of ["turbo.json", "nx.json", "lerna.json", ".git"]) {
     if (await exists(join(directory, name))) return name;
+  }
+  // An installed project that declares nothing: a manifest sitting next to a
+  // lockfile or node_modules. No marker above catches it (a scaffold made with
+  // --no-git has no .git), yet it is precisely the folder a reader opens in
+  // the editor, and opened there the project's own settings key does nothing.
+  if (manifest) {
+    for (const name of LOCKFILE_EVIDENCE) {
+      if (await exists(join(directory, name))) return name;
+    }
+    if (await exists(join(directory, "node_modules"))) return "node_modules";
   }
   return null;
 }

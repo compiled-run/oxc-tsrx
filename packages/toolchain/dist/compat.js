@@ -82,7 +82,22 @@ const WORKSPACE_ROOT_EVIDENCE = Object.freeze([
 	"turbo.json",
 	"nx.json",
 	"lerna.json",
-	".git"
+	".git",
+	"package-lock.json",
+	"pnpm-lock.yaml",
+	"yarn.lock",
+	"bun.lock",
+	"bun.lockb",
+	"npm-shrinkwrap.json",
+	"node_modules"
+]);
+const LOCKFILE_EVIDENCE = Object.freeze([
+	"package-lock.json",
+	"pnpm-lock.yaml",
+	"yarn.lock",
+	"bun.lock",
+	"bun.lockb",
+	"npm-shrinkwrap.json"
 ]);
 const CODE_WORKSPACE_SUFFIX = ".code-workspace";
 function evidenceRank(evidence) {
@@ -106,6 +121,10 @@ async function workspaceRootEvidence(directory) {
 		"lerna.json",
 		".git"
 	]) if (await exists(join(directory, name))) return name;
+	if (manifest) {
+		for (const name of LOCKFILE_EVIDENCE) if (await exists(join(directory, name))) return name;
+		if (await exists(join(directory, "node_modules"))) return "node_modules";
+	}
 	return null;
 }
 /**
