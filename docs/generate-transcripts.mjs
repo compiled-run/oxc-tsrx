@@ -382,7 +382,7 @@ const scaffoldPackageJson = `${JSON.stringify(
     type: 'module',
     devDependencies: {
       '@types/react': '^19.2.17',
-      'oxc-tsrx': '0.2.1',
+      'oxc-tsrx': '0.2.2',
       typescript: '~6.0.2',
       'vite-plus': '^0.2.6',
     },

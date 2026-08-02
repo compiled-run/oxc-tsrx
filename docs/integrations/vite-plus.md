@@ -42,7 +42,7 @@ What you get is an ordinary React and TypeScript app that knows nothing about
 ## 3. Add the linter and the editor toolchain
 
 ```sh
-vp install -D oxc-tsrx@0.2.1 oxlint-tsgolint@0.24.0 \
+vp install -D oxc-tsrx@0.2.2 oxlint-tsgolint@0.24.0 \
   @tsrx/typescript-plugin @tsrx/react
 ```
 
@@ -85,7 +85,7 @@ project's own manager, not a fixed one:
   hands it to npm instead of reading it itself:
 
   ```sh
-  vp install -D oxc-tsrx@0.2.1 oxlint-tsgolint@0.24.0 \
+  vp install -D oxc-tsrx@0.2.2 oxlint-tsgolint@0.24.0 \
     @tsrx/typescript-plugin @tsrx/react -- --legacy-peer-deps
   ```
 
@@ -248,7 +248,7 @@ and the walkthrough above is the rest:
 
 <!-- pm-install -->
 ```sh
-npm install --save-dev vite-plus oxc-tsrx@0.2.1
+npm install --save-dev vite-plus oxc-tsrx@0.2.2
 npx oxc-tsrx setup
 ```
 

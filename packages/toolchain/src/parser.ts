@@ -3,7 +3,7 @@ import { parseTrustedTsrxProgram, parseTsrxProgram } from "./tsrx-transfer.js";
 import { NATIVE_TARGETS, nativePackageName, nativeTargetForHost } from "./native-targets.js";
 
 const require = createRequire(import.meta.url);
-const PACKAGE_VERSION = "0.2.1";
+const PACKAGE_VERSION = "0.2.2";
 const parserManifest = Object.freeze({
   name: "oxc-tsrx",
   version: PACKAGE_VERSION,
