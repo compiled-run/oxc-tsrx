@@ -463,7 +463,7 @@ export async function readVsixEntries(path, limits = DEFAULT_VSIX_LIMITS) {
   });
 }
 
-export async function verifyVsixArchive(path, expected, options: any = {}) {
+async function verifyVsixArchive(path, expected, options: any = {}) {
   const entries = await readVsixEntries(path, options.limits ?? DEFAULT_VSIX_LIMITS);
   return verifyVsixEntries(entries, expected);
 }

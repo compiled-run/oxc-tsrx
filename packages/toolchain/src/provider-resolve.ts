@@ -48,8 +48,6 @@ export const RESERVED_EXTENSIONS = Object.freeze([
 
 const RESERVED = new Set(RESERVED_EXTENSIONS);
 const IDENTIFIER = /^[a-z][a-z0-9-]*$/u;
-const FATAL_CODES = new Set(["duplicate-id", "extension-conflict", "reserved-extension"]);
-
 export class ProviderProtocolError extends Error {
   diagnostics: any;
 
@@ -563,10 +561,6 @@ export function providerExtensions(index) {
 
 export function hasProviderErrors(index) {
   return (index?.diagnostics ?? []).some((entry) => entry.severity === "error");
-}
-
-export function isFatalDiagnostic(entry) {
-  return FATAL_CODES.has(entry?.code);
 }
 
 /**

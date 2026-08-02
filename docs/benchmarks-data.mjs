@@ -466,7 +466,7 @@ const tickLabel = (value) => String(Number(Number(value).toFixed(6)))
 // ratio gates, the two raw runs the ratio divides).
 const GRID = { left: 200, right: 64, gateTop: 52, stripHeight: 30, lowerTop: 118, ratioHeight: 58 }
 const CHART_WIDTH = 700
-export const chartHeightFor = (kind) => (kind === 'ratio' ? 200 : kind === 'samples' ? 176 : 108)
+const chartHeightFor = (kind) => (kind === 'ratio' ? 200 : kind === 'samples' ? 176 : 108)
 
 const budgetSymbol = (direction) => (direction === '<=' ? '≤' : '≥')
 

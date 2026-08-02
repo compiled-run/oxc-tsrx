@@ -404,17 +404,6 @@ export async function discoverTsrxFiles(positionals, cwd = process.cwd()) {
   return [...positives].sort();
 }
 
-export function requestedOutputFormat(args) {
-  for (let index = 0; index < args.length; index += 1) {
-    const argument = args[index];
-    if (argument === "--format" || argument === "-f") return args[index + 1] ?? null;
-    if (argument.startsWith("--format=")) return argument.slice("--format=".length);
-    if (argument.startsWith("-f=")) return argument.slice(3);
-    if (argument.startsWith("-f") && argument.length > 2) return argument.slice(2);
-  }
-  return "default";
-}
-
 export function argumentValue(args, names) {
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];

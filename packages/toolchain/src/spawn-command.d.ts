@@ -4,8 +4,6 @@ export interface OxcTsrxCommandInvocation {
   readonly windowsVerbatimArguments: boolean;
 }
 
-export declare function isBatchFile(file: string, platform?: NodeJS.Platform): boolean;
-
 export declare function escapeCommandArgument(argument: string): string;
 
 export declare function resolveCommandInvocation(

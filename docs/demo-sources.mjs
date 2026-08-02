@@ -82,7 +82,7 @@ if (!typeAwareCode.includes(TYPE_AWARE_ANCHOR)) {
 
 // The lint scenario's anchor lives in both snippets; assert it so the shared
 // "Lint findings" and "Custom config" examples cannot go quiet either.
-export const LINT_ANCHOR = 'const pending = tasks.filter((task) => !task.done);'
+const LINT_ANCHOR = 'const pending = tasks.filter((task) => !task.done);'
 for (const [name, snippet] of Object.entries({ heroCode, playgroundCode })) {
   if (!snippet.includes(LINT_ANCHOR)) {
     throw new Error(`demo-sources: ${name} no longer contains the lint example anchor`)

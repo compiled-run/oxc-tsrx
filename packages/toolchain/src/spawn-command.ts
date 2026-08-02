@@ -43,7 +43,7 @@ const BATCH_EXTENSIONS = new Set([".cmd", ".bat"]);
  */
 const COMMAND_METACHARACTERS = /([()\][%!^"`<>&|;, *?])/gu;
 
-export function isBatchFile(file, platform = process.platform) {
+function isBatchFile(file, platform = process.platform) {
   return platform === "win32" && BATCH_EXTENSIONS.has(extname(String(file)).toLowerCase());
 }
 

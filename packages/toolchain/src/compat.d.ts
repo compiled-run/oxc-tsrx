@@ -132,10 +132,6 @@ export interface OxcTsrxRemoveResult extends OxcTsrxCompatibilityStatus {
 }
 
 export declare function findProjectRoot(start?: string): Promise<string>;
-export declare function detectPackageManager(
-  projectRoot: string,
-  userAgent?: string,
-): Promise<OxcTsrxCompatibilityStatus["packageManager"]>;
 export declare function compatibilityStatus(
   options?: OxcTsrxCompatibilityOptions,
 ): Promise<OxcTsrxCompatibilityStatus>;

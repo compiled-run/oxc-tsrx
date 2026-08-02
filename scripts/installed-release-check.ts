@@ -25,7 +25,7 @@ import { npmChildEnvironment, resolveNpmInvocation } from "../tests/helpers/npm-
 
 const root = resolve(import.meta.dirname, "..");
 
-export class ReleaseCheckError extends Error {
+class ReleaseCheckError extends Error {
   project: string | null;
 
   constructor(message, { project }: { project?: string } = {}) {

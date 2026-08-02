@@ -67,7 +67,7 @@ function isZeroBlock(block) {
  * Every entry in a tar stream, in order. `contents` is a view over the archive
  * buffer rather than a copy, so reading a 14 MB package costs one gunzip.
  */
-export function readTarEntries(archive) {
+function readTarEntries(archive) {
   const entries = [];
   let offset = 0;
   let overrides = new Map();

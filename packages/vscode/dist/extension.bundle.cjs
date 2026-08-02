@@ -21862,7 +21862,6 @@ var provider_resolve_exports = /* @__PURE__ */ __exportAll({
 	extensionOf: () => extensionOf,
 	findProjectRoot: () => findProjectRoot,
 	hasProviderErrors: () => hasProviderErrors,
-	isFatalDiagnostic: () => isFatalDiagnostic,
 	isReservedExtension: () => isReservedExtension,
 	providerDeclaration: () => providerDeclaration,
 	providerExtensions: () => providerExtensions,
@@ -22255,9 +22254,6 @@ function providerExtensions(index) {
 function hasProviderErrors(index) {
 	return (index?.diagnostics ?? []).some((entry) => entry.severity === "error");
 }
-function isFatalDiagnostic(entry) {
-	return FATAL_CODES.has(entry?.code);
-}
 /**
 * Look up one capability for one file. Returns `null` for every extension the
 * index does not own, which is the fast path for ordinary source files.
@@ -22279,7 +22275,7 @@ function resolveCapability(index, filePath, capability) {
 		...target
 	};
 }
-var SUPPORTED_PROTOCOLS, CAPABILITY_NAMES, DEPENDENCY_FIELDS, RESERVED_EXTENSIONS, RESERVED, IDENTIFIER, FATAL_CODES, ProviderProtocolError;
+var SUPPORTED_PROTOCOLS, CAPABILITY_NAMES, DEPENDENCY_FIELDS, RESERVED_EXTENSIONS, RESERVED, IDENTIFIER, ProviderProtocolError;
 var init_provider_resolve = __esmMin((() => {
 	SUPPORTED_PROTOCOLS = Object.freeze([1]);
 	CAPABILITY_NAMES = Object.freeze([
@@ -22311,11 +22307,6 @@ var init_provider_resolve = __esmMin((() => {
 	]);
 	RESERVED = new Set(RESERVED_EXTENSIONS);
 	IDENTIFIER = /^[a-z][a-z0-9-]*$/u;
-	FATAL_CODES = /* @__PURE__ */ new Set([
-		"duplicate-id",
-		"extension-conflict",
-		"reserved-extension"
-	]);
 	ProviderProtocolError = class extends Error {
 		diagnostics;
 		constructor(diagnostics) {
@@ -25467,7 +25458,6 @@ var runtime_exports = /* @__PURE__ */ __exportAll({
 	prepareVitePlusConfig: () => prepareVitePlusConfig,
 	removeExplicitTsrx: () => removeExplicitTsrx,
 	replaceConfigArgument: () => replaceConfigArgument,
-	requestedOutputFormat: () => requestedOutputFormat,
 	resolveNativeBinary: () => resolveNativeBinary,
 	resolveNativeCommand: () => resolveNativeCommand,
 	resolvePackageBinary: () => resolvePackageBinary,
@@ -25733,16 +25723,6 @@ async function discoverTsrxFiles(positionals, cwd = process.cwd()) {
 		for (const match of matches) if (match.endsWith(".tsrx")) positives.add((0, node_path.resolve)(match));
 	}
 	return [...positives].sort();
-}
-function requestedOutputFormat(args) {
-	for (let index = 0; index < args.length; index += 1) {
-		const argument = args[index];
-		if (argument === "--format" || argument === "-f") return args[index + 1] ?? null;
-		if (argument.startsWith("--format=")) return argument.slice(9);
-		if (argument.startsWith("-f=")) return argument.slice(3);
-		if (argument.startsWith("-f") && argument.length > 2) return argument.slice(2);
-	}
-	return "default";
 }
 function argumentValue(args, names) {
 	for (let index = 0; index < args.length; index += 1) {

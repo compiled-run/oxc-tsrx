@@ -326,7 +326,7 @@ function inAgentEnvironment(env) {
   return env.TERM_PROGRAM === "kiro";
 }
 
-// `requestedOutputFormat` answers `default` for both `--format=default` and no
+// An effective `default` can come from either `--format=default` or no
 // `--format` at all, and the difference is the whole question here.
 function explicitOutputFormat(args) {
   for (let index = 0; index < args.length; index += 1) {
