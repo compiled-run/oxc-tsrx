@@ -23,7 +23,7 @@ dependency:
 
 <!-- pm-install -->
 ```sh
-npm install --save-dev oxc-tsrx@0.2.0
+npm install --save-dev oxc-tsrx@0.2.1
 ```
 
 That is the whole setup. There is no config file and no ignore file to write.
@@ -46,7 +46,7 @@ This is the complete list of things you have to run to lint and format `.tsrx`.
 
 | Where you use it | Steps | What you run |
 | --- | --- | --- |
-| Command line (`oxlint`, `oxfmt`) | 1 | `npm install --save-dev oxc-tsrx@0.2.0` |
+| Command line (`oxlint`, `oxfmt`) | 1 | `npm install --save-dev oxc-tsrx@0.2.1` |
 | Editor, through the released official OXC extension | 1 | the same install, and nothing else |
 | [Vite+](#try-it-with-vite) (`vp lint`, `vp fmt`) | 2 | the same install, then `oxc-tsrx setup` |
 
@@ -64,7 +64,7 @@ both, and the walkthrough above is the rest of the story:
 
 <!-- pm-install -->
 ```sh
-npm install --save-dev vite-plus oxc-tsrx@0.2.0
+npm install --save-dev vite-plus oxc-tsrx@0.2.1
 npx oxc-tsrx setup
 ```
 

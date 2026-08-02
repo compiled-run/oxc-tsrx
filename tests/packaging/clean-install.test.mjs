@@ -127,7 +127,7 @@ test("untouched tarballs run the complete supported workflow from an empty consu
     private: true,
     type: "module",
     dependencies: {
-      "oxc-tsrx": "0.2.0",
+      "oxc-tsrx": "0.2.1",
       "vite-plus": "0.2.4",
     },
   };

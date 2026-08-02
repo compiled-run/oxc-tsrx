@@ -388,7 +388,7 @@ test(
     };
 
     await context.test("npm: one declared dependency and no activation step", async () => {
-      const app = await consumer("npm-consumer", { "oxc-tsrx": "0.2.0" });
+      const app = await consumer("npm-consumer", { "oxc-tsrx": "0.2.1" });
       await mustRun(
         npm,
         ["install", "--ignore-scripts", "--no-audit", "--no-fund", `--registry=${registry.url}`],
@@ -485,7 +485,7 @@ test(
         subtest.skip("pnpm is not installed");
         return;
       }
-      const app = await consumer("pnpm-consumer", { "oxc-tsrx": "0.2.0" });
+      const app = await consumer("pnpm-consumer", { "oxc-tsrx": "0.2.1" });
       await mustRun(
         pnpm,
         ["install", "--ignore-scripts", `--registry=${registry.url}`],
@@ -524,7 +524,7 @@ test(
       async () => {
         const app = await consumer("mixed-consumer", {
           "demo-language-provider": "1.0.0",
-          "oxc-tsrx": "0.2.0",
+          "oxc-tsrx": "0.2.1",
         });
         await mustRun(
           npm,
@@ -625,7 +625,7 @@ test("the providers report is a read-only audit that fails loudly", async (conte
   };
 
   await context.test("a clean project reports every declared capability", async () => {
-    const project = await fixture("solo", { "oxc-tsrx": "0.2.0" }, {});
+    const project = await fixture("solo", { "oxc-tsrx": "0.2.1" }, {});
     const before = await snapshot(project);
     const result = await run(process.execPath, [cli, "providers", "--json", "--project", project]);
     assert.equal(result.status, 0, result.stderr);
@@ -640,7 +640,7 @@ test("the providers report is a read-only audit that fails loudly", async (conte
 
     const text = await run(process.execPath, [cli, "providers", "--project", project]);
     assert.equal(text.status, 0, text.stderr);
-    assert.match(text.stdout, /oxc-tsrx@0\.2\.0 \(provider tsrx, protocol 1\)/u);
+    assert.match(text.stdout, /oxc-tsrx@0\.2\.1 \(provider tsrx, protocol 1\)/u);
     assert.match(text.stdout, /language tsrx: \.tsrx/u);
     assert.match(text.stdout, /routed extensions: \.tsrx -> oxc-tsrx/u);
   });
@@ -648,7 +648,7 @@ test("the providers report is a read-only audit that fails loudly", async (conte
   await context.test("two providers claiming one extension fail loudly", async () => {
     const project = await fixture(
       "conflict",
-      { "oxc-tsrx": "0.2.0", "rival-language-provider": "1.0.0" },
+      { "oxc-tsrx": "0.2.1", "rival-language-provider": "1.0.0" },
       { "rival-language-provider": providerStub("rival-language-provider", "rival", ".tsrx") },
     );
     const result = await run(process.execPath, [cli, "providers", "--json", "--project", project]);

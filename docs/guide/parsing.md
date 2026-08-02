@@ -20,7 +20,7 @@ You need Node.js 20.19 or newer:
 
 <!-- pm-install -->
 ```sh
-npm install oxc-tsrx@0.2.0
+npm install oxc-tsrx@0.2.1
 ```
 
 Like the CLI tools, the parser is native Rust code. Your package manager
