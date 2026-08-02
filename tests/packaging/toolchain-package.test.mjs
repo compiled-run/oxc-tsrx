@@ -1031,7 +1031,7 @@ test("a workspace root above the project root is reported instead of claimed act
     assert.equal(written.editorSlot.state, "inert");
     assert.equal(written.editorSlot.reach.state, "inert");
     assert.equal(written.editorSlot.reach.resolution.reason, "resolved");
-    assert.equal(written.editorSlot.notes.length, 2);
+    assert.equal(written.editorSlot.notes.length, 3);
     assert.match(
       written.editorSlot.notes[0],
       /VS Code reads \.vscode\/settings\.json only from the folder you open/u,
@@ -1045,6 +1045,9 @@ test("a workspace root above the project root is reported instead of claimed act
         "u",
       ),
     );
+    // A written key changes nothing in a window whose server is already
+    // running, so every write ends by saying so.
+    assert.match(written.editorSlot.notes[2], /reload it \(Developer: Reload Window\)/u);
 
     const report = formatCompatibilityReport(written);
     assert.match(report, /oxc\.path\.oxlint:\s+inert \(editor\)/u);
@@ -1138,6 +1141,81 @@ test("--workspace-root is the only way to write above the project root", async (
     const removed = await removeCompatibility({ projectRoot: nested.project, platform: "linux" });
     assert.equal(removed.removed.includes("oxc.path.oxlint"), true);
     assert.equal((await readdir(monorepo)).includes(".vscode"), false);
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
+});
+
+test("a workspace-root placement survives the reinstall that wipes the receipt", async () => {
+  // The receipt lives under node_modules, and the walkthroughs themselves tell
+  // readers to reinstall and re-run setup. Before this test existed, that wipe
+  // made plain `setup` forget a --workspace-root placement, write a second key
+  // at the project root, and leave the parent key behind in a file nothing
+  // took back - a demo whose editor went dark after every dependency change.
+  const { compatibilityStatus, removeCompatibility, setupCompatibility } = await import(
+    pathToFileURL(join(packageRoot, "dist/compat.js"))
+  );
+  const temporary = await temporaryDirectory("oxc-tsrx-editor-reinstall-");
+  try {
+    const nested = await providerFixture(temporary, join("demo", "my-app"), {
+      ownsLinterShim: false,
+    });
+    const demo = join(temporary, "demo");
+    // The walkthrough's exact parent shape: an installed project, no .git.
+    await writeFile(
+      join(demo, "package.json"),
+      `${JSON.stringify({ name: "demo-shell", private: true }, null, 2)}\n`,
+    );
+    await writeFile(join(demo, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n");
+    const ancestorSettings = join(demo, ".vscode", "settings.json");
+    const receipt = join(nested.project, "node_modules", ".oxc-tsrx-compat");
+
+    const options = { projectRoot: nested.project, platform: "linux" };
+    await setupCompatibility({ ...options, workspaceRoot: demo });
+    assert.deepEqual(JSON.parse(await readFile(ancestorSettings, "utf8")), {
+      "oxc.path.oxlint": "my-app/node_modules/oxc-tsrx/bin/oxlint",
+    });
+
+    // The reinstall: node_modules contents are regenerated, the receipt is gone.
+    await rm(receipt, { recursive: true, force: true });
+
+    // The durable artifact is the key itself, so status still serves it...
+    const status = await compatibilityStatus(options);
+    assert.equal(status.editorSlot.path, ancestorSettings);
+    assert.equal(status.editorSlot.settingsRoot, demo);
+    assert.equal(status.editorSlot.state, "active");
+
+    // ...plain setup keeps the placement instead of writing a second key...
+    const again = await setupCompatibility(options);
+    assert.equal(again.editorSlot.path, ancestorSettings);
+    assert.equal((await readdir(nested.project)).includes(".vscode"), false);
+
+    // ...re-aiming elsewhere is still refused, receipt or no receipt...
+    await assert.rejects(
+      setupCompatibility({ ...options, workspaceRoot: nested.project }),
+      /already wrote "oxc\.path\.oxlint"/u,
+    );
+
+    // ...and remove finds its way home too. Without the receipt it cannot
+    // prove it created the settings file, so the key goes and the emptied file
+    // conservatively stays - deleting a file it cannot prove it made would be
+    // presumptuous.
+    await rm(receipt, { recursive: true, force: true });
+    const removed = await removeCompatibility(options);
+    assert.equal(removed.removed.includes("oxc.path.oxlint"), true);
+    const survivor = JSON.parse(await readFile(ancestorSettings, "utf8").catch(() => "{}"));
+    assert.equal(survivor["oxc.path.oxlint"], undefined);
+    await rm(join(demo, ".vscode"), { recursive: true, force: true });
+
+    // A parent key that resolves into someone else's install is not adopted:
+    // it is their wiring, not a lost receipt of ours.
+    await mkdir(join(demo, ".vscode"), { recursive: true });
+    await writeFile(
+      ancestorSettings,
+      `${JSON.stringify({ "oxc.path.oxlint": "elsewhere/node_modules/oxc-tsrx/bin/oxlint" }, null, 2)}\n`,
+    );
+    const foreign = await compatibilityStatus(options);
+    assert.equal(foreign.editorSlot.settingsRoot, nested.project);
   } finally {
     await rm(temporary, { recursive: true, force: true });
   }

@@ -881,6 +881,39 @@ async function readEditorReceipt(modules) {
 }
 
 /**
+ * The durable form of the receipt: the key already sitting in a settings file.
+ *
+ * The receipt lives under `node_modules`, and every reinstall wipes it - which
+ * is routine, because the walkthroughs themselves tell readers to reinstall and
+ * re-run `setup`. The `.vscode` key survives the wipe, so when the receipt is
+ * gone the project root and every candidate workspace root are asked directly:
+ * a settings file whose key resolves back into THIS project's installed copy is
+ * a placement a previous `setup` made, and plain `setup`/`remove` keep serving
+ * it instead of silently reverting to the project root and leaving the old key
+ * behind in a file nothing takes back. A key resolving anywhere else is someone
+ * else's wiring and is left alone. Nearest placement wins: the project root is
+ * checked before any ancestor.
+ */
+async function recoverWrittenSettingsRoot(projectRoot) {
+  const candidates = [
+    projectRoot,
+    ...(await candidateWorkspaceRoots(projectRoot)).map((candidate) => candidate.path),
+  ];
+  const installed = join(projectRoot, "node_modules", PROVIDER);
+  for (const directory of candidates) {
+    const settings = await readJson(
+      join(directory, EDITOR_SLOT.directory, EDITOR_SLOT.file),
+    ).catch(() => null);
+    const value = settings?.[EDITOR_SLOT.key];
+    if (typeof value !== "string" || value.length === 0) continue;
+    const target = isAbsolute(value) ? value : resolve(directory, value);
+    const offset = relative(installed, target);
+    if (!offset.startsWith("..") && !isAbsolute(offset)) return directory;
+  }
+  return null;
+}
+
+/**
  * Which folder's `.vscode/settings.json` this run is talking about.
  *
  * An explicit `--workspace-root` wins, then whatever a previous `setup`
@@ -895,7 +928,7 @@ async function readEditorReceipt(modules) {
 async function editorSettingsRoot(projectRoot, receipt, workspaceRoot) {
   const written = receipt?.settingsPath
     ? dirname(dirname(resolve(projectRoot, receipt.settingsPath)))
-    : null;
+    : await recoverWrittenSettingsRoot(projectRoot);
   if (workspaceRoot === undefined || workspaceRoot === null) return written ?? projectRoot;
   // Relative to the working directory, exactly like `--project`, so the two
   // flags on one command line never mean two different things by `../..`.
@@ -1653,6 +1686,16 @@ export async function setupCompatibility(options: any = {}) {
         options,
       )
     : status.editorSlot;
+  if (editorWritten && !options.dryRun) {
+    // The extension reads this key once, when a window starts its server, and
+    // never watches it. A key written into an already-open window changes
+    // nothing until that window reloads - which is exactly how a freshly
+    // written correct key and a dead editor coexist.
+    editorSlot.notes = [
+      ...(editorSlot.notes ?? []),
+      `The editor reads "${EDITOR_SLOT.key}" only when a window starts its lint server. Any window that is already open keeps its current server: reload it (Developer: Reload Window) for this change to take effect.`,
+    ];
+  }
   return {
     ...status,
     action: options.dryRun ? "preview" : "setup",
