@@ -865,10 +865,13 @@ document.addEventListener('keydown', (event) => {
 
 // ---------- SPA routing via the Navigation API (Chromium; others fall back to MPA) ----------
 const pageCache = new Map()
-// Exposed for docs/verify.mjs only: warming is proven by cache STATE, not by a
-// network event, because a pointer travelling to one link can prefetch others
-// it crosses, after which no request ever fires for an already-warm path.
+// Exposed for docs/verify.mjs only. Warming is proven by calling the router's
+// own fetchPage and by cache STATE rather than by simulating a pointer and
+// waiting for a network event: a pointer travelling to one link can prefetch
+// links it crosses (after which no request ever fires for an already-warm
+// path), and pointer simulation itself proved environment-sensitive on CI.
 window.__pageCache = pageCache
+window.__warmPage = (href) => fetchPage(href)
 
 async function fetchPage(href) {
   const url = new URL(href)

@@ -483,20 +483,24 @@ const settleHead = async (floorMs) => {
 // happened before the race starts, which is the condition that made the live
 // window wide enough to hit.
 const warmCache = async (pathname) => {
-  const link = page
-    .locator(`.top-nav a[href$="${pathname}"], .sidebar a[href$="${pathname}"]`)
-    .first()
-  await link.hover()
-  // Warming is proven by router-cache STATE, not by waiting for a response
-  // event: the pointer travelling to this link can cross other nav links and
-  // prefetch them incidentally, after which an already-warm path fires no
-  // request at all and an event wait times out. The state check is true the
-  // moment the page is cached no matter which hover fetched it.
-  await page.waitForFunction(
-    (target) => window.__pageCache instanceof Map && window.__pageCache.has(target),
-    pathname,
-    { timeout: 10_000 },
-  )
+  // The wild mechanism is a pointer hovering a nav link; the contract under
+  // test is that fetchPage puts the page into the router's cache before the
+  // race starts. Simulating the pointer proved environment-sensitive on CI
+  // (three distinct timeout signatures, none reproducible locally), so the
+  // router's own fetchPage is called directly and any failure names itself
+  // instead of hiding inside a hover that silently warmed nothing.
+  const outcome = await page.evaluate(async (target) => {
+    if (typeof window.__warmPage !== 'function') return 'router not initialised'
+    try {
+      await window.__warmPage(new URL(target, location.href).href)
+    } catch (error) {
+      return String(error)
+    }
+    return window.__pageCache instanceof Map && window.__pageCache.has(target)
+      ? true
+      : 'fetch completed but the page is not in the router cache'
+  }, pathname)
+  if (outcome !== true) throw new Error(`warming ${pathname}: ${outcome}`)
   return true
 }
 
