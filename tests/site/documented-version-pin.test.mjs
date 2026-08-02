@@ -54,24 +54,31 @@ test("any documented oxc-tsrx version pin names the version this repository ship
   }
 });
 
-test("the documented install commands use a dist-tag, never a frozen version", async () => {
-  // `@latest` is fine and `oxc-tsrx` on its own is fine. Both keep working
-  // when a new version ships. `oxc-tsrx@0.1.4` does not: it is the form that
-  // quietly points every reader at the previous release the moment you publish.
+test("the documented install commands pin an exact version, never a dist-tag", async () => {
+  // This policy has flipped once, deliberately, in each direction; here is the
+  // whole trade so it does not flip again by accident.
   //
-  // Worth knowing about `@latest`, because it looks stronger than it is: pnpm
-  // 11 applies its release-age hold to the `latest` tag as well, so on that
-  // resolver `oxc-tsrx@latest` and a bare `oxc-tsrx` land on exactly the same
-  // version. The tag is a statement of intent that survives a release, not a
-  // guarantee of freshness.
-  const installLine = /(?:npm install|pnpm add|yarn add|bun add)[^\n`]*\boxc-tsrx@(\S+)/g;
+  // Dist-tags survive a release without an edit, which is why the site once
+  // required them. But pnpm applies its release-age hold to the `latest` tag
+  // itself, so for about a day after every publish `oxc-tsrx@latest` silently
+  // resolves the PREVIOUS release — measured 2026-08-01, an hour after 0.2.0
+  // shipped: pnpm 11.18 installed 0.1.5 and printed only "(0.2.0 is
+  // available)". The reader who follows the docs the day a release is
+  // announced is exactly the reader the docs most need to serve.
+  //
+  // A named version skips the holdback on every package manager, and staleness
+  // is no longer the price: scripts/sync-version.ts declares every one of
+  // these pins as a slot, rewrites them at each cut, and `--check` gates CI,
+  // while the sibling test above proves the pinned version is the one this
+  // repository ships.
+  const installLine = /(?:npm install|pnpm add|yarn add|bun add|vp install)[^\n`]*\boxc-tsrx@([^\s`]+)/g;
   for (const relativePath of readerFacingSources) {
     const source = await readFile(join(root, relativePath), "utf8");
     for (const match of source.matchAll(installLine)) {
-      assert.doesNotMatch(
+      assert.match(
         match[1],
-        /^\d+\.\d+\.\d+/,
-        `${relativePath} freezes an install command at oxc-tsrx@${match[1]}; use a dist-tag so it survives the next release`,
+        /^\d+\.\d+\.\d+$/,
+        `${relativePath} sends readers to oxc-tsrx@${match[1]}; name the exact shipped version — dist-tags resolve a day behind under pnpm's release-age hold`,
       );
     }
   }

@@ -486,11 +486,18 @@ const warmCache = async (pathname) => {
   const link = page
     .locator(`.top-nav a[href$="${pathname}"], .sidebar a[href$="${pathname}"]`)
     .first()
-  const [response] = await Promise.all([
-    page.waitForResponse((r) => new URL(r.url()).pathname === pathname, { timeout: 10_000 }),
-    link.hover(),
-  ])
-  return response.ok()
+  await link.hover()
+  // Warming is proven by router-cache STATE, not by waiting for a response
+  // event: the pointer travelling to this link can cross other nav links and
+  // prefetch them incidentally, after which an already-warm path fires no
+  // request at all and an event wait times out. The state check is true the
+  // moment the page is cached no matter which hover fetched it.
+  await page.waitForFunction(
+    (target) => window.__pageCache instanceof Map && window.__pageCache.has(target),
+    pathname,
+    { timeout: 10_000 },
+  )
+  return true
 }
 
 const raceNavigations = (steps) =>

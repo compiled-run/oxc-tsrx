@@ -23,13 +23,18 @@ dependency:
 
 <!-- pm-install -->
 ```sh
-npm install --save-dev oxc-tsrx@latest
+npm install --save-dev oxc-tsrx@0.2.0
 ```
 
 That is the whole setup. There is no config file and no ignore file to write.
 The tools are Rust, but you get a prebuilt binary for your platform: no Rust
 needed, no install scripts, nothing fetched later. It works on CI that blocks
 postinstall.
+
+The command names an exact version because `@latest` lies for about a day after
+a release: pnpm holds fresh releases back by default and silently resolves the
+previous version instead. A named version skips the holdback on every package
+manager.
 
 Eight platforms have binaries.
 [Platform Support](/reference/platform-support) says which is yours and how
@@ -41,7 +46,7 @@ This is the complete list of things you have to run to lint and format `.tsrx`.
 
 | Where you use it | Steps | What you run |
 | --- | --- | --- |
-| Command line (`oxlint`, `oxfmt`) | 1 | `npm install --save-dev oxc-tsrx@latest` |
+| Command line (`oxlint`, `oxfmt`) | 1 | `npm install --save-dev oxc-tsrx@0.2.0` |
 | Editor, through the released official OXC extension | 1 | the same install, and nothing else |
 | [Vite+](#try-it-with-vite) (`vp lint`, `vp fmt`) | 2 | the same install, then `oxc-tsrx setup` |
 
@@ -59,7 +64,7 @@ both, and the walkthrough above is the rest of the story:
 
 <!-- pm-install -->
 ```sh
-npm install --save-dev vite-plus oxc-tsrx@latest
+npm install --save-dev vite-plus oxc-tsrx@0.2.0
 npx oxc-tsrx setup
 ```
 
