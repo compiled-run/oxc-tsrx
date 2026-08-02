@@ -1300,6 +1300,23 @@ test("an installed ancestor with no workspace declaration is still a named candi
     assert.deepEqual(status.editorSlot.workspaceRoots, [
       { path: demo, evidence: "pnpm-lock.yaml" },
     ]);
+
+    // Weak evidence names the folder without demoting the slot: an installed
+    // ancestor is a folder someone MIGHT open, not a monorepo root they open by
+    // default, and the walkthrough's happy path must not read like a failure.
+    const { setupCompatibility } = await import(
+      pathToFileURL(join(packageRoot, "dist/compat.js"))
+    );
+    const written = await setupCompatibility({ projectRoot: nested.project, platform: "linux" });
+    assert.equal(written.editorSlot.state, "active");
+    const ancestorNotes = written.editorSlot.notes.filter((note) => note.includes(demo));
+    assert.equal(ancestorNotes.length, 1);
+    assert.match(ancestorNotes[0], /setup --workspace-root/u);
+    assert.equal(
+      written.editorSlot.notes.some((note) => note.includes("Two remedies")),
+      false,
+      "the full remedies wall is reserved for deliberate workspace markers",
+    );
   } finally {
     await rm(temporary, { recursive: true, force: true });
   }

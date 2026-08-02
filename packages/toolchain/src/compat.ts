@@ -980,6 +980,29 @@ function workspaceRootsNote(settingsRoot, workspaceRoots) {
 }
 
 /**
+ * Deliberate workspace markers earn the full inert-plus-remedies treatment: a
+ * declared monorepo root or a repository root is a folder people open by
+ * default. The weak tier - a lockfile or node_modules next to a plain manifest,
+ * the shape every scaffold-inside-a-demo-folder walkthrough manufactures - is a
+ * folder someone MIGHT open, and a happy-path setup drowning that maybe in a
+ * warning wall teaches readers to skip the report entirely. Weak-only ancestors
+ * keep the slot active and get one line naming the folder and the one command.
+ */
+function strongWorkspaceRoots(workspaceRoots) {
+  return workspaceRoots.filter(
+    (candidate) =>
+      candidate.evidence.endsWith(CODE_WORKSPACE_SUFFIX) ||
+      WORKSPACE_ROOT_EVIDENCE.indexOf(candidate.evidence) <=
+        WORKSPACE_ROOT_EVIDENCE.indexOf(".git"),
+  );
+}
+
+function weakAncestorNote(projectRoot, workspaceRoots) {
+  const [nearest] = workspaceRoots;
+  return `If you open ${nearest.path} in your editor rather than ${projectRoot}, that window will not read this key: run ${PROVIDER} setup --workspace-root ${nearest.path} for that window.`;
+}
+
+/**
  * The two remedies, in the order to try them, worded identically for a key that
  * was written into a folder nobody opens and for a lookup that only wins in a
  * folder nobody opens. The reader's move is the same in both cases.
@@ -1044,9 +1067,12 @@ async function judgeEditorReach({ settingsRoot, projectRoot, value, workspaceRoo
     );
   }
 
-  if (workspaceRoots.length > 0) {
-    notes.push(workspaceRootsNote(settingsRoot, workspaceRoots));
+  const strong = strongWorkspaceRoots(workspaceRoots);
+  if (strong.length > 0) {
+    notes.push(workspaceRootsNote(settingsRoot, strong));
     notes.push(editorRemediesNote(projectRoot));
+  } else if (workspaceRoots.length > 0) {
+    notes.push(weakAncestorNote(projectRoot, workspaceRoots));
   }
   if (settingsRoot !== projectRoot) {
     notes.push(
@@ -1056,7 +1082,7 @@ async function judgeEditorReach({ settingsRoot, projectRoot, value, workspaceRoo
 
   const unresolvable = Boolean(rejection) || (resolution !== null && !spawnable);
   return {
-    state: unresolvable ? "unresolvable" : workspaceRoots.length > 0 ? "inert" : "ok",
+    state: unresolvable ? "unresolvable" : strong.length > 0 ? "inert" : "ok",
     value,
     windowRoot: settingsRoot,
     platform,

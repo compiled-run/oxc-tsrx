@@ -834,6 +834,22 @@ function workspaceRootsNote(settingsRoot, workspaceRoots) {
 	return workspaceRoots.length === 1 ? `VS Code reads .vscode/settings.json only from the folder you open as the workspace root, never from a subfolder of it. This folder above ${settingsRoot} looks like a workspace root: ${listed}. Open that one instead and this key is never read.` : `VS Code reads .vscode/settings.json only from the folder you open as the workspace root, never from a subfolder of it. These folders above ${settingsRoot} look like a workspace root: ${listed}. Open any of them instead and this key is never read.`;
 }
 /**
+* Deliberate workspace markers earn the full inert-plus-remedies treatment: a
+* declared monorepo root or a repository root is a folder people open by
+* default. The weak tier - a lockfile or node_modules next to a plain manifest,
+* the shape every scaffold-inside-a-demo-folder walkthrough manufactures - is a
+* folder someone MIGHT open, and a happy-path setup drowning that maybe in a
+* warning wall teaches readers to skip the report entirely. Weak-only ancestors
+* keep the slot active and get one line naming the folder and the one command.
+*/
+function strongWorkspaceRoots(workspaceRoots) {
+	return workspaceRoots.filter((candidate) => candidate.evidence.endsWith(CODE_WORKSPACE_SUFFIX) || WORKSPACE_ROOT_EVIDENCE.indexOf(candidate.evidence) <= WORKSPACE_ROOT_EVIDENCE.indexOf(".git"));
+}
+function weakAncestorNote(projectRoot, workspaceRoots) {
+	const [nearest] = workspaceRoots;
+	return `If you open ${nearest.path} in your editor rather than ${projectRoot}, that window will not read this key: run ${PROVIDER} setup --workspace-root ${nearest.path} for that window.`;
+}
+/**
 * The two remedies, in the order to try them, worded identically for a key that
 * was written into a folder nobody opens and for a lookup that only wins in a
 * folder nobody opens. The reader's move is the same in both cases.
@@ -865,13 +881,14 @@ async function judgeEditorReach({ settingsRoot, projectRoot, value, workspaceRoo
 	const spawnable = resolution === null || resolution.reason !== "resolved" ? false : isSpawnable(resolution.path, resolution.loader, platform);
 	if (resolution && !rejection && resolution.reason !== "resolved") notes.push(`${resolution.attempted ?? value} does not exist, so the extension would find no linter at all. A configured "${EDITOR_SLOT.key}" replaces the extension's own node_modules lookup instead of adding to it, with no fallback, so a value that does not resolve is worse than no value. Run ${PROVIDER} setup to refresh it.`);
 	if (resolution?.reason === "resolved" && !spawnable) notes.push(`On Windows the extension spawns a value like this through cmd.exe, which can only run .exe, .com, .bat and .cmd. "${value}" has no file extension, so the spawn fails and the editor stays silent with no error anywhere. Add "oxc.useExecPath": true to the same settings file to have it launched with Node instead.`);
-	if (workspaceRoots.length > 0) {
-		notes.push(workspaceRootsNote(settingsRoot, workspaceRoots));
+	const strong = strongWorkspaceRoots(workspaceRoots);
+	if (strong.length > 0) {
+		notes.push(workspaceRootsNote(settingsRoot, strong));
 		notes.push(editorRemediesNote(projectRoot));
-	}
+	} else if (workspaceRoots.length > 0) notes.push(weakAncestorNote(projectRoot, workspaceRoots));
 	if (settingsRoot !== projectRoot) notes.push(`"${value}" is relative to ${settingsRoot}. A multi-root window resolves a relative "${EDITOR_SLOT.key}" against its FIRST folder, not against the folder holding the settings file, so keep ${settingsRoot} first in the window or the editor looks for the linter in the wrong tree.`);
 	return {
-		state: Boolean(rejection) || resolution !== null && !spawnable ? "unresolvable" : workspaceRoots.length > 0 ? "inert" : "ok",
+		state: Boolean(rejection) || resolution !== null && !spawnable ? "unresolvable" : strong.length > 0 ? "inert" : "ok",
 		value,
 		windowRoot: settingsRoot,
 		platform,
