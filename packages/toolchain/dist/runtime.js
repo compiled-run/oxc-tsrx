@@ -305,16 +305,6 @@ async function discoverTsrxFiles(positionals, cwd = process.cwd()) {
 	}
 	return [...positives].sort();
 }
-function requestedOutputFormat(args) {
-	for (let index = 0; index < args.length; index += 1) {
-		const argument = args[index];
-		if (argument === "--format" || argument === "-f") return args[index + 1] ?? null;
-		if (argument.startsWith("--format=")) return argument.slice(9);
-		if (argument.startsWith("-f=")) return argument.slice(3);
-		if (argument.startsWith("-f") && argument.length > 2) return argument.slice(2);
-	}
-	return "default";
-}
 function argumentValue(args, names) {
 	for (let index = 0; index < args.length; index += 1) {
 		const argument = args[index];
@@ -330,4 +320,4 @@ function ensureSupportedOutput(format, files) {
 	if (files.length > 0 && format !== "default" && format !== "json") throw new Error(`OXC for TSRX currently combines default and json lint output; ${format} is unavailable for mixed .tsrx runs`);
 }
 //#endregion
-export { argumentValue, canonicalToolEnvironment, discoverTsrxFiles, ensureSupportedOutput, isViteConfigPath, platformPackage, prepareVitePlusConfig, removeExplicitTsrx, replaceConfigArgument, requestedOutputFormat, resolveNativeBinary, resolveNativeCommand, resolvePackageBinary, runCaptured, runPassthrough };
+export { argumentValue, canonicalToolEnvironment, discoverTsrxFiles, ensureSupportedOutput, isViteConfigPath, platformPackage, prepareVitePlusConfig, removeExplicitTsrx, replaceConfigArgument, resolveNativeBinary, resolveNativeCommand, resolvePackageBinary, runCaptured, runPassthrough };

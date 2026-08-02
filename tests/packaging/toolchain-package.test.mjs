@@ -1041,7 +1041,7 @@ test("a workspace root above the project root is reported instead of claimed act
     assert.match(
       written.editorSlot.notes[1],
       new RegExp(
-        `open ${escapeForRegExp(nested.project)} as the folder in your editor, or run oxc-tsrx setup --workspace-root <folder>`,
+        `open ${escapeForRegExp(nested.project)} as the folder in your editor, or - from ${escapeForRegExp(nested.project)} - run npx oxc-tsrx setup --workspace-root <folder>`,
         "u",
       ),
     );
@@ -1146,6 +1146,50 @@ test("--workspace-root is the only way to write above the project root", async (
   }
 });
 
+test("every weak ancestor in the chain gets its own copy of the key", async () => {
+  // Not just the nearest: whichever ancestor folder the editor is opened in,
+  // that window reads its own settings file, so every installed ancestor above
+  // the project is covered with a value relative to itself.
+  const { removeCompatibility, setupCompatibility } = await import(
+    pathToFileURL(join(packageRoot, "dist/compat.js"))
+  );
+  const temporary = await temporaryDirectory("oxc-tsrx-editor-chain-");
+  try {
+    const nested = await providerFixture(temporary, join("outer", "demo", "my-app"), {
+      ownsLinterShim: false,
+    });
+    const outer = join(temporary, "outer");
+    const demo = join(outer, "demo");
+    for (const shell of [outer, demo]) {
+      await writeFile(
+        join(shell, "package.json"),
+        `${JSON.stringify({ name: basename(shell), private: true }, null, 2)}\n`,
+      );
+      await writeFile(join(shell, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n");
+    }
+
+    const options = { projectRoot: nested.project, platform: "linux" };
+    const written = await setupCompatibility(options);
+    assert.equal(written.editorSlot.state, "active");
+    assert.deepEqual(
+      JSON.parse(await readFile(join(demo, ".vscode", "settings.json"), "utf8")),
+      { "oxc.path.oxlint": "my-app/node_modules/oxc-tsrx/bin/oxlint" },
+    );
+    assert.deepEqual(
+      JSON.parse(await readFile(join(outer, ".vscode", "settings.json"), "utf8")),
+      { "oxc.path.oxlint": "demo/my-app/node_modules/oxc-tsrx/bin/oxlint" },
+    );
+
+    // Symmetry across the whole chain.
+    const removed = await removeCompatibility(options);
+    assert.equal(removed.removed.includes("oxc.path.oxlint"), true);
+    assert.equal((await readdir(demo)).includes(".vscode"), false);
+    assert.equal((await readdir(outer)).includes(".vscode"), false);
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
+});
+
 test("a workspace-root placement survives the reinstall that wipes the receipt", async () => {
   // The receipt lives under node_modules, and the walkthroughs themselves tell
   // readers to reinstall and re-run setup. Before this test existed, that wipe
@@ -1185,10 +1229,17 @@ test("a workspace-root placement survives the reinstall that wipes the receipt",
     assert.equal(status.editorSlot.settingsRoot, demo);
     assert.equal(status.editorSlot.state, "active");
 
-    // ...plain setup keeps the placement instead of writing a second key...
+    // ...plain setup keeps the parent as the primary placement AND covers the
+    // project's own window too, so whichever folder is opened, that window
+    // reads a correct key...
     const again = await setupCompatibility(options);
     assert.equal(again.editorSlot.path, ancestorSettings);
-    assert.equal((await readdir(nested.project)).includes(".vscode"), false);
+    assert.deepEqual(
+      JSON.parse(
+        await readFile(join(nested.project, ".vscode", "settings.json"), "utf8"),
+      ),
+      { "oxc.path.oxlint": "node_modules/oxc-tsrx/bin/oxlint" },
+    );
 
     // ...re-aiming elsewhere is still refused, receipt or no receipt...
     await assert.rejects(
@@ -1196,16 +1247,19 @@ test("a workspace-root placement survives the reinstall that wipes the receipt",
       /already wrote "oxc\.path\.oxlint"/u,
     );
 
-    // ...and remove finds its way home too. Without the receipt it cannot
-    // prove it created the settings file, so the key goes and the emptied file
-    // conservatively stays - deleting a file it cannot prove it made would be
+    // ...and remove takes back every placement. Without the receipt it cannot
+    // prove it created the settings files, so the keys go and emptied files
+    // conservatively stay - deleting a file it cannot prove it made would be
     // presumptuous.
     await rm(receipt, { recursive: true, force: true });
     const removed = await removeCompatibility(options);
     assert.equal(removed.removed.includes("oxc.path.oxlint"), true);
-    const survivor = JSON.parse(await readFile(ancestorSettings, "utf8").catch(() => "{}"));
-    assert.equal(survivor["oxc.path.oxlint"], undefined);
+    for (const settings of [ancestorSettings, join(nested.project, ".vscode", "settings.json")]) {
+      const survivor = JSON.parse(await readFile(settings, "utf8").catch(() => "{}"));
+      assert.equal(survivor["oxc.path.oxlint"], undefined, settings);
+    }
     await rm(join(demo, ".vscode"), { recursive: true, force: true });
+    await rm(join(nested.project, ".vscode"), { recursive: true, force: true });
 
     // A parent key that resolves into someone else's install is not adopted:
     // it is their wiring, not a lost receipt of ours.
@@ -1301,22 +1355,31 @@ test("an installed ancestor with no workspace declaration is still a named candi
       { path: demo, evidence: "pnpm-lock.yaml" },
     ]);
 
-    // Weak evidence names the folder without demoting the slot: an installed
-    // ancestor is a folder someone MIGHT open, not a monorepo root they open by
-    // default, and the walkthrough's happy path must not read like a failure.
+    // Weak evidence is handled, not warned about: an installed ancestor is a
+    // folder someone MIGHT open, so setup writes that folder's own copy of the
+    // key automatically, and the walkthrough's happy path reads as the success
+    // it is - active, with the extra coverage named.
     const { setupCompatibility } = await import(
       pathToFileURL(join(packageRoot, "dist/compat.js"))
     );
     const written = await setupCompatibility({ projectRoot: nested.project, platform: "linux" });
     assert.equal(written.editorSlot.state, "active");
+    assert.deepEqual(
+      JSON.parse(await readFile(join(demo, ".vscode", "settings.json"), "utf8")),
+      { "oxc.path.oxlint": "my-app/node_modules/oxc-tsrx/bin/oxlint" },
+      "the ancestor's own window is covered without a flag or a manual step",
+    );
     const ancestorNotes = written.editorSlot.notes.filter((note) => note.includes(demo));
     assert.equal(ancestorNotes.length, 1);
-    assert.match(ancestorNotes[0], /setup --workspace-root/u);
+    assert.match(ancestorNotes[0], /Also covered/u);
     assert.equal(
       written.editorSlot.notes.some((note) => note.includes("Two remedies")),
       false,
       "the full remedies wall is reserved for deliberate workspace markers",
     );
+    // Idempotent: a second setup changes nothing and reports the same coverage.
+    const again = await setupCompatibility({ projectRoot: nested.project, platform: "linux" });
+    assert.equal(again.changed.includes("oxc.path.oxlint"), false);
   } finally {
     await rm(temporary, { recursive: true, force: true });
   }
@@ -1442,7 +1505,7 @@ test("unnecessary is proven from every folder that might be opened, not assumed"
     assert.match(
       status.editorSlot.notes[1],
       new RegExp(
-        `open ${escapeForRegExp(nested.project)} as the folder in your editor, or run oxc-tsrx setup --workspace-root <folder>`,
+        `open ${escapeForRegExp(nested.project)} as the folder in your editor, or - from ${escapeForRegExp(nested.project)} - run npx oxc-tsrx setup --workspace-root <folder>`,
         "u",
       ),
     );

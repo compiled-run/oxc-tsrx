@@ -84,4 +84,4 @@ function spawnCommand(file, args = [], options = {}, spawnProcess = spawn) {
 	});
 }
 //#endregion
-export { escapeCommandArgument, isBatchFile, resolveCommandInvocation, spawnCommand };
+export { escapeCommandArgument, resolveCommandInvocation, spawnCommand };

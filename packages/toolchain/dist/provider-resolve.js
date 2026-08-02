@@ -50,11 +50,6 @@ const RESERVED_EXTENSIONS = Object.freeze([
 ]);
 const RESERVED = new Set(RESERVED_EXTENSIONS);
 const IDENTIFIER = /^[a-z][a-z0-9-]*$/u;
-const FATAL_CODES = /* @__PURE__ */ new Set([
-	"duplicate-id",
-	"extension-conflict",
-	"reserved-extension"
-]);
 var ProviderProtocolError = class extends Error {
 	diagnostics;
 	constructor(diagnostics) {
@@ -451,9 +446,6 @@ function providerExtensions(index) {
 function hasProviderErrors(index) {
 	return (index?.diagnostics ?? []).some((entry) => entry.severity === "error");
 }
-function isFatalDiagnostic(entry) {
-	return FATAL_CODES.has(entry?.code);
-}
 /**
 * Look up one capability for one file. Returns `null` for every extension the
 * index does not own, which is the fast path for ordinary source files.
@@ -476,4 +468,4 @@ function resolveCapability(index, filePath, capability) {
 	};
 }
 //#endregion
-export { CAPABILITY_NAMES, DEPENDENCY_FIELDS, PROTOCOL_VERSION, ProviderProtocolError, RESERVED_EXTENSIONS, SUPPORTED_PROTOCOLS, dependencyNames, discoverProviders, extensionOf, findProjectRoot, hasProviderErrors, isFatalDiagnostic, isReservedExtension, providerDeclaration, providerExtensions, resolveCapability };
+export { CAPABILITY_NAMES, DEPENDENCY_FIELDS, PROTOCOL_VERSION, ProviderProtocolError, RESERVED_EXTENSIONS, SUPPORTED_PROTOCOLS, dependencyNames, discoverProviders, extensionOf, findProjectRoot, hasProviderErrors, isReservedExtension, providerDeclaration, providerExtensions, resolveCapability };

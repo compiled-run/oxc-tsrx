@@ -153,7 +153,6 @@ export declare function discoverProviders(
 ): Promise<OxcProviderIndex>;
 export declare function providerExtensions(index: OxcProviderIndex): string[];
 export declare function hasProviderErrors(index: OxcProviderIndex): boolean;
-export declare function isFatalDiagnostic(entry: OxcProviderDiagnostic): boolean;
 export declare function resolveCapability(
   index: OxcProviderIndex,
   filePath: string,

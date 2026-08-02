@@ -439,14 +439,18 @@ async function detectPackageManager(projectRoot, userAgent = process.env.npm_con
 		["bun.lock", "bun"],
 		["bun.lockb", "bun"],
 		["yarn.lock", "yarn"],
-		["package-lock.json", "npm"]
+		["package-lock.json", "npm"],
+		["deno.lock", "deno"],
+		["deno.json", "deno"],
+		["deno.jsonc", "deno"]
 	]) if (await exists(join(projectRoot, lockfile))) return manager;
 	const agent = userAgent?.split("/")[0];
 	if ([
 		"npm",
 		"pnpm",
 		"yarn",
-		"bun"
+		"bun",
+		"deno"
 	].includes(agent)) return agent;
 	return "unknown";
 }
@@ -845,9 +849,35 @@ function workspaceRootsNote(settingsRoot, workspaceRoots) {
 function strongWorkspaceRoots(workspaceRoots) {
 	return workspaceRoots.filter((candidate) => candidate.evidence.endsWith(CODE_WORKSPACE_SUFFIX) || WORKSPACE_ROOT_EVIDENCE.indexOf(candidate.evidence) <= WORKSPACE_ROOT_EVIDENCE.indexOf(".git"));
 }
-function weakAncestorNote(projectRoot, workspaceRoots) {
-	const [nearest] = workspaceRoots;
-	return `If you open ${nearest.path} in your editor rather than ${projectRoot}, that window will not read this key: run ${PROVIDER} setup --workspace-root ${nearest.path} for that window.`;
+/**
+* The other settings files a window might actually read, each with the value
+* that is correct for its own folder. VS Code reads settings only from the
+* opened folder, so full coverage means one correct key per folder someone
+* plausibly opens: the project root, and every WEAK candidate above it - an
+* installed folder that declares no workspace and carries no VCS, the shape a
+* scaffold-inside-a-demo-folder walkthrough manufactures. `setup` writes these
+* automatically. Strong roots (a declared monorepo, a repository root, a
+* `.code-workspace`) stay behind the explicit `--workspace-root` flag: writing
+* into a checked-in tree's settings uninvited is the footgun the flag exists
+* for. An explicit flag also disables the automatic placements, because naming
+* a folder is choosing it.
+*/
+async function editorAncestorPlacements(projectRoot, providerRoot, settingsRoot, workspaceRoots, explicitWorkspaceRoot) {
+	if (explicitWorkspaceRoot !== void 0 && explicitWorkspaceRoot !== null) return [];
+	const strong = new Set(strongWorkspaceRoots(workspaceRoots).map((c) => c.path));
+	const roots = [projectRoot, ...workspaceRoots.map((c) => c.path)].filter((root) => root !== settingsRoot && !strong.has(root));
+	const placements = [];
+	for (const root of roots) {
+		const path = join(root, EDITOR_SLOT.directory, EDITOR_SLOT.file);
+		const settings = await readJson(path).catch(() => null);
+		placements.push({
+			root,
+			path,
+			value: await editorSettingValue(root, projectRoot, providerRoot),
+			current: typeof settings?.[EDITOR_SLOT.key] === "string" ? settings[EDITOR_SLOT.key] : null
+		});
+	}
+	return placements;
 }
 /**
 * The two remedies, in the order to try them, worded identically for a key that
@@ -855,7 +885,7 @@ function weakAncestorNote(projectRoot, workspaceRoots) {
 * folder nobody opens. The reader's move is the same in both cases.
 */
 function editorRemediesNote(projectRoot) {
-	return `Two remedies, in order: open ${projectRoot} as the folder in your editor, or run ${PROVIDER} setup --workspace-root <folder> to write the key into that folder's .vscode/settings.json instead. setup never writes above your project root without that flag, because a key written for a folder you did not open disables the extension's own lookup and leaves the linter dead.`;
+	return `Two remedies, in order: open ${projectRoot} as the folder in your editor, or - from ${projectRoot} - run npx ${PROVIDER} setup --workspace-root <folder> to write the key into that folder's .vscode/settings.json instead. setup never writes above your project root without that flag, because a key written for a folder you did not open disables the extension's own lookup and leaves the linter dead.`;
 }
 /**
 * Would the editor actually run this value?
@@ -866,7 +896,7 @@ function editorRemediesNote(projectRoot) {
 * active. All four refusals are collected rather than short-circuited: a value
 * can be both in a file the editor never reads and unspawnable once it does.
 */
-async function judgeEditorReach({ settingsRoot, projectRoot, value, workspaceRoots, platform }) {
+async function judgeEditorReach({ settingsRoot, projectRoot, value, workspaceRoots, ancestorPlacements = [], platform }) {
 	const notes = [];
 	const rejection = value === null ? null : rejectConfiguredValue(value);
 	if (rejection === "configured-rejected-traversal") notes.push(`The official OXC extension refuses any "${EDITOR_SLOT.key}" containing ".." or ".\\" before it looks at the filesystem, so "${value}" never reaches a linter. There is no relative escape hatch: the value has to name a path inside the folder you open.`);
@@ -885,7 +915,9 @@ async function judgeEditorReach({ settingsRoot, projectRoot, value, workspaceRoo
 	if (strong.length > 0) {
 		notes.push(workspaceRootsNote(settingsRoot, strong));
 		notes.push(editorRemediesNote(projectRoot));
-	} else if (workspaceRoots.length > 0) notes.push(weakAncestorNote(projectRoot, workspaceRoots));
+	}
+	const covered = ancestorPlacements.filter((p) => p.current === p.value);
+	if (covered.length > 0) notes.push(`Also covered: ${covered.map((p) => p.path).join(", ")}. A window opened at ${covered.length === 1 ? "that folder" : "any of those folders"} reads its own copy of the key.`);
 	if (settingsRoot !== projectRoot) notes.push(`"${value}" is relative to ${settingsRoot}. A multi-root window resolves a relative "${EDITOR_SLOT.key}" against its FIRST folder, not against the folder holding the settings file, so keep ${settingsRoot} first in the window or the editor looks for the linter in the wrong tree.`);
 	return {
 		state: Boolean(rejection) || resolution !== null && !spawnable ? "unresolvable" : strong.length > 0 ? "inert" : "ok",
@@ -986,6 +1018,7 @@ async function inspectEditorSlot(projectRoot, providerRoot, modules, options = {
 	const shim = await inspectLinterShim(modules, providerRoot);
 	const value = await editorSettingValue(settingsRoot, projectRoot, providerRoot);
 	const workspaceRoots = await candidateWorkspaceRoots(settingsRoot);
+	const ancestorPlacements = await editorAncestorPlacements(projectRoot, providerRoot, settingsRoot, workspaceRoots, options.workspaceRoot);
 	const base = {
 		name: EDITOR_SLOT.name,
 		capability: EDITOR_SLOT.capability,
@@ -994,7 +1027,8 @@ async function inspectEditorSlot(projectRoot, providerRoot, modules, options = {
 		settingsRoot,
 		value,
 		linterShim: shim,
-		workspaceRoots
+		workspaceRoots,
+		ancestorPlacements
 	};
 	const judge = async (state, currentValue) => ({
 		...base,
@@ -1005,6 +1039,7 @@ async function inspectEditorSlot(projectRoot, providerRoot, modules, options = {
 			projectRoot,
 			value: ["active", "collision"].includes(state) && typeof currentValue === "string" ? currentValue : value,
 			workspaceRoots,
+			ancestorPlacements,
 			platform
 		})
 	});
@@ -1051,19 +1086,57 @@ async function inspectEditorSlot(projectRoot, providerRoot, modules, options = {
 	}
 	return reported("collision", current);
 }
-async function writeEditorSlot(projectRoot, modules, slot) {
-	const directory = dirname(slot.path);
+/**
+* Merge the key into one settings file, replacing a stale copy when asked, and
+* report whether the file or its directory had to be created so `remove` can
+* take back exactly what `setup` made.
+*/
+async function mergeEditorKey(path, value, { replaceStale = false } = {}) {
+	const directory = dirname(path);
 	const createdDirectory = !await exists(directory);
 	if (createdDirectory) await mkdir(directory, { recursive: true });
-	const createdFile = !await exists(slot.path);
-	const previous = createdFile ? "{}\n" : await readFile(slot.path, "utf8");
+	const createdFile = !await exists(path);
+	const previous = createdFile ? "{}\n" : await readFile(path, "utf8");
 	const structure = readTopLevelObject(previous);
-	if (!structure) throw new Error(`refusing to edit ${slot.path}: its top-level JSON object could not be located`);
-	const cleaned = slot.state === "stale" ? removeTopLevelEntry(previous, structure, EDITOR_SLOT.key) : previous;
-	const target = slot.state === "stale" ? readTopLevelObject(cleaned) : structure;
-	if (!target) throw new Error(`refusing to edit ${slot.path}: rewriting it would not round-trip`);
-	await writeFile(slot.path, insertTopLevelEntry(cleaned, target, EDITOR_SLOT.key, slot.value));
+	if (!structure) throw new Error(`refusing to edit ${path}: its top-level JSON object could not be located`);
+	const cleaned = replaceStale ? removeTopLevelEntry(previous, structure, EDITOR_SLOT.key) : previous;
+	const target = replaceStale ? readTopLevelObject(cleaned) : structure;
+	if (!target) throw new Error(`refusing to edit ${path}: rewriting it would not round-trip`);
+	await writeFile(path, insertTopLevelEntry(cleaned, target, EDITOR_SLOT.key, value));
+	return {
+		createdFile,
+		createdDirectory
+	};
+}
+async function writeEditorSlot(projectRoot, modules, slot) {
 	const existing = await readEditorReceipt(modules);
+	let created = {
+		createdFile: false,
+		createdDirectory: false
+	};
+	if (slot.currentValue !== slot.value) created = await mergeEditorKey(slot.path, slot.value, { replaceStale: slot.state === "stale" });
+	const placements = [];
+	const existingPlacements = new Map((existing?.placements ?? []).map((placement) => [placement.settingsPath, placement]));
+	for (const placement of slot.ancestorPlacements ?? []) {
+		const settingsPath = toPosix(relative(projectRoot, placement.path));
+		const previous = existingPlacements.get(settingsPath);
+		let placementCreated = {
+			createdFile: previous?.createdFile === true,
+			createdDirectory: previous?.createdDirectory === true
+		};
+		if (placement.current !== placement.value) {
+			const written = await mergeEditorKey(placement.path, placement.value, { replaceStale: placement.current !== null });
+			placementCreated = {
+				createdFile: placementCreated.createdFile || written.createdFile,
+				createdDirectory: placementCreated.createdDirectory || written.createdDirectory
+			};
+		}
+		placements.push({
+			settingsPath,
+			value: placement.value,
+			...placementCreated
+		});
+	}
 	await mkdir(join(modules, EDITOR_RECEIPT[0]), { recursive: true });
 	await writeFile(join(modules, ...EDITOR_RECEIPT), `${JSON.stringify({
 		schemaVersion: COMPATIBILITY_SCHEMA,
@@ -1071,25 +1144,44 @@ async function writeEditorSlot(projectRoot, modules, slot) {
 		key: EDITOR_SLOT.key,
 		value: slot.value,
 		settingsPath: toPosix(relative(projectRoot, slot.path)),
-		createdFile: existing?.createdFile === true ? true : createdFile,
-		createdDirectory: existing?.createdDirectory === true ? true : createdDirectory
+		createdFile: existing?.createdFile === true ? true : created.createdFile,
+		createdDirectory: existing?.createdDirectory === true ? true : created.createdDirectory,
+		placements
 	}, null, 2)}\n`);
+}
+async function removeEditorKeyFrom(path, { createdFile = false, createdDirectory = false } = {}) {
+	const text = await readFile(path, "utf8").catch(() => null);
+	if (text === null) return;
+	const structure = readTopLevelObject(text);
+	if (!structure) throw new Error(`refusing to edit ${path}: its top-level JSON object could not be located`);
+	const next = removeTopLevelEntry(text, structure, EDITOR_SLOT.key);
+	const remaining = readTopLevelObject(next);
+	if (remaining !== null && remaining.entries.length === 0 && next.slice(remaining.openEnd, remaining.closeStart).trim().length === 0 && createdFile === true) {
+		await rm(path, { force: true });
+		if (createdDirectory === true) {
+			const directory = dirname(path);
+			if ((await readdir(directory).catch(() => ["keep"])).length === 0) await rmdir(directory).catch(() => {});
+		}
+	} else await writeFile(path, next);
 }
 async function revertEditorSlot(modules, slot) {
 	const receipt = await readEditorReceipt(modules);
-	const text = await readFile(slot.path, "utf8").catch(() => null);
-	if (text !== null) {
-		const structure = readTopLevelObject(text);
-		if (!structure) throw new Error(`refusing to edit ${slot.path}: its top-level JSON object could not be located`);
-		const next = removeTopLevelEntry(text, structure, EDITOR_SLOT.key);
-		const remaining = readTopLevelObject(next);
-		if (remaining !== null && remaining.entries.length === 0 && next.slice(remaining.openEnd, remaining.closeStart).trim().length === 0 && receipt?.createdFile === true) {
-			await rm(slot.path, { force: true });
-			if (receipt.createdDirectory === true) {
-				const directory = dirname(slot.path);
-				if ((await readdir(directory).catch(() => ["keep"])).length === 0) await rmdir(directory).catch(() => {});
-			}
-		} else await writeFile(slot.path, next);
+	await removeEditorKeyFrom(slot.path, {
+		createdFile: receipt?.createdFile === true,
+		createdDirectory: receipt?.createdDirectory === true
+	});
+	const receiptPlacements = new Map((receipt?.placements ?? []).map((placement) => [placement.settingsPath, placement]));
+	const seen = /* @__PURE__ */ new Set([slot.path]);
+	for (const placement of receipt?.placements ?? []) {
+		const path = resolve(join(modules, ".."), placement.settingsPath);
+		if (seen.has(path)) continue;
+		seen.add(path);
+		await removeEditorKeyFrom(path, placement);
+	}
+	for (const placement of slot.ancestorPlacements ?? []) {
+		if (seen.has(placement.path) || placement.current !== placement.value) continue;
+		seen.add(placement.path);
+		await removeEditorKeyFrom(placement.path, receiptPlacements.get(placement.path) ?? {});
 	}
 	await rm(join(modules, ...EDITOR_RECEIPT), { force: true });
 }
@@ -1278,7 +1370,8 @@ async function setupCompatibility(options = {}) {
 			replacedPackage: slotStatus.replacedPackage
 		}, status.providerVersion, modules);
 	}
-	const editorWritten = ["missing", "stale"].includes(status.editorSlot.state) || status.editorSlot.state === "inert" && status.editorSlot.currentValue === null && options.workspaceRoot !== void 0 && options.workspaceRoot !== null;
+	const placementsPending = (status.editorSlot.ancestorPlacements ?? []).some((placement) => placement.current !== placement.value);
+	const editorWritten = ["missing", "stale"].includes(status.editorSlot.state) || placementsPending || status.editorSlot.state === "inert" && status.editorSlot.currentValue === null && options.workspaceRoot !== void 0 && options.workspaceRoot !== null;
 	if (editorWritten) {
 		if (!options.dryRun) await writeEditorSlot(status.projectRoot, modules, status.editorSlot);
 		changed.push(status.editorSlot.name);
@@ -1501,4 +1594,4 @@ function formatCompatibilityReport(result) {
 	return `${lines.join("\n")}\n`;
 }
 //#endregion
-export { compatibilityStatus, detectPackageManager, findProjectRoot, formatCompatibilityReport, removeCompatibility, setupCompatibility };
+export { compatibilityStatus, findProjectRoot, formatCompatibilityReport, removeCompatibility, setupCompatibility };
