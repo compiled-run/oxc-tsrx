@@ -43,14 +43,14 @@ What you get is an ordinary React and TypeScript app that knows nothing about
 
 ```sh
 vp install -D oxc-tsrx@latest oxlint-tsgolint@0.24.0 \
-  @tsrx/typescript-plugin @tsrx/react -- --legacy-peer-deps
+  @tsrx/typescript-plugin @tsrx/react
 ```
 
 `vp install`, not `npm install`: inside a Vite+ project your own package manager
 often refuses to run at all.
 [`EBADDEVENGINES`](#when-something-goes-wrong) is why.
 
-Four packages and one flag. The first two are what lints `.tsrx`; the last two
+Four packages. The first two are what lints `.tsrx`; the last two
 belong to the TSRX toolchain rather than to `oxc-tsrx`, and without them
 `vp lint` still works while your editor stays blank.
 
@@ -70,19 +70,32 @@ belong to the TSRX toolchain rather than to `oxc-tsrx`, and without them
 One command, not four: step 4 writes inside `node_modules`, and anything
 installed after it quietly undoes what it did.
 
-<!-- details:Why the install needs --legacy-peer-deps -->
+<!-- details:If the install stops over peer dependencies -->
 
 `@tsrx/typescript-plugin` declares peers a current scaffold does not satisfy,
 starting with [`typescript`](https://www.typescriptlang.org "brand:typescript")
-`^5.9.3` against the TypeScript 6 the scaffold just gave you, and npm stops the
-whole install over it. The flag tells npm to skip that check and keep the
-versions the scaffold picked. The bare `--` is how `vp install` forwards a flag
-to npm rather than reading it itself.
+`^5.9.3` against the TypeScript 6 the scaffold just gave you. What happens next
+depends on which package manager `vp install` forwards to — it uses your
+project's own manager, not a fixed one:
 
-Keeping TypeScript 6 is the point. Every step here was run on 6.0.3, and
-`vp lint` reports both files exactly as step 5 shows. `setup` does mention that
-6 is outside the plugin's declared range; that note is expected rather than
-something to fix.
+- **pnpm** (and Bun) record the mismatch as a warning and finish the install.
+  Measured with pnpm 10: all four packages land, exit 0, nothing else to do.
+- **npm** stops the whole install with `ERESOLVE`. Re-run with the flag npm's
+  own error message names, forwarded through the bare `--` so `vp install`
+  hands it to npm instead of reading it itself:
+
+  ```sh
+  vp install -D oxc-tsrx@latest oxlint-tsgolint@0.24.0 \
+    @tsrx/typescript-plugin @tsrx/react -- --legacy-peer-deps
+  ```
+
+  `--legacy-peer-deps` is npm's, not pnpm's: under pnpm it fails as an unknown
+  option, which is why the command above does not carry it.
+
+Keeping TypeScript 6 is the point either way. Every step here was run on 6.0.3,
+and `vp lint` reports both files exactly as step 5 shows. `setup` does mention
+that 6 is outside the plugin's declared range; that note is expected rather
+than something to fix.
 
 <!-- /details -->
 
