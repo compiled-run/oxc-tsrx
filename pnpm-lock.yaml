@@ -111,13 +111,13 @@ importers:
         specifier: 0.140.0
         version: 0.140.0
       oxc-tsrx:
-        specifier: 0.2.2
+        specifier: 0.2.3
         version: link:../toolchain
 
   packages/vscode:
     dependencies:
       oxc-tsrx:
-        specifier: 0.2.2
+        specifier: 0.2.3
         version: link:../toolchain
       vscode-languageclient:
         specifier: 10.1.0

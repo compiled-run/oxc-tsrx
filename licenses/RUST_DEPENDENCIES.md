@@ -6,7 +6,7 @@ build dependency closure of the three binaries in `oxc_tsrx_cli` and the
 native addon in `parser_napi_binding`; benchmark and development-only
 dependencies are excluded.
 
-- Cargo.lock SHA-256: `acf61a823453c65c5149d711a4297aa6bd501e0649d8fdb4fe1ed6f18a3b9989`
+- Cargo.lock SHA-256: `9107eb51fa9806dd8660b9842f11483d954a58c65e530c1ebe28fbb5384782ab`
 - Canonical OXC revision: `8e0ed2ebb96137fb1611cdbd5742d5cb46037d40`
 - Shipping third-party packages: 220
 - Accepted license policy: `licenses/allowed-rust-license-expressions.json`

@@ -286,7 +286,7 @@ async function exerciseLane(lane, artifacts, environment) {
       type: "module",
       dependencies: {
         "@tsrx/vite-plugin-react": "0.0.72",
-        "oxc-tsrx": "0.2.2",
+        "oxc-tsrx": "0.2.3",
         react: "19.2.7",
         "react-dom": "19.2.7",
         "vite-plus": lane.vitePlusVersion,

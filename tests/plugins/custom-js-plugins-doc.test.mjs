@@ -428,7 +428,7 @@ async function makeWalkthroughProject() {
   await writeFile(
     join(project, "package.json"),
     `${JSON.stringify(
-      { name: "my-app", private: true, type: "module", devDependencies: { "oxc-tsrx": "0.2.2" } },
+      { name: "my-app", private: true, type: "module", devDependencies: { "oxc-tsrx": "0.2.3" } },
       null,
       2,
     )}\n`,
