@@ -15,6 +15,11 @@ if (!['native', 'wasm', 'static'].includes(mode)) {
 }
 const baseUrl = (positional[0] ?? 'http://localhost:4519').replace(/\/$/, '')
 const parsedBaseUrl = new URL(baseUrl)
+// Routes in this file are written site-relative; the site may be served under
+// a URL prefix (docs/site.config.mjs base), which baseUrl carries. withBase
+// maps a site-relative route onto the pathname the browser actually sees.
+const basePathname = parsedBaseUrl.pathname.replace(/\/$/, '')
+const withBase = (route) => (route === '/' ? basePathname || '/' : basePathname + route)
 const loopback = ['127.0.0.1', 'localhost', '::1'].includes(parsedBaseUrl.hostname)
 if (mode === 'native' && (parsedBaseUrl.protocol !== 'http:' || !loopback)) {
   throw new Error('native docs verification is restricted to a loopback HTTP origin')
@@ -48,7 +53,17 @@ const check = (ok, label, detail = '') => {
 
 if (mode !== 'static') {
   const [{ createDemoHighlighter }, { getDocsHighlighter, highlightWith }] = await Promise.all([
-    import(pathToFileURL(path.join(docsDir, 'dist', 'assets', 'demo-highlighter.js'))),
+    import(
+      pathToFileURL(
+        path.join(
+          docsDir,
+          'dist',
+          ...basePathname.split('/').filter(Boolean),
+          'assets',
+          'demo-highlighter.js',
+        ),
+      )
+    ),
     import('./highlight.mjs'),
   ])
   const clientHighlighter = createDemoHighlighter()
@@ -149,7 +164,8 @@ context.on('page', (page) => {
     if (response.status() >= 400) badResponses.push(`${response.status()} ${response.url()}`)
   })
   page.on('request', (request) => {
-    if (new URL(request.url()).pathname.startsWith('/api/')) serverApiRequests.push(request.url())
+    if (new URL(request.url()).pathname.startsWith(`${basePathname}/api/`))
+      serverApiRequests.push(request.url())
   })
 })
 
@@ -331,7 +347,7 @@ for (const [route, shell] of [
   const state = await shellProbe()
   check(
     state.sheets.length === 1 &&
-      state.sheets[0] === `/assets/style-${shell}.css` &&
+      state.sheets[0] === withBase(`/assets/style-${shell}.css`) &&
       state.firstSheetIsHeadLink &&
       state.ruleCount > 0,
     `stylesheet: direct load of ${route} links only the ${shell} shell`,
@@ -344,7 +360,7 @@ const checkShell = (label, route, state) => {
   const direct = directShells.get(route)
   check(state.spa, `stylesheet: ${label} stayed a client-side navigation (no reload)`)
   check(
-    state.sheets.length === 1 && state.sheets[0] === `/assets/style-${direct.shell}.css`,
+    state.sheets.length === 1 && state.sheets[0] === withBase(`/assets/style-${direct.shell}.css`),
     `stylesheet: ${label} leaves the ${direct.shell} shell as the only stylesheet`,
     `${state.sheets.join(', ') || 'no stylesheet'} (expected exactly /assets/style-${direct.shell}.css)`,
   )
@@ -390,7 +406,7 @@ await page.waitForFunction(
 checkShell('back to doc', '/guide/getting-started', await shellProbe())
 
 await page.evaluate(() => navigation.back())
-await page.waitForURL((url) => url.pathname === '/')
+await page.waitForURL((url) => url.pathname.replace(/\/$/, '') === basePathname)
 await page.waitForFunction(() => Boolean(document.querySelector('.hero-name')))
 checkShell('back to home', '/', await shellProbe())
 
@@ -499,7 +515,7 @@ const warmCache = async (pathname) => {
     return window.__pageCache instanceof Map && window.__pageCache.has(target)
       ? true
       : 'fetch completed but the page is not in the router cache'
-  }, pathname)
+  }, withBase(pathname))
   if (outcome !== true) throw new Error(`warming ${pathname}: ${outcome}`)
   return true
 }
@@ -531,12 +547,12 @@ const overlapCase = async ({ label, start, warm, steps, delays, finalRoute, mark
       `${label}: prefetch warms ${pathname} into the router's page cache`,
     )
   }
-  for (const [pathname, ms] of delays) routeDelays.set(pathname, ms)
+  for (const [pathname, ms] of delays) routeDelays.set(withBase(pathname), ms)
   await page.evaluate(() => {
     window.__spaMarker = true
   })
   await watchHead()
-  await raceNavigations(steps)
+  await raceNavigations(steps.map((step) => ({ ...step, href: withBase(step.href) })))
   await page.waitForURL(`**${finalRoute}`, { timeout: 15_000 }).catch(() => {})
   await page
     .waitForFunction(
@@ -556,7 +572,7 @@ const overlapCase = async ({ label, start, warm, steps, delays, finalRoute, mark
   )
   const landed = new URL(page.url()).pathname
   check(
-    landed === finalRoute && rendered === marker.text,
+    landed === withBase(finalRoute) && rendered === marker.text,
     `${label}: settles on the final destination, not a superseded one`,
     `${landed} showing ${JSON.stringify(rendered)} (expected ${finalRoute} showing ${JSON.stringify(marker.text)})`,
   )
@@ -565,7 +581,7 @@ const overlapCase = async ({ label, start, warm, steps, delays, finalRoute, mark
   // removed, by whom, and when" is the whole diagnosis when it fails.
   const shell = directShells.get(finalRoute).shell
   check(
-    state.sheets.length === 1 && state.sheets[0] === `/assets/style-${shell}.css`,
+    state.sheets.length === 1 && state.sheets[0] === withBase(`/assets/style-${shell}.css`),
     `${label}: leaves exactly one stylesheet in the head, the ${shell} shell's`,
     `${state.sheets.join(', ') || 'NO STYLESHEET AT ALL'} · head log: ${headLog || '(no head mutations)'}`,
   )

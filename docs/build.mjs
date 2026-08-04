@@ -29,9 +29,19 @@ const outDir = process.env.OXC_TSRX_DOCS_OUT_DIR
   ? path.resolve(process.env.OXC_TSRX_DOCS_OUT_DIR)
   : defaultOutDir
 const base = config.base ?? '/'
+const trimmedBase = base.replace(/\/$/, '')
+// Site pages live under the base path inside the deploy root, so the domain
+// root stays free for the landing page and deploy-wide files (vercel.json,
+// robots.txt).
+const siteDir = trimmedBase
+  ? path.join(outDir, ...trimmedBase.split('/').filter(Boolean))
+  : outDir
 
-const withBase = (href) =>
-  href.startsWith('/') ? base.replace(/\/$/, '') + href : href
+const withBase = (href) => {
+  if (!href.startsWith('/')) return href
+  if (href === '/') return trimmedBase || '/'
+  return trimmedBase + href
+}
 
 const escapeHtml = (text) =>
   String(text)
@@ -674,7 +684,7 @@ const favicon = withBase('/assets/logo.svg')
 const socialImage = `${config.origin}${withBase('/assets/social-card.png')}`
 
 function canonicalUrl(pathname) {
-  if (pathname === '/') return `${config.origin}${base}`
+  if (pathname === '/') return `${config.origin}${trimmedBase || '/'}`
   return `${config.origin}${withBase(pathname)}`
 }
 
@@ -2339,7 +2349,7 @@ async function build() {
   execFileSync(process.execPath, [path.join(docsDir, 'render-diagrams.mjs')], { stdio: 'inherit' })
   await validateOutputDirectory()
   await rm(outDir, { recursive: true, force: true })
-  await mkdir(outDir, { recursive: true })
+  await mkdir(siteDir, { recursive: true })
 
   const flat = config.sidebar.flatMap((group) =>
     group.items.map((item) => ({ ...item, group: group.text })),
@@ -2488,7 +2498,7 @@ async function build() {
       pageIndex: pageIndex < flat.length ? pageIndex : -1,
       flat,
     })
-    const outPath = path.join(outDir, `${item.link.replace(/^\//, '')}.html`)
+    const outPath = path.join(siteDir, `${item.link.replace(/^\//, '')}.html`)
     await mkdir(path.dirname(outPath), { recursive: true })
     await writeFile(outPath, dedupeBrandIcons(html))
     // Raw markdown twin for the copy-as-Markdown button and llms-full.txt.
@@ -2514,9 +2524,9 @@ async function build() {
       ].join('\n'),
     ),
   ].join('\n')
-  await writeFile(path.join(outDir, 'llms.txt'), llmsIndex)
+  await writeFile(path.join(siteDir, 'llms.txt'), llmsIndex)
   await writeFile(
-    path.join(outDir, 'llms-full.txt'),
+    path.join(siteDir, 'llms-full.txt'),
     markdownPages
       .map((page) => `<!-- ${page.group} / ${page.title} (${page.link}) -->\n\n${page.body}`)
       .join('\n\n---\n\n'),
@@ -2524,12 +2534,12 @@ async function build() {
 
   const home = parseFrontmatter(await readFile(path.join(docsDir, 'index.md'), 'utf8'))
   await writeFile(
-    path.join(outDir, 'index.html'),
+    path.join(siteDir, 'index.html'),
     dedupeBrandIcons(await renderHomePage({ description: home.data.description })),
   )
-  await writeFile(path.join(outDir, 'playground.html'), renderPlaygroundPage())
+  await writeFile(path.join(siteDir, 'playground.html'), renderPlaygroundPage())
 
-  await cp(path.join(docsDir, 'assets'), path.join(outDir, 'assets'), { recursive: true })
+  await cp(path.join(docsDir, 'assets'), path.join(siteDir, 'assets'), { recursive: true })
   // Ship one stylesheet per page shell, without comments (the source keeps
   // them). The home page has a hard transfer budget in docs/verify.mjs, and
   // every byte here is on its critical path, so a page gets the rules it can
@@ -2548,12 +2558,12 @@ async function build() {
   // adding a page, link a `style-<shell>.css` bundle; this copy is compatibility
   // ballast, not the stylesheet.
   await writeFile(
-    path.join(outDir, 'assets', 'style.css'),
+    path.join(siteDir, 'assets', 'style.css'),
     styleSource.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\n{3,}/g, '\n\n'),
   )
   for (const [shell, lines] of styleBundles) {
     await writeFile(
-      path.join(outDir, 'assets', `style-${shell}.css`),
+      path.join(siteDir, 'assets', `style-${shell}.css`),
       lines
         .join('\n')
         .replace(/\/\*[\s\S]*?\*\//g, '')
@@ -2565,7 +2575,7 @@ async function build() {
     platform: 'browser',
     output: {
       format: 'esm',
-      file: path.join(outDir, 'assets', 'demo-highlighter.js'),
+      file: path.join(siteDir, 'assets', 'demo-highlighter.js'),
       minify: true,
     },
   })
@@ -2578,13 +2588,13 @@ async function build() {
     throw new Error(`required docs WebAssembly artifact is missing: ${wasmBinary}`)
   }
   if (wasmDemo) {
-    await mkdir(path.join(outDir, 'assets', 'demo-wasm'), { recursive: true })
+    await mkdir(path.join(siteDir, 'assets', 'demo-wasm'), { recursive: true })
     await rolldownBuild({
       input: path.join(docsDir, 'demo-wasm-engine-entry.mjs'),
       platform: 'browser',
       output: {
         format: 'esm',
-        file: path.join(outDir, 'assets', 'demo-wasm', 'engine.js'),
+        file: path.join(siteDir, 'assets', 'demo-wasm', 'engine.js'),
         minify: true,
       },
     })
@@ -2593,22 +2603,22 @@ async function build() {
       platform: 'browser',
       output: {
         format: 'esm',
-        file: path.join(outDir, 'assets', 'demo-wasm', 'wasi-worker-browser.mjs'),
+        file: path.join(siteDir, 'assets', 'demo-wasm', 'wasi-worker-browser.mjs'),
         minify: true,
       },
     })
-    await cp(wasmBinary, path.join(outDir, 'assets', 'demo-wasm', 'demo-wasm.wasm32-wasi.wasm'))
+    await cp(wasmBinary, path.join(siteDir, 'assets', 'demo-wasm', 'demo-wasm.wasm32-wasi.wasm'))
   }
-  await rm(path.join(outDir, 'assets', 'logos'), { recursive: true, force: true })
+  await rm(path.join(siteDir, 'assets', 'logos'), { recursive: true, force: true })
   await cp(
     path.join(docsDir, '..', 'node_modules', 'minisearch', 'dist', 'es'),
-    path.join(outDir, 'assets', 'minisearch'),
+    path.join(siteDir, 'assets', 'minisearch'),
     { recursive: true },
   )
-  await writeFile(path.join(outDir, 'search-index.json'), JSON.stringify(searchDocs))
-  await writeFile(path.join(outDir, 'type-error-example.json'), `${typeErrorAsset}\n`)
+  await writeFile(path.join(siteDir, 'search-index.json'), JSON.stringify(searchDocs))
+  await writeFile(path.join(siteDir, 'type-error-example.json'), `${typeErrorAsset}\n`)
   await writeFile(
-    path.join(outDir, 'demo-capabilities.json'),
+    path.join(siteDir, 'demo-capabilities.json'),
     `${JSON.stringify({
       ok: true,
       mode: wasmDemo ? 'wasm' : 'static',
@@ -2652,11 +2662,51 @@ async function build() {
     `User-agent: *\nAllow: ${base}\nSitemap: ${canonicalUrl('/sitemap.xml')}\n`,
   )
   await writeFile(
-    path.join(outDir, 'sitemap.xml'),
+    path.join(siteDir, 'sitemap.xml'),
     `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${publicPaths
       .map((pathname) => `  <url><loc>${canonicalUrl(pathname)}</loc></url>`)
       .join('\n')}\n</urlset>\n`,
   )
+
+  // With a non-root base the domain root is not part of the docs site, so it
+  // gets a minimal landing page that points visitors at the docs.
+  if (trimmedBase) {
+    const host = new URL(config.origin).host
+    await writeFile(
+      path.join(outDir, 'index.html'),
+      `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="color-scheme" content="light dark" />
+<meta name="description" content="Projects served at ${host}." />
+<title>${host}</title>
+<style>
+:root { color-scheme: light dark; }
+body { margin: 0; min-height: 100dvh; display: grid; place-items: center; font-family: system-ui, sans-serif; background: #fdfdfd; color: #1a1a1a; }
+main { text-align: center; padding: 2rem; }
+h1 { font-size: 1.05rem; font-weight: 600; letter-spacing: 0.01em; margin: 0 0 1.5rem; color: #666; }
+a { color: inherit; text-decoration: none; border: 1px solid #d4d4d4; border-radius: 8px; padding: 0.65rem 1.1rem; display: inline-block; font-size: 1rem; }
+a:hover { border-color: #888; }
+@media (prefers-color-scheme: dark) {
+  body { background: #111; color: #ededed; }
+  h1 { color: #999; }
+  a { border-color: #333; }
+  a:hover { border-color: #777; }
+}
+</style>
+</head>
+<body>
+<main>
+<h1>${host}</h1>
+<a href="${trimmedBase}">${escapeHtml(config.title)} &rarr;</a>
+</main>
+</body>
+</html>
+`,
+    )
+  }
 
   console.log(`built ${publicPaths.length} pages, ${searchDocs.length} search sections -> ${outDir}`)
 }

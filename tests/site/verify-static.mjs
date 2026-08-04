@@ -7,8 +7,14 @@ import { fileURLToPath } from 'node:url'
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const dist = path.join(root, 'docs', 'dist')
-// The site is served at the root ('' means no path prefix).
-const basePath = ''
+const { default: siteConfig } = await import(
+  new URL('../../docs/site.config.mjs', import.meta.url)
+)
+// URL prefix the site lives under ('' means no path prefix). The build nests
+// its output to match, so URL paths map straight into dist.
+const baseSegments = (siteConfig.base ?? '/').split('/').filter(Boolean)
+const basePath = baseSegments.length > 0 ? `/${baseSegments.join('/')}` : ''
+const siteDist = path.join(dist, ...baseSegments)
 const requireWasm = process.argv.slice(2).includes('--require-wasm')
 const unsupported = process.argv.slice(2).filter((argument) => argument !== '--require-wasm')
 if (unsupported.length > 0) throw new Error(`unsupported option(s): ${unsupported.join(', ')}`)
@@ -59,15 +65,7 @@ const server = http.createServer((request, response) => {
   response.setHeader('Cross-Origin-Opener-Policy', 'same-origin')
   response.setHeader('Cross-Origin-Embedder-Policy', 'require-corp')
   const url = new URL(request.url, 'http://localhost')
-  if (basePath && url.pathname === '/') {
-    response.writeHead(302, { Location: `${basePath}/` }).end()
-    return
-  }
-  if (basePath && url.pathname !== basePath && !url.pathname.startsWith(`${basePath}/`)) {
-    response.writeHead(404, { 'Content-Type': 'text/plain' }).end('Not found')
-    return
-  }
-  const publicPath = decodeURIComponent(url.pathname.slice(basePath.length) || '/')
+  const publicPath = decodeURIComponent(url.pathname || '/')
   let file = path.join(dist, path.normalize(publicPath))
   if (!file.startsWith(dist)) {
     response.writeHead(403, { 'Content-Type': 'text/plain' }).end('Forbidden')
@@ -97,7 +95,7 @@ try {
   // The built site self-describes its demo mode: 'wasm' when the in-browser
   // engine was bundled (npm run docs:wasm), 'static' otherwise.
   const capabilities = JSON.parse(
-    await readFile(path.join(dist, 'demo-capabilities.json'), 'utf8'),
+    await readFile(path.join(siteDist, 'demo-capabilities.json'), 'utf8'),
   )
   if (requireWasm && capabilities.mode !== 'wasm') {
     throw new Error(`required wasm verification built ${capabilities.mode} mode`)

@@ -9,9 +9,15 @@ import { join, relative, resolve, sep } from "node:path";
 import test from "node:test";
 
 const root = resolve(import.meta.dirname, "../..");
-const origin = "https://oxc-tsrx.dev";
-const base = "/";
+const { default: siteConfig } = await import("../../docs/site.config.mjs");
+const origin = siteConfig.origin;
+const base = siteConfig.base ?? "/";
+const trimmedBase = base.replace(/\/$/u, "");
+const baseSegments = base.split("/").filter(Boolean);
 const siteUrl = `${origin}${base}`;
+// The home page canonical drops the trailing slash when the site lives under
+// a base path (docs/build.mjs canonicalUrl).
+const homeUrl = trimmedBase ? `${origin}${trimmedBase}` : siteUrl;
 
 function run(executable, args, options = {}) {
   return new Promise((resolveRun, rejectRun) => {
@@ -49,10 +55,12 @@ async function buildTemporarySite(environment = {}) {
   const result = await run(process.execPath, ["docs/build.mjs"], {
     env: { ...process.env, ...environment, OXC_TSRX_DOCS_OUT_DIR: outDir },
   });
-  return { outDir, result };
+  // Site pages live under the base path inside the deploy root; the landing
+  // page, robots.txt, and vercel.json stay at the root.
+  return { outDir, siteDir: join(outDir, ...baseSegments), result };
 }
 
-function request(port, { path = "/demo-capabilities.json", method = "GET", headers = {}, body = "" } = {}) {
+function request(port, { path = `${trimmedBase}/demo-capabilities.json`, method = "GET", headers = {}, body = "" } = {}) {
   return new Promise((resolveRequest, rejectRequest) => {
     const call = http.request(
       {
@@ -118,10 +126,10 @@ async function startDocsServer(environment = {}) {
 }
 
 test("static launch build has canonical and social metadata on every public page", async () => {
-  const { outDir, result } = await buildTemporarySite();
+  const { outDir, siteDir, result } = await buildTemporarySite();
   assert.match(result.stdout, new RegExp(`-> ${outDir.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\n$`, "u"));
 
-  const htmlFiles = (await filesUnder(outDir)).filter((path) => path.endsWith(".html"));
+  const htmlFiles = (await filesUnder(siteDir)).filter((path) => path.endsWith(".html"));
   // The 16 sidebar pages, plus the home page, the playground, and the one
   // supplemental page (the embedded CSS boundary) that is linked to rather than
   // listed. A literal on purpose: adding or removing a public page should be a
@@ -136,9 +144,9 @@ test("static launch build has canonical and social metadata on every public page
 
   for (const path of htmlFiles) {
     const html = await readFile(path, "utf8");
-    const pagePath = relative(outDir, path).split(sep).join("/");
+    const pagePath = relative(siteDir, path).split(sep).join("/");
     const canonical =
-      pagePath === "index.html" ? siteUrl : `${siteUrl}${pagePath.replace(/\.html$/u, "")}`;
+      pagePath === "index.html" ? homeUrl : `${siteUrl}${pagePath.replace(/\.html$/u, "")}`;
     assert.match(html, new RegExp(`<link rel="canonical" href="${canonical}"`), pagePath);
     assert.match(html, /<meta property="og:type" content="website" \/>/u, pagePath);
     assert.match(html, new RegExp(`<meta property="og:url" content="${canonical}"`), pagePath);
@@ -155,39 +163,49 @@ test("static launch build has canonical and social metadata on every public page
 });
 
 test("static launch build has a scoped base, crawl metadata, and no internal design gallery", async () => {
-  const { outDir } = await buildTemporarySite();
+  const { outDir, siteDir } = await buildTemporarySite();
   const [home, robots, sitemap, playground, capabilities, vercel] = await Promise.all([
-    readFile(join(outDir, "index.html"), "utf8"),
+    readFile(join(siteDir, "index.html"), "utf8"),
     readFile(join(outDir, "robots.txt"), "utf8"),
-    readFile(join(outDir, "sitemap.xml"), "utf8"),
-    readFile(join(outDir, "playground.html"), "utf8"),
-    readFile(join(outDir, "demo-capabilities.json"), "utf8").then(JSON.parse),
+    readFile(join(siteDir, "sitemap.xml"), "utf8"),
+    readFile(join(siteDir, "playground.html"), "utf8"),
+    readFile(join(siteDir, "demo-capabilities.json"), "utf8").then(JSON.parse),
     readFile(join(outDir, "vercel.json"), "utf8").then(JSON.parse),
   ]);
+  const escapedBase = trimmedBase.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 
-  assert.match(home, /href="\/guide\/getting-started"/u);
+  assert.match(home, new RegExp(`href="${escapedBase}/guide/getting-started"`, "u"));
   assert.match(home, /href="https:\/\/github\.com\/markless-dev\/oxc-tsrx"/u);
   assert.match(home, /href="https:\/\/www\.npmjs\.com\/package\/oxc-tsrx"/u);
   assert.doesNotMatch(home, /npmjs\.com\/package\/(?:oxlint-tsrx|oxfmt-tsrx)/u);
-  assert.match(home, /href="\/assets\//u);
-  assert.match(home, /src="\/assets\//u);
-  assert.equal(/(?:href|src)="\/oxc-tsrx\//u.test(home), false);
+  assert.match(home, new RegExp(`href="${escapedBase}/assets/`, "u"));
+  assert.match(home, new RegExp(`src="${escapedBase}/assets/`, "u"));
+  // No double-applied base prefix anywhere.
+  assert.equal(new RegExp(`(?:href|src)="${escapedBase}${escapedBase}/`, "u").test(home), false);
+
+  if (trimmedBase) {
+    // The domain root carries the landing page pointing at the docs.
+    const landing = await readFile(join(outDir, "index.html"), "utf8");
+    assert.match(landing, new RegExp(`href="${escapedBase}"`, "u"));
+    assert.match(landing, /prefers-color-scheme: dark/u);
+    assert.match(landing, /color-scheme" content="light dark"/u);
+  }
   assert.equal(playground.includes("Everything on this page runs the real"), false);
   assert.match(playground, /static preview/u);
   assert.match(playground, /local development server/u);
   assert.match(home, /pre-generated example · static preview/u);
   assert.match(home, /native lint and format run only on the local development server/u);
   assert.doesNotMatch(home, /lint clean · format converged/u);
-  assert.equal((await stat(join(outDir, "assets", "social-card.png"))).isFile(), true);
-  await assert.rejects(stat(join(outDir, "assets", "logos")), /ENOENT/u);
+  assert.equal((await stat(join(siteDir, "assets", "social-card.png"))).isFile(), true);
+  await assert.rejects(stat(join(siteDir, "assets", "logos")), /ENOENT/u);
 
   assert.equal(
     robots,
-    `User-agent: *\nAllow: /\nSitemap: ${siteUrl}sitemap.xml\n`,
+    `User-agent: *\nAllow: ${base}\nSitemap: ${siteUrl}sitemap.xml\n`,
   );
   assert.match(sitemap, /^<\?xml version="1\.0" encoding="UTF-8"\?>/u);
   assert.equal([...sitemap.matchAll(/<loc>/gu)].length, 20);
-  assert.match(sitemap, new RegExp(`<loc>${siteUrl}</loc>`));
+  assert.match(sitemap, new RegExp(`<loc>${homeUrl}</loc>`));
   assert.equal(sitemap.includes("logos.html"), false);
   assert.equal(sitemap.includes(".html"), false);
   // The build ships the in-browser wasm engine whenever its artifact exists
@@ -272,12 +290,12 @@ test("social preview is a 1200 by 630 PNG", async () => {
 });
 
 test("the generated terminal transcript stays discoverable outside the interactive HTML", async () => {
-  const { outDir } = await buildTemporarySite();
+  const { siteDir } = await buildTemporarySite();
   const [html, markdown, llmsFull, searchIndex] = await Promise.all([
-    readFile(join(outDir, "guide", "getting-started.html"), "utf8"),
-    readFile(join(outDir, "guide", "getting-started.md"), "utf8"),
-    readFile(join(outDir, "llms-full.txt"), "utf8"),
-    readFile(join(outDir, "search-index.json"), "utf8").then(JSON.parse),
+    readFile(join(siteDir, "guide", "getting-started.html"), "utf8"),
+    readFile(join(siteDir, "guide", "getting-started.md"), "utf8"),
+    readFile(join(siteDir, "llms-full.txt"), "utf8"),
+    readFile(join(siteDir, "search-index.json"), "utf8").then(JSON.parse),
   ]);
   const command = "npx oxlint src/Cart.tsrx";
   const diagnostic = "Variable 'total' is declared but never used.";
@@ -296,7 +314,7 @@ test("the generated terminal transcript stays discoverable outside the interacti
 });
 
 test("aggregate-selected benchmark evidence survives Markdown, LLM, and search exports", async () => {
-  const { outDir } = await buildTemporarySite();
+  const { siteDir } = await buildTemporarySite();
   const aggregate = JSON.parse(
     await readFile(join(root, "docs", "acceptance", "performance-report.json"), "utf8"),
   );
@@ -305,9 +323,9 @@ test("aggregate-selected benchmark evidence survives Markdown, LLM, and search e
     aggregate.results.comparative.path,
   ];
   const [markdown, llmsFull, searchIndex] = await Promise.all([
-    readFile(join(outDir, "reference", "benchmarks.md"), "utf8"),
-    readFile(join(outDir, "llms-full.txt"), "utf8"),
-    readFile(join(outDir, "search-index.json"), "utf8"),
+    readFile(join(siteDir, "reference", "benchmarks.md"), "utf8"),
+    readFile(join(siteDir, "llms-full.txt"), "utf8"),
+    readFile(join(siteDir, "search-index.json"), "utf8"),
   ]);
 
   for (const artifact of [markdown, llmsFull]) {
@@ -407,7 +425,7 @@ if (process.argv.some((arg) => arg.includes('stdin-filepath'))) {
     assert.equal(
       (
         await request(server.port, {
-          path: "/api/lint",
+          path: `${trimmedBase}/api/lint`,
           method: "POST",
           body: "export const value = 1",
         })
@@ -417,7 +435,7 @@ if (process.argv.some((arg) => arg.includes('stdin-filepath'))) {
     assert.equal(
       (
         await request(server.port, {
-          path: "/api/lint",
+          path: `${trimmedBase}/api/lint`,
           method: "POST",
           headers: { Origin: "https://attacker.invalid", "Sec-Fetch-Site": "cross-site" },
           body: "export const value = 1",
@@ -429,7 +447,7 @@ if (process.argv.some((arg) => arg.includes('stdin-filepath'))) {
 
     const firstFour = Array.from({ length: 4 }, () =>
       request(server.port, {
-        path: "/api/format",
+        path: `${trimmedBase}/api/format`,
         method: "POST",
         headers: sameOrigin,
         body: "export const value=1",
@@ -437,7 +455,7 @@ if (process.argv.some((arg) => arg.includes('stdin-filepath'))) {
     );
     await new Promise((resolveDelay) => setTimeout(resolveDelay, 40));
     const busy = await request(server.port, {
-      path: "/api/format",
+      path: `${trimmedBase}/api/format`,
       method: "POST",
       headers: sameOrigin,
       body: "export const later=2",
@@ -446,7 +464,7 @@ if (process.argv.some((arg) => arg.includes('stdin-filepath'))) {
     assert.ok((await Promise.all(firstFour)).every((response) => response.status === 200));
 
     const linted = await request(server.port, {
-      path: "/api/lint",
+      path: `${trimmedBase}/api/lint`,
       method: "POST",
       headers: sameOrigin,
       body: "export const value = 1",

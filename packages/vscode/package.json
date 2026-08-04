@@ -3,7 +3,7 @@
   "displayName": "OXC for TSRX",
   "version": "0.2.3",
   "description": "Native Oxlint and Oxfmt editor support for TSRX",
-  "homepage": "https://oxc-tsrx.dev/",
+  "homepage": "https://compiled.run/oxc-tsrx",
   "publisher": "thejackshelton",
   "license": "MIT",
   "repository": {

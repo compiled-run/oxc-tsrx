@@ -10,7 +10,10 @@ import { parseNpmPackResponse } from "../helpers/npm-pack-response.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 const repository = "https://github.com/markless-dev/oxc-tsrx";
-const homepage = "https://oxc-tsrx.dev/";
+const homepage = "https://compiled.run/oxc-tsrx";
+// The v0.1.0 launch manifest is a record of the launch as it ran, when the
+// site lived at its original domain; it keeps the URL it actually posted.
+const launchHomepage = "https://oxc-tsrx.dev/";
 const publicDirectories = ["toolchain"];
 
 const readJson = async (path) => JSON.parse(await readFile(path, "utf8"));
@@ -61,7 +64,7 @@ test("launch manifest names every byte set and keeps external actions approval-g
   assert.equal(launch.schemaVersion, 2);
   assert.equal(launch.version, "0.1.0");
   assert.equal(launch.repository, repository);
-  assert.equal(launch.site.url, homepage);
+  assert.equal(launch.site.url, launchHomepage);
   assert.equal(launch.site.artifact, "docs/dist");
   assert.equal(launch.site.provider, "vercel");
   assert.equal(launch.site.config, "docs/dist/vercel.json");
@@ -87,7 +90,7 @@ test("launch manifest names every byte set and keeps external actions approval-g
   assert.match(launch.social.text, /OXC for TSRX/u);
   assert.match(launch.social.text, /Install oxc-tsrx/u);
   assert.doesNotMatch(launch.social.text, /Install oxlint-tsrx|Install oxfmt-tsrx/u);
-  assert.match(launch.social.text, new RegExp(homepage.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.match(launch.social.text, new RegExp(launchHomepage.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.deepEqual(launch.requiredApprovals, [
     "repository-push",
     "npm-publication",
@@ -114,7 +117,7 @@ test("launch manifest names every byte set and keeps external actions approval-g
   assert.match(runbook, /zero `?\/api`? engine requests/u);
   assert.doesNotMatch(runbook, /GitHub Pages|thejackshelton\.github\.io/u);
   assert.match(prerequisites, /^## Vercel$/mu);
-  assert.match(prerequisites, /oxc-tsrx\.dev/u);
+  assert.match(prerequisites, /compiled\.run\/oxc-tsrx/u);
   assert.match(prerequisites, /docs\/dist\/vercel\.json/u);
   assert.match(workflow, /workflow_dispatch:/u);
   assert.match(workflow, /rustup target add wasm32-wasip1-threads/u);

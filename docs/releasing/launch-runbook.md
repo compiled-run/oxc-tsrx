@@ -80,7 +80,7 @@ or embedded source identity differs.
 ## 5. Website deployment
 
 The website payload is the byte-for-byte fresh `docs/dist` artifact served by
-Vercel at `https://oxc-tsrx.dev/`. It contains the real threaded browser WASM
+Vercel at `https://compiled.run/oxc-tsrx`. It contains the real threaded browser WASM
 engine but no server process or native execution endpoint.
 
 First manually build the artifact from the reviewed commit:

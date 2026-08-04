@@ -43,7 +43,8 @@ const projectionBin =
   process.env.OXC_TSRX_PROJECTION_BIN ??
   path.join(docsDir, 'tools', 'projection-dump', 'target', 'release', 'projection-dump')
 const nativeAvailable = () => existsSync(lintBin) && existsSync(fmtBin)
-const wasmAvailable = () => existsSync(path.join(distDir, 'assets', 'demo-wasm', 'engine.js'))
+const wasmAvailable = () =>
+  existsSync(path.join(distDir, ...baseSegments, 'assets', 'demo-wasm', 'engine.js'))
 // Type-aware lint needs the tsgolint executable resolvable from the workspace,
 // and the linted file must live inside an inferable TypeScript program, which
 // is why demo temp files go under the repo root instead of the OS tmpdir.
@@ -443,10 +444,6 @@ const server = http.createServer((request, response) => {
       reject(response, 400, 'malformed URL')
       return
     }
-    if (basePath && url.pathname === '/') {
-      response.writeHead(302, { Location: `${basePath}/` }).end()
-      return
-    }
     if (url.pathname === `${basePath}/demo-capabilities.json`) {
       capabilities(response)
       return
@@ -466,13 +463,12 @@ const server = http.createServer((request, response) => {
       })
       return
     }
-    if (url.pathname !== basePath && !url.pathname.startsWith(`${basePath}/`)) {
-      response.writeHead(404, { 'Content-Type': 'text/plain' }).end('Not found')
-      return
-    }
+    // The build nests the site under the base path inside dist, with the
+    // landing page and robots.txt at the root, so URL paths map straight into
+    // the output directory exactly as they do in production.
     let publicPath
     try {
-      publicPath = decodeURIComponent(url.pathname.slice(basePath.length) || '/')
+      publicPath = decodeURIComponent(url.pathname || '/')
     } catch {
       reject(response, 400, 'malformed path encoding')
       return

@@ -122,7 +122,7 @@ jobs:
     permissions: {}
     environment:
       name: production
-      url: https://oxc-tsrx.dev
+      url: https://compiled.run/oxc-tsrx
     env:
       # The static docs project. Vercel's Git integration is deliberately not
       # connected: the site cannot be built on Vercel's image, so the artifact
@@ -155,7 +155,10 @@ jobs:
       - name: Prove production is serving this build
         run: |
           set -euo pipefail
-          origin="https://oxc-tsrx.dev"
+          # The project's stable production alias: verification must not depend
+          # on custom-domain DNS, which can change independently of a deploy.
+          # The site lives under the /oxc-tsrx base path (docs/site.config.mjs).
+          origin="https://oxc-tsrx-docs.vercel.app/oxc-tsrx"
           for attempt in 1 2 3 4 5; do
             if curl -fsS "${origin}/demo-capabilities.json" -o capabilities.json; then
               break
@@ -173,9 +176,11 @@ jobs:
           # it would also "pass" against a deploy that never took effect. Hash
           # the actual page instead: that only matches if production is serving
           # the artifact this run built.
-          curl -fsS "${origin}/" -o live-index.html
+          # No trailing slash: the deploy redirects /oxc-tsrx/ to /oxc-tsrx
+          # (trailingSlash: false) and curl is not following redirects.
+          curl -fsS "${origin}" -o live-index.html
           live="$(shasum -a 256 < live-index.html | cut -d" " -f1)"
-          built="$(shasum -a 256 < dist/index.html | cut -d" " -f1)"
+          built="$(shasum -a 256 < dist/oxc-tsrx/index.html | cut -d" " -f1)"
           if [ "${live}" != "${built}" ]; then
             echo "::error::production serves index.html ${live}, this run built ${built}"
             exit 1

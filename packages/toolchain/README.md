@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://oxc-tsrx.dev/">
+  <a href="https://compiled.run/oxc-tsrx">
     <img alt="OXC for TSRX" width="600" src="https://raw.githubusercontent.com/markless-dev/oxc-tsrx/HEAD/.github/assets/readme-hero.png">
   </a>
 </p>
@@ -25,7 +25,7 @@ written in Rust. This package teaches them to read `.tsrx` too.
 _OXC for TSRX is an independent community project. It is not affiliated with,
 endorsed by, or a product of VoidZero or the OXC team._
 
-[**Docs**](https://oxc-tsrx.dev/) &nbsp;·&nbsp; [**Getting started**](https://oxc-tsrx.dev/guide/getting-started) &nbsp;·&nbsp; [**Playground**](https://oxc-tsrx.dev/playground)
+[**Docs**](https://compiled.run/oxc-tsrx) &nbsp;·&nbsp; [**Getting started**](https://compiled.run/oxc-tsrx/guide/getting-started) &nbsp;·&nbsp; [**Playground**](https://compiled.run/oxc-tsrx/playground)
 
 ## Install
 
@@ -36,11 +36,11 @@ npm install --save-dev oxc-tsrx
 That is the whole setup, for the command line and for your editor. You get
 `oxlint` and `oxfmt`, the real [OXC](https://oxc.rs) commands, now able to read
 `.tsrx`, with no config file, no ignore file, and no install script. [Vite+ needs
-one more command](https://oxc-tsrx.dev/guide/getting-started#try-it-with-vite).
+one more command](https://compiled.run/oxc-tsrx/guide/getting-started#try-it-with-vite).
 
 You do not need Rust installed: the install downloads a ready-built program for
 your machine, one of eight published for macOS, Linux, and Windows. See
-[Platform support](https://oxc-tsrx.dev/reference/platform-support).
+[Platform support](https://compiled.run/oxc-tsrx/reference/platform-support).
 
 ## Usage
 
@@ -63,7 +63,7 @@ These are the TSRX blocks the linter and formatter understand: `@{` blocks,
 `@if` / `@else if` / `@else`, `@for` / `@empty`, `@switch` / `@case` /
 `@default`, `@try` / `@pending` / `@catch`, tags whose name is an expression,
 `<{expression}>`, and plain `<style>` blocks
-([TSRX syntax](https://oxc-tsrx.dev/guide/tsrx-syntax) shows each one). Anything
+([TSRX syntax](https://compiled.run/oxc-tsrx/guide/tsrx-syntax) shows each one). Anything
 outside that list **fails closed**: the command stops and says what it found and
 where, rather than guessing and maybe producing wrong output.
 
@@ -81,7 +81,7 @@ underlines the same problems the terminal reports. One catch: the TSRX
 toolchain's own extension owns `.tsrx`, and the OXC extension lists no
 activation event for it, so it does not start on its own. Open any JavaScript,
 TypeScript, or JSON file in the project once, and `.tsrx` works for the rest of
-the session. See the [editor guide](https://oxc-tsrx.dev/integrations/editor).
+the session. See the [editor guide](https://compiled.run/oxc-tsrx/integrations/editor).
 
 ## Using it from your own code
 
@@ -93,7 +93,7 @@ import { format } from "oxc-tsrx/format";
 
 The parser hands back the structure of your file and the formatter hands back
 tidied text, so you can build your own tools on the same reader the commands
-use. [Parsing](https://oxc-tsrx.dev/guide/parsing) has the shape it returns.
+use. [Parsing](https://compiled.run/oxc-tsrx/guide/parsing) has the shape it returns.
 None of these compiles `.tsrx` either; that stays your framework's TSRX
 plugin's job.
 
@@ -109,16 +109,16 @@ editor both say when they have done that, and
 so it refuses `jsPlugins` and names `oxlint` as the command that can.
 `oxc-tsrx/lint/plugins-dev` is for *writing* a plugin, since it re-exports the
 `RuleTester` from `oxlint`. See [Custom JavaScript
-plugins](https://oxc-tsrx.dev/integrations/custom-js-plugins).
+plugins](https://compiled.run/oxc-tsrx/integrations/custom-js-plugins).
 
 ## Documentation
 
-- [Getting started](https://oxc-tsrx.dev/guide/getting-started): install, first file, first run.
-- [Configuration](https://oxc-tsrx.dev/integrations/configuration): every supported setting.
-- [CLI reference](https://oxc-tsrx.dev/reference/cli): commands, flags, and exit codes.
-- [Platform support](https://oxc-tsrx.dev/reference/platform-support): which of the eight published platforms are tested on every change.
-- [Limitations](https://oxc-tsrx.dev/reference/limitations): what is not claimed yet.
-- [Provider protocol](https://oxc-tsrx.dev/architecture/provider-protocol): the `oxc.provider` block, what reads it today, and how a plain install reaches released hosts.
+- [Getting started](https://compiled.run/oxc-tsrx/guide/getting-started): install, first file, first run.
+- [Configuration](https://compiled.run/oxc-tsrx/integrations/configuration): every supported setting.
+- [CLI reference](https://compiled.run/oxc-tsrx/reference/cli): commands, flags, and exit codes.
+- [Platform support](https://compiled.run/oxc-tsrx/reference/platform-support): which of the eight published platforms are tested on every change.
+- [Limitations](https://compiled.run/oxc-tsrx/reference/limitations): what is not claimed yet.
+- [Provider protocol](https://compiled.run/oxc-tsrx/architecture/provider-protocol): the `oxc.provider` block, what reads it today, and how a plain install reaches released hosts.
 
 `oxc-tsrx` is the only package to depend on. The eight `@oxc-tsrx/native-*`
 packages are platform binaries in `optionalDependencies`, and you never name one
