@@ -15,3 +15,6 @@ benchmarks/comparative/.corpus-*/
 # Host-specific parser addon built for local development; CI builds its own.
 packages/toolchain/parser.node
 packages/toolchain/parser.node.json
+
+# fable-opus harness run state (local evidence, never repo content)
+.fable-opus/
