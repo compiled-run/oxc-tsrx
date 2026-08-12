@@ -1,7 +1,7 @@
 {
   "name": "oxc-tsrx-vscode",
   "displayName": "OXC for TSRX",
-  "version": "0.2.3",
+  "version": "0.3.0",
   "description": "Native Oxlint and Oxfmt editor support for TSRX",
   "homepage": "https://compiled.run/oxc-tsrx",
   "publisher": "thejackshelton",
@@ -59,7 +59,7 @@
     "THIRD_PARTY_NOTICES.md"
   ],
   "dependencies": {
-    "oxc-tsrx": "0.2.3",
+    "oxc-tsrx": "0.3.0",
     "vscode-languageclient": "10.1.0"
   },
   "contributes": {
