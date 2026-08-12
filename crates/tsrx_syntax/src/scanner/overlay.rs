@@ -7,6 +7,7 @@ pub(super) struct Checkpoint {
     dynamic_tags: usize,
     dynamic_comments: usize,
     style_blocks: usize,
+    statement_boundaries: usize,
     first_root: u32,
     last_root: u32,
     parent: Option<(usize, u32, u32)>,
@@ -136,6 +137,7 @@ impl Scanner<'_> {
             dynamic_tags: self.dynamic_tags.len(),
             dynamic_comments: self.dynamic_comments.len(),
             style_blocks: self.style_blocks.len(),
+            statement_boundaries: self.statement_boundaries.len(),
             first_root: self.first_root,
             last_root: self.last_root,
             parent,
@@ -150,6 +152,7 @@ impl Scanner<'_> {
         self.dynamic_tags.truncate(checkpoint.dynamic_tags);
         self.dynamic_comments.truncate(checkpoint.dynamic_comments);
         self.style_blocks.truncate(checkpoint.style_blocks);
+        self.statement_boundaries.truncate(checkpoint.statement_boundaries);
         self.first_root = checkpoint.first_root;
         self.last_root = checkpoint.last_root;
         if let Some((index, first_child, last_child)) = checkpoint.parent {

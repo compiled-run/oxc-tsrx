@@ -290,6 +290,10 @@ pub struct Overlay {
     pub(crate) dynamic_comments: Vec<ByteSpan>,
     pub(crate) style_blocks: Vec<StyleBlock>,
     pub(crate) script_blocks: Vec<ScriptBlock>,
+    /// Offsets of markup openings that begin a statement only because they lead their line, in
+    /// ascending order. Each one needs a projected `;` so the legal-TSX lane reads the same
+    /// statement boundary the TSRX scanner did.
+    pub(crate) statement_boundaries: Vec<u32>,
     pub(crate) first_root: u32,
     pub(crate) last_root: u32,
 }

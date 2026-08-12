@@ -19,6 +19,7 @@ pub(super) enum Action {
     ParserDynamic(u32),
     ParserShorthand(u32),
     ParserLazyPattern(u32),
+    StatementBoundary(u32),
 }
 
 impl Action {
@@ -39,6 +40,11 @@ impl Action {
             }
             Self::ParserLazyPattern(pattern) => {
                 (overlay.parser_lazy_patterns[pattern as usize].ampersand, 2)
+            }
+            // The boundary precedes everything else written at the same markup opening, including
+            // a dynamic tag's rewritten `<`.
+            Self::StatementBoundary(boundary) => {
+                (overlay.statement_boundaries[boundary as usize], 0)
             }
         }
     }
@@ -125,6 +131,10 @@ pub(super) fn build_try_actions(overlay: &Overlay) -> Result<Vec<Action>, Projec
     Ok(actions)
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "one merge of every edit stream: splitting it would hide the source-order invariant"
+)]
 pub(super) fn project_actions(
     builder: &mut Builder<'_>,
     overlay: &Overlay,
@@ -142,6 +152,7 @@ pub(super) fn project_actions(
     let mut parser_dynamic_cursor = 0usize;
     let mut parser_shorthand_cursor = 0usize;
     let mut parser_lazy_pattern_cursor = 0usize;
+    let mut statement_boundary_cursor = 0usize;
     loop {
         while overlay.parser_lazy_patterns.get(parser_lazy_pattern_cursor).is_some_and(|pattern| {
             usize::try_from(pattern.ampersand)
@@ -170,6 +181,9 @@ pub(super) fn project_actions(
         let parser_lazy_pattern = (parser_lazy_pattern_cursor < overlay.parser_lazy_patterns.len())
             .then(|| to_u32(parser_lazy_pattern_cursor).map(Action::ParserLazyPattern))
             .transpose()?;
+        let statement_boundary = (statement_boundary_cursor < overlay.statement_boundaries.len())
+            .then(|| to_u32(statement_boundary_cursor).map(Action::StatementBoundary))
+            .transpose()?;
         let Some(action) = [
             wrapper,
             try_end,
@@ -180,6 +194,7 @@ pub(super) fn project_actions(
             parser_dynamic,
             parser_shorthand,
             parser_lazy_pattern,
+            statement_boundary,
         ]
         .into_iter()
         .flatten()
@@ -226,6 +241,10 @@ pub(super) fn project_actions(
             Action::ParserLazyPattern(pattern) => {
                 parser_lazy_pattern_cursor += 1;
                 builder.parser_lazy_pattern(pattern)?;
+            }
+            Action::StatementBoundary(boundary) => {
+                statement_boundary_cursor += 1;
+                builder.statement_boundary(boundary)?;
             }
         }
     }

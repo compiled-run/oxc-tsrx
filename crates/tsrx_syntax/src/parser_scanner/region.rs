@@ -91,12 +91,17 @@ impl Scanner<'_> {
                     pending_control_paren = false;
                     closed_control_paren = false;
                 }
-                b'<' if can_start_jsx
+                b'<' if (can_start_jsx || self.line_leading_markup_starts_a_statement(index))
                     && self.looks_like_jsx_start(index)
                     && !self.looks_like_typescript_type_parameters(index) =>
                 {
                     let checkpoint = self.checkpoint();
                     let committed = self.committed_jsx_opening(index);
+                    if !can_start_jsx {
+                        // Only the line-leading rule admitted this opening, so the legal-TSX lane
+                        // needs an explicit `;` where TSRX read a statement boundary.
+                        self.statement_boundaries.push(to_u32(index)?);
+                    }
                     match self.scan_jsx_element(index) {
                         Ok(end) => {
                             index = end;
