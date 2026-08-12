@@ -16,11 +16,11 @@
   ],
   "homepage": "https://compiled.run/oxc-tsrx",
   "bugs": {
-    "url": "https://github.com/markless-dev/oxc-tsrx/issues"
+    "url": "https://github.com/compiled-run/oxc-tsrx/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/markless-dev/oxc-tsrx.git",
+    "url": "git+https://github.com/compiled-run/oxc-tsrx.git",
     "directory": "packages/toolchain"
   },
   "type": "module",

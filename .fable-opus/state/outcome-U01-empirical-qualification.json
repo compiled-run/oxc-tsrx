@@ -1,0 +1,11 @@
+{
+  "unitId": "U01-empirical-qualification",
+  "runId": "pr10-review-and-release",
+  "attempt": 1,
+  "outcome": "completed",
+  "reason": "Qualified PR #10 empirically on branch codex/octane-integration-compat (HEAD 47d62e8). Q1 PASS: cargo test 273 passed/0 failed, clippy exit 0, test:parser-api 9/9, test:parser-addon 1/1, all with --offline. Q2 FAIL: issue #8 defect 1 unfixed, identical 'unterminated regular expression literal starting at byte 78'; extra variants show any semicolon-less statement before a markup line triggers it. Q3 FAIL: structural refusal persists at defaults; under semi:false it vanishes but emits a spurious ';<main>a</main>'. Proved Q2 and Q3 share one root cause. Q4 NOT COVERED: both Ripple#1417 snippets rejected with 'Unexpected token', matching plain-TSX baseline. Rebuilt only gitignored artifacts; tracked tree unchanged.",
+  "agentId": "ad8ccc34ea1580b6b",
+  "background": false,
+  "verdictDelivered": true,
+  "ts": "2026-08-12T21:59:17.807Z"
+}

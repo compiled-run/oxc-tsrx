@@ -15,7 +15,7 @@
 
 set -u
 
-REPO="markless-dev/oxc-tsrx"
+REPO="compiled-run/oxc-tsrx"
 WORKFLOW="publish.yml"
 CHECK=0
 [ "${1:-}" = "--check" ] && CHECK=1

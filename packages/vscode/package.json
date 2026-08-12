@@ -8,11 +8,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/markless-dev/oxc-tsrx.git",
+    "url": "https://github.com/compiled-run/oxc-tsrx.git",
     "directory": "packages/vscode"
   },
   "bugs": {
-    "url": "https://github.com/markless-dev/oxc-tsrx/issues"
+    "url": "https://github.com/compiled-run/oxc-tsrx/issues"
   },
   "keywords": [
     "oxc",

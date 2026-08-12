@@ -9,11 +9,13 @@ import { npmChildEnvironment, resolveNpmInvocation } from "../helpers/npm-invoca
 import { parseNpmPackResponse } from "../helpers/npm-pack-response.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
-const repository = "https://github.com/markless-dev/oxc-tsrx";
+const repository = "https://github.com/compiled-run/oxc-tsrx";
 const homepage = "https://compiled.run/oxc-tsrx";
 // The v0.1.0 launch manifest is a record of the launch as it ran, when the
-// site lived at its original domain; it keeps the URL it actually posted.
+// repo lived in its original org and the site at its original domain; it keeps
+// the URL it actually posted.
 const launchHomepage = "https://oxc-tsrx.dev/";
+const launchRepository = "https://github.com/markless-dev/oxc-tsrx";
 const publicDirectories = ["toolchain"];
 
 const readJson = async (path) => JSON.parse(await readFile(path, "utf8"));
@@ -63,7 +65,7 @@ test("launch manifest names every byte set and keeps external actions approval-g
   const launch = await readJson(join(root, "docs", "releasing", "v0.1.0-launch.json"));
   assert.equal(launch.schemaVersion, 2);
   assert.equal(launch.version, "0.1.0");
-  assert.equal(launch.repository, repository);
+  assert.equal(launch.repository, launchRepository);
   assert.equal(launch.site.url, launchHomepage);
   assert.equal(launch.site.artifact, "docs/dist");
   assert.equal(launch.site.provider, "vercel");

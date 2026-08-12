@@ -75,7 +75,7 @@ jobs:
   publish:
     name: ${{ inputs.mode }} ${{ inputs.version }}
     # A fork cannot publish these names, and should not try.
-    if: github.repository == 'markless-dev/oxc-tsrx'
+    if: github.repository == 'compiled-run/oxc-tsrx'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:

@@ -116,7 +116,7 @@ jobs:
   # build already proved and hands it to Vercel.
   deploy:
     needs: build
-    if: github.repository == 'markless-dev/oxc-tsrx' && github.ref_name == 'main'
+    if: github.repository == 'compiled-run/oxc-tsrx' && github.ref_name == 'main'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions: {}

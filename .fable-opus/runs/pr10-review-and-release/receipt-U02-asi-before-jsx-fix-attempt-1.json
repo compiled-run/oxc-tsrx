@@ -1,0 +1,22 @@
+{
+  "status": "completed",
+  "summary": "Fixed issue #8 defect 1 with TDD. Both scanner lanes now admit a line-leading committed markup opening as a statement start (at_line_start && committed_jsx_opening, still excluding TS type-parameter forms). That alone was insufficient: the projected TSX still applied standard JS ASI, so the scanner records each such offset in a new Overlay::statement_boundaries and both projection lanes emit a `;` before the authored `<`, keeping every authored byte copied verbatim and every span mappable. Five tests added; full workspace tests and clippy green. Defect 2 (Oxfmt refusal on a trailing @if) survives and is a different root cause: code_context returns Expression for a line-leading @ control after a semicolon-less statement.",
+  "files_changed": [
+    "crates/tsrx_syntax/src/model.rs",
+    "crates/tsrx_syntax/src/scanner/mod.rs",
+    "crates/tsrx_syntax/src/scanner/lexical.rs",
+    "crates/tsrx_syntax/src/scanner/overlay.rs",
+    "crates/tsrx_syntax/src/parser_scanner/region.rs",
+    "crates/tsrx_syntax/src/parser_scanner/jsx.rs",
+    "crates/tsrx_syntax/src/parser_scanner/state.rs",
+    "crates/tsrx_syntax/src/parser_scanner/overlay.rs",
+    "crates/tsrx_syntax/src/projection/builder.rs",
+    "crates/tsrx_syntax/src/parser_projection/actions.rs",
+    "crates/tsrx_syntax/src/parser_projection/builder.rs",
+    "crates/tsrx_parser_engine/tests/program_composition.rs"
+  ],
+  "open_questions": [
+    "Defect 2 needs a follow-up unit: should code_context treat a line-leading @ control as Statement context, given that changes statement-vs-expression reconstruction for existing programs?",
+    "Is the preceding statement's authored span extending to the `<` offset acceptable, or should a follow-up move the `;` to the true statement end via the reconstruct passes' AuthoredStart override?"
+  ]
+}

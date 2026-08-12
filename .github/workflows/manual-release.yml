@@ -69,7 +69,7 @@ jobs:
   release:
     name: ${{ inputs.mode }} ${{ inputs.release_type }}
     # A fork cannot tag or release this repository, and should not try.
-    if: github.repository == 'markless-dev/oxc-tsrx'
+    if: github.repository == 'compiled-run/oxc-tsrx'
     runs-on: ubuntu-24.04
     # A cold release build of the Rust workspace is the long pole here, and the
     # rust-cache above only helps on a second run with the same key. 60 was the

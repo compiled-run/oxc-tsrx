@@ -12,11 +12,11 @@
   ],
   "homepage": "https://compiled.run/oxc-tsrx",
   "bugs": {
-    "url": "https://github.com/markless-dev/oxc-tsrx/issues"
+    "url": "https://github.com/compiled-run/oxc-tsrx/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/markless-dev/oxc-tsrx.git"
+    "url": "git+https://github.com/compiled-run/oxc-tsrx.git"
   },
   "license": "MIT",
   "packageManager": "pnpm@10.33.2",
