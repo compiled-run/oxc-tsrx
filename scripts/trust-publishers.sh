@@ -66,6 +66,24 @@ for name in $NAMES; do
   # it needs the real terminal. Swallowing its output turns the prompt into a
   # silent failure.
   echo ">>> $name"
+
+  # npm refuses to overwrite an existing trusted publisher (E409: "already
+  # exists ... delete and re-create"), so a re-point (for example after a repo
+  # transfer) must revoke the old config first. `npm trust list` prints the
+  # trust id; revoke every one found, then create fresh below.
+  existing_ids=$(npm trust list "$name" 2>/dev/null \
+    | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' \
+    | sort -u)
+  for trust_id in $existing_ids; do
+    echo "  revoking existing trust $trust_id"
+    npm trust revoke "$name" --id="$trust_id" || {
+      echo "  FAILED to revoke $trust_id on $name; skipping create" >&2
+      failed=$((failed + 1))
+      continue 2
+    }
+    sleep 2
+  done
+
   if npm trust github "$name" \
     --repo "$REPO" \
     --file "$WORKFLOW" \
