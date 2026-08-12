@@ -21,6 +21,7 @@ use super::{
 pub(super) struct MarkerValidation {
     token_markers: Vec<bool>,
     style_markers: Vec<bool>,
+    script_markers: Vec<bool>,
     wrapper_starts: Vec<bool>,
     wrapper_ends: Vec<bool>,
     header_markers: Vec<u8>,
@@ -33,6 +34,7 @@ impl MarkerValidation {
         Ok(Self {
             token_markers: vec![false; overlay.tokens.len()],
             style_markers: vec![false; overlay.style_blocks.len()],
+            script_markers: vec![false; overlay.script_blocks.len()],
             wrapper_starts: vec![false; overlay.nodes.len()],
             wrapper_ends: vec![false; overlay.nodes.len()],
             header_markers: vec![0_u8; annotated_clauses.len()],
@@ -55,6 +57,9 @@ impl MarkerValidation {
             }
             MarkerKind::Style(index) => {
                 self.record_style(index, comment, projected, segments, overlay)
+            }
+            MarkerKind::Script(index) => {
+                self.record_script(index, comment, projected, segments, overlay)
             }
             MarkerKind::WrapperStart(index) => self.record_wrapper(index, true, overlay),
             MarkerKind::WrapperEnd(index) => self.record_wrapper(index, false, overlay),
@@ -157,6 +162,37 @@ impl MarkerValidation {
         Ok(())
     }
 
+    fn record_script(
+        &mut self,
+        raw: u32,
+        comment: &CommentRecord,
+        projected: &str,
+        segments: &[ProjectionSegment],
+        overlay: OverlayView<'_>,
+    ) -> Result<(), TsrxParseError> {
+        let index = usize::try_from(raw)
+            .map_err(|_| TsrxParseError::Unsupported("script marker index overflow"))?;
+        let script = overlay
+            .script_blocks
+            .get(index)
+            .ok_or(TsrxParseError::Unsupported("unknown script marker"))?;
+        let scaffold_start = project_authored_end(segments, script.content.start)
+            .ok_or(TsrxParseError::Unsupported("unmapped script marker start"))?;
+        let scaffold_end = project_authored_start(segments, script.content.end)
+            .ok_or(TsrxParseError::Unsupported("unmapped script marker end"))?;
+        let positioned = comment.span.start == scaffold_start.saturating_add(1)
+            && slice(projected, scaffold_start, comment.span.start)? == "{"
+            && slice(projected, comment.span.end, scaffold_end)? == " null}";
+        let seen = self
+            .script_markers
+            .get_mut(index)
+            .ok_or(TsrxParseError::Unsupported("unknown script marker"))?;
+        if std::mem::replace(seen, true) || !positioned {
+            return Err(TsrxParseError::Unsupported("duplicated or displaced script marker"));
+        }
+        Ok(())
+    }
+
     fn record_wrapper(
         &mut self,
         raw: u32,
@@ -232,6 +268,7 @@ impl MarkerValidation {
                 .iter()
                 .zip(overlay.style_blocks)
                 .all(|(seen, style)| *seen != style.self_closing)
+            && self.script_markers.iter().all(|seen| *seen)
             && overlay.nodes.iter().enumerate().all(|(index, node)| {
                 let expected = node.context != ControlContext::Statement;
                 self.wrapper_starts[index] == expected && self.wrapper_ends[index] == expected

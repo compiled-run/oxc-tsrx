@@ -19,9 +19,12 @@ pub(super) struct Checkpoint {
     pub(super) embedded_tokens: usize,
     pub(super) parser_dynamic_tokens: usize,
     pub(super) parser_code_blocks: usize,
+    pub(super) parser_shorthand_attributes: usize,
+    pub(super) parser_lazy_patterns: usize,
     pub(super) dynamic_tags: usize,
     pub(super) dynamic_comments: usize,
     pub(super) style_blocks: usize,
+    pub(super) script_blocks: usize,
     pub(super) first_root: u32,
     pub(super) last_root: u32,
     parent: Option<(usize, u32, u32)>,
@@ -38,9 +41,12 @@ impl Scanner<'_> {
             embedded_tokens: self.embedded_tokens,
             parser_dynamic_tokens: self.parser_dynamic_tokens,
             parser_code_blocks: self.parser_code_blocks,
+            parser_shorthand_attributes: self.parser_shorthand_attributes,
+            parser_lazy_patterns: self.parser_lazy_patterns,
             dynamic_tags: self.dynamic_tags,
             dynamic_comments: self.dynamic_comments,
             style_blocks: self.style_blocks,
+            script_blocks: self.script_blocks,
             first_root: self.first_root,
             last_root: self.last_root,
         }
@@ -158,9 +164,12 @@ impl Scanner<'_> {
             embedded_tokens: self.embedded_tokens.len(),
             parser_dynamic_tokens: self.parser_dynamic_tokens.len(),
             parser_code_blocks: self.parser_code_blocks.len(),
+            parser_shorthand_attributes: self.parser_shorthand_attributes.len(),
+            parser_lazy_patterns: self.parser_lazy_patterns.len(),
             dynamic_tags: self.dynamic_tags.len(),
             dynamic_comments: self.dynamic_comments.len(),
             style_blocks: self.style_blocks.len(),
+            script_blocks: self.script_blocks.len(),
             first_root: self.first_root,
             last_root: self.last_root,
             parent,
@@ -178,9 +187,12 @@ impl Scanner<'_> {
         self.embedded_tokens.truncate(checkpoint.embedded_tokens);
         self.parser_dynamic_tokens.truncate(checkpoint.parser_dynamic_tokens);
         self.parser_code_blocks.truncate(checkpoint.parser_code_blocks);
+        self.parser_shorthand_attributes.truncate(checkpoint.parser_shorthand_attributes);
+        self.parser_lazy_patterns.truncate(checkpoint.parser_lazy_patterns);
         self.dynamic_tags.truncate(checkpoint.dynamic_tags);
         self.dynamic_comments.truncate(checkpoint.dynamic_comments);
         self.style_blocks.truncate(checkpoint.style_blocks);
+        self.script_blocks.truncate(checkpoint.script_blocks);
         if let Some(probes) = self.surrogate_probes.as_deref() {
             probes.borrow_mut().rollback(checkpoint.probe_changes);
         }

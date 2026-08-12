@@ -17,6 +17,8 @@ pub(super) enum Action {
     Header { clause: u32, ordinal: u32 },
     Embedded(u32),
     ParserDynamic(u32),
+    ParserShorthand(u32),
+    ParserLazyPattern(u32),
 }
 
 impl Action {
@@ -32,6 +34,12 @@ impl Action {
             Self::Header { clause, .. } => (overlay.clauses[clause as usize].header.start, 3),
             Self::Embedded(token) => (overlay.embedded_tokens[token as usize].span.start, 3),
             Self::ParserDynamic(token) => (overlay.parser_dynamic_tokens[token as usize].offset, 2),
+            Self::ParserShorthand(attribute) => {
+                (overlay.parser_shorthand_attributes[attribute as usize].span.start, 2)
+            }
+            Self::ParserLazyPattern(pattern) => {
+                (overlay.parser_lazy_patterns[pattern as usize].ampersand, 2)
+            }
         }
     }
 }
@@ -132,7 +140,15 @@ pub(super) fn project_actions(
     let mut header_cursor = 0usize;
     let mut embedded_cursor = 0usize;
     let mut parser_dynamic_cursor = 0usize;
+    let mut parser_shorthand_cursor = 0usize;
+    let mut parser_lazy_pattern_cursor = 0usize;
     loop {
+        while overlay.parser_lazy_patterns.get(parser_lazy_pattern_cursor).is_some_and(|pattern| {
+            usize::try_from(pattern.ampersand)
+                .is_ok_and(|ampersand| ampersand < builder.original_cursor())
+        }) {
+            parser_lazy_pattern_cursor += 1;
+        }
         let wrapper = wrapper_actions.get(wrapper_cursor).copied();
         let try_end = try_end_actions.get(try_end_cursor).copied();
         let parser_code_block_end =
@@ -147,12 +163,27 @@ pub(super) fn project_actions(
         let parser_dynamic = (parser_dynamic_cursor < overlay.parser_dynamic_tokens.len())
             .then(|| to_u32(parser_dynamic_cursor).map(Action::ParserDynamic))
             .transpose()?;
-        let Some(action) =
-            [wrapper, try_end, parser_code_block_end, token, header, embedded, parser_dynamic]
-                .into_iter()
-                .flatten()
-                .min_by_key(|action| action.key(overlay))
-        else {
+        let parser_shorthand = (parser_shorthand_cursor
+            < overlay.parser_shorthand_attributes.len())
+        .then(|| to_u32(parser_shorthand_cursor).map(Action::ParserShorthand))
+        .transpose()?;
+        let parser_lazy_pattern = (parser_lazy_pattern_cursor < overlay.parser_lazy_patterns.len())
+            .then(|| to_u32(parser_lazy_pattern_cursor).map(Action::ParserLazyPattern))
+            .transpose()?;
+        let Some(action) = [
+            wrapper,
+            try_end,
+            parser_code_block_end,
+            token,
+            header,
+            embedded,
+            parser_dynamic,
+            parser_shorthand,
+            parser_lazy_pattern,
+        ]
+        .into_iter()
+        .flatten()
+        .min_by_key(|action| action.key(overlay)) else {
             break;
         };
         match action {
@@ -187,6 +218,14 @@ pub(super) fn project_actions(
             Action::ParserDynamic(token) => {
                 parser_dynamic_cursor += 1;
                 builder.parser_dynamic(token)?;
+            }
+            Action::ParserShorthand(attribute) => {
+                parser_shorthand_cursor += 1;
+                builder.parser_shorthand(attribute)?;
+            }
+            Action::ParserLazyPattern(pattern) => {
+                parser_lazy_pattern_cursor += 1;
+                builder.parser_lazy_pattern(pattern)?;
             }
         }
     }

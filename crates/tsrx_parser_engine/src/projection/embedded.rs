@@ -14,6 +14,7 @@ pub(super) fn validate_dynamic_overlay(view: OverlayView<'_>) -> Result<(), Tsrx
     let mut closed = vec![false; view.dynamic_tags.len()];
     let mut active = Vec::with_capacity(8);
     let mut previous_style_end = 0_u32;
+    let mut previous_script_end = 0_u32;
     for token in view.embedded {
         match token.kind {
             tsrx_syntax::EmbeddedKind::DynamicOpen => {
@@ -83,6 +84,12 @@ pub(super) fn validate_dynamic_overlay(view: OverlayView<'_>) -> Result<(), Tsrx
                 }
                 previous_style_end = token.span.end;
             }
+            tsrx_syntax::EmbeddedKind::ScriptContent => {
+                if token.span.start < previous_script_end {
+                    return Err(TsrxParseError::Unsupported("script payload tokens are unordered"));
+                }
+                previous_script_end = token.span.end;
+            }
         }
     }
     if !active.is_empty() {
@@ -140,6 +147,40 @@ pub(super) fn validate_dynamic_overlay(view: OverlayView<'_>) -> Result<(), Tsrx
     }
     if comments_seen.iter().any(|seen| !seen) {
         return Err(TsrxParseError::Unsupported("unowned dynamic closing comment"));
+    }
+    Ok(())
+}
+
+pub(super) fn validate_script_overlay(view: OverlayView<'_>) -> Result<(), TsrxParseError> {
+    let mut payloads = vec![false; view.script_blocks.len()];
+    for token in
+        view.embedded.iter().filter(|token| token.kind == tsrx_syntax::EmbeddedKind::ScriptContent)
+    {
+        let index = usize::try_from(token.owner)
+            .map_err(|_| TsrxParseError::Unsupported("script owner index overflow"))?;
+        let script = view
+            .script_blocks
+            .get(index)
+            .ok_or(TsrxParseError::Unsupported("unknown script owner"))?;
+        let content = script.content;
+        let element = script.element;
+        if content != token.span
+            || element.start >= content.start
+            || content.end >= element.end
+            || std::mem::replace(
+                payloads
+                    .get_mut(index)
+                    .ok_or(TsrxParseError::Unsupported("unknown script payload"))?,
+                true,
+            )
+        {
+            return Err(TsrxParseError::Unsupported(
+                "malformed or duplicated script payload token",
+            ));
+        }
+    }
+    if payloads.iter().any(|payload| !payload) {
+        return Err(TsrxParseError::Unsupported("script payload token is missing"));
     }
     Ok(())
 }

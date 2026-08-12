@@ -111,6 +111,7 @@ pub enum EmbeddedKind {
     DynamicOpen,
     DynamicClose,
     StyleContent,
+    ScriptContent,
 }
 
 #[repr(u8)]
@@ -146,6 +147,26 @@ pub struct ParserCodeBlock {
     pub body: ByteSpan,
 }
 
+/// One TSRX shorthand JSX attribute such as `{value}`.
+///
+/// The parser projection duplicates the identifier into the legal TSX spelling
+/// `value={value}`; reconstruction uses these authored spans to restore the shorthand flag and
+/// the attribute's original range.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ParserShorthandAttribute {
+    pub span: ByteSpan,
+    pub identifier: ByteSpan,
+}
+
+/// One lazy destructuring marker between a declaration keyword and an array/object pattern.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ParserLazyPattern {
+    pub ampersand: u32,
+    pub pattern_start: u32,
+}
+
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct EmbeddedToken {
@@ -178,6 +199,15 @@ pub struct StyleBlock {
     /// self-closing style element.
     pub content: ByteSpan,
     pub self_closing: bool,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ScriptBlock {
+    /// Complete authored JSX script element, including its opening and closing tag.
+    pub element: ByteSpan,
+    /// Exact authored raw-text bytes between the opening and closing tags.
+    pub content: ByteSpan,
 }
 
 #[repr(C)]
@@ -234,9 +264,12 @@ pub struct OverlayView<'a> {
     pub embedded: &'a [OverlayEmbedded],
     pub parser_dynamic: &'a [ParserDynamicToken],
     pub parser_code_blocks: &'a [ParserCodeBlock],
+    pub parser_shorthand_attributes: &'a [ParserShorthandAttribute],
+    pub parser_lazy_patterns: &'a [ParserLazyPattern],
     pub dynamic_tags: &'a [OverlayDynamicTag],
     pub dynamic_comments: &'a [ByteSpan],
     pub style_blocks: &'a [OverlayStyleBlock],
+    pub script_blocks: &'a [ScriptBlock],
     pub first_root: u32,
 }
 
@@ -251,9 +284,12 @@ pub struct Overlay {
     pub(crate) embedded_tokens: Vec<EmbeddedToken>,
     pub(crate) parser_dynamic_tokens: Vec<ParserDynamicToken>,
     pub(crate) parser_code_blocks: Vec<ParserCodeBlock>,
+    pub(crate) parser_shorthand_attributes: Vec<ParserShorthandAttribute>,
+    pub(crate) parser_lazy_patterns: Vec<ParserLazyPattern>,
     pub(crate) dynamic_tags: Vec<DynamicTag>,
     pub(crate) dynamic_comments: Vec<ByteSpan>,
     pub(crate) style_blocks: Vec<StyleBlock>,
+    pub(crate) script_blocks: Vec<ScriptBlock>,
     pub(crate) first_root: u32,
     pub(crate) last_root: u32,
 }
@@ -270,9 +306,12 @@ impl Overlay {
             embedded: &self.embedded_tokens,
             parser_dynamic: &self.parser_dynamic_tokens,
             parser_code_blocks: &self.parser_code_blocks,
+            parser_shorthand_attributes: &self.parser_shorthand_attributes,
+            parser_lazy_patterns: &self.parser_lazy_patterns,
             dynamic_tags: &self.dynamic_tags,
             dynamic_comments: &self.dynamic_comments,
             style_blocks: &self.style_blocks,
+            script_blocks: &self.script_blocks,
             first_root: self.first_root,
         }
     }

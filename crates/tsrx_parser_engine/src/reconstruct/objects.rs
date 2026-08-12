@@ -23,6 +23,9 @@ pub(super) struct ProjectedObjectIndex {
     pub(super) switch_objects: Vec<(u32, RecordIndex)>,
     pub(super) block_objects: Vec<(u32, RecordIndex)>,
     pub(super) jsx_containers: Vec<(u32, RecordIndex)>,
+    pub(super) jsx_attributes: Vec<(u32, RecordIndex)>,
+    pub(super) jsx_opening_elements: Vec<(u32, RecordIndex)>,
+    pub(super) patterns: Vec<(u32, RecordIndex)>,
     pub(super) layout_containers: Vec<RecordIndex>,
     pub(super) call_objects: Vec<RecordIndex>,
     pub(super) module_objects: Vec<RecordIndex>,
@@ -36,6 +39,9 @@ impl ProjectedObjectIndex {
             switch_objects: Vec::new(),
             block_objects: Vec::new(),
             jsx_containers: Vec::new(),
+            jsx_attributes: Vec::new(),
+            jsx_opening_elements: Vec::new(),
+            patterns: Vec::new(),
             layout_containers: Vec::new(),
             call_objects: Vec::new(),
             module_objects: Vec::new(),
@@ -59,6 +65,9 @@ impl ProjectedObjectIndex {
             Some(r#""SwitchStatement""#) => Some(&mut self.switch_objects),
             Some(r#""BlockStatement""#) => Some(&mut self.block_objects),
             Some(r#""JSXExpressionContainer""#) => Some(&mut self.jsx_containers),
+            Some(r#""JSXAttribute""#) => Some(&mut self.jsx_attributes),
+            Some(r#""JSXOpeningElement""#) => Some(&mut self.jsx_opening_elements),
+            Some(r#""ArrayPattern""# | r#""ObjectPattern""#) => Some(&mut self.patterns),
             Some(r#""CallExpression""#) => {
                 self.call_objects.push(object);
                 None
@@ -83,6 +92,9 @@ impl ProjectedObjectIndex {
             &mut self.switch_objects,
             &mut self.block_objects,
             &mut self.jsx_containers,
+            &mut self.jsx_attributes,
+            &mut self.jsx_opening_elements,
+            &mut self.patterns,
         ] {
             objects.sort_unstable_by_key(|(start, _)| *start);
         }

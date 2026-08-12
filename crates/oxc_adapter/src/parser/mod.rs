@@ -70,6 +70,8 @@ pub struct ProjectedParseResult {
     pub rejection_module_names: RejectionModuleNames,
     pub comments: CommentTable,
     pub errors: DiagnosticTable,
+    /// Parser diagnostics intentionally omitted by the TSRX compatibility route.
+    pub suppressed_diagnostics: u32,
     pub authored_grammar: Option<AuthoredGrammarFailure>,
     pub syntax_failed: bool,
     pub panicked: bool,
@@ -90,6 +92,55 @@ pub struct FailedTsrxMetadata {
     pub errors: DiagnosticTable,
     /// Raw module-name spans retained only for rare UTF-16 rejection arbitration.
     pub rejection_module_names: RejectionModuleNames,
+}
+
+fn is_tsrx_compatible_grammar_diagnostic(source: &str, diagnostic: &OxcDiagnostic) -> bool {
+    if diagnostic.code.scope.as_deref() != Some("TS") {
+        return false;
+    }
+    if diagnostic.code.number.as_deref() == Some("1147") {
+        return true;
+    }
+    if diagnostic.code.number.as_deref() != Some("18007") {
+        return false;
+    }
+
+    // With `preserve_parens: false`, OXC drops this evidence before validating JSX and reports
+    // TS18007 for an authored parenthesized sequence expression. The reference parser accepts the
+    // expression, and OXC still constructs its correct SequenceExpression node.
+    let bytes = source.as_bytes();
+    diagnostic.labels.iter().any(|label| {
+        let Ok(start) = usize::try_from(label.offset()) else {
+            return false;
+        };
+        let Ok(length) = usize::try_from(label.len()) else {
+            return false;
+        };
+        let Some(end) = start.checked_add(length) else {
+            return false;
+        };
+        start.checked_sub(1).and_then(|index| bytes.get(index)) == Some(&b'(')
+            && bytes.get(end) == Some(&b')')
+    })
+}
+
+fn append_tsrx_grammar_diagnostics(
+    output: &mut DiagnosticTable,
+    source: &str,
+    diagnostics: &[OxcDiagnostic],
+) -> Result<(bool, u32), TapeBuildError> {
+    let compatible =
+        |diagnostic: &&OxcDiagnostic| is_tsrx_compatible_grammar_diagnostic(source, diagnostic);
+    append_diagnostics(
+        output,
+        diagnostics.iter().filter(|diagnostic| !compatible(diagnostic)),
+        DiagnosticPhase::Grammar,
+    )?;
+    let suppressed = u32::try_from(diagnostics.iter().filter(compatible).count())
+        .map_err(|_| TapeBuildError::CapacityOverflow)?;
+    let retained = diagnostics.len()
+        != usize::try_from(suppressed).map_err(|_| TapeBuildError::CapacityOverflow)?;
+    Ok((retained, suppressed))
 }
 
 /// Revision-neutral import/export name spans retained on a failed one-parse route.
@@ -215,8 +266,11 @@ fn parse_to_projected_tape_with_retention(
     });
     let comments = serialize_comments(&parsed.program, request.source)?;
     let mut errors = DiagnosticTable::default();
-    append_diagnostics(&mut errors, parsed.diagnostics.iter(), DiagnosticPhase::Grammar)?;
-    let syntax_failed = parsed.panicked || !parsed.diagnostics.is_empty();
+    // The reference TSRX parser accepts two shapes for which OXC constructs the right AST but
+    // additionally emits a TypeScript grammar diagnostic. Keep every other diagnostic fail-closed.
+    let (has_retained_diagnostics, suppressed_diagnostics) =
+        append_tsrx_grammar_diagnostics(&mut errors, request.source, &parsed.diagnostics)?;
+    let syntax_failed = parsed.panicked || has_retained_diagnostics;
     if syntax_failed {
         let rejection_module_names = match request.rejection_metadata {
             RejectionMetadata::None => RejectionModuleNames::default(),
@@ -231,6 +285,7 @@ fn parse_to_projected_tape_with_retention(
             rejection_module_names,
             comments,
             errors,
+            suppressed_diagnostics,
             authored_grammar: None,
             syntax_failed: true,
             panicked: parsed.panicked,
@@ -256,6 +311,7 @@ fn parse_to_projected_tape_with_retention(
                     rejection_module_names,
                     comments,
                     errors,
+                    suppressed_diagnostics,
                     authored_grammar: Some(AuthoredGrammarFailure {
                         message: error.to_string(),
                         offset,
@@ -286,6 +342,7 @@ fn parse_to_projected_tape_with_retention(
         rejection_module_names: RejectionModuleNames::default(),
         comments,
         errors,
+        suppressed_diagnostics,
         authored_grammar: None,
         syntax_failed: false,
         panicked: false,

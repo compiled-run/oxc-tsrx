@@ -5,6 +5,7 @@
 pub(super) enum MarkerKind {
     Token(u32),
     Style(u32),
+    Script(u32),
     WrapperStart(u32),
     WrapperEnd(u32),
     Header { ordinal: u32, part: HeaderPart, boundary: MarkerBoundary },
@@ -46,6 +47,11 @@ pub(super) fn parse_marker(comment: &str) -> Option<(&str, MarkerKind)> {
         marker.strip_prefix('S').and_then(|tail| tail.strip_suffix("__")).and_then(parse_decimal)
     {
         return Some((prefix, MarkerKind::Style(index)));
+    }
+    if let Some(index) =
+        marker.strip_prefix('Q').and_then(|tail| tail.strip_suffix("__")).and_then(parse_decimal)
+    {
+        return Some((prefix, MarkerKind::Script(index)));
     }
     if let Some((&part, tail)) = marker.as_bytes().split_first()
         && matches!(part, b'R' | b'I' | b'K')

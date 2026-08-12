@@ -99,13 +99,14 @@ fn parse_direct<W: Utf16WorkObserver>(
     }
     require_one_oxc_parse(parsed.parse_count)?;
     let mut errors = parsed.errors;
+    let suppressed_diagnostics = parsed.suppressed_diagnostics;
     render_diagnostic_codeframes(options.filename, source, &mut errors)
         .map_err(TsrxParseError::from)?;
     if parsed.syntax_failed {
         return TsrxParseResult::failed_with_rejection_module_names(
             parsed.comments,
             errors,
-            0,
+            suppressed_diagnostics,
             parsed.rejection_module_names,
         );
     }
@@ -120,7 +121,7 @@ fn parse_direct<W: Utf16WorkObserver>(
         module,
         parsed.comments,
         errors,
-        0,
+        suppressed_diagnostics,
         false,
         parsed.rejection_module_names,
     ))
@@ -190,6 +191,7 @@ fn parse_projected<W: Utf16WorkObserver>(
         mut rejection_module_names,
         comments: projected_comments,
         errors: projected_errors,
+        suppressed_diagnostics: parser_suppressed_diagnostics,
         authored_grammar,
         syntax_failed,
         panicked: _,
@@ -220,8 +222,11 @@ fn parse_projected<W: Utf16WorkObserver>(
             rejection_module_names,
         );
     }
-    let (mut errors, suppressed_diagnostics) =
+    let (mut errors, projection_suppressed_diagnostics) =
         reconstruct_diagnostics(projected_errors, projection_view.segments)?;
+    let suppressed_diagnostics = parser_suppressed_diagnostics
+        .checked_add(projection_suppressed_diagnostics)
+        .ok_or(TsrxParseError::Unsupported("suppressed diagnostic count exceeds 4 GiB"))?;
     render_diagnostic_codeframes(options.filename, source, &mut errors)
         .map_err(TsrxParseError::from)?;
     if syntax_failed {
