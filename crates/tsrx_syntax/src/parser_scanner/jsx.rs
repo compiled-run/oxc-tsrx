@@ -4,7 +4,8 @@ use crate::{
     diagnostics::{ProjectionError, to_u32},
     model::{
         ByteSpan, ControlContext, DynamicTag, EmbeddedKind, EmbeddedToken, NONE, ParserCodeBlock,
-        ParserDynamicKind, ParserDynamicToken, StructuralKind, StyleBlock,
+        ParserDynamicKind, ParserDynamicToken, ParserShorthandAttribute, ScriptBlock,
+        StructuralKind, StyleBlock,
     },
 };
 
@@ -102,6 +103,7 @@ impl Scanner<'_> {
         }
 
         let style = !fragment && !dynamic && self.bytes[name_start..name_end] == *b"style";
+        let script = !fragment && !dynamic && self.bytes[name_start..name_end] == *b"script";
         // Parser owners are preorder identities. Reserve before scanning attributes because a JSX
         // expression attribute can itself contain another style element.
         let parser_style_owner = if style {
@@ -116,6 +118,7 @@ impl Scanner<'_> {
             None
         };
         let mut self_closing = false;
+        let mut expecting_attribute_value = false;
         if !fragment {
             loop {
                 let Some(&byte) = self.bytes.get(index) else {
@@ -125,8 +128,24 @@ impl Scanner<'_> {
                     });
                 };
                 match byte {
-                    b'\'' | b'"' => index = self.skip_quote(index, byte)?,
-                    b'{' => index = self.scan_expression_region(index + 1, Some(b'}'))?,
+                    b'\'' | b'"' => {
+                        index = self.skip_jsx_quote(index, byte)?;
+                        expecting_attribute_value = false;
+                    }
+                    b'{' => {
+                        let shorthand_start = index;
+                        index = self.scan_expression_region(index + 1, Some(b'}'))?;
+                        if !expecting_attribute_value
+                            && let Some(identifier) =
+                                self.jsx_shorthand_identifier(shorthand_start, index)
+                        {
+                            self.parser_shorthand_attributes.push(ParserShorthandAttribute {
+                                span: ByteSpan::new(to_u32(shorthand_start)?, to_u32(index)?),
+                                identifier,
+                            });
+                        }
+                        expecting_attribute_value = false;
+                    }
                     b'/' if self.bytes.get(index + 1) == Some(&b'*') => {
                         index = self.skip_block_comment(index)?;
                     }
@@ -144,12 +163,14 @@ impl Scanner<'_> {
                     }
                     byte if byte.is_ascii_whitespace() => index += 1,
                     _ if self.identifier_start_width(index).is_some() => {
+                        expecting_attribute_value = false;
                         index = self.skip_jsx_name(index);
                         while self.bytes.get(index).is_some_and(u8::is_ascii_whitespace) {
                             index += 1;
                         }
                         if self.bytes.get(index) == Some(&b'=') {
                             index += 1;
+                            expecting_attribute_value = true;
                         }
                     }
                     _ => {
@@ -208,6 +229,29 @@ impl Scanner<'_> {
                 owner,
             });
             return Ok(close_start + "</style>".len());
+        }
+
+        if script {
+            let Some(relative_close) = find_bytes(&self.bytes[index..], b"</script>") else {
+                return Err(ProjectionError::UnterminatedSyntax {
+                    offset: to_u32(start)?,
+                    construct: "inline `<script>` block",
+                });
+            };
+            let close_start = index + relative_close;
+            self.mark_surrogates(index, close_start, OpaqueSurrogateContext::JsxText);
+            let content = ByteSpan::new(to_u32(index)?, to_u32(close_start)?);
+            let owner = to_u32(self.script_blocks.len())?;
+            self.script_blocks.push(ScriptBlock {
+                element: ByteSpan::new(to_u32(start)?, to_u32(close_start + "</script>".len())?),
+                content,
+            });
+            self.embedded_tokens.push(EmbeddedToken {
+                kind: EmbeddedKind::ScriptContent,
+                span: content,
+                owner,
+            });
+            return Ok(close_start + "</script>".len());
         }
 
         loop {
@@ -438,6 +482,22 @@ impl Scanner<'_> {
                 || (*byte == b'/' && self.bytes.get(index + 1) == Some(&b'*'))
                 || (*byte == b'/' && self.bytes.get(index + 1) == Some(&b'>'))
         })
+    }
+
+    fn jsx_shorthand_identifier(&self, start: usize, end: usize) -> Option<ByteSpan> {
+        let identifier_start = start.checked_add(1)?;
+        let identifier_end = end.checked_sub(1)?;
+        if self.bytes.get(start) != Some(&b'{')
+            || self.bytes.get(identifier_end) != Some(&b'}')
+            || self.identifier_start_width(identifier_start).is_none()
+            || self.skip_identifier(identifier_start) != identifier_end
+        {
+            return None;
+        }
+        Some(ByteSpan::new(
+            u32::try_from(identifier_start).ok()?,
+            u32::try_from(identifier_end).ok()?,
+        ))
     }
 
     fn skip_jsx_name(&self, mut index: usize) -> usize {

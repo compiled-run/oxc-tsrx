@@ -72,7 +72,7 @@ impl Scanner<'_> {
                     });
                 };
                 match byte {
-                    b'\'' | b'"' => index = self.skip_quote(index, byte)?,
+                    b'\'' | b'"' => index = self.skip_jsx_quote(index, byte)?,
                     b'{' => index = self.scan_region(index + 1, Some(b'}'))?,
                     b'/' if self.bytes.get(index + 1) == Some(&b'*') => {
                         index = self.skip_block_comment(index)?;

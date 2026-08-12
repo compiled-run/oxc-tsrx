@@ -9,12 +9,13 @@ use super::{
     clauses::{
         validate_for_clauses, validate_if_clauses, validate_switch_clauses, validate_try_clauses,
     },
-    embedded::{validate_dynamic_overlay, validate_style_overlay},
+    embedded::{validate_dynamic_overlay, validate_script_overlay, validate_style_overlay},
 };
 
 pub(crate) fn validate_overlay(view: OverlayView<'_>) -> Result<(), TsrxParseError> {
     validate_dynamic_overlay(view)?;
     validate_style_overlay(view)?;
+    validate_script_overlay(view)?;
     let mut root_tokens = vec![false; view.nodes.len()];
     for token in view.tokens {
         let valid = match token.kind {

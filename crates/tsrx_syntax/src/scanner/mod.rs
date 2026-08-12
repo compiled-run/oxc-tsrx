@@ -77,9 +77,12 @@ impl<'a> Scanner<'a> {
             embedded_tokens: self.embedded_tokens,
             parser_dynamic_tokens: Vec::new(),
             parser_code_blocks: Vec::new(),
+            parser_shorthand_attributes: Vec::new(),
+            parser_lazy_patterns: Vec::new(),
             dynamic_tags: self.dynamic_tags,
             dynamic_comments: self.dynamic_comments,
             style_blocks: self.style_blocks,
+            script_blocks: Vec::new(),
             first_root: self.first_root,
             last_root: self.last_root,
         })
@@ -146,7 +149,10 @@ impl<'a> Scanner<'a> {
                     pending_control_paren = false;
                     closed_control_paren = false;
                 }
-                b'<' if can_start_jsx && self.looks_like_jsx_start(index) => {
+                b'<' if can_start_jsx
+                    && self.looks_like_jsx_start(index)
+                    && !self.looks_like_typescript_type_parameters(index) =>
+                {
                     let checkpoint = self.checkpoint();
                     let committed = self.committed_jsx_opening(index);
                     match self.scan_jsx_element(index) {
@@ -244,6 +250,8 @@ impl<'a> Scanner<'a> {
                         && (!can_start_expression
                             || closed_control_paren
                             || previous == Some(b'@')
+                            || previous == Some(b';')
+                            || previous == Some(b'}')
                             || previous == Some(b'>')
                                 && previous_significant_byte(self.bytes, index.saturating_sub(1))
                                     == Some(b'='));
@@ -297,28 +305,29 @@ impl<'a> Scanner<'a> {
                 _ if self.identifier_start_width(index).is_some() => {
                     let end = self.skip_identifier(index);
                     let identifier = &self.bytes[index..end];
+                    let type_position = identifier == b"void"
+                        && previous_significant_byte(self.bytes, index) == Some(b':');
                     pending_control_paren = matches!(
                         identifier,
                         b"if" | b"for" | b"while" | b"with" | b"switch" | b"catch"
                     );
-                    can_start_expression = pending_control_paren
-                        || matches!(
-                            identifier,
-                            b"return"
-                                | b"throw"
-                                | b"case"
-                                | b"delete"
-                                | b"void"
-                                | b"typeof"
-                                | b"new"
-                                | b"yield"
-                                | b"await"
-                                | b"in"
-                                | b"of"
-                                | b"instanceof"
-                                | b"else"
-                                | b"do"
-                        );
+                    can_start_expression = !type_position
+                        && (pending_control_paren
+                            || matches!(
+                                identifier,
+                                b"return"
+                                    | b"throw"
+                                    | b"case"
+                                    | b"delete"
+                                    | b"void"
+                                    | b"typeof"
+                                    | b"new"
+                                    | b"yield"
+                                    | b"await"
+                                    | b"in"
+                                    | b"of"
+                                    | b"instanceof"
+                            ));
                     can_start_jsx = can_start_expression;
                     closed_control_paren = false;
                     index = end;
@@ -327,6 +336,15 @@ impl<'a> Scanner<'a> {
                     if self.bytes.get(index + 1) == Some(&byte) && !can_start_expression =>
                 {
                     index += 2;
+                    can_start_expression = false;
+                    can_start_jsx = false;
+                    pending_control_paren = false;
+                    closed_control_paren = false;
+                }
+                b'!' if !can_start_expression => {
+                    // In TypeScript expression position this is a postfix non-null assertion,
+                    // so a following `/` is division rather than the start of a regexp.
+                    index += 1;
                     can_start_expression = false;
                     can_start_jsx = false;
                     pending_control_paren = false;

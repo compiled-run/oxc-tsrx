@@ -19,14 +19,21 @@ use super::{
     dynamic_tags::reconstruct_dynamic_tags,
     if_chain::IfReconstructor,
     layout_text::normalize_template_layout_text,
+    lazy_patterns::reconstruct_lazy_patterns,
     loops::{LoopReconstructor, build_header_ordinals},
     objects::ProjectedObjectIndex,
+    script::reconstruct_script_elements,
+    shorthand_attributes::reconstruct_shorthand_attributes,
     spans::AuthoredStart,
     style::reconstruct_style_elements,
     switch::SwitchReconstructor,
     try_catch::{TryReconstructor, collect_try_helpers},
 };
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "the reconstruction order is a single dependency-sensitive pass over shared indexes"
+)]
 pub(crate) fn reconstruct_projected(
     tape: &mut FlatTape,
     authored: &str,
@@ -112,6 +119,22 @@ pub(crate) fn reconstruct_projected(
     }
     reconstruct_style_elements(tape, authored, overlay, segments, &parents, &mut starts)?;
     reconstruct_dynamic_tags(tape, authored, overlay, segments, prefix, &parents, &mut starts)?;
+    reconstruct_shorthand_attributes(
+        tape,
+        overlay,
+        segments,
+        prefix,
+        &object_index.jsx_attributes,
+        &mut starts,
+    )?;
+    reconstruct_lazy_patterns(
+        tape,
+        overlay,
+        segments,
+        &object_index.patterns,
+        &parents,
+        &mut starts,
+    )?;
     normalize_control_body_lists(tape, &body_lists)?;
     let mut list_removals = Vec::new();
     reconstruct_code_blocks(
@@ -126,6 +149,15 @@ pub(crate) fn reconstruct_projected(
     normalize_template_layout_text(tape, &object_index.layout_containers, &mut list_removals)?;
     tape.remove_list_values(
         &list_removals.iter().map(|removal| (removal.list, removal.entry)).collect::<Vec<_>>(),
+    )?;
+    reconstruct_script_elements(
+        tape,
+        authored,
+        overlay,
+        segments,
+        &object_index.jsx_opening_elements,
+        &parents,
+        &mut starts,
     )?;
     Ok(starts)
 }
@@ -179,6 +211,9 @@ fn initial_authored_starts(
         .len()
         .saturating_mul(2)
         .saturating_add(overlay.style_blocks.len().saturating_mul(3))
+        .saturating_add(overlay.parser_shorthand_attributes.len())
+        .saturating_add(overlay.parser_lazy_patterns.len().saturating_mul(2))
+        .saturating_add(overlay.script_blocks.len())
         .saturating_add(code_blocks.saturating_mul(2))
         .saturating_add(1);
     let mut starts = Vec::with_capacity(capacity);

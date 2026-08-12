@@ -13,7 +13,7 @@ pub use model::{
     ByteSpan, ClauseRole, ControlContext, ControlKind, EmbeddedKind, ForHeader, NONE_INDEX,
     Overlay, OverlayClause, OverlayDynamicTag, OverlayEmbedded, OverlayNode, OverlayStyleBlock,
     OverlayToken, OverlayView, ParserCodeBlock, ParserDynamicKind, ParserDynamicToken,
-    StructuralKind, StructuralToken,
+    ParserLazyPattern, ParserShorthandAttribute, ScriptBlock, StructuralKind, StructuralToken,
 };
 pub use parser_projection::{MappedProjection as ParserProjection, project_for_parser};
 pub use parser_scanner::OpaqueSurrogateContext;

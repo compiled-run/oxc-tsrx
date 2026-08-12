@@ -478,6 +478,9 @@ impl<'a> Builder<'a> {
                     .expect("writing to a String cannot fail");
                 self.cursor = span_end;
             }
+            EmbeddedKind::ScriptContent => {
+                return Err(ProjectionError::StructuralMismatch);
+            }
         }
         Ok(())
     }

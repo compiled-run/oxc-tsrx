@@ -36,7 +36,8 @@ impl<'a> Builder<'a> {
                     .len()
                     .saturating_sub(raw_style_bytes)
                     .saturating_add(overlay.tokens.len().saturating_mul(64))
-                    .saturating_add(overlay.embedded_tokens.len().saturating_mul(32)),
+                    .saturating_add(overlay.embedded_tokens.len().saturating_mul(32))
+                    .saturating_add(overlay.parser_shorthand_attributes.len().saturating_mul(8)),
             ),
             segments: Vec::with_capacity(
                 overlay
@@ -45,6 +46,7 @@ impl<'a> Builder<'a> {
                     .saturating_mul(2)
                     .saturating_add(overlay.dynamic_tags.len())
                     .saturating_add(overlay.style_blocks.len())
+                    .saturating_add(overlay.parser_shorthand_attributes.len().saturating_mul(2))
                     .saturating_add(1),
             ),
             cursor: 0,
@@ -109,6 +111,25 @@ impl<'a> Builder<'a> {
             });
         }
         Ok(())
+    }
+
+    fn copy_original_omitting_lazy_patterns(
+        &mut self,
+        span: ByteSpan,
+    ) -> Result<(), ProjectionError> {
+        let mut cursor = span.start;
+        for pattern in &self.overlay.parser_lazy_patterns {
+            if pattern.ampersand < span.start || pattern.ampersand >= span.end {
+                continue;
+            }
+            self.copy_original(ByteSpan::new(cursor, pattern.ampersand))?;
+            cursor = pattern.ampersand.saturating_add(1);
+        }
+        self.copy_original(ByteSpan::new(cursor, span.end))
+    }
+
+    pub(super) const fn original_cursor(&self) -> usize {
+        self.cursor
     }
 
     pub(super) fn wrapper_start(&mut self, node_index: u32) -> Result<(), ProjectionError> {
@@ -308,7 +329,7 @@ impl<'a> Builder<'a> {
         }
         self.copy_to(clause.header.start as usize)?;
         self.output.push('(');
-        self.copy_original(header.left)?;
+        self.copy_original_omitting_lazy_patterns(header.left)?;
         self.output.push_str(" of ");
         let callee_start = self.output.len();
         write!(self.output, "{}H{ordinal}_", self.prefix).expect("writing to a String cannot fail");
@@ -355,19 +376,34 @@ impl<'a> Builder<'a> {
     /// only style content here.
     pub(super) fn embedded(&mut self, token_index: u32) -> Result<(), ProjectionError> {
         let token = self.overlay.embedded_tokens[token_index as usize];
-        if token.kind != EmbeddedKind::StyleContent {
-            return Ok(());
-        }
-        self.copy_to(token.span.start as usize)?;
-        let style = self
-            .overlay
-            .style_blocks
-            .get(token.owner as usize)
-            .ok_or(ProjectionError::StructuralMismatch)?;
-        if style.content != token.span {
-            return Err(ProjectionError::StructuralMismatch);
-        }
-        write!(self.output, "{{/*{}S{}__*/ null}}", self.prefix, token.owner)
+        let marker = match token.kind {
+            EmbeddedKind::StyleContent => {
+                self.copy_to(token.span.start as usize)?;
+                let style = self
+                    .overlay
+                    .style_blocks
+                    .get(token.owner as usize)
+                    .ok_or(ProjectionError::StructuralMismatch)?;
+                if style.content != token.span {
+                    return Err(ProjectionError::StructuralMismatch);
+                }
+                'S'
+            }
+            EmbeddedKind::ScriptContent => {
+                self.copy_to(token.span.start as usize)?;
+                let script = self
+                    .overlay
+                    .script_blocks
+                    .get(token.owner as usize)
+                    .ok_or(ProjectionError::StructuralMismatch)?;
+                if script.content != token.span {
+                    return Err(ProjectionError::StructuralMismatch);
+                }
+                'Q'
+            }
+            EmbeddedKind::DynamicOpen | EmbeddedKind::DynamicClose => return Ok(()),
+        };
+        write!(self.output, "{{/*{}{marker}{}__*/ null}}", self.prefix, token.owner)
             .expect("writing to a String cannot fail");
         self.cursor = token.span.end as usize;
         Ok(())
@@ -443,6 +479,47 @@ impl<'a> Builder<'a> {
                 self.cursor = tag.closing.end as usize;
             }
         }
+        Ok(())
+    }
+
+    pub(super) fn parser_shorthand(&mut self, attribute_index: u32) -> Result<(), ProjectionError> {
+        let attribute = self
+            .overlay
+            .parser_shorthand_attributes
+            .get(attribute_index as usize)
+            .ok_or(ProjectionError::StructuralMismatch)?;
+        if attribute.span.start.saturating_add(1) != attribute.identifier.start
+            || attribute.identifier.end.saturating_add(1) != attribute.span.end
+            || self.source.as_bytes().get(attribute.span.start as usize) != Some(&b'{')
+            || self.source.as_bytes().get(attribute.identifier.end as usize) != Some(&b'}')
+        {
+            return Err(ProjectionError::StructuralMismatch);
+        }
+        self.copy_to(attribute.span.start as usize)?;
+        write!(self.output, "{}S{attribute_index}_", self.prefix)
+            .expect("writing to a String cannot fail");
+        self.output.push('=');
+        self.copy_original(attribute.span)?;
+        self.cursor = attribute.span.end as usize;
+        Ok(())
+    }
+
+    pub(super) fn parser_lazy_pattern(
+        &mut self,
+        pattern_index: u32,
+    ) -> Result<(), ProjectionError> {
+        let pattern = self
+            .overlay
+            .parser_lazy_patterns
+            .get(pattern_index as usize)
+            .ok_or(ProjectionError::StructuralMismatch)?;
+        if pattern.pattern_start <= pattern.ampersand
+            || self.source.as_bytes().get(pattern.ampersand as usize) != Some(&b'&')
+        {
+            return Err(ProjectionError::StructuralMismatch);
+        }
+        self.copy_to(pattern.ampersand as usize)?;
+        self.cursor = pattern.ampersand.saturating_add(1) as usize;
         Ok(())
     }
 }

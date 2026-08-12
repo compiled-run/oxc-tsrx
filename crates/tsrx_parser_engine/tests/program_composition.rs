@@ -11,7 +11,7 @@ use support::{
     assert_failed, assert_no_scaffold, field, list_field, object_field, program_body, require_type,
     scalar_field, span,
 };
-use tsrx_parser_engine::{TsrxParseRequest, parse_tsrx};
+use tsrx_parser_engine::{TsrxParseOptions, TsrxParseRequest, parse_tsrx, parse_tsrx_with_options};
 use tsrx_tape_schema::{FlatTape, RecordIndex, ValueKind, ValueRef};
 
 fn offset(value: usize) -> u32 {
@@ -118,6 +118,202 @@ fn imports_and_exported_tsrx_functions_preserve_program_wrappers_and_order() {
         (offset(source.find("@{").expect("code block start")), offset(source.len()))
     );
     assert_no_scaffold(result.program());
+}
+
+#[test]
+fn multiline_quoted_jsx_attributes_remain_authored_literals() {
+    let source = "export function View() @{ <main class=\"one\n  two\">ok</main> }";
+    let result = parse_tsrx(&TsrxParseRequest { source }).expect("multiline JSX attribute");
+    let export = program_body(result.program())[0].as_object().expect("export declaration");
+    let function = object_field(result.program(), export, "declaration");
+    let element = rendered(result.program(), code_block(result.program(), function));
+    let opening = object_field(result.program(), element, "openingElement");
+    let attribute = list_field(result.program(), opening, "attributes")[0]
+        .as_object()
+        .expect("class attribute");
+    let literal = object_field(result.program(), attribute, "value");
+    assert_eq!(scalar_field(result.program(), literal, "value"), r#""one\n  two""#);
+    assert_eq!(span(result.program(), literal), (38, 49));
+    assert_no_scaffold(result.program());
+}
+
+#[test]
+fn jsx_shorthand_attributes_preserve_authored_shape_and_spans() {
+    let source = "function Child(props: { label: string; count: number }) @{\n\
+        <span>{props.label}</span>\n\
+    }\n\
+    function View() @{\n\
+        const label = 'ready';\n\
+        const count = 2;\n\
+        <Child {label} {count} />\n\
+    }";
+    let result = parse_tsrx(&TsrxParseRequest { source }).expect("JSX shorthand attributes");
+    let function = program_body(result.program())[1].as_object().expect("view declaration");
+    let element = rendered(result.program(), code_block(result.program(), function));
+    let opening = object_field(result.program(), element, "openingElement");
+    let attributes = list_field(result.program(), opening, "attributes");
+    assert_eq!(attributes.len(), 2);
+
+    for (attribute, identifier) in attributes.into_iter().zip(["label", "count"]) {
+        let attribute = attribute.as_object().expect("shorthand attribute");
+        require_type(result.program(), attribute, "JSXAttribute");
+        assert_eq!(scalar_field(result.program(), attribute, "shorthand"), "true");
+        assert_eq!(
+            scalar_field(
+                result.program(),
+                object_field(result.program(), attribute, "name"),
+                "name"
+            ),
+            format!(r#""{identifier}""#),
+        );
+        let spelling = format!("{{{identifier}}}");
+        let start = source.find(&spelling).expect("authored shorthand");
+        assert_eq!(
+            span(result.program(), attribute),
+            (offset(start), offset(start + spelling.len()))
+        );
+        assert_eq!(
+            span(result.program(), object_field(result.program(), attribute, "value")),
+            (offset(start), offset(start + spelling.len())),
+        );
+    }
+    assert_no_scaffold(result.program());
+}
+
+#[test]
+fn script_payloads_remain_raw_text_through_the_oxc_parse() {
+    let source = r#"function View() @{ <script type="application/json">{"nested":{"enabled":true},"boundary":"</ScRiPt>"}</script> }"#;
+    let result = parse_tsrx(&TsrxParseRequest { source }).expect("raw script payload");
+    let function = program_body(result.program())[0].as_object().expect("function declaration");
+    let element = rendered(result.program(), code_block(result.program(), function));
+    require_type(result.program(), element, "JSXElement");
+    assert_eq!(
+        scalar_field(result.program(), element, "content"),
+        r#""{\"nested\":{\"enabled\":true},\"boundary\":\"</ScRiPt>\"}""#,
+    );
+    let children = list_field(result.program(), element, "children");
+    assert_eq!(children.len(), 1);
+    let text = children[0].as_object().expect("script text");
+    require_type(result.program(), text, "JSXText");
+    let content_start = source.find("{\"nested\"").expect("content start");
+    let content_end = source.find("</script>").expect("closing script");
+    assert_eq!(span(result.program(), text), (offset(content_start), offset(content_end)));
+    assert_eq!(
+        scalar_field(result.program(), text, "raw"),
+        scalar_field(result.program(), element, "content")
+    );
+    assert_no_scaffold(result.program());
+}
+
+#[test]
+fn lazy_destructuring_patterns_preserve_markers_in_declarations_and_for_headers() {
+    let source = "function View(props: any) @{\n\
+        const &{ first, last } = props.user;\n\
+        let &[head, ...tail] = props.items;\n\
+        <ul>@for (const &{ id, label } of props.items; index i; key id) {\n\
+            <li>{label}</li>\n\
+        }</ul>\n\
+    }\n\
+    function Param(&{ greeting, name }: any) @{ <p>{greeting + name}</p> }";
+    let result = parse_tsrx(&TsrxParseRequest { source }).expect("lazy destructuring patterns");
+    let tape = result.program();
+    let mut patterns = Vec::new();
+    let mut declarators = Vec::new();
+    for raw in 0..tape.object_count() {
+        let object = RecordIndex::new(u32::try_from(raw).expect("object index"));
+        if tape
+            .field_index(object, "type")
+            .and_then(|field| tape.field_value(field))
+            .and_then(|value| tape.scalar(value))
+            .is_some_and(|kind| matches!(kind, r#""ArrayPattern""# | r#""ObjectPattern""#))
+            && tape.field_index(object, "lazy").is_some()
+        {
+            patterns.push(object);
+        }
+        if tape
+            .field_index(object, "type")
+            .and_then(|field| tape.field_value(field))
+            .and_then(|value| tape.scalar(value))
+            == Some(r#""VariableDeclarator""#)
+        {
+            declarators.push(object);
+        }
+    }
+    assert_eq!(patterns.len(), 4);
+    for pattern in patterns {
+        assert_eq!(scalar_field(tape, pattern, "lazy"), "true");
+        let (pattern_start, _) = span(tape, pattern);
+        let declarator = declarators
+            .iter()
+            .copied()
+            .find(|declarator| object_field(tape, *declarator, "id") == pattern);
+        if let Some(declarator) = declarator {
+            assert_eq!(span(tape, declarator).0 + 1, pattern_start);
+        }
+        assert_eq!(source.as_bytes()[usize::try_from(pattern_start - 1).expect("offset")], b'&');
+    }
+    assert_no_scaffold(tape);
+}
+
+#[test]
+fn parenthesized_sequence_expressions_survive_jsx_validation_without_parent_nodes() {
+    let source = "function Leaf(theme: () => string) @{ \
+        <span>{((window as any).__renders.leaf++, theme())}</span> \
+    }";
+    let result = parse_tsrx_with_options(
+        &TsrxParseRequest { source },
+        TsrxParseOptions { preserve_parens: Some(false), ..TsrxParseOptions::default() },
+    )
+    .expect("parenthesized sequence expression");
+    assert!(result.errors.is_empty());
+    assert_eq!(result.suppressed_diagnostics, 1);
+
+    let function = program_body(result.program())[0].as_object().expect("function declaration");
+    let element = rendered(result.program(), code_block(result.program(), function));
+    let children = list_field(result.program(), element, "children");
+    let container = children[0].as_object().expect("JSX expression container");
+    require_type(result.program(), container, "JSXExpressionContainer");
+    require_type(
+        result.program(),
+        object_field(result.program(), container, "expression"),
+        "SequenceExpression",
+    );
+    assert_no_scaffold(result.program());
+}
+
+#[test]
+fn statement_blocks_and_postfix_non_null_assertions_preserve_following_jsx() {
+    let source = "function View(value: number, enabled: boolean) @{\n\
+        let label = '';\n\
+        if (enabled) { label = 'on'; } else { label = 'off'; }\n\
+        { const scoped = value; label += String(scoped); }\n\
+        const half = value! / 2;\n\
+        function cleanup(): void { label = ''; }\n\
+        <main>{label + half}</main>\n\
+    }";
+    let result = parse_tsrx(&TsrxParseRequest { source }).expect("statement-bearing setup");
+    let function = program_body(result.program())[0].as_object().expect("function declaration");
+    let element = rendered(result.program(), code_block(result.program(), function));
+    require_type(result.program(), element, "JSXElement");
+    assert_no_scaffold(result.program());
+}
+
+#[test]
+fn typescript_generic_syntax_is_not_committed_as_jsx() {
+    for source in [
+        "type Props = Omit<Elements['mesh'], 'ref'>; function View() @{ <main/> }",
+        "const useValue = <T extends Value,>(value: T): T => value; function View() @{ <main/> }",
+        "const useValue = <T = Value,>(value: T): T => value; function View() @{ <main/> }",
+        "interface Api { Subscribe: <TSelected = State>(props: Props<TSelected>) => Node; } function View() @{ <main/> }",
+    ] {
+        let result = parse_tsrx(&TsrxParseRequest { source })
+            .unwrap_or_else(|error| panic!("generic TypeScript failed for `{source}`: {error}"));
+        let program = result
+            .program
+            .as_ref()
+            .unwrap_or_else(|| panic!("generic TypeScript produced no Program for `{source}`"));
+        assert_no_scaffold(program);
+    }
 }
 
 #[test]
@@ -248,6 +444,43 @@ fn exports_inside_a_top_level_typescript_module_are_not_treated_as_nested_tsrx_m
         body[2].as_object().expect("export declaration"),
         "ExportNamedDeclaration",
     );
+}
+
+#[test]
+fn imports_inside_typescript_modules_preserve_the_reference_tsrx_ast() {
+    let source = concat!(
+        "import { value } from './domain.ts'; ",
+        "module server { ",
+        "import { commitOrder } from './server-domain.ts'; ",
+        "export async function placeOrder(request: unknown) { return commitOrder(request); } ",
+        "}",
+    );
+    let result = parse_tsrx_with_options(
+        &TsrxParseRequest { source },
+        TsrxParseOptions { source_type: Some("module"), ..TsrxParseOptions::default() },
+    )
+    .expect("TypeScript module import");
+    assert!(result.errors.is_empty());
+    assert_eq!(result.suppressed_diagnostics, 1);
+
+    let declaration = program_body(result.program())[1].as_object().expect("module declaration");
+    require_type(result.program(), declaration, "TSModuleDeclaration");
+    let block = object_field(result.program(), declaration, "body");
+    require_type(result.program(), block, "TSModuleBlock");
+    let module_body = list_field(result.program(), block, "body");
+    assert_eq!(module_body.len(), 2);
+    let import = module_body[0].as_object().expect("nested import declaration");
+    require_type(result.program(), import, "ImportDeclaration");
+    assert_eq!(
+        span(result.program(), import).0,
+        offset(source.find("import { commitOrder }").expect("nested import"))
+    );
+    require_type(
+        result.program(),
+        module_body[1].as_object().expect("nested export declaration"),
+        "ExportNamedDeclaration",
+    );
+    assert_no_scaffold(result.program());
 }
 
 #[test]
