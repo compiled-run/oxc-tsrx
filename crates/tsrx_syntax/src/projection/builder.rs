@@ -24,6 +24,7 @@ enum Action {
     Header { clause: u32, ordinal: u32 },
     ForBody(u32),
     Embedded(u32),
+    StatementBoundary(u32),
 }
 
 impl Action {
@@ -38,6 +39,10 @@ impl Action {
                 (overlay.clauses[clause as usize].body.start.saturating_add(1), 0)
             }
             Self::Embedded(token) => (overlay.embedded_tokens[token as usize].span.start, 3),
+            // The boundary precedes everything else written at the same markup opening.
+            Self::StatementBoundary(boundary) => {
+                (overlay.statement_boundaries[boundary as usize], 0)
+            }
         }
     }
 }
@@ -392,6 +397,23 @@ impl<'a> Builder<'a> {
         Ok(())
     }
 
+    /// Writes the `;` that a line-leading markup opening implies, immediately before the opening
+    /// so the authored `<` is still copied verbatim and every authored byte keeps its segment.
+    fn statement_boundary(&mut self, boundary: u32) -> Result<(), ProjectionError> {
+        let offset = *self
+            .overlay
+            .statement_boundaries
+            .get(boundary as usize)
+            .ok_or(ProjectionError::StructuralMismatch)?;
+        let start = offset as usize;
+        if self.source.as_bytes().get(start) != Some(&b'<') {
+            return Err(ProjectionError::SourceChanged { offset });
+        }
+        self.copy_to(start)?;
+        self.output.push(';');
+        Ok(())
+    }
+
     fn embedded(&mut self, token_index: u32) -> Result<(), ProjectionError> {
         let token = self.overlay.embedded_tokens[token_index as usize];
         let span_start = token.span.start as usize;
@@ -527,6 +549,7 @@ pub(super) fn build_projection_with_purpose(
     let mut token_cursor = 0usize;
     let mut header_cursor = 0usize;
     let mut embedded_cursor = 0usize;
+    let mut statement_boundary_cursor = 0usize;
     loop {
         let wrapper = wrapper_actions.get(wrapper_cursor).copied();
         let try_end = try_end_actions.get(try_end_cursor).copied();
@@ -537,7 +560,10 @@ pub(super) fn build_projection_with_purpose(
         let embedded = (embedded_cursor < overlay.embedded_tokens.len())
             .then(|| to_u32(embedded_cursor).map(Action::Embedded))
             .transpose()?;
-        let Some(action) = [wrapper, try_end, token, header, embedded]
+        let statement_boundary = (statement_boundary_cursor < overlay.statement_boundaries.len())
+            .then(|| to_u32(statement_boundary_cursor).map(Action::StatementBoundary))
+            .transpose()?;
+        let Some(action) = [wrapper, try_end, token, header, embedded, statement_boundary]
             .into_iter()
             .flatten()
             .min_by_key(|action| action.key(overlay))
@@ -572,6 +598,10 @@ pub(super) fn build_projection_with_purpose(
             Action::Embedded(token) => {
                 embedded_cursor += 1;
                 builder.embedded(token)?;
+            }
+            Action::StatementBoundary(boundary) => {
+                statement_boundary_cursor += 1;
+                builder.statement_boundary(boundary)?;
             }
         }
     }

@@ -1083,3 +1083,102 @@ fn one_bad_custom_root_keeps_the_whole_module_fail_closed() {
     let source = "import './setup'; function Good() @{ <Good/> } function Bad() @{ @try{return 1}@catch{} } export { Good, Bad };";
     assert_failed(source);
 }
+
+#[test]
+fn a_markup_line_after_a_semicolon_less_statement_starts_a_new_statement() {
+    for source in [
+        "function Counter() @{\n\tconst count = get()\n\n\t<button>\n\t\t{'Count: ' + count}\n\t</button>\n}\n",
+        "function Counter() @{\n\tconst count = get();\n\n\t<button>\n\t\t{'Count: ' + count}\n\t</button>\n}\n",
+        "function Counter() @{\n\tconst count = get()\n\t<button>{count}</button>\n}\n",
+        "function Counter() @{\n\tconst count = 1\n\t<button>{count}</button>\n}\n",
+    ] {
+        let result = parse_tsrx(&TsrxParseRequest { source })
+            .unwrap_or_else(|error| panic!("markup line after a statement: {error}"));
+        assert!(result.errors.is_empty(), "diagnostics for `{source}`");
+        let tape = result.program();
+        let function = program_body(tape)[0].as_object().expect("Counter");
+        let block = code_block(tape, function);
+        let body = list_field(tape, block, "body");
+        assert_eq!(body.len(), 1, "one setup statement in `{source}`");
+        require_type(tape, body[0].as_object().expect("count"), "VariableDeclaration");
+        require_type(tape, rendered(tape, block), "JSXElement");
+        assert_no_scaffold(tape);
+    }
+}
+
+#[test]
+fn a_control_line_after_a_semicolon_less_statement_owns_its_markup_body() {
+    for source in [
+        "function D() @{\n\tconst d = get()\n\t@if (d) {\n\t\t<main>a</main>\n\t}\n}\n",
+        "function D() @{\n\tconst d = get();\n\t@if (d) {\n\t\t<main>a</main>\n\t}\n}\n",
+    ] {
+        let result = parse_tsrx(&TsrxParseRequest { source })
+            .unwrap_or_else(|error| panic!("control line after a statement: {error}"));
+        assert!(result.errors.is_empty(), "diagnostics for `{source}`");
+        let tape = result.program();
+        let function = program_body(tape)[0].as_object().expect("D");
+        let block = code_block(tape, function);
+        let body = list_field(tape, block, "body");
+        assert_eq!(body.len(), 1, "one setup statement in `{source}`");
+        require_type(tape, body[0].as_object().expect("d"), "VariableDeclaration");
+        require_type(tape, rendered(tape, block), "JSXIfExpression");
+        assert_no_scaffold(tape);
+    }
+}
+
+#[test]
+fn a_line_leading_less_than_that_cannot_open_markup_stays_a_comparison() {
+    for source in [
+        "function View(a: number, b: number) @{\n\tconst wide = a < b\n\t<main>{wide}</main>\n}\n",
+        "function View(a: number, b: number) @{\n\tconst wide = a\n\t\t< b\n\t<main>{wide}</main>\n}\n",
+    ] {
+        let result = parse_tsrx(&TsrxParseRequest { source })
+            .unwrap_or_else(|error| panic!("line-leading comparison: {error}"));
+        assert!(result.errors.is_empty(), "diagnostics for `{source}`");
+        let tape = result.program();
+        let function = program_body(tape)[0].as_object().expect("View");
+        let block = code_block(tape, function);
+        let declaration = list_field(tape, block, "body")[0].as_object().expect("wide");
+        require_type(tape, declaration, "VariableDeclaration");
+        let declarator =
+            list_field(tape, declaration, "declarations")[0].as_object().expect("declarator");
+        let init = object_field(tape, declarator, "init");
+        require_type(tape, init, "BinaryExpression");
+        assert_eq!(scalar_field(tape, init, "operator"), r#""<""#, "comparison in `{source}`");
+        require_type(tape, rendered(tape, block), "JSXElement");
+        assert_no_scaffold(tape);
+    }
+}
+
+#[test]
+fn line_leading_typescript_type_parameters_are_not_read_as_markup() {
+    for source in [
+        "const useValue =\n<T extends Value,>(value: T): T => value;\nfunction View() @{ <main/> }",
+        "const useValue =\n<T = Value,>(value: T): T => value;\nfunction View() @{ <main/> }",
+        "function View() @{\n\tconst seed = get()\n\tconst useValue =\n\t\t<T extends Value,>(value: T): T => value\n\t<main>{useValue(seed)}</main>\n}\n",
+    ] {
+        let result = parse_tsrx(&TsrxParseRequest { source })
+            .unwrap_or_else(|error| panic!("line-leading type parameters: {error}"));
+        assert!(result.errors.is_empty(), "diagnostics for `{source}`");
+        assert_no_scaffold(result.program());
+    }
+}
+
+#[test]
+fn nested_markup_lines_record_their_boundaries_in_source_order() {
+    let source = "function F() @{\n\tconst a = get()\n\t<main>@{\n\t\tconst b = get()\n\t\t<b>{a + b}</b>\n\t}</main>\n}\n";
+    let result = parse_tsrx(&TsrxParseRequest { source })
+        .unwrap_or_else(|error| panic!("nested markup lines: {error}"));
+    assert!(result.errors.is_empty(), "diagnostics for `{source}`");
+    let tape = result.program();
+    let function = program_body(tape)[0].as_object().expect("F");
+    let block = code_block(tape, function);
+    assert_eq!(list_field(tape, block, "body").len(), 1);
+    let element = rendered(tape, block);
+    require_type(tape, element, "JSXElement");
+    let child = list_field(tape, element, "children")[0].as_object().expect("child code block");
+    require_type(tape, child, "JSXCodeBlock");
+    assert_eq!(list_field(tape, child, "body").len(), 1);
+    require_type(tape, rendered(tape, child), "JSXElement");
+    assert_no_scaffold(tape);
+}

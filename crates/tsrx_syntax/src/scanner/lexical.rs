@@ -111,6 +111,30 @@ impl Scanner<'_> {
         }
     }
 
+    /// Octane starts a new statement when a line begins with a committed markup opening, even
+    /// though the previous line left its statement unterminated. This is a TSRX boundary rather
+    /// than JavaScript ASI — `<` can continue a JavaScript expression — so it is narrowed to the
+    /// openings `committed_jsx_opening` already recognises as markup, and the caller keeps
+    /// excluding the TypeScript type-parameter forms.
+    pub(super) fn line_leading_markup_starts_a_statement(&self, index: usize) -> bool {
+        self.at_line_start(index) && self.committed_jsx_opening(index)
+    }
+
+    /// True when only non-terminator whitespace separates `index` from the preceding line
+    /// terminator. A comment before the cursor on the same line is not whitespace, so it keeps the
+    /// cursor inside the line it was written on.
+    fn at_line_start(&self, index: usize) -> bool {
+        let mut cursor = index;
+        while cursor > 0 {
+            match self.bytes[cursor - 1] {
+                b'\n' | b'\r' => return true,
+                byte if byte.is_ascii_whitespace() => cursor -= 1,
+                _ => return false,
+            }
+        }
+        false
+    }
+
     pub(super) fn committed_jsx_opening(&self, start: usize) -> bool {
         if self.bytes.get(start + 1) == Some(&b'{') {
             return true;

@@ -25,6 +25,7 @@ pub(super) struct Checkpoint {
     pub(super) dynamic_comments: usize,
     pub(super) style_blocks: usize,
     pub(super) script_blocks: usize,
+    pub(super) statement_boundaries: usize,
     pub(super) first_root: u32,
     pub(super) last_root: u32,
     parent: Option<(usize, u32, u32)>,
@@ -47,6 +48,7 @@ impl Scanner<'_> {
             dynamic_comments: self.dynamic_comments,
             style_blocks: self.style_blocks,
             script_blocks: self.script_blocks,
+            statement_boundaries: self.statement_boundaries,
             first_root: self.first_root,
             last_root: self.last_root,
         }
@@ -170,6 +172,7 @@ impl Scanner<'_> {
             dynamic_comments: self.dynamic_comments.len(),
             style_blocks: self.style_blocks.len(),
             script_blocks: self.script_blocks.len(),
+            statement_boundaries: self.statement_boundaries.len(),
             first_root: self.first_root,
             last_root: self.last_root,
             parent,
@@ -193,6 +196,7 @@ impl Scanner<'_> {
         self.dynamic_comments.truncate(checkpoint.dynamic_comments);
         self.style_blocks.truncate(checkpoint.style_blocks);
         self.script_blocks.truncate(checkpoint.script_blocks);
+        self.statement_boundaries.truncate(checkpoint.statement_boundaries);
         if let Some(probes) = self.surrogate_probes.as_deref() {
             probes.borrow_mut().rollback(checkpoint.probe_changes);
         }

@@ -26,6 +26,7 @@ pub(crate) struct Scanner<'a> {
     dynamic_tags: Vec<DynamicTag>,
     dynamic_comments: Vec<ByteSpan>,
     style_blocks: Vec<StyleBlock>,
+    statement_boundaries: Vec<u32>,
     first_root: u32,
     last_root: u32,
     parents: Vec<u32>,
@@ -59,6 +60,7 @@ impl<'a> Scanner<'a> {
             dynamic_tags: Vec::new(),
             dynamic_comments: Vec::new(),
             style_blocks: Vec::new(),
+            statement_boundaries: Vec::new(),
             first_root: NONE,
             last_root: NONE,
             parents: Vec::with_capacity(8),
@@ -83,6 +85,7 @@ impl<'a> Scanner<'a> {
             dynamic_comments: self.dynamic_comments,
             style_blocks: self.style_blocks,
             script_blocks: Vec::new(),
+            statement_boundaries: self.statement_boundaries,
             first_root: self.first_root,
             last_root: self.last_root,
         })
@@ -149,12 +152,17 @@ impl<'a> Scanner<'a> {
                     pending_control_paren = false;
                     closed_control_paren = false;
                 }
-                b'<' if can_start_jsx
+                b'<' if (can_start_jsx || self.line_leading_markup_starts_a_statement(index))
                     && self.looks_like_jsx_start(index)
                     && !self.looks_like_typescript_type_parameters(index) =>
                 {
                     let checkpoint = self.checkpoint();
                     let committed = self.committed_jsx_opening(index);
+                    if !can_start_jsx {
+                        // Only the line-leading rule admitted this opening, so the legal-TSX lane
+                        // needs an explicit `;` where TSRX read a statement boundary.
+                        self.statement_boundaries.push(to_u32(index)?);
+                    }
                     match self.scan_jsx_element(index) {
                         Ok(end) => {
                             index = end;

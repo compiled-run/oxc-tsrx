@@ -504,6 +504,23 @@ impl<'a> Builder<'a> {
         Ok(())
     }
 
+    /// Writes the `;` that a line-leading markup opening implies, immediately before the opening
+    /// so the authored `<` is still copied verbatim and every authored byte keeps its segment.
+    pub(super) fn statement_boundary(&mut self, boundary: u32) -> Result<(), ProjectionError> {
+        let offset = *self
+            .overlay
+            .statement_boundaries
+            .get(boundary as usize)
+            .ok_or(ProjectionError::StructuralMismatch)?;
+        let start = offset as usize;
+        if self.source.as_bytes().get(start) != Some(&b'<') {
+            return Err(ProjectionError::SourceChanged { offset });
+        }
+        self.copy_to(start)?;
+        self.output.push(';');
+        Ok(())
+    }
+
     pub(super) fn parser_lazy_pattern(
         &mut self,
         pattern_index: u32,
