@@ -2631,8 +2631,7 @@ async function build() {
   )
   // Site navigation links are extensionless (/guide/introduction); Vercel needs
   // cleanUrls to resolve them to the .html files. The COOP/COEP headers give the wasm demo
-  // engine the cross-origin isolation SharedArrayBuffer requires; the site
-  // loads no cross-origin subresources, so they cost nothing.
+  // engine the cross-origin isolation SharedArrayBuffer requires.
   await writeFile(
     path.join(outDir, 'vercel.json'),
     `${JSON.stringify({
@@ -2644,9 +2643,29 @@ async function build() {
       // README published in oxc-tsrx@0.1.5 links that path, and an npm tarball
       // is immutable, so the path itself has to keep resolving.
       redirects: [],
+      // The Guessless docs are a separate Vercel project (guessless-docs) served
+      // under this domain at /guessless. Both sources are needed: ':path*' does
+      // not match the bare '/guessless', and the bare source proxies to the
+      // trailing-slash form so the upstream never answers with its own redirect
+      // (this site is trailingSlash: false, so a redirect round-trip would loop).
+      rewrites: [
+        {
+          source: '/guessless',
+          destination: 'https://guessless-docs.vercel.app/guessless',
+        },
+        {
+          source: '/guessless/:path*',
+          destination: 'https://guessless-docs.vercel.app/guessless/:path*',
+        },
+      ],
       headers: [
         {
-          source: '/(.*)',
+          // Scoped to exclude /guessless. Cross-origin isolation is required by
+          // the wasm demo engine here, but COEP: require-corp would block the
+          // Guessless page's cross-origin subresources (its Google Fonts
+          // stylesheet and the cdn.simpleicons.org icon masks), which are not
+          // served with CORP headers. That page needs no isolation of its own.
+          source: '/((?!guessless).*)',
           headers: [
             { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
             { key: 'Cross-Origin-Embedder-Policy', value: 'require-corp' },
@@ -2689,6 +2708,7 @@ main { text-align: center; padding: 2rem; }
 h1 { font-size: 1.05rem; font-weight: 600; letter-spacing: 0.01em; margin: 0 0 1.5rem; color: #666; }
 a { color: inherit; text-decoration: none; border: 1px solid #d4d4d4; border-radius: 8px; padding: 0.65rem 1.1rem; display: inline-block; font-size: 1rem; }
 a:hover { border-color: #888; }
+nav { display: flex; flex-wrap: wrap; gap: 0.75rem; justify-content: center; }
 @media (prefers-color-scheme: dark) {
   body { background: #111; color: #ededed; }
   h1 { color: #999; }
@@ -2700,7 +2720,10 @@ a:hover { border-color: #888; }
 <body>
 <main>
 <h1>${host}</h1>
+<nav>
 <a href="${trimmedBase}">${escapeHtml(config.title)} &rarr;</a>
+<a href="/guessless">Guessless &rarr;</a>
+</nav>
 </main>
 </body>
 </html>
