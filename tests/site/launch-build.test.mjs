@@ -175,7 +175,7 @@ test("static launch build has a scoped base, crawl metadata, and no internal des
   const escapedBase = trimmedBase.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 
   assert.match(home, new RegExp(`href="${escapedBase}/guide/getting-started"`, "u"));
-  assert.match(home, /href="https:\/\/github\.com\/markless-dev\/oxc-tsrx"/u);
+  assert.match(home, /href="https:\/\/github\.com\/compiled-run\/oxc-tsrx"/u);
   assert.match(home, /href="https:\/\/www\.npmjs\.com\/package\/oxc-tsrx"/u);
   assert.doesNotMatch(home, /npmjs\.com\/package\/(?:oxlint-tsrx|oxfmt-tsrx)/u);
   assert.match(home, new RegExp(`href="${escapedBase}/assets/`, "u"));
