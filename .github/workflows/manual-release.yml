@@ -75,8 +75,13 @@ jobs:
     # rust-cache above only helps on a second run with the same key. 60 was the
     # budget when this job compiled nothing.
     timeout-minutes: 90
+    # `actions: write` is the narrowest grant that lets the last step dispatch
+    # site-artifact.yml; the trap it exists for is written out there. It buys
+    # the ability to start a workflow run in this repository and nothing else,
+    # and it stays on this job rather than at the top of the file.
     permissions:
       contents: write
+      actions: write
     steps:
       # Full history, because the release notes are generated from it and a
       # shallow clone would silently produce a shorter changelog.
@@ -428,6 +433,29 @@ jobs:
           make_latest: ${{ inputs.release_type != 'prerelease' }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
+
+      # The push above is made with GITHUB_TOKEN, and a token push fires no
+      # `push` event: GitHub suppresses those so a workflow cannot recurse into
+      # itself. site-artifact.yml deploys compiled.run on push to main, so the
+      # release commit lands, no event is delivered, and the site keeps serving
+      # the PREVIOUS release's docs until some unrelated commit happens to
+      # arrive. 0.4.0 was cut that way and compiled.run stayed on 0.3.0.
+      #
+      # An explicit workflow_dispatch is not a suppressed event, so the deploy
+      # is chained by hand here. site-artifact.yml's deploy job gates on
+      # `github.ref_name == 'main'` rather than on the event, so a dispatched
+      # run deploys exactly like a pushed one. `--ref main` is safe to write
+      # literally: this job already refuses to run anywhere but the default
+      # branch.
+      - name: Deploy the site for the release just pushed
+        if: inputs.mode == 'release'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh workflow run site-artifact.yml --ref main
+          echo "dispatched site-artifact.yml on main; compiled.run rebuilds from the release commit"
 
       # Deliberately the last word in this file. The release exists on GitHub;
       # nothing is on npm yet, and nothing in this workflow can put it there.

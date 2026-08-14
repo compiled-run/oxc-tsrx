@@ -190,7 +190,9 @@ test("contents: write stays scoped to the single release job", () => {
 
   // Exactly one job, and it is the one that pushes.
   assert.deepEqual(Object.keys(workflow.jobs), ["release"]);
-  assert.deepEqual(job("release").permissions, { contents: "write" });
+  // `actions: write` is only the grant that lets release mode dispatch the
+  // site deploy; it cannot touch the registry, and id-token stays absent.
+  assert.deepEqual(job("release").permissions, { contents: "write", actions: "write" });
 });
 
 test("no id-token: write anywhere, so this workflow cannot publish to npm", () => {

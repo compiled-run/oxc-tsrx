@@ -88,6 +88,13 @@ default branch. It takes three inputs:
 Run the dry run, read the notes it attaches to the run as an artifact, then run
 it again in `release` mode.
 
+`release` mode also chains the site deploy: once the commit and the tag are
+pushed it dispatches **Build website artifact**
+(`.github/workflows/site-artifact.yml`) on `main`, so compiled.run rebuilds from
+the release commit. That step exists because the release push is made with
+`GITHUB_TOKEN` and a token push fires no `push` event, which used to leave the
+site serving the previous release's docs until an unrelated commit landed.
+
 ### Why the version is not just `bumpp`
 
 `bumpp` rewrites the `version` field of a manifest. That is four files out of
