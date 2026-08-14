@@ -40,6 +40,7 @@ test("the parser can be bundled without a runtime package.json dependency", asyn
 
     const bundledSource = await readFile(bundle, "utf8");
     assert.doesNotMatch(bundledSource, /require\(["']\.\/package\.json["']\)/u);
+    assert.doesNotMatch(bundledSource, /new URL\([^)]*import\.meta\.url/u);
     const result = await runNode(bundle);
     assert.equal(result.stderr, "");
     assert.deepEqual(JSON.parse(result.stdout), { apiVersion: 1, lazy: true, loadedAddons: [] });

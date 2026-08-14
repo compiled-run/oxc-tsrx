@@ -12,6 +12,7 @@ const expectedInventory = [
   "facade.js",
   "index.d.ts",
   "index.js",
+  "style.js",
   "types/estree.d.ts",
   "types/index.d.ts",
 ];
@@ -128,6 +129,11 @@ test(
       recursive: true,
       filter: (source) => !/[\\/](?:dist|node_modules)(?:[\\/]|$)/u.test(source),
     });
+    await cp(
+      join(packageRoot, "dist"),
+      join(fixture, "tsrx-core-compat", "dist"),
+      { recursive: true },
+    );
     await symlink(
       join(root, "node_modules"),
       join(fixturePackage, "node_modules"),
@@ -144,6 +150,12 @@ test(
     const toolchainExpectedInventory = [
       ...authoredRuntime,
       ...toolchainDeclarationFiles,
+      "tsrx-core-compat/facade.js",
+      "tsrx-core-compat/index.d.ts",
+      "tsrx-core-compat/index.js",
+      "tsrx-core-compat/style.js",
+      "tsrx-core-compat/types/estree.d.ts",
+      "tsrx-core-compat/types/index.d.ts",
     ].sort();
     const committedBefore = new Map(
       await Promise.all(
@@ -170,7 +182,12 @@ test(
     assert.deepEqual(rebuiltInventory, toolchainExpectedInventory);
     assert.deepEqual(
       committedInventory.filter((file) => file.endsWith(".js")),
-      authoredRuntime,
+      [
+        ...authoredRuntime,
+        "tsrx-core-compat/facade.js",
+        "tsrx-core-compat/index.js",
+        "tsrx-core-compat/style.js",
+      ].sort(),
       "every authored toolchain runtime must have exactly one emitted JavaScript file",
     );
     for (const file of toolchainExpectedInventory) {

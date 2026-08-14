@@ -97,6 +97,17 @@ use. [Parsing](https://compiled.run/oxc-tsrx/guide/parsing) has the shape it ret
 None of these compiles `.tsrx` either; that stays your framework's TSRX
 plugin's job.
 
+Framework compilers that currently call `@tsrx/core`'s parser can use the
+compatibility facade from the same package:
+
+```js
+import { parseModule } from "oxc-tsrx/tsrx-core-compat";
+```
+
+It preserves TypeScript fields and supplies the source locations, directive
+keyword origins, comments, and complete scoped-CSS tree expected by
+`@tsrx/core` consumers.
+
 ## Your own JavaScript lint plugins
 
 A plugin listed in `jsPlugins` runs on `.tsrx` from the `oxlint` command and

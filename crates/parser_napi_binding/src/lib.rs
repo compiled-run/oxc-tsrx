@@ -353,7 +353,7 @@ fn parse_owned(
                 },
                 // The canonical TSRX contract deliberately defaults to the JavaScript ESTree
                 // field policy; callers can request OXC's TypeScript field policy explicitly.
-                include_ts_fields: !eager_compat && options.ast_type.as_deref() == Some("ts"),
+                include_ts_fields: eager_compat || options.ast_type.as_deref() == Some("ts"),
                 ranges: options.range.unwrap_or(false),
                 preserve_parens: if eager_compat { Some(false) } else { options.preserve_parens },
                 show_semantic_errors: !eager_compat
@@ -388,7 +388,7 @@ fn parse_owned(
                 } else {
                     options.source_type.as_deref()
                 },
-                include_ts_fields: !eager_compat && options.ast_type.as_deref() == Some("ts"),
+                include_ts_fields: eager_compat || options.ast_type.as_deref() == Some("ts"),
                 ranges: options.range.unwrap_or(false),
                 preserve_parens: if eager_compat { Some(false) } else { options.preserve_parens },
                 show_semantic_errors: !eager_compat

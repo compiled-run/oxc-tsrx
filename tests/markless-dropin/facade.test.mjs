@@ -40,7 +40,7 @@ test("parseModule delegates to the TSRX parser with the exact OXC options", () =
     [
       "module.tsrx",
       "export const answer = 42",
-      { lang: "tsrx", sourceType: "module", astType: "js", preserveParens: false },
+      { lang: "tsrx", sourceType: "module", astType: "ts", preserveParens: false },
     ],
   ]);
   const marker = Object.getOwnPropertyDescriptor(
@@ -108,17 +108,10 @@ test("parseModule sends generated JavaScript through OXC's TypeScript-compatible
   ]);
 });
 
-test("the successful no-comment hot path skips source scanning and comment materialization", () => {
+test("the successful no-comment path adds source locations without materializing comments", () => {
   const program = makeProgram();
   let commentsGetterReads = 0;
-  const source = {
-    get length() {
-      throw new Error("the compatibility layer scanned the source");
-    },
-    charCodeAt() {
-      throw new Error("the compatibility layer scanned the source");
-    },
-  };
+  const source = "export const answer = 42";
   const api = createTsrxCoreCompat({
     parseSync(_filename, observedSource) {
       assert.equal(observedSource, source);
@@ -135,6 +128,10 @@ test("the successful no-comment hot path skips source scanning and comment mater
 
   assert.equal(api.parseModule(source), program);
   assert.equal(commentsGetterReads, 0);
+  assert.deepEqual(program.loc, {
+    start: { line: 1, column: 0 },
+    end: { line: 1, column: 21 },
+  });
 });
 
 test("an Unexpected-token rejection retries unquoted TSRX submodule sources exactly once", () => {
@@ -222,13 +219,129 @@ test("an Unexpected-token rejection retries unquoted TSRX submodule sources exac
     name: "server",
     start: firstIdentifierStart,
     end: firstIdentifierStart + "server".length,
+    loc: {
+      start: { line: 1, column: firstIdentifierStart },
+      end: { line: 1, column: firstIdentifierStart + "server".length },
+    },
   });
   assert.deepEqual(program.body[2].source, {
     type: "Identifier",
     name: "server",
     start: secondIdentifierStart,
     end: secondIdentifierStart + "server".length,
+    loc: {
+      start: { line: 1, column: secondIdentifierStart },
+      end: { line: 1, column: secondIdentifierStart + "server".length },
+    },
   });
+});
+
+test("TSRX compatibility materializes directive origins and the full scoped CSS tree", () => {
+  const source = [
+    "@if(a){x}@else{y}",
+    "@for(const x of xs){x}@empty{y}",
+    "@switch(x){@case 1:{x}@default:{y}}",
+    "@try{x}@pending{y}@catch(error){z}",
+    "<style scoped>.a,.b { color: red; }</style>",
+  ].join("\n");
+  const span = (text, from = 0) => {
+    const start = source.indexOf(text, from);
+    return { start, end: start + text.length };
+  };
+  const elseSpan = span("@else");
+  const emptySpan = span("@empty");
+  const caseSpan = span("@case");
+  const defaultSpan = span("@default");
+  const pendingSpan = span("@pending");
+  const catchSpan = span("@catch");
+  const styleSpan = span("<style scoped>.a,.b { color: red; }</style>");
+  const css = ".a,.b { color: red; }";
+  const program = {
+    type: "Program",
+    start: 0,
+    end: source.length,
+    sourceType: "module",
+    hashbang: null,
+    body: [
+      {
+        type: "JSXIfExpression",
+        start: 0,
+        end: source.indexOf("\n"),
+        consequent: { type: "BlockStatement", start: 6, end: elseSpan.start, body: [] },
+        alternate: {
+          type: "BlockStatement",
+          start: elseSpan.end,
+          end: source.indexOf("\n"),
+          body: [],
+        },
+      },
+      {
+        type: "JSXForExpression",
+        start: source.indexOf("@for"),
+        end: source.indexOf("\n", source.indexOf("@for")),
+        body: { type: "BlockStatement", start: source.indexOf("{x}"), end: emptySpan.start, body: [] },
+        empty: { type: "BlockStatement", start: emptySpan.end, end: emptySpan.end + 3, body: [] },
+      },
+      {
+        type: "JSXSwitchExpression",
+        start: source.indexOf("@switch"),
+        end: source.indexOf("\n", source.indexOf("@switch")),
+        cases: [
+          { type: "SwitchCase", ...caseSpan, test: { type: "Literal", ...span("1", caseSpan.end), value: 1 }, consequent: [] },
+          { type: "SwitchCase", ...defaultSpan, test: null, consequent: [] },
+        ],
+      },
+      {
+        type: "JSXTryExpression",
+        start: source.indexOf("@try"),
+        end: source.indexOf("\n", source.indexOf("@try")),
+        block: { type: "BlockStatement", start: source.indexOf("{x}", source.indexOf("@try")), end: pendingSpan.start, body: [] },
+        pending: { type: "BlockStatement", start: pendingSpan.end, end: catchSpan.start, body: [] },
+        handler: { type: "CatchClause", start: catchSpan.start, end: source.indexOf("\n", source.indexOf("@try")), body: { type: "BlockStatement", start: catchSpan.end, end: source.indexOf("\n", source.indexOf("@try")), body: [] } },
+      },
+      {
+        type: "JSXStyleElement",
+        ...styleSpan,
+        css,
+        metadata: { path: [] },
+        openingElement: { type: "JSXOpeningElement", start: styleSpan.start, end: styleSpan.start + "<style scoped>".length },
+        children: [{ type: "StyleSheet", source: css, start: 0, end: css.length, children: [] }],
+      },
+    ],
+  };
+  const api = createTsrxCoreCompat({
+    parseSync() {
+      return program;
+    },
+  });
+
+  api.parseModule(source, "src/Origins.tsrx");
+
+  assert.deepEqual(program.body[0].alternateKeyword, {
+    ...elseSpan,
+    loc: { start: { line: 1, column: elseSpan.start }, end: { line: 1, column: elseSpan.end } },
+  });
+  assert.deepEqual([program.body[1].emptyKeyword.start, program.body[1].emptyKeyword.end], [emptySpan.start, emptySpan.end]);
+  assert.deepEqual(program.body[2].cases.map((node) => [node.keyword.start, node.keyword.end]), [
+    [caseSpan.start, caseSpan.end],
+    [defaultSpan.start, defaultSpan.end],
+  ]);
+  assert.deepEqual([program.body[3].pendingKeyword.start, program.body[3].pendingKeyword.end], [pendingSpan.start, pendingSpan.end]);
+  assert.deepEqual([program.body[3].handlerKeyword.start, program.body[3].handlerKeyword.end], [catchSpan.start, catchSpan.end]);
+
+  const style = program.body[4];
+  const sheet = style.children[0];
+  assert.match(sheet.hash, /^tsrx-[0-9a-f]{8}$/u);
+  assert.equal(style.metadata.styleScopeHash, sheet.hash);
+  assert.deepEqual(sheet.children[0].prelude.children.map((selector) => selector.children[0].selectors[0].name), ["a", "b"]);
+  assert.deepEqual(sheet.children[0].block.children[0], {
+    type: "Declaration",
+    start: 8,
+    end: 18,
+    property: "color",
+    value: "red",
+  });
+  assert.deepEqual(program.loc.end, { line: 5, column: styleSpan.end - styleSpan.start });
 });
 
 test("parseModule preserves an explicit filename and appends compatible comments", () => {

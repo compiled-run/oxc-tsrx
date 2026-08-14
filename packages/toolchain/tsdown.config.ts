@@ -59,5 +59,21 @@ export default defineConfig({
       ],
       flatten: false,
     },
+    {
+      from: [
+        "../tsrx-core-compat/dist/facade.js",
+        "../tsrx-core-compat/dist/index.d.ts",
+        "../tsrx-core-compat/dist/index.js",
+        "../tsrx-core-compat/dist/style.js",
+      ],
+      to: "dist/tsrx-core-compat",
+    },
+    {
+      from: [
+        "../tsrx-core-compat/dist/types/estree.d.ts",
+        "../tsrx-core-compat/dist/types/index.d.ts",
+      ],
+      to: "dist/tsrx-core-compat/types",
+    },
   ],
 });

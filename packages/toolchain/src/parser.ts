@@ -1,5 +1,9 @@
 import { createRequire } from "node:module";
-import { parseTrustedTsrxProgram, parseTsrxProgram } from "./tsrx-transfer.js";
+import {
+  isTsrxBinaryProgram,
+  parseTrustedTsrxProgram,
+  parseTsrxProgram,
+} from "./tsrx-transfer.js";
 import { NATIVE_TARGETS, nativePackageName, nativeTargetForHost } from "./native-targets.js";
 
 const require = createRequire(import.meta.url);
@@ -509,14 +513,17 @@ function binding() {
   }
 
   const { existsSync } = require("node:fs");
+  const { dirname, join, resolve } = require("node:path");
   const { fileURLToPath } = require("node:url");
   const explicit = process.env.OXC_TSRX_PARSER_ADDON;
   if (explicit) {
-    const { resolve } = require("node:path");
     nativeBinding = loadAdjacentAddon(resolve(explicit), hostTarget);
     return nativeBinding;
   }
-  const adjacent = fileURLToPath(new URL(`../${ADDON_FILE}`, import.meta.url));
+  // Avoid a dynamic `new URL(..., import.meta.url)` here. Vite treats that form as
+  // an asset glob and attempts to import every string constant in this module,
+  // including native-package inventory entries such as `LICENSE`.
+  const adjacent = join(dirname(fileURLToPath(import.meta.url)), "..", ADDON_FILE);
   if (existsSync(adjacent)) {
     nativeBinding = loadAdjacentAddon(adjacent, hostTarget);
     return nativeBinding;
@@ -688,7 +695,7 @@ export function parseSync(filename, sourceText, options) {
     if (selectedRoute === ROUTE_TSRX_CORE_COMPAT) {
       if (
         typeof nativeResult === "string" ||
-        nativeResult?.words instanceof Uint32Array
+        isTsrxBinaryProgram(nativeResult)
       ) {
         return parseTrustedTsrxProgram(nativeResult);
       }

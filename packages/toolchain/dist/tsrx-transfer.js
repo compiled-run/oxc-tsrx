@@ -78,6 +78,9 @@ const COMMON_KEYS = Object.freeze([
 	"declare",
 	"members"
 ]);
+function isTsrxBinaryProgram(payload) {
+	return payload !== null && typeof payload === "object" && Object.prototype.toString.call(payload.words) === "[object Uint32Array]";
+}
 function invalid(message) {
 	throw new TypeError(`invalid TSRX Program transfer: ${message}`);
 }
@@ -123,7 +126,7 @@ function parseMetadata(metadata, keyCount, scalarCount, fixCount) {
 	};
 }
 function parseBinaryProgram(payload) {
-	if (payload === null || typeof payload !== "object" || typeof payload.metadata !== "string" || !(payload.words instanceof Uint32Array)) invalid("binary payload has invalid lanes");
+	if (payload === null || typeof payload !== "object" || typeof payload.metadata !== "string" || !isTsrxBinaryProgram(payload)) invalid("binary payload has invalid lanes");
 	const { metadata, words } = payload;
 	if (words.byteLength > PROGRAM_TRANSFER_MAX_BYTES || Buffer.byteLength(metadata, "utf8") > PROGRAM_TRANSFER_MAX_BYTES - words.byteLength) invalid("binary payload exceeds its bounded capacity");
 	if (words.length < PROGRAM_BINARY_HEADER_WORDS) invalid("binary graph header is truncated");
@@ -306,7 +309,7 @@ function parseTrustedBinaryProgram(payload) {
 	return program;
 }
 function parseTrustedTsrxProgram(payload) {
-	if (payload?.words instanceof Uint32Array) return parseTrustedBinaryProgram(payload);
+	if (isTsrxBinaryProgram(payload)) return parseTrustedBinaryProgram(payload);
 	return parseTsrxProgram(payload);
 }
 function parseTsrxProgram(payload) {
@@ -321,4 +324,4 @@ function parseTsrxProgram(payload) {
 	return envelope.node;
 }
 //#endregion
-export { parseTrustedTsrxProgram, parseTsrxProgram };
+export { isTsrxBinaryProgram, parseTrustedTsrxProgram, parseTsrxProgram };
