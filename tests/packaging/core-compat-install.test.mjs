@@ -84,17 +84,14 @@ async function inventory(directory) {
   return files.sort();
 }
 
-test("the packed core-compat package works from an outside consumer", async (context) => {
+test("the packed oxc-tsrx compatibility subpath works from an outside consumer", async (context) => {
   const artifacts = await mkdtemp(join(tmpdir(), "oxc-tsrx-core-compat-artifacts-"));
   const consumer = await mkdtemp(join(tmpdir(), "oxc-tsrx-core-compat-consumer-"));
   const cache = join(artifacts, ".npm-cache");
   context.after(() => rm(artifacts, { recursive: true, force: true }));
   context.after(() => rm(consumer, { recursive: true, force: true }));
 
-  const [compatPackage, toolchainPackage] = await Promise.all([
-    pack("packages/tsrx-core-compat", artifacts, cache),
-    pack("packages/toolchain", artifacts, cache),
-  ]);
+  const toolchainPackage = await pack("packages/toolchain", artifacts, cache);
   // The parser addon is a host-specific build artifact that is not tracked, and
   // release workflows build it outside the tree; stage this run's own copy the
   // way native-package.test.mjs does rather than trusting a checked-out path.
@@ -121,7 +118,6 @@ test("the packed core-compat package works from an outside consumer", async (con
   );
   const nativePackage = JSON.parse(nativeResult.stdout);
   const registry = await startLocalRegistry([
-    compatPackage,
     toolchainPackage,
     {
       manifest: { name: nativePackage.packageName, version: nativePackage.version },
@@ -139,7 +135,7 @@ test("the packed core-compat package works from an outside consumer", async (con
         name: "core-compat-outside-consumer",
         private: true,
         type: "module",
-        dependencies: { "@oxc-tsrx/tsrx-core-compat": compatPackage.version },
+        dependencies: { "oxc-tsrx": toolchainPackage.manifest.version },
       },
       null,
       2,
@@ -163,7 +159,7 @@ test("the packed core-compat package works from an outside consumer", async (con
   isEventAttribute,
   normalizeEventName,
   parseModule,
-} from "@oxc-tsrx/tsrx-core-compat";
+} from "oxc-tsrx/tsrx-core-compat";
 
 const program = parseModule("export const answer = 42", "consumer.ts");
 console.log(JSON.stringify({
@@ -187,9 +183,9 @@ console.log(JSON.stringify({
 
   await writeFile(
     join(consumer, "type-contract.ts"),
-    `import { parseModule } from "@oxc-tsrx/tsrx-core-compat";
-import type { ParseOptions, VolarMappingsResult } from "@oxc-tsrx/tsrx-core-compat/types";
-import type * as AST from "@oxc-tsrx/tsrx-core-compat/types/estree";
+    `import { parseModule } from "oxc-tsrx/tsrx-core-compat";
+import type { ParseOptions, VolarMappingsResult } from "oxc-tsrx/tsrx-core-compat/types";
+import type * as AST from "oxc-tsrx/tsrx-core-compat/types/estree";
 
 const options: ParseOptions = { collect: true, errors: [] };
 const program: AST.Program = parseModule("export {}", "consumer.ts", options);
@@ -222,14 +218,20 @@ void result;
     { cwd: consumer, env: environment },
   );
 
-  const installedRoot = join(consumer, "node_modules/@oxc-tsrx/tsrx-core-compat");
+  const installedRoot = join(consumer, "node_modules/oxc-tsrx");
   const installedManifest = JSON.parse(await readFile(join(installedRoot, "package.json"), "utf8"));
-  assert.deepEqual(installedManifest.files, ["dist", "LICENSE", "README.md"]);
+  assert.ok(installedManifest.exports["./tsrx-core-compat"]);
+  assert.ok(installedManifest.exports["./tsrx-core-compat/types"]);
+  assert.ok(installedManifest.exports["./tsrx-core-compat/types/estree"]);
   const installedFiles = await inventory(installedRoot);
-  assert.equal(installedFiles.some((file) => file === "src" || file.startsWith("src/")), false);
-  assert.equal(
-    installedFiles.some((file) => file.endsWith(".ts") && !file.endsWith(".d.ts")),
-    false,
-    "the package must not contain authored TypeScript sources",
-  );
+  for (const file of [
+    "dist/tsrx-core-compat/facade.js",
+    "dist/tsrx-core-compat/index.d.ts",
+    "dist/tsrx-core-compat/index.js",
+    "dist/tsrx-core-compat/style.js",
+    "dist/tsrx-core-compat/types/estree.d.ts",
+    "dist/tsrx-core-compat/types/index.d.ts",
+  ]) {
+    assert.ok(installedFiles.includes(file), file);
+  }
 });

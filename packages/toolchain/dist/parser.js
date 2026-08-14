@@ -1,5 +1,5 @@
 import { NATIVE_TARGETS, nativePackageName, nativeTargetForHost } from "./native-targets.js";
-import { parseTrustedTsrxProgram, parseTsrxProgram } from "./tsrx-transfer.js";
+import { isTsrxBinaryProgram, parseTrustedTsrxProgram, parseTsrxProgram } from "./tsrx-transfer.js";
 import { createRequire } from "node:module";
 //#region src/parser.ts
 const require = createRequire(import.meta.url);
@@ -398,14 +398,14 @@ function binding() {
 	if (nativeBinding !== void 0) return nativeBinding;
 	if (hostTarget === null) fail("ERR_TSRX_UNSUPPORTED_TARGET", "parser host target", "one of the eight supported Node targets", `${process.platform}-${process.arch}${linuxLibc() ? `-${linuxLibc()}` : ""}`);
 	const { existsSync } = require("node:fs");
+	const { dirname, join, resolve } = require("node:path");
 	const { fileURLToPath } = require("node:url");
 	const explicit = process.env.OXC_TSRX_PARSER_ADDON;
 	if (explicit) {
-		const { resolve } = require("node:path");
 		nativeBinding = loadAdjacentAddon(resolve(explicit), hostTarget);
 		return nativeBinding;
 	}
-	const adjacent = fileURLToPath(new URL(`../${ADDON_FILE}`, import.meta.url));
+	const adjacent = join(dirname(fileURLToPath(import.meta.url)), "..", ADDON_FILE);
 	if (existsSync(adjacent)) {
 		nativeBinding = loadAdjacentAddon(adjacent, hostTarget);
 		return nativeBinding;
@@ -533,7 +533,7 @@ function parseSync(filename, sourceText, options) {
 		const selectedRoute = route(filename, options);
 		const nativeResult = invoke("parseSync", filename, sourceText, options, selectedRoute);
 		if (selectedRoute === ROUTE_TSRX_CORE_COMPAT) {
-			if (typeof nativeResult === "string" || nativeResult?.words instanceof Uint32Array) return parseTrustedTsrxProgram(nativeResult);
+			if (typeof nativeResult === "string" || isTsrxBinaryProgram(nativeResult)) return parseTrustedTsrxProgram(nativeResult);
 			return {
 				program: parseTsrxProgram(nativeResult.program),
 				errors: nativeResult.errors

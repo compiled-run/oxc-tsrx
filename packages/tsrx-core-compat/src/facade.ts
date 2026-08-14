@@ -1,7 +1,9 @@
+import { parse_style } from "./style.js";
+
 const PARSER_OPTIONS = Object.freeze({
   lang: "tsrx",
   sourceType: "module",
-  astType: "js",
+  astType: "ts",
   preserveParens: false,
 });
 const TSRX_CORE_COMPAT_EAGER = Symbol.for("@oxc-tsrx/parser/tsrx-core-compat-eager");
@@ -946,6 +948,124 @@ function compatibleComment(comment, positionAt) {
   };
 }
 
+function keywordSpan(source, keyword, start, end, positionAt) {
+  const offset = source.indexOf(keyword, Math.max(0, start));
+  if (offset === -1 || offset + keyword.length > end) return null;
+  return {
+    start: offset,
+    end: offset + keyword.length,
+    loc: {
+      start: positionAt(offset),
+      end: positionAt(offset + keyword.length),
+    },
+  };
+}
+
+function materializeCompatibilityProgram(program, source, filename, loose, positionAt) {
+  if (typeof source !== "string") return;
+  const seen = new WeakSet();
+  const stack = [{ value: program, insideHead: false }];
+  while (stack.length > 0) {
+    const { value, insideHead } = stack.pop();
+    if (value === null || typeof value !== "object" || seen.has(value)) continue;
+    seen.add(value);
+
+    if (value.type === "StyleSheet") continue;
+    if (Number.isInteger(value.start) && Number.isInteger(value.end) && value.loc == null) {
+      value.loc = {
+        start: positionAt(value.start),
+        end: positionAt(value.end),
+      };
+    }
+
+    if (
+      (value.type === "JSXIfExpression" || value.type === "IfStatement") &&
+      value.alternate != null &&
+      value.alternateKeyword == null
+    ) {
+      value.alternateKeyword = keywordSpan(
+        source,
+        "@else",
+        value.consequent?.end ?? value.start,
+        value.alternate?.end ?? value.end,
+        positionAt,
+      );
+    } else if (
+      value.type === "JSXForExpression" &&
+      value.empty != null &&
+      value.emptyKeyword == null
+    ) {
+      value.emptyKeyword = keywordSpan(
+        source,
+        "@empty",
+        value.body?.end ?? value.start,
+        value.empty?.end ?? value.end,
+        positionAt,
+      );
+    } else if (value.type === "SwitchCase" && value.keyword == null) {
+      const keyword = value.test == null ? "@default" : "@case";
+      value.keyword = keywordSpan(source, keyword, value.start, value.end, positionAt);
+    } else if (value.type === "JSXTryExpression") {
+      if (value.pending != null && value.pendingKeyword == null) {
+        value.pendingKeyword = keywordSpan(
+          source,
+          "@pending",
+          value.block?.end ?? value.start,
+          value.pending?.end ?? value.end,
+          positionAt,
+        );
+      }
+      if (value.handler != null && value.handlerKeyword == null) {
+        value.handlerKeyword = keywordSpan(
+          source,
+          "@catch",
+          value.pending?.end ?? value.block?.end ?? value.start,
+          value.handler?.end ?? value.end,
+          positionAt,
+        );
+      }
+    }
+
+    if (value.type === "JSXStyleElement" && typeof value.css === "string") {
+      const style = parse_style(
+        value.css,
+        {
+          filename,
+          line: value.openingElement?.loc?.start?.line ?? value.loc?.start?.line ?? 1,
+          column: value.openingElement?.loc?.start?.column ?? value.loc?.start?.column ?? 0,
+        },
+        { loose },
+      );
+      value.children = [style];
+      if (!insideHead) {
+        value.metadata ??= { path: [] };
+        value.metadata.styleScopeHash = style.hash;
+      }
+    }
+
+    const elementName = value.openingElement?.name?.name;
+    const childInsideHead = insideHead || value.type === "JSXElement" && elementName === "head";
+    for (const [key, child] of Object.entries(value)) {
+      if (
+        key === "parent" ||
+        key === "loc" ||
+        key.endsWith("Keyword") ||
+        child === null ||
+        typeof child !== "object"
+      ) {
+        continue;
+      }
+      if (Array.isArray(child)) {
+        for (let index = child.length - 1; index >= 0; index -= 1) {
+          stack.push({ value: child[index], insideHead: childInsideHead });
+        }
+      } else {
+        stack.push({ value: child, insideHead: childInsideHead });
+      }
+    }
+  }
+}
+
 function missingProgramError(filename) {
   const error = new SyntaxError(`oxc-tsrx/parser did not return a Program for ${filename}`) as CompatSyntaxError;
   error.code = undefined;
@@ -1191,6 +1311,14 @@ export function createTsrxCoreCompat(parser) {
         }
         throw missingProgramError(resolvedFilename);
       }
+
+      materializeCompatibilityProgram(
+        program,
+        source,
+        resolvedFilename,
+        Boolean(options?.loose),
+        positions(),
+      );
 
       if (wantsComments) {
         for (const comment of comments) options.comments.push(compatibleComment(comment, positions()));

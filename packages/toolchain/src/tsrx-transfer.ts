@@ -79,6 +79,14 @@ const COMMON_KEYS = Object.freeze([
   "members",
 ]);
 
+export function isTsrxBinaryProgram(payload) {
+  return (
+    payload !== null &&
+    typeof payload === "object" &&
+    Object.prototype.toString.call(payload.words) === "[object Uint32Array]"
+  );
+}
+
 function invalid(message) {
   throw new TypeError(`invalid TSRX Program transfer: ${message}`);
 }
@@ -167,7 +175,7 @@ function parseBinaryProgram(payload) {
     payload === null ||
     typeof payload !== "object" ||
     typeof payload.metadata !== "string" ||
-    !(payload.words instanceof Uint32Array)
+    !isTsrxBinaryProgram(payload)
   ) {
     invalid("binary payload has invalid lanes");
   }
@@ -439,7 +447,7 @@ function parseTrustedBinaryProgram(payload) {
 }
 
 export function parseTrustedTsrxProgram(payload) {
-  if (payload?.words instanceof Uint32Array) return parseTrustedBinaryProgram(payload);
+  if (isTsrxBinaryProgram(payload)) return parseTrustedBinaryProgram(payload);
   return parseTsrxProgram(payload);
 }
 

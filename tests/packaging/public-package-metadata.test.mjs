@@ -81,6 +81,9 @@ test("oxc-tsrx is the complete public toolchain boundary", async () => {
     "./lint/plugins-dev",
     "./format",
     "./compat",
+    "./tsrx-core-compat",
+    "./tsrx-core-compat/types",
+    "./tsrx-core-compat/types/estree",
     "./provider-resolve",
     "./package.json",
   ]);

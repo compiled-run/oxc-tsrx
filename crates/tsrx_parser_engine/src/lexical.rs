@@ -546,16 +546,16 @@ impl<'tape> Validator<'tape> {
     }
 
     fn visit_break(
-        &self,
+        &mut self,
         object: RecordIndex,
         context: Context,
         is_continue: bool,
     ) -> Result<(), TsrxParseError> {
-        if !context.validate {
-            return Ok(());
-        }
         let label = field_value(self.tape, object, "label")?;
         if is_null(self.tape, label) {
+            if !context.validate {
+                return Ok(());
+            }
             let depth = if is_continue { context.continue_depth } else { context.break_depth };
             if depth == 0 {
                 return Err(TsrxParseError::AuthoredGrammar(
@@ -572,6 +572,10 @@ impl<'tape> Validator<'tape> {
         let label = label
             .as_object()
             .ok_or(TsrxParseError::Unsupported("break or continue label is not an Identifier"))?;
+        self.push(ValueRef::object(label), context, EdgeRole::NameOnly);
+        if !context.validate {
+            return Ok(());
+        }
         let key = LabelKey { scope: context.flow_scope, name: identifier_name(self.tape, label)? };
         let continuable = self.labels.get(&key).copied().ok_or_else(|| {
             TsrxParseError::AuthoredGrammar(
@@ -683,23 +687,32 @@ impl<'tape> Validator<'tape> {
     }
 
     fn visit_identifier(
-        &self,
+        &mut self,
         object: RecordIndex,
         context: Context,
         role: EdgeRole,
     ) -> Result<(), TsrxParseError> {
-        if !context.validate || role == EdgeRole::NameOnly {
-            return Ok(());
+        if context.validate && role != EdgeRole::NameOnly {
+            match scalar_field(self.tape, object, "name") {
+                Some(r#""await""#) => {
+                    return Err(TsrxParseError::AuthoredGrammar(
+                        "await identifier is outside a name-only position".to_string(),
+                    ));
+                }
+                Some(r#""yield""#) => {
+                    return Err(TsrxParseError::AuthoredGrammar(
+                        "yield identifier is outside a name-only position".to_string(),
+                    ));
+                }
+                _ => {}
+            }
         }
-        match scalar_field(self.tape, object, "name") {
-            Some(r#""await""#) => Err(TsrxParseError::AuthoredGrammar(
-                "await identifier is outside a name-only position".to_string(),
-            )),
-            Some(r#""yield""#) => Err(TsrxParseError::AuthoredGrammar(
-                "yield identifier is outside a name-only position".to_string(),
-            )),
-            _ => Ok(()),
-        }
+        // Identifiers can own TypeScript-only children such as `typeAnnotation`.
+        // Validation used to stop at the identifier name, which left those reachable
+        // descendants in projected coordinates and made non-ASCII files fail at the
+        // Node UTF-16 boundary.
+        self.visit_generic(object, context);
+        Ok(())
     }
 
     fn visit_variable(

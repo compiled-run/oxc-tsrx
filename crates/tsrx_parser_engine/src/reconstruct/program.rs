@@ -7,11 +7,12 @@ use tsrx_tape_schema::{FlatTape, RecordIndex, ValueRef};
 
 use crate::{
     TsrxParseError,
+    projection::map_endpoint,
     tape_index::{ParentIndex, ParentSlot},
 };
 
 use super::{
-    access::{has_type, list_field, require_type},
+    access::{has_type, list_field, require_type, scalar_u32},
     code_blocks::{
         collect_code_block_plans, mark_direct_custom_clause_blocks, reconstruct_code_blocks,
     },
@@ -137,6 +138,7 @@ pub(crate) fn reconstruct_projected(
     )?;
     normalize_control_body_lists(tape, &body_lists)?;
     let mut list_removals = Vec::new();
+    collect_synthetic_empty_statements(tape, segments, &parents, &mut list_removals)?;
     reconstruct_code_blocks(
         tape,
         authored,
@@ -160,6 +162,41 @@ pub(crate) fn reconstruct_projected(
         &mut starts,
     )?;
     Ok(starts)
+}
+
+fn collect_synthetic_empty_statements(
+    tape: &FlatTape,
+    segments: &[ProjectionSegment],
+    parents: &ParentIndex,
+    removals: &mut Vec<super::edits::ListEntryRemoval>,
+) -> Result<(), TsrxParseError> {
+    for raw in 0..tape.object_count() {
+        let raw = u32::try_from(raw).map_err(|_| {
+            TsrxParseError::ResourceExhausted("object index exceeds the 32-bit tape limit")
+        })?;
+        let object = RecordIndex::new(raw);
+        if !has_type(tape, object, r#""EmptyStatement""#) {
+            continue;
+        }
+        let start = scalar_u32(tape, object, "start")?;
+        let end = scalar_u32(tape, object, "end")?;
+        if map_endpoint(segments, start, true).is_some()
+            || map_endpoint(segments, end, false).is_some()
+        {
+            continue;
+        }
+        let Some(ParentSlot::ListValue(entry)) = parents.parent_slot(ValueRef::object(object))
+        else {
+            continue;
+        };
+        let Some(list) =
+            parents.parent_container(ValueRef::object(object)).and_then(ValueRef::as_list)
+        else {
+            continue;
+        };
+        removals.push(super::edits::ListEntryRemoval { list, entry });
+    }
+    Ok(())
 }
 
 fn validate_program_shape(tape: &FlatTape) -> Result<RecordIndex, TsrxParseError> {

@@ -94,6 +94,18 @@ fn reconstructs_jsx_child_for_of_directly_in_children() {
 }
 
 #[test]
+fn preserves_jsx_block_comments_inside_keyed_loop_bodies() {
+    let source = concat!(
+        "function ItemList({ items }) @{\n\t<ul>\n",
+        "\t\t@for (const item of items; key item.id) {\n",
+        "\t\t\t{\n\t\t\t\t/* distinct */\n\t\t\t}\n",
+        "\t\t\t<li>x</li>\n\t\t}\n\t</ul>\n}",
+    );
+    let result = parse_tsrx(&TsrxParseRequest { source }).expect("commented keyed @for");
+    assert_no_scaffold(result.program());
+}
+
+#[test]
 fn preserves_for_await_on_for_of_only() {
     let source = "const value=@for await(const x of xs){x};";
     let result = parse_tsrx(&TsrxParseRequest { source }).expect("@for await");

@@ -91,6 +91,51 @@ test("the Node boundary preserves astral offsets and opaque lone surrogate halve
   });
 });
 
+test("TypeScript fields reconstructed inside TSRX bodies keep authored UTF-16 spans", async () => {
+  await withParser(async ({ parseSync }) => {
+    const source =
+      "/*😀*/ export function View(props: { value: string }) @{ const label: string = props.value; <p>{label}</p> }";
+    const result = parseSync("TypedUnicode.tsrx", source, {
+      lang: "tsrx",
+      astType: "ts",
+    });
+
+    assert.equal(result.errors.length, 0);
+    const annotation = findNode(result.program, "TSTypeAnnotation");
+    const labelStart = source.indexOf("label: string");
+    const annotationStart = labelStart + "label".length;
+    assert.deepEqual(
+      [annotation.start, annotation.end],
+      [annotationStart, annotationStart + ": string".length],
+    );
+    const keyword = findNode(annotation, "TSStringKeyword");
+    assert.deepEqual(
+      [keyword.start, keyword.end],
+      [annotationStart + ": ".length, annotationStart + ": string".length],
+    );
+  });
+});
+
+test("JSX block comments inside keyed TSRX loops have authored spans", async () => {
+  await withParser(async ({ parseSync }) => {
+    const source =
+      "function ItemList({ items }) @{\n\t<ul>\n\t\t@for (const item of items; key item.id) {\n\t\t\t{\n\t\t\t\t/* distinct */\n\t\t\t}\n\t\t\t<li>x</li>\n\t\t}\n\t</ul>\n}";
+    const result = parseSync("CommentedLoop.tsrx", source, {
+      lang: "tsrx",
+      astType: "ts",
+    });
+
+    assert.equal(result.errors.length, 0);
+    const commentStart = source.indexOf("/* distinct */");
+    assert.equal(findNode(result.program, "EmptyStatement"), null);
+    assert.equal(result.comments.length, 1);
+    assert.deepEqual(
+      [result.comments[0].start, result.comments[0].end],
+      [commentStart, commentStart + "/* distinct */".length],
+    );
+  });
+});
+
 test("active lone surrogates fail closed at their exact UTF-16 unit and null is cached", async () => {
   await withParser(async ({ parse, parseSync }) => {
     for (const unit of [0xd800, 0xdc00]) {

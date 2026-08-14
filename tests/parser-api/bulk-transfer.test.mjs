@@ -5,8 +5,12 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
+import { runInNewContext } from "node:vm";
 
-import { parseTsrxProgram } from "../../packages/toolchain/dist/tsrx-transfer.js";
+import {
+  parseTrustedTsrxProgram,
+  parseTsrxProgram,
+} from "../../packages/toolchain/dist/tsrx-transfer.js";
 import { scriptNode } from "../helpers/script-node.mjs";
 import { removeAddonFixture } from "./addon-fixture.mjs";
 
@@ -105,6 +109,14 @@ test("private Program graph decoder rejects malformed envelopes", () => {
     0,
   ]);
   assert.deepEqual(parseTsrxProgram({ metadata, words }), { type: "Program" });
+
+  const foreignWords = runInNewContext(`new Uint32Array([${words.join(",")}])`);
+  assert.deepEqual(parseTsrxProgram({ metadata, words: foreignWords }), {
+    type: "Program",
+  });
+  assert.deepEqual(parseTrustedTsrxProgram({ metadata, words: foreignWords }), {
+    type: "Program",
+  });
 
   const malformed = [
     { metadata, words: words.slice(0, -1) },

@@ -93,6 +93,17 @@
       "import": "./dist/compat.js",
       "default": "./dist/compat.js"
     },
+    "./tsrx-core-compat": {
+      "types": "./dist/tsrx-core-compat/index.d.ts",
+      "import": "./dist/tsrx-core-compat/index.js",
+      "default": "./dist/tsrx-core-compat/index.js"
+    },
+    "./tsrx-core-compat/types": {
+      "types": "./dist/tsrx-core-compat/types/index.d.ts"
+    },
+    "./tsrx-core-compat/types/estree": {
+      "types": "./dist/tsrx-core-compat/types/estree.d.ts"
+    },
     "./provider-resolve": {
       "types": "./dist/provider-resolve.d.ts",
       "import": "./dist/provider-resolve.js",
