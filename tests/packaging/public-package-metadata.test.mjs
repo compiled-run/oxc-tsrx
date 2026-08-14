@@ -43,7 +43,7 @@ test("oxc-tsrx is the complete public toolchain boundary", async () => {
   const manifest = JSON.parse(await readFile(join(packageRoot, "package.json"), "utf8"));
 
   assert.equal(manifest.name, "oxc-tsrx");
-  assert.equal(manifest.version, "0.3.0");
+  assert.equal(manifest.version, "0.4.0");
   assert.deepEqual(manifest.bin, {
     "oxc-tsrx": "./bin/oxc-tsrx",
     oxlint: "./bin/oxlint",
@@ -65,14 +65,14 @@ test("oxc-tsrx is the complete public toolchain boundary", async () => {
   // The eight-platform split is what makes a user download one binary instead
   // of eight, and this package is now the only place that declares it.
   assert.deepEqual(Object.entries(manifest.optionalDependencies), [
-    ["@oxc-tsrx/native-darwin-arm64", "0.3.0"],
-    ["@oxc-tsrx/native-darwin-x64", "0.3.0"],
-    ["@oxc-tsrx/native-linux-arm64-gnu", "0.3.0"],
-    ["@oxc-tsrx/native-linux-arm64-musl", "0.3.0"],
-    ["@oxc-tsrx/native-linux-x64-gnu", "0.3.0"],
-    ["@oxc-tsrx/native-linux-x64-musl", "0.3.0"],
-    ["@oxc-tsrx/native-win32-arm64-msvc", "0.3.0"],
-    ["@oxc-tsrx/native-win32-x64-msvc", "0.3.0"],
+    ["@oxc-tsrx/native-darwin-arm64", "0.4.0"],
+    ["@oxc-tsrx/native-darwin-x64", "0.4.0"],
+    ["@oxc-tsrx/native-linux-arm64-gnu", "0.4.0"],
+    ["@oxc-tsrx/native-linux-arm64-musl", "0.4.0"],
+    ["@oxc-tsrx/native-linux-x64-gnu", "0.4.0"],
+    ["@oxc-tsrx/native-linux-x64-musl", "0.4.0"],
+    ["@oxc-tsrx/native-win32-arm64-msvc", "0.4.0"],
+    ["@oxc-tsrx/native-win32-x64-msvc", "0.4.0"],
   ]);
   assert.deepEqual(Object.keys(manifest.exports), [
     ".",

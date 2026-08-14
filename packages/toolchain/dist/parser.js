@@ -3,7 +3,7 @@ import { isTsrxBinaryProgram, parseTrustedTsrxProgram, parseTsrxProgram } from "
 import { createRequire } from "node:module";
 //#region src/parser.ts
 const require = createRequire(import.meta.url);
-const PACKAGE_VERSION = "0.3.0";
+const PACKAGE_VERSION = "0.4.0";
 const parserManifest = Object.freeze({
 	name: "oxc-tsrx",
 	version: PACKAGE_VERSION,

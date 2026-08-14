@@ -26,7 +26,7 @@ You need Node.js 20.19 or newer, and one install
 
 <!-- pm-install -->
 ```sh
-npm install oxc-tsrx@0.3.0
+npm install oxc-tsrx@0.4.0
 ```
 
 Save this as `src/TaskList.tsrx`:

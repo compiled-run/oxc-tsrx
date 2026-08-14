@@ -7,7 +7,7 @@ import {
 import { NATIVE_TARGETS, nativePackageName, nativeTargetForHost } from "./native-targets.js";
 
 const require = createRequire(import.meta.url);
-const PACKAGE_VERSION = "0.3.0";
+const PACKAGE_VERSION = "0.4.0";
 const parserManifest = Object.freeze({
   name: "oxc-tsrx",
   version: PACKAGE_VERSION,
