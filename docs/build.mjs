@@ -2649,6 +2649,10 @@ async function build() {
       // https://github.com/compiled-run/guessless and deploys independently.
       rewrites: [
         {
+          source: '/guessless',
+          destination: 'https://guessless.vercel.app/',
+        },
+        {
           source: '/guessless/:path*',
           destination: 'https://guessless.vercel.app/:path*',
         },
