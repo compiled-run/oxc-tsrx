@@ -28,7 +28,7 @@ endorsed by, or a product of VoidZero or the OXC team._
 ## Install
 
 ```sh
-npm install --save-dev oxc-tsrx@0.4.0
+npm install --save-dev oxc-tsrx@latest
 ```
 
 That is the whole setup, for the command line and for your editor. There is no
