@@ -26,13 +26,13 @@ jobs:
   #
   # This job exists rather than simply letting `build` run on pull requests
   # because `build` installs a Rust target and compiles the WebAssembly demo
-  # engine. Even with cargo caching and WASM artifact caching, that is still
-  # extra time per pull request to prove something no pull request is asking
-  # about. Everything the site tests need is a plain `docs:build`: the site
-  # falls back to the static demo when the WebAssembly artifact is absent
-  # (docs/build.mjs:1743-1750), and both suites were confirmed green against a
-  # build with no wasm artifact at all. The full artifact-and-deploy path stays
-  # on push and dispatch, where the bytes it produces are actually used.
+  # engine. Even with Cargo caching, that is still extra time per pull request
+  # to prove something no pull request is asking about. Everything the site
+  # tests need is a plain `docs:build`: the site falls back to the static demo
+  # when the WebAssembly artifact is absent (docs/build.mjs:1743-1750), and both
+  # suites were confirmed green against a build with no wasm artifact at all.
+  # The full artifact-and-deploy path stays on push and dispatch, where the bytes
+  # it produces are actually used.
   #
   # The one thing a pull request does not get: the checks that need the real
   # engine. "generated WebAssembly executes the real lint, format, and
@@ -41,8 +41,8 @@ jobs:
   # the docs to this repository's own source, including the platform-support
   # drift test, runs in both.
   #
-  # Cost, measured on this branch: ~2 min here against ~3–7 min for the build
-  # job (depending on WASM cache hit) plus ~30s to deploy.
+  # Cost, measured on this branch: ~2 min here vs ~4–5 min for the build
+  # job (with Cargo cache) plus ~30s to deploy.
   site-tests:
     name: Site tests
     if: github.event_name == 'pull_request'
@@ -90,50 +90,15 @@ jobs:
       - name: Install the locked documentation graph
         run: pnpm install --frozen-lockfile --ignore-scripts
 
-      - name: Compute WASM inputs hash
-        id: wasm-hash
-        run: |
-          set -euo pipefail
-          # Hash all inputs that affect the WASM build: demo-wasm source,
-          # its dependencies (tsrx_* crates), Cargo manifests and locks.
-          wasm_hash=$(
-            git ls-files -z \
-              'docs/tools/demo-wasm/**' \
-              'crates/tsrx_*/**' \
-              'Cargo.toml' 'Cargo.lock' \
-              'docs/tools/demo-wasm/Cargo.toml' \
-              'docs/tools/demo-wasm/Cargo.lock' \
-            | sort -z \
-            | xargs -0 shasum -a 256 \
-            | shasum -a 256 \
-            | cut -d' ' -f1
-          )
-          echo "hash=${wasm_hash}" >> "${GITHUB_OUTPUT}"
-          echo "WASM inputs hash: ${wasm_hash}"
-
-      - name: Restore cached WASM artifact
-        id: wasm-cache
-        uses: actions/cache@v4
-        with:
-          path: docs/tools/demo-wasm/dist
-          key: wasm-artifact-${{ runner.os }}-${{ steps.wasm-hash.outputs.hash }}
-
       - name: Install the threaded WASI Rust target
-        if: steps.wasm-cache.outputs.cache-hit != 'true'
         run: rustup target add wasm32-wasip1-threads
 
       - name: Set up Rust cache
-        if: steps.wasm-cache.outputs.cache-hit != 'true'
         uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: docs/tools/demo-wasm
-
-      - name: Build the WASM artifact from scratch
-        if: steps.wasm-cache.outputs.cache-hit != 'true'
-        run: pnpm run docs:wasm
 
       - name: Build and prove the real browser-engine artifact
         run: |
+          pnpm run docs:wasm
           OXC_TSRX_REQUIRE_WASM=1 pnpm run docs:build
           pnpm run test:site:unit
           node tests/site/verify-static.mjs --require-wasm
