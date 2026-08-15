@@ -101,6 +101,20 @@ jobs:
           node tests/site/verify-static.mjs --require-wasm
           pnpm run docs:check
 
+      - name: Fetch and embed Guessless docs
+        run: |
+          set -euo pipefail
+          # Fetch the Guessless docs from compiled-run/guessless and copy them
+          # into docs/dist/guessless/ so they ship in the same Vercel deploy.
+          echo "Fetching Guessless docs from compiled-run/guessless..."
+          TEMP_DIR="$(mktemp -d)"
+          git clone --depth 1 --branch main https://github.com/compiled-run/guessless.git "${TEMP_DIR}"
+          mkdir -p docs/dist/guessless
+          cp -r "${TEMP_DIR}/site/guessless/." docs/dist/guessless/
+          rm -rf "${TEMP_DIR}"
+          echo "Guessless docs copied to docs/dist/guessless/"
+          ls -la docs/dist/guessless/ | head -20
+
       - name: Upload the exact Vercel-shaped static artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -187,31 +201,29 @@ jobs:
           fi
           echo "production is serving this run's build (${built})"
 
-      - name: Prove Guessless is still accessible
+      - name: Prove Guessless docs are accessible
         run: |
           set -euo pipefail
-          # Verify that the Guessless project (https://github.com/compiled-run/guessless)
-          # is still accessible after this oxc-tsrx deploy. The rewrite rule in
-          # vercel.json proxies /guessless to https://guessless.vercel.app to prevent
-          # oxc-tsrx deploys from wiping out the separate Guessless deployment.
+          # Verify that the Guessless docs (from https://github.com/compiled-run/guessless)
+          # are accessible after this oxc-tsrx deploy. The docs are now embedded as
+          # static files under /guessless/ in the artifact.
           origin="https://oxc-tsrx-docs.vercel.app/guessless"
           echo "Checking that ${origin} is accessible..."
           for attempt in 1 2 3 4 5; do
-            # Guessless redirects to /login, so follow redirects and check for non-404
-            status_code="$(curl -fsS -o /dev/null -w '%{http_code}' -L "${origin}" || echo "000")"
+            status_code="$(curl -fsS -o /dev/null -w '%{http_code}' "${origin}" || echo "000")"
             if [ "${status_code}" = "200" ]; then
-              echo "✓ Guessless is accessible (HTTP ${status_code})"
+              echo "✓ Guessless docs are accessible (HTTP ${status_code})"
               break
             fi
             if [ "${status_code}" = "404" ]; then
-              echo "::error::Guessless returned 404! The oxc-tsrx deploy broke the Guessless proxy."
+              echo "::error::Guessless returned 404! The static docs were not embedded."
               exit 1
             fi
             echo "attempt ${attempt}: got HTTP ${status_code}, retrying..."
             sleep 5
           done
           if [ "${status_code}" != "200" ]; then
-            echo "::error::Could not verify Guessless accessibility after 5 attempts"
+            echo "::error::Could not verify Guessless docs accessibility after 5 attempts"
             exit 1
           fi
           
@@ -219,9 +231,9 @@ jobs:
           custom_origin="https://compiled.run/guessless"
           echo "Checking that ${custom_origin} is accessible..."
           for attempt in 1 2 3 4 5; do
-            custom_status="$(curl -fsS -o /dev/null -w '%{http_code}' -L "${custom_origin}" || echo "000")"
+            custom_status="$(curl -fsS -o /dev/null -w '%{http_code}' "${custom_origin}" || echo "000")"
             if [ "${custom_status}" = "200" ]; then
-              echo "✓ Guessless is accessible via custom domain (HTTP ${custom_status})"
+              echo "✓ Guessless docs accessible via custom domain (HTTP ${custom_status})"
               exit 0
             fi
             if [ "${custom_status}" = "404" ]; then

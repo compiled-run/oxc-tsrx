@@ -233,16 +233,10 @@ test("static launch build has a scoped base, crawl metadata, and no internal des
       ],
     },
   ]);
-  // Verify the Guessless proxy rewrite is present to prevent oxc-tsrx deploys
-  // from wiping out the separate Guessless deployment.
+  // Guessless docs are now embedded as static files during the build, so no
+  // external rewrite is needed. Verify the rewrites array is empty.
   assert.ok(Array.isArray(vercel.rewrites), "vercel.json should have rewrites array");
-  const guesslessRewrite = vercel.rewrites.find((r) => r.source === "/guessless/:path*");
-  assert.ok(guesslessRewrite, "vercel.json should have /guessless rewrite rule");
-  assert.equal(
-    guesslessRewrite.destination,
-    "https://guessless.vercel.app/:path*",
-    "Guessless rewrite should proxy to guessless.vercel.app",
-  );
+  assert.equal(vercel.rewrites.length, 0, "vercel.json should have no rewrites");
 });
 
 test("launch build fails closed when the browser WebAssembly artifact is required", async () => {
