@@ -2644,19 +2644,10 @@ async function build() {
       // README published in oxc-tsrx@0.1.5 links that path, and an npm tarball
       // is immutable, so the path itself has to keep resolving.
       redirects: [],
-      // Preserve /guessless: proxy requests to the separate Guessless deployment
-      // so oxc-tsrx deploys cannot wipe it out. Guessless lives in
-      // https://github.com/compiled-run/guessless and deploys independently.
-      rewrites: [
-        {
-          source: '/guessless',
-          destination: 'https://guessless.vercel.app/',
-        },
-        {
-          source: '/guessless/:path*',
-          destination: 'https://guessless.vercel.app/:path*',
-        },
-      ],
+      // Guessless docs are now embedded as static files under /guessless/ during
+      // the site build (see .github/workflows/site-artifact.yml), so no rewrites
+      // are needed. Vercel's cleanUrls handles /guessless -> /guessless/index.html.
+      rewrites: [],
       headers: [
         {
           source: '/(.*)',
