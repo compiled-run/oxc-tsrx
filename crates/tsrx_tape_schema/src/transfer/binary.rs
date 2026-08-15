@@ -20,6 +20,46 @@ use super::{
 const PROGRAM_BINARY_HEADER_WORDS: usize = 12;
 const BINARY_UNUSED_RANGE: u32 = u32::MAX;
 
+#[derive(Clone, Copy, Default)]
+enum CompatNodeType {
+    #[default]
+    Other,
+    ArrayPattern,
+    AssignmentPattern,
+    Class,
+    Export,
+    Identifier,
+    ImportDeclaration,
+    MethodDefinition,
+    ObjectPattern,
+    Property,
+    PropertyDefinition,
+    RestElement,
+    TsInterfaceDeclaration,
+    TsMethodSignature,
+    TsPropertySignature,
+}
+
+fn compat_node_type(value: &str) -> CompatNodeType {
+    match value {
+        r#""ArrayPattern""# => CompatNodeType::ArrayPattern,
+        r#""AssignmentPattern""# => CompatNodeType::AssignmentPattern,
+        r#""ClassDeclaration""# | r#""ClassExpression""# => CompatNodeType::Class,
+        r#""ExportAllDeclaration""# | r#""ExportNamedDeclaration""# => CompatNodeType::Export,
+        r#""Identifier""# => CompatNodeType::Identifier,
+        r#""ImportDeclaration""# => CompatNodeType::ImportDeclaration,
+        r#""MethodDefinition""# => CompatNodeType::MethodDefinition,
+        r#""ObjectPattern""# => CompatNodeType::ObjectPattern,
+        r#""Property""# => CompatNodeType::Property,
+        r#""PropertyDefinition""# => CompatNodeType::PropertyDefinition,
+        r#""RestElement""# => CompatNodeType::RestElement,
+        r#""TSInterfaceDeclaration""# => CompatNodeType::TsInterfaceDeclaration,
+        r#""TSMethodSignature""# => CompatNodeType::TsMethodSignature,
+        r#""TSPropertySignature""# => CompatNodeType::TsPropertySignature,
+        _ => CompatNodeType::Other,
+    }
+}
+
 pub(super) struct BinaryProgramSerializer {
     tape: FlatTape,
     objects: Vec<BinaryObject>,
@@ -37,10 +77,14 @@ pub(super) struct BinaryProgramSerializer {
     paths: Vec<BinaryPathNode>,
     fixes: Vec<Option<u32>>,
     pending: Vec<BinaryPending>,
+    strip_tsrx_core_defaults: bool,
 }
 
 impl BinaryProgramSerializer {
-    pub(super) fn new(tape: FlatTape) -> Result<Self, TapeBuildError> {
+    pub(super) fn new(
+        tape: FlatTape,
+        strip_tsrx_core_defaults: bool,
+    ) -> Result<Self, TapeBuildError> {
         let object_count = tape.object_count();
         let list_count = tape.list_count();
         let field_count = tape.field_count();
@@ -101,7 +145,81 @@ impl BinaryProgramSerializer {
             paths,
             fixes,
             pending,
+            strip_tsrx_core_defaults,
         })
+    }
+
+    fn omit_tsrx_core_default(
+        &self,
+        node_type: CompatNodeType,
+        key: StringRange,
+        value: ValueRef,
+    ) -> Result<bool, TapeBuildError> {
+        let key = self.tape.checked_key_range(key).ok_or(TapeBuildError::InvalidRecordIndex)?;
+        let empty_list = value.as_list().and_then(|list| self.tape.list_length(list)) == Some(0);
+        if empty_list
+            && (key == "decorators"
+                || key == "attributes"
+                    && matches!(
+                        node_type,
+                        CompatNodeType::Export | CompatNodeType::ImportDeclaration
+                    )
+                || key == "implements" && matches!(node_type, CompatNodeType::Class)
+                || key == "extends" && matches!(node_type, CompatNodeType::TsInterfaceDeclaration))
+        {
+            return Ok(true);
+        }
+
+        let scalar = value.as_scalar().and_then(|_| self.tape.scalar(value));
+        if scalar == Some("null")
+            && (matches!(
+                key,
+                "accessibility"
+                    | "directive"
+                    | "hashbang"
+                    | "options"
+                    | "phase"
+                    | "returnType"
+                    | "superTypeArguments"
+                    | "typeAnnotation"
+                    | "typeArguments"
+                    | "typeParameters"
+            ) || key == "value" && matches!(node_type, CompatNodeType::RestElement))
+        {
+            return Ok(true);
+        }
+        if scalar != Some("false") {
+            return Ok(false);
+        }
+        if matches!(
+            key,
+            "abstract"
+                | "const"
+                | "declare"
+                | "definite"
+                | "global"
+                | "in"
+                | "out"
+                | "override"
+                | "readonly"
+                | "static"
+        ) {
+            return Ok(true);
+        }
+        Ok(key == "optional"
+            && matches!(
+                node_type,
+                CompatNodeType::ArrayPattern
+                    | CompatNodeType::AssignmentPattern
+                    | CompatNodeType::Identifier
+                    | CompatNodeType::MethodDefinition
+                    | CompatNodeType::ObjectPattern
+                    | CompatNodeType::Property
+                    | CompatNodeType::PropertyDefinition
+                    | CompatNodeType::RestElement
+                    | CompatNodeType::TsMethodSignature
+                    | CompatNodeType::TsPropertySignature
+            ))
     }
 
     fn key_id(&mut self, range: StringRange) -> Result<u32, TapeBuildError> {
@@ -253,10 +371,27 @@ impl BinaryProgramSerializer {
             u32::try_from(self.fields.len()).map_err(|_| TapeBuildError::CapacityOverflow)?;
         let mut next = record.first_field;
         let mut fix_recorded = false;
+        let mut node_type = CompatNodeType::Other;
+        let mut field_count = 0_u32;
         for _ in 0..record.field_count {
             let field_index =
                 next.get().map(RecordIndex::new).ok_or(TapeBuildError::InvalidRecordIndex)?;
             let field = self.tape.take_field_record_for_transfer(field_index)?;
+            if self.strip_tsrx_core_defaults {
+                let key = self
+                    .tape
+                    .checked_key_range(field.key)
+                    .ok_or(TapeBuildError::InvalidRecordIndex)?;
+                if key == "type"
+                    && let Some(value) = self.tape.scalar(field.value)
+                {
+                    node_type = compat_node_type(value);
+                }
+                if self.omit_tsrx_core_default(node_type, field.key, field.value)? {
+                    next = field.next;
+                    continue;
+                }
+            }
             let key = self.key_id(field.key)?;
             if field.value.needs_fix() {
                 if !matches!(field.value.kind(), ValueKind::Scalar)
@@ -272,6 +407,7 @@ impl BinaryProgramSerializer {
             let child_path = self.track_paths.then_some((path, BinaryPathSegment::Key(key)));
             let value = self.encode_value(field.value, child_path)?;
             self.fields.push(BinaryField { key, value });
+            field_count = field_count.checked_add(1).ok_or(TapeBuildError::CapacityOverflow)?;
             next = field.next;
         }
         if !next.is_none() {
@@ -281,7 +417,7 @@ impl BinaryProgramSerializer {
             .objects
             .get_mut(usize::try_from(wire).map_err(|_| TapeBuildError::InvalidRecordIndex)?)
             .ok_or(TapeBuildError::InvalidRecordIndex)?;
-        *slot = BinaryObject { field_start, field_count: record.field_count };
+        *slot = BinaryObject { field_start, field_count };
         Ok(())
     }
 

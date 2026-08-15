@@ -138,6 +138,26 @@ fn multiline_quoted_jsx_attributes_remain_authored_literals() {
 }
 
 #[test]
+fn unbraced_jsx_element_attribute_values_preserve_authored_shape() {
+    let source = "function Child(props: { content: unknown }) @{ <>{props.content}</> }\n\
+        export function View() @{ <Child content=<view>Invalid</view> /> }";
+    let result = parse_tsrx(&TsrxParseRequest { source }).expect("nested JSX attribute value");
+    let export = program_body(result.program())[1].as_object().expect("export declaration");
+    let function = object_field(result.program(), export, "declaration");
+    let element = rendered(result.program(), code_block(result.program(), function));
+    let opening = object_field(result.program(), element, "openingElement");
+    let attribute = list_field(result.program(), opening, "attributes")[0]
+        .as_object()
+        .expect("content attribute");
+    let value = object_field(result.program(), attribute, "value");
+    require_type(result.program(), value, "JSXElement");
+    let value_start = source.find("<view>").expect("nested element start");
+    let value_end = value_start + "<view>Invalid</view>".len();
+    assert_eq!(span(result.program(), value), (offset(value_start), offset(value_end)));
+    assert_no_scaffold(result.program());
+}
+
+#[test]
 fn jsx_shorthand_attributes_preserve_authored_shape_and_spans() {
     let source = "function Child(props: { label: string; count: number }) @{\n\
         <span>{props.label}</span>\n\
@@ -305,6 +325,7 @@ fn typescript_generic_syntax_is_not_committed_as_jsx() {
         "const useValue = <T extends Value,>(value: T): T => value; function View() @{ <main/> }",
         "const useValue = <T = Value,>(value: T): T => value; function View() @{ <main/> }",
         "interface Api { Subscribe: <TSelected = State>(props: Props<TSelected>) => Node; } function View() @{ <main/> }",
+        "const identities = new WeakMap<object, number>(); function View() @{ <main/> }",
     ] {
         let result = parse_tsrx(&TsrxParseRequest { source })
             .unwrap_or_else(|error| panic!("generic TypeScript failed for `{source}`: {error}"));

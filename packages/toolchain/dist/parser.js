@@ -533,7 +533,7 @@ function parseSync(filename, sourceText, options) {
 		const selectedRoute = route(filename, options);
 		const nativeResult = invoke("parseSync", filename, sourceText, options, selectedRoute);
 		if (selectedRoute === ROUTE_TSRX_CORE_COMPAT) {
-			if (typeof nativeResult === "string" || isTsrxBinaryProgram(nativeResult)) return parseTrustedTsrxProgram(nativeResult);
+			if (typeof nativeResult === "string" || isTsrxBinaryProgram(nativeResult)) return parseTrustedTsrxProgram(nativeResult, true);
 			return {
 				program: parseTsrxProgram(nativeResult.program),
 				errors: nativeResult.errors

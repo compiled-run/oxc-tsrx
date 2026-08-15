@@ -12,6 +12,9 @@ const VALUE_INDEX_MASK = 0x3fffffff;
 const UNUSED_RANGE = 0xffffffff;
 const COMMON_KEY_FLAG = 0x80000000;
 const COMMON_KEY_INDEX_MASK = 0x7fffffff;
+const TSRX_CORE_COMPAT_DEFAULTS_STRIPPED = Symbol.for(
+  "@oxc-tsrx/parser/tsrx-core-compat-defaults-stripped",
+);
 const COMMON_KEYS = Object.freeze([
   "body",
   "end",
@@ -375,7 +378,71 @@ function parseBinaryProgram(payload) {
   return program;
 }
 
-function parseTrustedBinaryProgram(payload) {
+function isEmptyArray(value) {
+  return Array.isArray(value) && value.length === 0;
+}
+
+function omitTsrxCoreCompatDefault(type, key, value) {
+  if (
+    isEmptyArray(value) &&
+    (key === "decorators" ||
+      (key === "attributes" &&
+        (type === "ExportAllDeclaration" ||
+          type === "ExportNamedDeclaration" ||
+          type === "ImportDeclaration")) ||
+      (key === "implements" &&
+        (type === "ClassDeclaration" || type === "ClassExpression")) ||
+      (key === "extends" && type === "TSInterfaceDeclaration"))
+  ) {
+    return true;
+  }
+  if (
+    value == null &&
+    (key === "accessibility" ||
+      key === "directive" ||
+      key === "hashbang" ||
+      key === "options" ||
+      key === "phase" ||
+      key === "returnType" ||
+      key === "superTypeArguments" ||
+      key === "typeAnnotation" ||
+      key === "typeArguments" ||
+      key === "typeParameters" ||
+      (type === "RestElement" && key === "value"))
+  ) {
+    return true;
+  }
+  if (value !== false) return false;
+  if (
+    key === "abstract" ||
+    key === "const" ||
+    key === "declare" ||
+    key === "definite" ||
+    key === "global" ||
+    key === "in" ||
+    key === "out" ||
+    key === "override" ||
+    key === "readonly" ||
+    key === "static"
+  ) {
+    return true;
+  }
+  return (
+    key === "optional" &&
+    (type === "ArrayPattern" ||
+      type === "AssignmentPattern" ||
+      type === "Identifier" ||
+      type === "MethodDefinition" ||
+      type === "ObjectPattern" ||
+      type === "Property" ||
+      type === "PropertyDefinition" ||
+      type === "RestElement" ||
+      type === "TSMethodSignature" ||
+      type === "TSPropertySignature")
+  );
+}
+
+function parseTrustedBinaryProgram(payload, stripTsrxCoreCompatDefaults = false) {
   const { metadata, words } = payload;
   const objectCount = words[2];
   const fieldCount = words[3];
@@ -419,6 +486,21 @@ function parseTrustedBinaryProgram(payload) {
     const start = words[objectOffset + objectIndex * 2];
     const count = words[objectOffset + objectIndex * 2 + 1];
     const object = objects[objectIndex];
+    let type;
+    if (stripTsrxCoreCompatDefaults) {
+      for (let index = 0; index < count; index += 1) {
+        const offset = fieldOffset + (start + index) * 2;
+        const encodedKey = words[offset];
+        const key =
+          encodedKey & COMMON_KEY_FLAG
+            ? COMMON_KEYS[encodedKey & COMMON_KEY_INDEX_MASK]
+            : keys[encodedKey];
+        if (key !== "type") continue;
+        const packed = words[offset + 1];
+        if (packed >>> 30 === SCALAR_TAG) type = scalars[packed & VALUE_INDEX_MASK];
+        break;
+      }
+    }
     for (let index = 0; index < count; index += 1) {
       const offset = fieldOffset + (start + index) * 2;
       const packed = words[offset + 1];
@@ -437,17 +519,28 @@ function parseTrustedBinaryProgram(payload) {
         encodedKey & COMMON_KEY_FLAG
           ? COMMON_KEYS[encodedKey & COMMON_KEY_INDEX_MASK]
           : keys[encodedKey];
+      if (stripTsrxCoreCompatDefaults && omitTsrxCoreCompatDefault(type, key, decoded)) {
+        continue;
+      }
       // The native encoder rejects the setter-bearing `__proto__` schema key.
       object[key] = decoded;
     }
   }
   const program = objects[words[7]];
   for (const path of fixes) applyFix(program, path);
+  if (stripTsrxCoreCompatDefaults) {
+    Object.defineProperty(program, TSRX_CORE_COMPAT_DEFAULTS_STRIPPED, {
+      configurable: true,
+      value: true,
+    });
+  }
   return program;
 }
 
-export function parseTrustedTsrxProgram(payload) {
-  if (isTsrxBinaryProgram(payload)) return parseTrustedBinaryProgram(payload);
+export function parseTrustedTsrxProgram(payload, stripTsrxCoreCompatDefaults = false) {
+  if (isTsrxBinaryProgram(payload)) {
+    return parseTrustedBinaryProgram(payload, stripTsrxCoreCompatDefaults);
+  }
   return parseTsrxProgram(payload);
 }
 

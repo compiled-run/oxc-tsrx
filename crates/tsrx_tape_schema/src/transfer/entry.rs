@@ -102,6 +102,15 @@ impl FlatTape {
     pub fn program_transfer_engine_binary_owned(
         self,
     ) -> Result<ProgramBinaryTransfer, TapeBuildError> {
-        BinaryProgramSerializer::new(self)?.run()
+        BinaryProgramSerializer::new(self, false)?.run()
+    }
+
+    /// Consumes an engine-origin Program into the compatibility facade's private binary graph,
+    /// omitting OXC defaults that the reference parser does not expose.
+    #[doc(hidden)]
+    pub fn program_transfer_tsrx_core_compat_binary_owned(
+        self,
+    ) -> Result<ProgramBinaryTransfer, TapeBuildError> {
+        BinaryProgramSerializer::new(self, true)?.run()
     }
 }

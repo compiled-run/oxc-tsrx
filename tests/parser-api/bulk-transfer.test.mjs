@@ -81,6 +81,12 @@ test("TSRX crosses Node-API as one versioned Program payload", async () => {
     const eagerProgram = parser.parseSync("Bulk.tsrx", source, eagerOptions);
     assert.equal(eagerProgram.type, "Program");
     assert.equal(Object.hasOwn(eagerProgram, "program"), false);
+    assert.equal(Object.hasOwn(eagerProgram, "hashbang"), false);
+    assert.equal(Object.hasOwn(eagerProgram.body[0].declarations[0].id, "decorators"), false);
+    assert.equal(
+      eagerProgram[Symbol.for("@oxc-tsrx/parser/tsrx-core-compat-defaults-stripped")],
+      true,
+    );
   } finally {
     if (previous === undefined) delete process.env.OXC_TSRX_PARSER_ADDON;
     else process.env.OXC_TSRX_PARSER_ADDON = previous;
@@ -171,4 +177,41 @@ test("private Program graph decoder rejects malformed envelopes", () => {
   for (const payload of malformed) {
     assert.throws(() => parseTsrxProgram(payload), TypeError);
   }
+});
+
+test("trusted compatibility transfer omits reference-parser defaults before traversal", () => {
+  const metadata = '[[],["Program",null],[]]';
+  const words = new Uint32Array([
+    0x42525354,
+    1,
+    1,
+    2,
+    0,
+    0,
+    1,
+    0,
+    0,
+    2,
+    0,
+    0,
+    0,
+    2,
+    0x80000005,
+    0,
+    0x80000002,
+    1,
+  ]);
+  const payload = { metadata, words };
+
+  assert.deepEqual(parseTrustedTsrxProgram(payload), {
+    type: "Program",
+    hashbang: null,
+  });
+
+  const compatible = parseTrustedTsrxProgram(payload, true);
+  assert.deepEqual(compatible, { type: "Program" });
+  assert.equal(
+    compatible[Symbol.for("@oxc-tsrx/parser/tsrx-core-compat-defaults-stripped")],
+    true,
+  );
 });

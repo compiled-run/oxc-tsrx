@@ -128,6 +128,10 @@ impl Scanner<'_> {
                     });
                 };
                 match byte {
+                    b'<' if expecting_attribute_value => {
+                        index = self.scan_jsx_element(index)?;
+                        expecting_attribute_value = false;
+                    }
                     b'\'' | b'"' => {
                         index = self.skip_jsx_quote(index, byte)?;
                         expecting_attribute_value = false;
