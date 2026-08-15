@@ -113,7 +113,7 @@ jobs:
 
       - name: Restore cached WASM artifact
         id: wasm-cache
-        uses: actions/cache@fc3465b3dfe8e8304039f51d0b17111be4e84be1 # v7.0.0
+        uses: actions/cache@v4
         with:
           path: docs/tools/demo-wasm/dist
           key: wasm-artifact-${{ runner.os }}-${{ steps.wasm-hash.outputs.hash }}
@@ -124,7 +124,7 @@ jobs:
 
       - name: Set up Rust cache
         if: steps.wasm-cache.outputs.cache-hit != 'true'
-        uses: Swatinem/rust-cache@9b2bc3f5e9fd7ea53f70bd89d9e6b05aa4fa691e # v2.7.9
+        uses: Swatinem/rust-cache@v2
         with:
           workspaces: docs/tools/demo-wasm
 
