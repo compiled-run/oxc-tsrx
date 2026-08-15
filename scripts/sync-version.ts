@@ -145,9 +145,6 @@ const DEP_SINGLE_QUOTED = () => slot(String.raw`'oxc-tsrx':\s*'<V>'`);
 const CLI_SPEC_IN_REGEX = () =>
   slot(String.raw`oxc-tsrx@<V>`, SPELLINGS.regexEscaped);
 
-/** `oxc-tsrx@1.0.0` — the install spec a docs page tells a reader to run. */
-const INSTALL_SPEC = () => slot(String.raw`oxc-tsrx@<V>`);
-
 /** `assert.equal(manifest.dependencies["oxc-tsrx"], "1.0.0")` */
 const ASSERT_DEP = () => slot(String.raw`dependencies\["oxc-tsrx"\],\s*"<V>"`);
 
@@ -334,15 +331,11 @@ const textTargets: any[] = [
   { file: "tests/packaging/vscode-artifact.test.mjs", slots: [[ASSERT_VERSION, 1]] },
   { file: "tests/plugins/custom-js-plugins-doc.test.mjs", slots: [[DEP, 1]] },
   { file: "tests/vite/physical-consumer.mjs", slots: [[DEP, 1]] },
-  // Docs install commands pin an exact version on purpose: pnpm 11 holds a
-  // fresh release back for about a day by default and resolves `@latest` to
-  // the previous version, silently. A named version skips the holdback.
-  { file: "README.md", slots: [[INSTALL_SPEC, 1]] },
-  { file: "docs/guide/getting-started.md", slots: [[INSTALL_SPEC, 3]] },
-  { file: "docs/guide/parsing.md", slots: [[INSTALL_SPEC, 1]] },
-  { file: "docs/integrations/vite-plus.md", slots: [[INSTALL_SPEC, 3]] },
-  { file: "docs/integrations/custom-js-plugins.md", slots: [[INSTALL_SPEC, 1]] },
-  { file: "docs/reference/cli.md", slots: [[INSTALL_SPEC, 1]] },
+  // Docs and README install commands say `oxc-tsrx@latest` (owner decision,
+  // 2026-08-14) and are no longer declared here. The trade this accepts is
+  // pnpm's release-age hold: for about a day after a publish, `@latest`
+  // resolves the previous release. tests/site/documented-version-pin.test.mjs
+  // enforces the dist-tag form so stale pins cannot creep back in.
 ];
 
 // ---------------------------------------------------------------------------
