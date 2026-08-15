@@ -1,4 +1,5 @@
 name: Build website artifact
+# Optimized with validated WASM artifact caching
 
 on:
   push:
