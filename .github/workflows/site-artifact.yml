@@ -26,13 +26,13 @@ jobs:
   #
   # This job exists rather than simply letting `build` run on pull requests
   # because `build` installs a Rust target and compiles the WebAssembly demo
-  # engine. Even with Cargo caching, that is still extra time per pull request
-  # to prove something no pull request is asking about. Everything the site
-  # tests need is a plain `docs:build`: the site falls back to the static demo
-  # when the WebAssembly artifact is absent (docs/build.mjs:1743-1750), and both
-  # suites were confirmed green against a build with no wasm artifact at all.
-  # The full artifact-and-deploy path stays on push and dispatch, where the bytes
-  # it produces are actually used.
+  # engine. Even with Cargo caching and validated WASM artifact caching, that
+  # is still extra time per pull request to prove something no pull request is
+  # asking about. Everything the site tests need is a plain `docs:build`: the
+  # site falls back to the static demo when the WebAssembly artifact is absent
+  # (docs/build.mjs:1743-1750), and both suites were confirmed green against a
+  # build with no wasm artifact at all. The full artifact-and-deploy path stays
+  # on push and dispatch, where the bytes it produces are actually used.
   #
   # The one thing a pull request does not get: the checks that need the real
   # engine. "generated WebAssembly executes the real lint, format, and
@@ -41,8 +41,8 @@ jobs:
   # the docs to this repository's own source, including the platform-support
   # drift test, runs in both.
   #
-  # Cost, measured on this branch: ~2 min here vs ~4–5 min for the build
-  # job (with Cargo cache) plus ~30s to deploy.
+  # Cost, measured on this branch: ~2 min here vs ~2–6 min for the build
+  # job (WASM cache hit: ~2–3 min; miss: ~5–6 min) plus ~30s to deploy.
   site-tests:
     name: Site tests
     if: github.event_name == 'pull_request'
@@ -90,15 +90,86 @@ jobs:
       - name: Install the locked documentation graph
         run: pnpm install --frozen-lockfile --ignore-scripts
 
+      - name: Compute WASM inputs hash
+        id: wasm-hash
+        run: |
+          set -euo pipefail
+          # Hash all inputs that affect the WASM build: demo-wasm source,
+          # tsrx_* crate dependencies, Cargo manifests, and Rust toolchain.
+          wasm_hash=$(
+            {
+              git ls-files -z \
+                'docs/tools/demo-wasm/**' \
+                'crates/tsrx_*/**' \
+                'Cargo.toml' 'Cargo.lock' \
+                'docs/tools/demo-wasm/Cargo.toml' \
+                'docs/tools/demo-wasm/Cargo.lock' \
+                'rust-toolchain.toml' \
+              | sort -z \
+              | xargs -0 shasum -a 256
+              rustc --version
+              echo "target:wasm32-wasip1-threads"
+            } | shasum -a 256 | cut -d' ' -f1
+          )
+          echo "hash=${wasm_hash}" >> "${GITHUB_OUTPUT}"
+          echo "WASM inputs hash: ${wasm_hash}"
+
+      - name: Restore cached WASM artifact
+        id: wasm-cache
+        uses: actions/cache@v4
+        with:
+          path: docs/tools/demo-wasm/dist
+          key: wasm-${{ runner.os }}-${{ steps.wasm-hash.outputs.hash }}
+
+      - name: Validate restored WASM artifact
+        id: wasm-valid
+        if: steps.wasm-cache.outputs.cache-hit == 'true'
+        run: |
+          set -euo pipefail
+          wasm_dir="docs/tools/demo-wasm/dist"
+          wasm_file="${wasm_dir}/demo-wasm.wasm"
+          worker_file="${wasm_dir}/wasi-worker-browser.mjs"
+          wasm_copy="${wasm_dir}/demo-wasm.wasm32-wasi.wasm"
+          
+          # Check all required files exist
+          if [ ! -f "${wasm_file}" ] || [ ! -f "${worker_file}" ] || [ ! -f "${wasm_copy}" ]; then
+            echo "WASM cache incomplete: missing files"
+            echo "valid=false" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+          
+          # Check WASM file size is reasonable (should be ~9 MB, fail if < 5 MB)
+          wasm_size=$(stat -c%s "${wasm_file}" 2>/dev/null || stat -f%z "${wasm_file}")
+          if [ "${wasm_size}" -lt 5000000 ]; then
+            echo "WASM cache invalid: file too small (${wasm_size} bytes)"
+            echo "valid=false" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+          
+          # Check worker file has expected content
+          if ! grep -q "MessageHandler" "${worker_file}" || ! grep -q "instantiateNapiModule" "${worker_file}"; then
+            echo "WASM cache invalid: worker file corrupted"
+            echo "valid=false" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+          
+          echo "WASM cache valid: ${wasm_size} bytes"
+          echo "valid=true" >> "${GITHUB_OUTPUT}"
+
       - name: Install the threaded WASI Rust target
+        if: steps.wasm-cache.outputs.cache-hit != 'true' || steps.wasm-valid.outputs.valid != 'true'
         run: rustup target add wasm32-wasip1-threads
 
       - name: Set up Rust cache
+        if: steps.wasm-cache.outputs.cache-hit != 'true' || steps.wasm-valid.outputs.valid != 'true'
         uses: Swatinem/rust-cache@v2
+
+      - name: Build WASM artifact from scratch
+        if: steps.wasm-cache.outputs.cache-hit != 'true' || steps.wasm-valid.outputs.valid != 'true'
+        run: pnpm run docs:wasm
 
       - name: Build and prove the real browser-engine artifact
         run: |
-          pnpm run docs:wasm
           OXC_TSRX_REQUIRE_WASM=1 pnpm run docs:build
           pnpm run test:site:unit
           node tests/site/verify-static.mjs --require-wasm
