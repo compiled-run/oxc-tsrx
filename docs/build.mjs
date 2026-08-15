@@ -2644,6 +2644,15 @@ async function build() {
       // README published in oxc-tsrx@0.1.5 links that path, and an npm tarball
       // is immutable, so the path itself has to keep resolving.
       redirects: [],
+      // Preserve /guessless: proxy requests to the separate Guessless deployment
+      // so oxc-tsrx deploys cannot wipe it out. Guessless lives in
+      // https://github.com/compiled-run/guessless and deploys independently.
+      rewrites: [
+        {
+          source: '/guessless/:path*',
+          destination: 'https://guessless.vercel.app/:path*',
+        },
+      ],
       headers: [
         {
           source: '/(.*)',

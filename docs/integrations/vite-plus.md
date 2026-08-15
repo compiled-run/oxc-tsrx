@@ -42,7 +42,7 @@ What you get is an ordinary React and TypeScript app that knows nothing about
 ## 3. Add the linter and the editor toolchain
 
 ```sh
-vp install -D oxc-tsrx@latest oxlint-tsgolint@0.24.0 \
+vp install -D oxc-tsrx@latest oxlint-tsgolint@latest \
   @tsrx/typescript-plugin @tsrx/react
 ```
 
@@ -58,9 +58,9 @@ belong to the TSRX toolchain rather than to `oxc-tsrx`, and without them
   this package, and it is what teaches `oxlint` and `oxfmt` to read `.tsrx` at
   all.
 - **[`oxlint-tsgolint`](https://github.com/oxc-project/tsgolint "brand:oxc")** is
-  the type-aware lint engine a `vp create` React project turns on. It is pinned
-  because `oxc-tsrx` speaks one protocol version, and [a
-  mismatch](#when-something-goes-wrong) stops `.tsrx` linting.
+  the type-aware lint engine a `vp create` React project turns on. `oxc-tsrx`
+  speaks one protocol version, and [a mismatch](#when-something-goes-wrong)
+  stops `.tsrx` linting.
 - **[`@tsrx/typescript-plugin`](https://tsrx.dev "brand:tsrx")** is what gives
   your editor types inside `.tsrx`. Step 4 is where you declare it.
 - **[`@tsrx/react`](https://tsrx.dev "brand:react")** is this template's
@@ -85,7 +85,7 @@ project's own manager, not a fixed one:
   hands it to npm instead of reading it itself:
 
   ```sh
-  vp install -D oxc-tsrx@latest oxlint-tsgolint@0.24.0 \
+  vp install -D oxc-tsrx@latest oxlint-tsgolint@latest \
     @tsrx/typescript-plugin @tsrx/react -- --legacy-peer-deps
   ```
 
