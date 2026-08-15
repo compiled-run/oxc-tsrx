@@ -186,3 +186,50 @@ jobs:
             exit 1
           fi
           echo "production is serving this run's build (${built})"
+
+      - name: Prove Guessless is still accessible
+        run: |
+          set -euo pipefail
+          # Verify that the Guessless project (https://github.com/compiled-run/guessless)
+          # is still accessible after this oxc-tsrx deploy. The rewrite rule in
+          # vercel.json proxies /guessless to https://guessless.vercel.app to prevent
+          # oxc-tsrx deploys from wiping out the separate Guessless deployment.
+          origin="https://oxc-tsrx-docs.vercel.app/guessless"
+          echo "Checking that ${origin} is accessible..."
+          for attempt in 1 2 3 4 5; do
+            # Guessless redirects to /login, so follow redirects and check for non-404
+            status_code="$(curl -fsS -o /dev/null -w '%{http_code}' -L "${origin}" || echo "000")"
+            if [ "${status_code}" = "200" ]; then
+              echo "✓ Guessless is accessible (HTTP ${status_code})"
+              break
+            fi
+            if [ "${status_code}" = "404" ]; then
+              echo "::error::Guessless returned 404! The oxc-tsrx deploy broke the Guessless proxy."
+              exit 1
+            fi
+            echo "attempt ${attempt}: got HTTP ${status_code}, retrying..."
+            sleep 5
+          done
+          if [ "${status_code}" != "200" ]; then
+            echo "::error::Could not verify Guessless accessibility after 5 attempts"
+            exit 1
+          fi
+          
+          # Also verify via the custom domain (compiled.run)
+          custom_origin="https://compiled.run/guessless"
+          echo "Checking that ${custom_origin} is accessible..."
+          for attempt in 1 2 3 4 5; do
+            custom_status="$(curl -fsS -o /dev/null -w '%{http_code}' -L "${custom_origin}" || echo "000")"
+            if [ "${custom_status}" = "200" ]; then
+              echo "✓ Guessless is accessible via custom domain (HTTP ${custom_status})"
+              exit 0
+            fi
+            if [ "${custom_status}" = "404" ]; then
+              echo "::error::Guessless at custom domain returned 404!"
+              exit 1
+            fi
+            echo "attempt ${attempt}: custom domain got HTTP ${custom_status}, retrying..."
+            sleep 5
+          done
+          echo "::error::Could not verify Guessless via custom domain after 5 attempts"
+          exit 1
