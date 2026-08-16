@@ -16,6 +16,15 @@ function parserResultProgram(result) {
 function parserResultErrors(result) {
 	return result?.type === "Program" ? EMPTY_ERRORS : result?.errors ?? EMPTY_ERRORS;
 }
+function tsrxRetry(parser, filename, source, eagerTsrx) {
+	const options = eagerTsrx ? EAGER_PARSER_OPTIONS : PARSER_OPTIONS;
+	const result = parser.parseSync(filename, source, options);
+	if (parserResultProgram(result) === null || parserResultErrors(result).length > 0) return null;
+	return {
+		result,
+		options
+	};
+}
 function ordinaryParserOptions(lang) {
 	return Object.freeze({
 		lang,
@@ -1094,12 +1103,11 @@ function createTsrxCoreCompat(parser) {
 					result = parser.parseSync(resolvedFilename, source, selectedParserOptions);
 				} catch (ordinaryError) {
 					if (selectedParserOptions !== TYPESCRIPT_REACT_PARSER_OPTIONS || typeof source !== "string" || !source.includes("@{")) throw ordinaryError;
-					const tsrxOptions = eagerTsrx ? EAGER_PARSER_OPTIONS : PARSER_OPTIONS;
 					try {
-						const tsrxResult = parser.parseSync(resolvedFilename, source, tsrxOptions);
-						if (parserResultProgram(tsrxResult) === null || parserResultErrors(tsrxResult).length > 0) throw ordinaryError;
-						result = tsrxResult;
-						selectedParserOptions = tsrxOptions;
+						const retry = tsrxRetry(parser, resolvedFilename, source, eagerTsrx);
+						if (retry === null) throw ordinaryError;
+						result = retry.result;
+						selectedParserOptions = retry.options;
 					} catch {
 						throw ordinaryError;
 					}
@@ -1116,16 +1124,13 @@ function createTsrxCoreCompat(parser) {
 					throw translated;
 				}
 			}
-			if (selectedParserOptions === TYPESCRIPT_REACT_PARSER_OPTIONS && typeof source === "string" && source.includes("@{") && (parserResultProgram(result) === null || parserResultErrors(result).length > 0)) {
-				const tsrxOptions = eagerTsrx ? EAGER_PARSER_OPTIONS : PARSER_OPTIONS;
-				try {
-					const tsrxResult = parser.parseSync(resolvedFilename, source, tsrxOptions);
-					if (parserResultProgram(tsrxResult) !== null && parserResultErrors(tsrxResult).length === 0) {
-						result = tsrxResult;
-						selectedParserOptions = tsrxOptions;
-					}
-				} catch {}
-			}
+			if (selectedParserOptions === TYPESCRIPT_REACT_PARSER_OPTIONS && typeof source === "string" && source.includes("@{") && (parserResultProgram(result) === null || parserResultErrors(result).length > 0)) try {
+				const retry = tsrxRetry(parser, resolvedFilename, source, eagerTsrx);
+				if (retry !== null) {
+					result = retry.result;
+					selectedParserOptions = retry.options;
+				}
+			} catch {}
 			let program;
 			let comments;
 			let nativeErrors;

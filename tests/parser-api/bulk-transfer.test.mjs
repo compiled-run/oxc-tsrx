@@ -106,7 +106,7 @@ test("TSRX crosses Node-API as one versioned Program payload", async () => {
     const lazyCompatibilityProgram = facade.parseModule(paritySource, "Parity.tsrx", {
       comments,
     });
-    assert.deepEqual(lazyCompatibilityProgram, eagerCompatibilityProgram);
+    assert.deepStrictEqual(lazyCompatibilityProgram, eagerCompatibilityProgram);
   } finally {
     if (previous === undefined) delete process.env.OXC_TSRX_PARSER_ADDON;
     else process.env.OXC_TSRX_PARSER_ADDON = previous;
@@ -270,7 +270,7 @@ test("trusted compatibility transfer omits reference-parser defaults before trav
     ]),
   };
   const reorderedCompatible = parseTrustedTsrxProgram(reorderedPayload, true);
-  assert.deepEqual(reorderedCompatible, {
+  assert.deepStrictEqual(reorderedCompatible, {
     type: "Program",
     body: [{ type: "Identifier" }],
   });

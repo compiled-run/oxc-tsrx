@@ -35,6 +35,15 @@ function parserResultErrors(result) {
   return result?.type === "Program" ? EMPTY_ERRORS : (result?.errors ?? EMPTY_ERRORS);
 }
 
+function tsrxRetry(parser, filename, source, eagerTsrx) {
+  const options = eagerTsrx ? EAGER_PARSER_OPTIONS : PARSER_OPTIONS;
+  const result = parser.parseSync(filename, source, options);
+  if (parserResultProgram(result) === null || parserResultErrors(result).length > 0) {
+    return null;
+  }
+  return { result, options };
+}
+
 function ordinaryParserOptions(lang) {
   return Object.freeze({
     lang,
@@ -1479,17 +1488,11 @@ export function createTsrxCoreCompat(parser) {
             throw ordinaryError;
           }
 
-          const tsrxOptions = eagerTsrx ? EAGER_PARSER_OPTIONS : PARSER_OPTIONS;
           try {
-            const tsrxResult = parser.parseSync(resolvedFilename, source, tsrxOptions);
-            if (
-              parserResultProgram(tsrxResult) === null ||
-              parserResultErrors(tsrxResult).length > 0
-            ) {
-              throw ordinaryError;
-            }
-            result = tsrxResult;
-            selectedParserOptions = tsrxOptions;
+            const retry = tsrxRetry(parser, resolvedFilename, source, eagerTsrx);
+            if (retry === null) throw ordinaryError;
+            result = retry.result;
+            selectedParserOptions = retry.options;
           } catch {
             // A valid ordinary TSX parse always wins. If both lanes reject the source, preserve
             // the ordinary parser's diagnostic instead of guessing from comments, JSX text,
@@ -1524,15 +1527,11 @@ export function createTsrxCoreCompat(parser) {
         source.includes("@{") &&
         (parserResultProgram(result) === null || parserResultErrors(result).length > 0)
       ) {
-        const tsrxOptions = eagerTsrx ? EAGER_PARSER_OPTIONS : PARSER_OPTIONS;
         try {
-          const tsrxResult = parser.parseSync(resolvedFilename, source, tsrxOptions);
-          if (
-            parserResultProgram(tsrxResult) !== null &&
-            parserResultErrors(tsrxResult).length === 0
-          ) {
-            result = tsrxResult;
-            selectedParserOptions = tsrxOptions;
+          const retry = tsrxRetry(parser, resolvedFilename, source, eagerTsrx);
+          if (retry !== null) {
+            result = retry.result;
+            selectedParserOptions = retry.options;
           }
         } catch {
           // Preserve the ordinary result unless TSRX produces a complete successful Program.
