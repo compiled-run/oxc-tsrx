@@ -163,7 +163,7 @@ async function runInstallOnlyDiscoverySession() {
           name: "oxc-tsrx-own-client-discovery-proof",
           private: true,
           type: "module",
-          dependencies: { "oxc-tsrx": "0.4.0" },
+          dependencies: { "oxc-tsrx": "0.5.0" },
         },
         null,
         2,

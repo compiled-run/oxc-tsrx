@@ -1,6 +1,6 @@
 {
   "name": "oxc-for-tsrx",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Rust-native Oxlint and Oxfmt integration for TSRX",
   "private": true,
   "keywords": [
