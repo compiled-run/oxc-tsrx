@@ -12,6 +12,7 @@ const VALUE_INDEX_MASK = 1073741823;
 const UNUSED_RANGE = 4294967295;
 const COMMON_KEY_FLAG = 2147483648;
 const COMMON_KEY_INDEX_MASK = 2147483647;
+const TSRX_CORE_COMPAT_DEFAULTS_STRIPPED = Symbol.for("@oxc-tsrx/parser/tsrx-core-compat-defaults-stripped");
 const COMMON_KEYS = Object.freeze([
 	"body",
 	"end",
@@ -130,8 +131,8 @@ function parseBinaryProgram(payload) {
 	const { metadata, words } = payload;
 	if (words.byteLength > PROGRAM_TRANSFER_MAX_BYTES || Buffer.byteLength(metadata, "utf8") > PROGRAM_TRANSFER_MAX_BYTES - words.byteLength) invalid("binary payload exceeds its bounded capacity");
 	if (words.length < PROGRAM_BINARY_HEADER_WORDS) invalid("binary graph header is truncated");
-	if (words[0] !== PROGRAM_BINARY_TRANSFER_MAGIC) invalid("binary graph magic does not match");
-	if (words[1] !== PROGRAM_BINARY_TRANSFER_VERSION) invalid(`unsupported binary version ${String(words[1])}`);
+	if (words[0] !== 1112691540) invalid("binary graph magic does not match");
+	if (words[1] !== 1) invalid(`unsupported binary version ${String(words[1])}`);
 	if (words[11] !== 0) invalid("binary graph reserved word is nonzero");
 	const objectCount = words[2];
 	const fieldCount = words[3];
@@ -262,7 +263,17 @@ function parseBinaryProgram(payload) {
 	for (const path of fixes) applyFix(program, path);
 	return program;
 }
-function parseTrustedBinaryProgram(payload) {
+function isEmptyArray(value) {
+	return Array.isArray(value) && value.length === 0;
+}
+function omitTsrxCoreCompatDefault(type, key, value) {
+	if (isEmptyArray(value) && (key === "decorators" || key === "attributes" && (type === "ExportAllDeclaration" || type === "ExportNamedDeclaration" || type === "ImportDeclaration") || key === "implements" && (type === "ClassDeclaration" || type === "ClassExpression") || key === "extends" && type === "TSInterfaceDeclaration")) return true;
+	if (value == null && (key === "accessibility" || key === "directive" || key === "hashbang" || key === "options" || key === "phase" || key === "returnType" || key === "superTypeArguments" || key === "typeAnnotation" || key === "typeArguments" || key === "typeParameters" || type === "RestElement" && key === "value")) return true;
+	if (value !== false) return false;
+	if (key === "abstract" || key === "const" || key === "declare" || key === "definite" || key === "global" || key === "in" || key === "out" || key === "override" || key === "readonly" || key === "static") return true;
+	return key === "optional" && (type === "ArrayPattern" || type === "AssignmentPattern" || type === "Identifier" || type === "MethodDefinition" || type === "ObjectPattern" || type === "Property" || type === "PropertyDefinition" || type === "RestElement" || type === "TSMethodSignature" || type === "TSPropertySignature");
+}
+function parseTrustedBinaryProgram(payload, stripTsrxCoreCompatDefaults = false) {
 	const { metadata, words } = payload;
 	const objectCount = words[2];
 	const fieldCount = words[3];
@@ -293,6 +304,15 @@ function parseTrustedBinaryProgram(payload) {
 		const start = words[objectOffset + objectIndex * 2];
 		const count = words[objectOffset + objectIndex * 2 + 1];
 		const object = objects[objectIndex];
+		let type;
+		if (stripTsrxCoreCompatDefaults) for (let index = 0; index < count; index += 1) {
+			const offset = fieldOffset + (start + index) * 2;
+			const encodedKey = words[offset];
+			if ((encodedKey & COMMON_KEY_FLAG ? COMMON_KEYS[encodedKey & COMMON_KEY_INDEX_MASK] : keys[encodedKey]) !== "type") continue;
+			const packed = words[offset + 1];
+			if (packed >>> 30 === SCALAR_TAG) type = scalars[packed & VALUE_INDEX_MASK];
+			break;
+		}
 		for (let index = 0; index < count; index += 1) {
 			const offset = fieldOffset + (start + index) * 2;
 			const packed = words[offset + 1];
@@ -301,15 +321,20 @@ function parseTrustedBinaryProgram(payload) {
 			const decoded = tag === SCALAR_TAG ? scalars[valueIndex] : tag === OBJECT_TAG ? objects[valueIndex] : tag === LIST_TAG ? lists[valueIndex] : valueIndex;
 			const encodedKey = words[offset];
 			const key = encodedKey & COMMON_KEY_FLAG ? COMMON_KEYS[encodedKey & COMMON_KEY_INDEX_MASK] : keys[encodedKey];
+			if (stripTsrxCoreCompatDefaults && omitTsrxCoreCompatDefault(type, key, decoded)) continue;
 			object[key] = decoded;
 		}
 	}
 	const program = objects[words[7]];
 	for (const path of fixes) applyFix(program, path);
+	if (stripTsrxCoreCompatDefaults) Object.defineProperty(program, TSRX_CORE_COMPAT_DEFAULTS_STRIPPED, {
+		configurable: true,
+		value: true
+	});
 	return program;
 }
-function parseTrustedTsrxProgram(payload) {
-	if (isTsrxBinaryProgram(payload)) return parseTrustedBinaryProgram(payload);
+function parseTrustedTsrxProgram(payload, stripTsrxCoreCompatDefaults = false) {
+	if (isTsrxBinaryProgram(payload)) return parseTrustedBinaryProgram(payload, stripTsrxCoreCompatDefaults);
 	return parseTsrxProgram(payload);
 }
 function parseTsrxProgram(payload) {
@@ -324,4 +349,4 @@ function parseTsrxProgram(payload) {
 	return envelope.node;
 }
 //#endregion
-export { isTsrxBinaryProgram, parseTrustedTsrxProgram, parseTsrxProgram };
+export { PROGRAM_BINARY_TRANSFER_MAGIC, PROGRAM_BINARY_TRANSFER_VERSION, isTsrxBinaryProgram, parseTrustedTsrxProgram, parseTsrxProgram };

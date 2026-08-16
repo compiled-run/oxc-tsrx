@@ -340,7 +340,7 @@ pub struct NativeProgramTransfer {
 pub(super) fn program_transfer_engine_binary(
     tape: FlatTape,
 ) -> napi::Result<NativeProgramTransfer> {
-    tape.program_transfer_engine_binary_owned()
+    tape.program_transfer_tsrx_core_compat_binary_owned()
         .map(|ProgramBinaryTransfer { metadata, words }| NativeProgramTransfer {
             metadata,
             words: words.into(),

@@ -40,7 +40,7 @@ test("parseModule delegates to the TSRX parser with the exact OXC options", () =
     [
       "module.tsrx",
       "export const answer = 42",
-      { lang: "tsrx", sourceType: "module", astType: "ts", preserveParens: false },
+      { lang: "tsrx", sourceType: "module", astType: "ts", preserveParens: true },
     ],
   ]);
   const marker = Object.getOwnPropertyDescriptor(
@@ -53,6 +53,66 @@ test("parseModule delegates to the TSRX parser with the exact OXC options", () =
     enumerable: false,
     configurable: false,
   });
+});
+
+test("parseModule preserves ordinary JSX lanes and enables JSX for object TypeScript", () => {
+  const calls = [];
+  const api = createTsrxCoreCompat({
+    parseSync(...args) {
+      calls.push(args);
+      return { program: makeProgram(), comments: [], errors: [] };
+    },
+  });
+
+  api.parseModule("function App() { return <main/>; }", "src/App.tsx");
+  api.parseModule("export const view = <main/>;", "src/App.jsx");
+  api.parseModule("export const view = <view/>;", "src/App.object.ts");
+  api.parseModule(
+    '// `@{}` is documentation\nconst example = "@{"; function App() { return <main/>; }',
+    "src/Documented.tsx",
+  );
+  api.parseModule(
+    "const marker = /@{/; function App() { return <main>{marker.source}</main>; }",
+    "src/Regex.tsx",
+  );
+
+  for (const [filename, _source, options] of calls) {
+    assert.match(filename, /(?:\.[jt]sx|\.object\.ts)$/u);
+    assert.deepEqual(options, {
+      lang: "tsx",
+      sourceType: "module",
+      astType: "ts",
+      preserveParens: false,
+      showSemanticErrors: true,
+    });
+  }
+});
+
+test("parseModule retries authored TSX template bodies without misreading JSX apostrophes", () => {
+  const calls = [];
+  const api = createTsrxCoreCompat({
+    parseSync(...args) {
+      calls.push(args);
+      if (args[2].lang === "tsx") {
+        return { program: null, comments: [], errors: [makeNativeError()] };
+      }
+      return { program: makeProgram(), comments: [], errors: [] };
+    },
+  });
+
+  api.parseModule(
+    "function Label() { return <p>don't</p>; } export function App() @{ <main/> }",
+    "src/App.tsx",
+  );
+
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0][2].lang, "tsx");
+  assert.equal(calls[1][2].lang, "tsrx");
+  assert.equal(calls[1][2].preserveParens, true);
+  assert.equal(
+    calls[1][2][Symbol.for("@oxc-tsrx/parser/tsrx-core-compat-eager")],
+    true,
+  );
 });
 
 test("comment and loose paths retain the complete lazy parser result", () => {
@@ -130,7 +190,270 @@ test("the successful no-comment path adds source locations without materializing
   assert.equal(commentsGetterReads, 0);
   assert.deepEqual(program.loc, {
     start: { line: 1, column: 0 },
-    end: { line: 1, column: 21 },
+    end: { line: 1, column: source.length },
+  });
+});
+
+test("TSRX compatibility restores element metadata and significant JSX whitespace", () => {
+  const source = "<main>\n  <span></span>\n  hello<br/>\n  world\n</main>";
+  const mainClose = source.indexOf("</main>");
+  const spanStart = source.indexOf("<span>");
+  const spanClose = source.indexOf("</span>");
+  const spanEnd = spanClose + "</span>".length;
+  const brStart = source.indexOf("<br/>");
+  const brEnd = brStart + "<br/>".length;
+  const program = {
+    type: "Program",
+    start: 0,
+    end: source.length,
+    sourceType: "module",
+    body: [
+      {
+        type: "JSXElement",
+        start: 0,
+        end: source.length,
+        openingElement: {
+          type: "JSXOpeningElement",
+          start: 0,
+          end: "<main>".length,
+          name: { type: "JSXIdentifier", name: "main", start: 1, end: 5 },
+          attributes: [],
+          selfClosing: false,
+        },
+        closingElement: {
+          type: "JSXClosingElement",
+          start: mainClose,
+          end: source.length,
+          name: {
+            type: "JSXIdentifier",
+            name: "main",
+            start: mainClose + 2,
+            end: mainClose + 6,
+          },
+        },
+        children: [
+          {
+            type: "JSXText",
+            value: source.slice("<main>".length, spanStart),
+            raw: source.slice("<main>".length, spanStart),
+            start: "<main>".length,
+            end: spanStart,
+          },
+          {
+            type: "JSXElement",
+            start: spanStart,
+            end: spanEnd,
+            openingElement: {
+              type: "JSXOpeningElement",
+              start: spanStart,
+              end: spanClose,
+              name: {
+                type: "JSXIdentifier",
+                name: "span",
+                start: spanStart + 1,
+                end: spanStart + 5,
+              },
+              attributes: [],
+              selfClosing: false,
+            },
+            closingElement: {
+              type: "JSXClosingElement",
+              start: spanClose,
+              end: spanEnd,
+              name: {
+                type: "JSXIdentifier",
+                name: "span",
+                start: spanClose + 2,
+                end: spanClose + 6,
+              },
+            },
+            children: [],
+          },
+          {
+            type: "JSXText",
+            value: source.slice(spanEnd, brStart),
+            raw: source.slice(spanEnd, brStart),
+            start: spanEnd,
+            end: brStart,
+          },
+          {
+            type: "JSXElement",
+            start: brStart,
+            end: brEnd,
+            openingElement: {
+              type: "JSXOpeningElement",
+              start: brStart,
+              end: brEnd,
+              name: {
+                type: "JSXIdentifier",
+                name: "br",
+                start: brStart + 1,
+                end: brStart + 3,
+              },
+              attributes: [],
+              selfClosing: true,
+            },
+            closingElement: null,
+            children: [],
+          },
+          {
+            type: "JSXText",
+            value: source.slice(brEnd, mainClose),
+            raw: source.slice(brEnd, mainClose),
+            start: brEnd,
+            end: mainClose,
+          },
+        ],
+      },
+    ],
+  };
+  const api = createTsrxCoreCompat({
+    parseSync() {
+      return { program, comments: [], errors: [] };
+    },
+  });
+
+  api.parseModule(source, "src/View.tsrx");
+
+  const main = program.body[0];
+  const [span, afterSpan, br, afterBr] = main.children;
+  assert.equal(main.children.length, 4);
+  assert.deepEqual(main.metadata, {
+    path: [],
+    native_tsrx: true,
+    templateMode: "template",
+    commentContainerId: 1,
+  });
+  assert.deepEqual(span.metadata, {
+    path: [],
+    native_tsrx: true,
+    templateMode: "template",
+    commentContainerId: 2,
+  });
+  assert.deepEqual(br.metadata, {
+    path: [],
+    native_tsrx: true,
+    templateMode: "script",
+    commentContainerId: 3,
+  });
+  assert.deepEqual(
+    { value: afterSpan.value, raw: afterSpan.raw, start: afterSpan.start },
+    { value: "hello", raw: "hello", start: spanEnd + 3 },
+  );
+  assert.equal(afterBr.value, "\n  world\n");
+});
+
+test("TSRX compatibility restores parser metadata and unwraps parenthesized expressions", () => {
+  const source = "namespace Example {}\n(value)";
+  const moduleEnd = source.indexOf("\n");
+  const valueStart = source.indexOf("value");
+  const program = {
+    type: "Program",
+    start: 0,
+    end: source.length,
+    sourceType: "module",
+    body: [
+      {
+        type: "TSModuleDeclaration",
+        kind: "namespace",
+        start: 0,
+        end: moduleEnd,
+        id: { type: "Identifier", name: "Example", start: 10, end: 17 },
+        body: { type: "TSModuleBlock", body: [], start: 18, end: moduleEnd },
+      },
+      {
+        type: "ParenthesizedExpression",
+        start: moduleEnd + 1,
+        end: source.length,
+        expression: {
+          type: "Identifier",
+          decorators: [],
+          name: "value",
+          optional: false,
+          typeAnnotation: null,
+          start: valueStart,
+          end: valueStart + "value".length,
+        },
+      },
+      {
+        type: "JSXIfExpression",
+        start: 0,
+        end: 0,
+        consequent: { type: "BlockStatement", start: 0, end: 0, body: [] },
+        alternate: { type: "BlockStatement", start: 0, end: 0, body: [] },
+      },
+      {
+        type: "JSXSwitchExpression",
+        start: 0,
+        end: 0,
+        cases: [
+          {
+            type: "SwitchCase",
+            start: 0,
+            end: 0,
+            test: null,
+            consequent: [
+              {
+                type: "BlockStatement",
+                start: 0,
+                end: 0,
+                body: [
+                  {
+                    type: "ExpressionStatement",
+                    start: 0,
+                    end: 0,
+                    expression: { type: "Identifier", name: "view", start: 0, end: 0 },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+  const api = createTsrxCoreCompat({
+    parseSync() {
+      return { program, comments: [], errors: [] };
+    },
+  });
+
+  api.parseModule(source, "src/Metadata.tsrx");
+
+  assert.deepEqual(program.body[0].metadata, {
+    path: [],
+    module_keyword: "namespace",
+  });
+  assert.equal(program.body[1].type, "Identifier");
+  assert.deepEqual(program.body[1].metadata, { path: [], parenthesized: true });
+  assert.equal("decorators" in program.body[1], false);
+  assert.equal("optional" in program.body[1], false);
+  assert.equal("typeAnnotation" in program.body[1], false);
+  assert.deepEqual(program.body[2].consequent.metadata, {
+    path: [],
+    native_tsrx_template_block: true,
+    templateMode: "script",
+    allows_native_return: false,
+  });
+  assert.deepEqual(program.body[2].alternate.metadata, program.body[2].consequent.metadata);
+  assert.deepEqual(program.body[3].cases[0].consequent[0], {
+    type: "JSXExpressionContainer",
+    start: 0,
+    end: 0,
+    expression: {
+      type: "Identifier",
+      name: "view",
+      start: 0,
+      end: 0,
+      loc: {
+        start: { line: 1, column: 0 },
+        end: { line: 1, column: 0 },
+      },
+    },
+    loc: {
+      start: { line: 1, column: 0 },
+      end: { line: 1, column: 0 },
+    },
   });
 });
 

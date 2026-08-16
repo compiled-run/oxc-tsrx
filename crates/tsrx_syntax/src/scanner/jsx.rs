@@ -63,6 +63,7 @@ impl Scanner<'_> {
 
         let style = !fragment && !dynamic && self.bytes[name_start..name_end] == *b"style";
         let mut self_closing = false;
+        let mut expecting_attribute_value = false;
         if !fragment {
             loop {
                 let Some(&byte) = self.bytes.get(index) else {
@@ -72,8 +73,18 @@ impl Scanner<'_> {
                     });
                 };
                 match byte {
-                    b'\'' | b'"' => index = self.skip_jsx_quote(index, byte)?,
-                    b'{' => index = self.scan_region(index + 1, Some(b'}'))?,
+                    b'<' if expecting_attribute_value => {
+                        index = self.scan_jsx_element(index)?;
+                        expecting_attribute_value = false;
+                    }
+                    b'\'' | b'"' => {
+                        index = self.skip_jsx_quote(index, byte)?;
+                        expecting_attribute_value = false;
+                    }
+                    b'{' => {
+                        index = self.scan_region(index + 1, Some(b'}'))?;
+                        expecting_attribute_value = false;
+                    }
                     b'/' if self.bytes.get(index + 1) == Some(&b'*') => {
                         index = self.skip_block_comment(index)?;
                     }
@@ -91,12 +102,14 @@ impl Scanner<'_> {
                     }
                     byte if byte.is_ascii_whitespace() => index += 1,
                     _ if self.identifier_start_width(index).is_some() => {
+                        expecting_attribute_value = false;
                         index = self.skip_jsx_name(index);
                         while self.bytes.get(index).is_some_and(u8::is_ascii_whitespace) {
                             index += 1;
                         }
                         if self.bytes.get(index) == Some(&b'=') {
                             index += 1;
+                            expecting_attribute_value = true;
                         }
                     }
                     _ => {

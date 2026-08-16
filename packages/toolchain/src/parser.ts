@@ -697,7 +697,7 @@ export function parseSync(filename, sourceText, options) {
         typeof nativeResult === "string" ||
         isTsrxBinaryProgram(nativeResult)
       ) {
-        return parseTrustedTsrxProgram(nativeResult);
+        return parseTrustedTsrxProgram(nativeResult, true);
       }
       return {
         program: parseTsrxProgram(nativeResult.program),

@@ -4,9 +4,10 @@ const PARSER_OPTIONS = Object.freeze({
 	lang: "tsrx",
 	sourceType: "module",
 	astType: "ts",
-	preserveParens: false
+	preserveParens: true
 });
 const TSRX_CORE_COMPAT_EAGER = Symbol.for("@oxc-tsrx/parser/tsrx-core-compat-eager");
+const TSRX_CORE_COMPAT_DEFAULTS_STRIPPED = Symbol.for("@oxc-tsrx/parser/tsrx-core-compat-defaults-stripped");
 const EAGER_PARSER_OPTIONS = Object.freeze(Object.defineProperty({ ...PARSER_OPTIONS }, TSRX_CORE_COMPAT_EAGER, { value: true }));
 const EMPTY_ERRORS = Object.freeze([]);
 function parserResultProgram(result) {
@@ -14,6 +15,15 @@ function parserResultProgram(result) {
 }
 function parserResultErrors(result) {
 	return result?.type === "Program" ? EMPTY_ERRORS : result?.errors ?? EMPTY_ERRORS;
+}
+function tsrxRetry(parser, filename, source, eagerTsrx) {
+	const options = eagerTsrx ? EAGER_PARSER_OPTIONS : PARSER_OPTIONS;
+	const result = parser.parseSync(filename, source, options);
+	if (parserResultProgram(result) === null || parserResultErrors(result).length > 0) return null;
+	return {
+		result,
+		options
+	};
 }
 function ordinaryParserOptions(lang) {
 	return Object.freeze({
@@ -25,7 +35,10 @@ function ordinaryParserOptions(lang) {
 	});
 }
 const TYPESCRIPT_PARSER_OPTIONS = ordinaryParserOptions("ts");
-const TYPESCRIPT_REACT_PARSER_OPTIONS = ordinaryParserOptions("tsx");
+const TYPESCRIPT_REACT_PARSER_OPTIONS = Object.freeze({
+	...ordinaryParserOptions("tsx"),
+	astType: "ts"
+});
 const TYPESCRIPT_DEFINITION_PARSER_OPTIONS = ordinaryParserOptions("dts");
 function parserOptions(filename, eagerTsrx = false) {
 	let pathname = filename;
@@ -36,6 +49,7 @@ function parserOptions(filename, eagerTsrx = false) {
 	if (pathname.endsWith(".tsrx")) return eagerTsrx ? EAGER_PARSER_OPTIONS : PARSER_OPTIONS;
 	if (pathname.endsWith(".d.ts") || pathname.endsWith(".d.mts") || pathname.endsWith(".d.cts")) return TYPESCRIPT_DEFINITION_PARSER_OPTIONS;
 	if (pathname.endsWith(".tsx")) return TYPESCRIPT_REACT_PARSER_OPTIONS;
+	if (pathname.endsWith(".object.ts")) return TYPESCRIPT_REACT_PARSER_OPTIONS;
 	if (pathname.endsWith(".ts") || pathname.endsWith(".mts") || pathname.endsWith(".cts")) return TYPESCRIPT_PARSER_OPTIONS;
 	if (pathname.endsWith(".jsx")) return TYPESCRIPT_REACT_PARSER_OPTIONS;
 	if (pathname.endsWith(".js") || pathname.endsWith(".mjs") || pathname.endsWith(".cjs")) return TYPESCRIPT_PARSER_OPTIONS;
@@ -791,22 +805,143 @@ function keywordSpan(source, keyword, start, end, positionAt) {
 		}
 	};
 }
+function unwrapParenthesizedExpression(value) {
+	let expression = value;
+	let parenthesized = false;
+	while (expression?.type === "ParenthesizedExpression") {
+		expression = expression.expression;
+		parenthesized = true;
+	}
+	if (parenthesized && expression !== null && typeof expression === "object") {
+		expression.metadata ??= { path: [] };
+		expression.metadata.path ??= [];
+		expression.metadata.parenthesized = true;
+	}
+	return expression;
+}
+function isClosedTemplateElement(value) {
+	if (value?.type === "JSXFragment") return value.closingFragment != null;
+	return (value?.type === "JSXElement" || value?.type === "JSXStyleElement") && value.openingElement?.selfClosing === false && value.closingElement != null;
+}
+function normalizeTemplateTextChildren(value, positionAt, trimInitialLayout) {
+	if (value.type !== "JSXElement" && value.type !== "JSXFragment" || !Array.isArray(value.children)) return;
+	let write = 0;
+	for (let read = 0; read < value.children.length; read += 1) {
+		const child = value.children[read];
+		if (child?.type === "JSXText" && typeof child.value === "string") {
+			if (child.value.trim() === "" && /[\r\n]/u.test(child.value)) continue;
+			const previous = write === 0 ? null : value.children[write - 1];
+			if (write === 0 && trimInitialLayout || isClosedTemplateElement(previous)) {
+				const leading = /^[ \t\r\n]*/u.exec(child.value)?.[0] ?? "";
+				if (/[\r\n]/u.test(leading)) {
+					child.value = child.value.slice(leading.length);
+					if (typeof child.raw === "string") child.raw = child.raw.slice(leading.length);
+					if (Number.isInteger(child.start)) {
+						child.start += leading.length;
+						if (child.loc?.start != null) child.loc.start = positionAt(child.start);
+					}
+				}
+			}
+		}
+		value.children[write] = child;
+		write += 1;
+	}
+	value.children.length = write;
+}
+function stampTemplateBlock(value) {
+	if (value?.type !== "BlockStatement") return;
+	value.metadata ??= { path: [] };
+	value.metadata.path ??= [];
+	value.metadata.native_tsrx_template_block = true;
+	value.metadata.templateMode = "script";
+	value.metadata.allows_native_return = false;
+}
+function materializeDirectiveBlockMetadata(value) {
+	if (value.type === "JSXIfExpression") {
+		stampTemplateBlock(value.consequent);
+		stampTemplateBlock(value.alternate);
+	} else if (value.type === "JSXForExpression") {
+		stampTemplateBlock(value.body);
+		stampTemplateBlock(value.empty);
+	} else if (value.type === "JSXTryExpression") {
+		stampTemplateBlock(value.block);
+		stampTemplateBlock(value.pending);
+		stampTemplateBlock(value.handler);
+		stampTemplateBlock(value.handler?.body);
+	} else if (value.type === "JSXSwitchExpression") for (const switchCase of value.cases ?? []) for (let index = 0; index < (switchCase?.consequent?.length ?? 0); index += 1) {
+		const statement = switchCase.consequent[index];
+		if (statement?.type === "BlockStatement" && statement.body?.length === 1 && statement.body[0]?.type === "ExpressionStatement") switchCase.consequent[index] = {
+			type: "JSXExpressionContainer",
+			start: statement.start,
+			end: statement.end,
+			expression: statement.body[0].expression
+		};
+		else stampTemplateBlock(statement);
+	}
+}
+function materializeDirectiveRange(value, positionAt) {
+	let finalBranch;
+	if (value.type === "JSXIfExpression") finalBranch = value.alternate ?? value.consequent;
+	else if (value.type === "JSXForExpression") finalBranch = value.empty ?? value.body;
+	else if (value.type === "JSXTryExpression") finalBranch = value.handler ?? value.pending ?? value.block;
+	else if (value.type === "JSXSwitchExpression") finalBranch = value.cases?.at(-1);
+	if (!Number.isInteger(finalBranch?.end) || finalBranch.end <= value.end) return;
+	value.end = finalBranch.end;
+	if (value.loc?.end != null) value.loc.end = positionAt(value.end);
+}
+function omitTsrxCoreCompatDefault(type, key, value) {
+	if (Array.isArray(value) && value.length === 0 && (key === "decorators" || key === "attributes" && (type === "ExportAllDeclaration" || type === "ExportNamedDeclaration" || type === "ImportDeclaration") || key === "implements" && (type === "ClassDeclaration" || type === "ClassExpression") || key === "extends" && type === "TSInterfaceDeclaration")) return true;
+	if (value == null && (key === "accessibility" || key === "directive" || key === "hashbang" || key === "options" || key === "phase" || key === "returnType" || key === "superTypeArguments" || key === "typeAnnotation" || key === "typeArguments" || key === "typeParameters" || type === "RestElement" && key === "value")) return true;
+	if (value !== false) return false;
+	if (key === "abstract" || key === "const" || key === "declare" || key === "definite" || key === "global" || key === "in" || key === "out" || key === "override" || key === "readonly" || key === "static") return true;
+	return key === "optional" && (type === "ArrayPattern" || type === "AssignmentPattern" || type === "Identifier" || type === "MethodDefinition" || type === "ObjectPattern" || type === "Property" || type === "PropertyDefinition" || type === "RestElement" || type === "TSMethodSignature" || type === "TSPropertySignature");
+}
+function stripOxcDefaultFields(value) {
+	for (const key in value) if (omitTsrxCoreCompatDefault(value.type, key, value[key])) delete value[key];
+}
 function materializeCompatibilityProgram(program, source, filename, loose, positionAt) {
 	if (typeof source !== "string") return;
-	const seen = /* @__PURE__ */ new WeakSet();
-	const stack = [{
-		value: program,
-		insideHead: false
-	}];
+	const defaultsStripped = program[TSRX_CORE_COMPAT_DEFAULTS_STRIPPED] === true;
+	if (defaultsStripped) delete program[TSRX_CORE_COMPAT_DEFAULTS_STRIPPED];
+	const stack = [program];
+	const insideHeadStack = [false];
+	const scriptSetupStack = [false];
+	const templateElements = [];
 	while (stack.length > 0) {
-		const { value, insideHead } = stack.pop();
-		if (value === null || typeof value !== "object" || seen.has(value)) continue;
-		seen.add(value);
+		const value = stack.pop();
+		const insideHead = insideHeadStack.pop();
+		const insideScriptSetup = scriptSetupStack.pop();
+		if (value === null || typeof value !== "object") continue;
 		if (value.type === "StyleSheet") continue;
+		if (value.type === "Program") {
+			value.start = 0;
+			value.end = source.length;
+			value.loc = {
+				start: positionAt(0),
+				end: positionAt(source.length)
+			};
+		}
+		if (!defaultsStripped) stripOxcDefaultFields(value);
 		if (Number.isInteger(value.start) && Number.isInteger(value.end) && value.loc == null) value.loc = {
 			start: positionAt(value.start),
 			end: positionAt(value.end)
 		};
+		if (value.type === "JSXElement" || value.type === "JSXFragment" || value.type === "JSXStyleElement") {
+			value.metadata ??= { path: [] };
+			value.metadata.path ??= [];
+			value.metadata.native_tsrx = true;
+			const elementName = value.openingElement?.name?.name;
+			value.metadata.templateMode = value.type === "JSXStyleElement" || elementName === "script" || value.openingElement?.selfClosing === true ? "script" : "template";
+			templateElements.push(value);
+			normalizeTemplateTextChildren(value, positionAt, insideScriptSetup);
+		}
+		if (value.type === "TSModuleDeclaration") {
+			value.metadata ??= { path: [] };
+			value.metadata.path ??= [];
+			value.metadata.module_keyword = value.kind;
+		}
+		materializeDirectiveBlockMetadata(value);
+		materializeDirectiveRange(value, positionAt);
 		if ((value.type === "JSXIfExpression" || value.type === "IfStatement") && value.alternate != null && value.alternateKeyword == null) value.alternateKeyword = keywordSpan(source, "@else", value.consequent?.end ?? value.start, value.alternate?.end ?? value.end, positionAt);
 		else if (value.type === "JSXForExpression" && value.empty != null && value.emptyKeyword == null) value.emptyKeyword = keywordSpan(source, "@empty", value.body?.end ?? value.start, value.empty?.end ?? value.end, positionAt);
 		else if (value.type === "SwitchCase" && value.keyword == null) value.keyword = keywordSpan(source, value.test == null ? "@default" : "@case", value.start, value.end, positionAt);
@@ -828,18 +963,31 @@ function materializeCompatibilityProgram(program, source, filename, loose, posit
 		}
 		const elementName = value.openingElement?.name?.name;
 		const childInsideHead = insideHead || value.type === "JSXElement" && elementName === "head";
-		for (const [key, child] of Object.entries(value)) {
-			if (key === "parent" || key === "loc" || key.endsWith("Keyword") || child === null || typeof child !== "object") continue;
-			if (Array.isArray(child)) for (let index = child.length - 1; index >= 0; index -= 1) stack.push({
-				value: child[index],
-				insideHead: childInsideHead
-			});
-			else stack.push({
-				value: child,
-				insideHead: childInsideHead
-			});
+		for (const key in value) {
+			let child = value[key];
+			if (key === "parent" || key === "loc" || key === "metadata" || key.endsWith("Keyword") || child === null || typeof child !== "object") continue;
+			const childInsideScriptSetup = insideScriptSetup || value.type === "JSXCodeBlock" && key === "body";
+			if (Array.isArray(child)) for (let index = child.length - 1; index >= 0; index -= 1) {
+				const unwrapped = unwrapParenthesizedExpression(child[index]);
+				if (unwrapped !== child[index]) child[index] = unwrapped;
+				stack.push(unwrapped);
+				insideHeadStack.push(childInsideHead);
+				scriptSetupStack.push(childInsideScriptSetup);
+			}
+			else {
+				const unwrapped = unwrapParenthesizedExpression(child);
+				if (unwrapped !== child) {
+					value[key] = unwrapped;
+					child = unwrapped;
+				}
+				stack.push(child);
+				insideHeadStack.push(childInsideHead);
+				scriptSetupStack.push(childInsideScriptSetup);
+			}
 		}
 	}
+	templateElements.sort((left, right) => left.start - right.start || right.end - left.end);
+	for (let index = 0; index < templateElements.length; index += 1) templateElements[index].metadata.commentContainerId = index + 1;
 }
 function missingProgramError(filename) {
 	const error = /* @__PURE__ */ new SyntaxError(`oxc-tsrx/parser did not return a Program for ${filename}`);
@@ -945,12 +1093,25 @@ function createTsrxCoreCompat(parser) {
 			const resolvedFilename = filename || "module.tsrx";
 			const collecting = Boolean(options?.collect || options?.loose);
 			const wantsComments = Array.isArray(options?.comments);
-			const selectedParserOptions = parserOptions(resolvedFilename, !options?.loose && !wantsComments);
+			const eagerTsrx = !options?.loose && !wantsComments;
+			let selectedParserOptions = parserOptions(resolvedFilename, eagerTsrx);
 			let positionAt;
 			const positions = () => positionAt ??= positionLookup(source);
 			let result;
 			try {
-				result = parser.parseSync(resolvedFilename, source, selectedParserOptions);
+				try {
+					result = parser.parseSync(resolvedFilename, source, selectedParserOptions);
+				} catch (ordinaryError) {
+					if (selectedParserOptions !== TYPESCRIPT_REACT_PARSER_OPTIONS || typeof source !== "string" || !source.includes("@{")) throw ordinaryError;
+					try {
+						const retry = tsrxRetry(parser, resolvedFilename, source, eagerTsrx);
+						if (retry === null) throw ordinaryError;
+						result = retry.result;
+						selectedParserOptions = retry.options;
+					} catch {
+						throw ordinaryError;
+					}
+				}
 			} catch (error) {
 				if (options?.loose && typeof source === "string" && isRecoverableLooseShapeFailure(error)) {
 					const recovered = looseRecovery(parser, resolvedFilename, source);
@@ -963,6 +1124,13 @@ function createTsrxCoreCompat(parser) {
 					throw translated;
 				}
 			}
+			if (selectedParserOptions === TYPESCRIPT_REACT_PARSER_OPTIONS && typeof source === "string" && source.includes("@{") && (parserResultProgram(result) === null || parserResultErrors(result).length > 0)) try {
+				const retry = tsrxRetry(parser, resolvedFilename, source, eagerTsrx);
+				if (retry !== null) {
+					result = retry.result;
+					selectedParserOptions = retry.options;
+				}
+			} catch {}
 			let program;
 			let comments;
 			let nativeErrors;
