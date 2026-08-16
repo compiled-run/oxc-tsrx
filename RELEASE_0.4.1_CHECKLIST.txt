@@ -1,0 +1,37 @@
+0.4.1 Release Checklist
+=======================
+
+Pre-flight: ✅ DONE
+- PR #21 merged: b8d31d8d2f021bd00cdc3ce41ea22c4d3deab0b3
+- CI green: https://github.com/compiled-run/oxc-tsrx/actions/runs/31971592933
+- No release-blocking issues
+
+STEP 1: Manual Release (dry-run)
+□ gh workflow run manual-release.yml --ref main -f release_type=patch -f mode=dry-run
+□ Review artifact release-cut-0.4.1-dry-run
+
+STEP 2: Manual Release (release)
+□ gh workflow run manual-release.yml --ref main -f release_type=patch -f mode=release
+□ Capture tag SHA: TAG_SHA=$(git rev-parse v0.4.1)
+
+STEP 3: Build release candidate
+□ gh workflow run release-candidate.yml --ref "$TAG_SHA"
+□ Wait ~60min for completion
+□ Capture: CANDIDATE_RUN_ID=<run_id> and CANDIDATE_SHA=<sha>
+
+STEP 4: Publish to npm (dry-run)
+□ gh workflow run publish.yml -f candidate_run_id="$CANDIDATE_RUN_ID" -f candidate_sha="$CANDIDATE_SHA" -f version=0.4.1 -f mode=dry-run
+□ Review dry-run log
+
+STEP 5: Publish to npm (release)
+□ gh workflow run publish.yml -f candidate_run_id="$CANDIDATE_RUN_ID" -f candidate_sha="$CANDIDATE_SHA" -f version=0.4.1 -f mode=publish -f confirm="PUBLISH 0.4.1"
+
+STEP 6: Verify
+□ npm view oxc-tsrx@0.4.1 version
+□ npm view oxc-tsrx@0.4.1 dist.attestations
+□ Verify all 9 packages (see RELEASE_0.4.1_COMMANDS.md)
+
+Done looks like:
+- v0.4.1 tag exists
+- GitHub Release published
+- oxc-tsrx@0.4.1 and 8 native packages on npm latest
