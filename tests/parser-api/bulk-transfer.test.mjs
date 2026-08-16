@@ -8,9 +8,12 @@ import test from "node:test";
 import { runInNewContext } from "node:vm";
 
 import {
+  PROGRAM_BINARY_TRANSFER_MAGIC,
+  PROGRAM_BINARY_TRANSFER_VERSION,
   parseTrustedTsrxProgram,
   parseTsrxProgram,
 } from "../../packages/toolchain/dist/tsrx-transfer.js";
+import { createTsrxCoreCompat } from "../../packages/tsrx-core-compat/dist/facade.js";
 import { scriptNode } from "../helpers/script-node.mjs";
 import { removeAddonFixture } from "./addon-fixture.mjs";
 
@@ -87,6 +90,23 @@ test("TSRX crosses Node-API as one versioned Program payload", async () => {
       eagerProgram[Symbol.for("@oxc-tsrx/parser/tsrx-core-compat-defaults-stripped")],
       true,
     );
+
+    const paritySource = String.raw`
+      "use strict";
+      declare class Base<T> {}
+      class Box<T> extends Base<T> { value?: T }
+      function identity<T>(value: T): T { return value; }
+      const result: string = identity<string>("value");
+      const pending = import("./dependency");
+      function View() @{ <main>{result}</main> }
+    `;
+    const facade = createTsrxCoreCompat(parser);
+    const eagerCompatibilityProgram = facade.parseModule(paritySource, "Parity.tsrx");
+    const comments = [];
+    const lazyCompatibilityProgram = facade.parseModule(paritySource, "Parity.tsrx", {
+      comments,
+    });
+    assert.deepEqual(lazyCompatibilityProgram, eagerCompatibilityProgram);
   } finally {
     if (previous === undefined) delete process.env.OXC_TSRX_PARSER_ADDON;
     else process.env.OXC_TSRX_PARSER_ADDON = previous;
@@ -97,8 +117,8 @@ test("TSRX crosses Node-API as one versioned Program payload", async () => {
 test("private Program graph decoder rejects malformed envelopes", () => {
   const metadata = '[["type"],["Program"],[]]';
   const words = new Uint32Array([
-    0x42525354,
-    1,
+    PROGRAM_BINARY_TRANSFER_MAGIC,
+    PROGRAM_BINARY_TRANSFER_VERSION,
     1,
     1,
     0,
@@ -134,8 +154,8 @@ test("private Program graph decoder rejects malformed envelopes", () => {
     {
       metadata: '[["self"],[],[]]',
       words: new Uint32Array([
-        0x42525354,
-        1,
+        PROGRAM_BINARY_TRANSFER_MAGIC,
+        PROGRAM_BINARY_TRANSFER_VERSION,
         1,
         1,
         0,
@@ -155,8 +175,8 @@ test("private Program graph decoder rejects malformed envelopes", () => {
     {
       metadata: "[[],[],[]]",
       words: new Uint32Array([
-        0x42525354,
-        1,
+        PROGRAM_BINARY_TRANSFER_MAGIC,
+        PROGRAM_BINARY_TRANSFER_VERSION,
         2,
         0,
         0,
@@ -182,8 +202,8 @@ test("private Program graph decoder rejects malformed envelopes", () => {
 test("trusted compatibility transfer omits reference-parser defaults before traversal", () => {
   const metadata = '[[],["Program",null],[]]';
   const words = new Uint32Array([
-    0x42525354,
-    1,
+    PROGRAM_BINARY_TRANSFER_MAGIC,
+    PROGRAM_BINARY_TRANSFER_VERSION,
     1,
     2,
     0,
@@ -212,6 +232,50 @@ test("trusted compatibility transfer omits reference-parser defaults before trav
   assert.deepEqual(compatible, { type: "Program" });
   assert.equal(
     compatible[Symbol.for("@oxc-tsrx/parser/tsrx-core-compat-defaults-stripped")],
+    true,
+  );
+
+  const reorderedPayload = {
+    metadata: '[[],["Program",null,"Identifier",false],[]]',
+    words: new Uint32Array([
+      PROGRAM_BINARY_TRANSFER_MAGIC,
+      PROGRAM_BINARY_TRANSFER_VERSION,
+      2,
+      5,
+      1,
+      1,
+      1,
+      0,
+      0,
+      4,
+      0,
+      0,
+      0,
+      3,
+      3,
+      2,
+      0x80000002,
+      1,
+      0x80000005,
+      0,
+      0x80000000,
+      0x80000000,
+      0x8000001c,
+      3,
+      0x80000005,
+      2,
+      0,
+      1,
+      0x40000001,
+    ]),
+  };
+  const reorderedCompatible = parseTrustedTsrxProgram(reorderedPayload, true);
+  assert.deepEqual(reorderedCompatible, {
+    type: "Program",
+    body: [{ type: "Identifier" }],
+  });
+  assert.equal(
+    reorderedCompatible[Symbol.for("@oxc-tsrx/parser/tsrx-core-compat-defaults-stripped")],
     true,
   );
 });

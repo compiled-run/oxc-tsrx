@@ -222,6 +222,44 @@ impl BinaryProgramSerializer {
             ))
     }
 
+    fn compat_node_type(
+        &self,
+        first_field: RecordIndex,
+        field_count: u32,
+    ) -> Result<CompatNodeType, TapeBuildError> {
+        if field_count == 0 {
+            return if first_field.is_none() {
+                Ok(CompatNodeType::Other)
+            } else {
+                Err(TapeBuildError::InvalidRecordIndex)
+            };
+        }
+
+        let mut next = first_field;
+        for index in 0..field_count {
+            let field_index =
+                next.get().map(RecordIndex::new).ok_or(TapeBuildError::InvalidRecordIndex)?;
+            let field =
+                self.tape.field_record(field_index).ok_or(TapeBuildError::InvalidRecordIndex)?;
+            let key =
+                self.tape.checked_key_range(field.key).ok_or(TapeBuildError::InvalidRecordIndex)?;
+            if key == "type" {
+                return Ok(self
+                    .tape
+                    .scalar(field.value)
+                    .map_or(CompatNodeType::Other, compat_node_type));
+            }
+            next = field.next;
+
+            // Engine ESTree records put `type` first, so only unusual or synthetic tapes scan a
+            // longer prefix. Validate a type-less slow-path chain while looking for its node kind.
+            if index + 1 == field_count && !next.is_none() {
+                return Err(TapeBuildError::InvalidRecordIndex);
+            }
+        }
+        Ok(CompatNodeType::Other)
+    }
+
     fn key_id(&mut self, range: StringRange) -> Result<u32, TapeBuildError> {
         let key = self.tape.checked_key_range(range).ok_or(TapeBuildError::InvalidRecordIndex)?;
         // Engine-origin ESTree field names are schema keys, never authored object-property names.
@@ -371,26 +409,21 @@ impl BinaryProgramSerializer {
             u32::try_from(self.fields.len()).map_err(|_| TapeBuildError::CapacityOverflow)?;
         let mut next = record.first_field;
         let mut fix_recorded = false;
-        let mut node_type = CompatNodeType::Other;
+        let node_type = if self.strip_tsrx_core_defaults {
+            self.compat_node_type(record.first_field, record.field_count)?
+        } else {
+            CompatNodeType::Other
+        };
         let mut field_count = 0_u32;
         for _ in 0..record.field_count {
             let field_index =
                 next.get().map(RecordIndex::new).ok_or(TapeBuildError::InvalidRecordIndex)?;
             let field = self.tape.take_field_record_for_transfer(field_index)?;
-            if self.strip_tsrx_core_defaults {
-                let key = self
-                    .tape
-                    .checked_key_range(field.key)
-                    .ok_or(TapeBuildError::InvalidRecordIndex)?;
-                if key == "type"
-                    && let Some(value) = self.tape.scalar(field.value)
-                {
-                    node_type = compat_node_type(value);
-                }
-                if self.omit_tsrx_core_default(node_type, field.key, field.value)? {
-                    next = field.next;
-                    continue;
-                }
+            if self.strip_tsrx_core_defaults
+                && self.omit_tsrx_core_default(node_type, field.key, field.value)?
+            {
+                next = field.next;
+                continue;
             }
             let key = self.key_id(field.key)?;
             if field.value.needs_fix() {

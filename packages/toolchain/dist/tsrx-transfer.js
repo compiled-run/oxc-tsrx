@@ -131,8 +131,8 @@ function parseBinaryProgram(payload) {
 	const { metadata, words } = payload;
 	if (words.byteLength > PROGRAM_TRANSFER_MAX_BYTES || Buffer.byteLength(metadata, "utf8") > PROGRAM_TRANSFER_MAX_BYTES - words.byteLength) invalid("binary payload exceeds its bounded capacity");
 	if (words.length < PROGRAM_BINARY_HEADER_WORDS) invalid("binary graph header is truncated");
-	if (words[0] !== PROGRAM_BINARY_TRANSFER_MAGIC) invalid("binary graph magic does not match");
-	if (words[1] !== PROGRAM_BINARY_TRANSFER_VERSION) invalid(`unsupported binary version ${String(words[1])}`);
+	if (words[0] !== 1112691540) invalid("binary graph magic does not match");
+	if (words[1] !== 1) invalid(`unsupported binary version ${String(words[1])}`);
 	if (words[11] !== 0) invalid("binary graph reserved word is nonzero");
 	const objectCount = words[2];
 	const fieldCount = words[3];
@@ -349,4 +349,4 @@ function parseTsrxProgram(payload) {
 	return envelope.node;
 }
 //#endregion
-export { isTsrxBinaryProgram, parseTrustedTsrxProgram, parseTsrxProgram };
+export { PROGRAM_BINARY_TRANSFER_MAGIC, PROGRAM_BINARY_TRANSFER_VERSION, isTsrxBinaryProgram, parseTrustedTsrxProgram, parseTsrxProgram };

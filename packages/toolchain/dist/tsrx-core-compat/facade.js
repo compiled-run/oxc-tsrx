@@ -31,40 +31,7 @@ const TYPESCRIPT_REACT_PARSER_OPTIONS = Object.freeze({
 	astType: "ts"
 });
 const TYPESCRIPT_DEFINITION_PARSER_OPTIONS = ordinaryParserOptions("dts");
-function containsTsrxTemplateBody(source) {
-	if (typeof source !== "string" || !source.includes("@{")) return false;
-	for (let index = 0; index < source.length; index += 1) {
-		const character = source[index];
-		const next = source[index + 1];
-		if (character === "/" && next === "/") {
-			index += 2;
-			while (index < source.length && source[index] !== "\n" && source[index] !== "\r") index += 1;
-			continue;
-		}
-		if (character === "/" && next === "*") {
-			index += 2;
-			while (index < source.length && !(source[index] === "*" && source[index + 1] === "/")) index += 1;
-			index += 1;
-			continue;
-		}
-		if (character === "'" || character === "\"" || character === "`") {
-			const quote = character;
-			index += 1;
-			while (index < source.length) {
-				if (source[index] === "\\") {
-					index += 2;
-					continue;
-				}
-				if (source[index] === quote) break;
-				index += 1;
-			}
-			continue;
-		}
-		if (character === "@" && next === "{") return true;
-	}
-	return false;
-}
-function parserOptions(filename, source, eagerTsrx = false) {
+function parserOptions(filename, eagerTsrx = false) {
 	let pathname = filename;
 	const query = pathname.indexOf("?");
 	const hash = pathname.indexOf("#");
@@ -72,10 +39,10 @@ function parserOptions(filename, source, eagerTsrx = false) {
 	if (suffix !== -1) pathname = pathname.slice(0, suffix);
 	if (pathname.endsWith(".tsrx")) return eagerTsrx ? EAGER_PARSER_OPTIONS : PARSER_OPTIONS;
 	if (pathname.endsWith(".d.ts") || pathname.endsWith(".d.mts") || pathname.endsWith(".d.cts")) return TYPESCRIPT_DEFINITION_PARSER_OPTIONS;
-	if (pathname.endsWith(".tsx")) return containsTsrxTemplateBody(source) ? eagerTsrx ? EAGER_PARSER_OPTIONS : PARSER_OPTIONS : TYPESCRIPT_REACT_PARSER_OPTIONS;
+	if (pathname.endsWith(".tsx")) return TYPESCRIPT_REACT_PARSER_OPTIONS;
 	if (pathname.endsWith(".object.ts")) return TYPESCRIPT_REACT_PARSER_OPTIONS;
 	if (pathname.endsWith(".ts") || pathname.endsWith(".mts") || pathname.endsWith(".cts")) return TYPESCRIPT_PARSER_OPTIONS;
-	if (pathname.endsWith(".jsx")) return containsTsrxTemplateBody(source) ? eagerTsrx ? EAGER_PARSER_OPTIONS : PARSER_OPTIONS : TYPESCRIPT_REACT_PARSER_OPTIONS;
+	if (pathname.endsWith(".jsx")) return TYPESCRIPT_REACT_PARSER_OPTIONS;
 	if (pathname.endsWith(".js") || pathname.endsWith(".mjs") || pathname.endsWith(".cjs")) return TYPESCRIPT_PARSER_OPTIONS;
 	return eagerTsrx ? EAGER_PARSER_OPTIONS : PARSER_OPTIONS;
 }
@@ -913,121 +880,15 @@ function materializeDirectiveRange(value, positionAt) {
 	value.end = finalBranch.end;
 	if (value.loc?.end != null) value.loc.end = positionAt(value.end);
 }
-function deleteNullDefaults(value, keys) {
-	for (const key of keys) if (value[key] == null) delete value[key];
-}
-function deleteFalseDefaults(value, keys) {
-	for (const key of keys) if (value[key] === false) delete value[key];
-}
-function deleteEmptyArrayDefaults(value, keys) {
-	for (const key of keys) if (Array.isArray(value[key]) && value[key].length === 0) delete value[key];
+function omitTsrxCoreCompatDefault(type, key, value) {
+	if (Array.isArray(value) && value.length === 0 && (key === "decorators" || key === "attributes" && (type === "ExportAllDeclaration" || type === "ExportNamedDeclaration" || type === "ImportDeclaration") || key === "implements" && (type === "ClassDeclaration" || type === "ClassExpression") || key === "extends" && type === "TSInterfaceDeclaration")) return true;
+	if (value == null && (key === "accessibility" || key === "directive" || key === "hashbang" || key === "options" || key === "phase" || key === "returnType" || key === "superTypeArguments" || key === "typeAnnotation" || key === "typeArguments" || key === "typeParameters" || type === "RestElement" && key === "value")) return true;
+	if (value !== false) return false;
+	if (key === "abstract" || key === "const" || key === "declare" || key === "definite" || key === "global" || key === "in" || key === "out" || key === "override" || key === "readonly" || key === "static") return true;
+	return key === "optional" && (type === "ArrayPattern" || type === "AssignmentPattern" || type === "Identifier" || type === "MethodDefinition" || type === "ObjectPattern" || type === "Property" || type === "PropertyDefinition" || type === "RestElement" || type === "TSMethodSignature" || type === "TSPropertySignature");
 }
 function stripOxcDefaultFields(value) {
-	switch (value.type) {
-		case "Program":
-			deleteNullDefaults(value, ["hashbang"]);
-			break;
-		case "Identifier":
-			deleteEmptyArrayDefaults(value, ["decorators"]);
-			deleteFalseDefaults(value, ["optional"]);
-			deleteNullDefaults(value, ["typeAnnotation"]);
-			break;
-		case "ArrayPattern":
-		case "ObjectPattern":
-		case "AssignmentPattern":
-			deleteEmptyArrayDefaults(value, ["decorators"]);
-			deleteFalseDefaults(value, ["optional"]);
-			deleteNullDefaults(value, ["typeAnnotation"]);
-			break;
-		case "RestElement":
-			deleteEmptyArrayDefaults(value, ["decorators"]);
-			deleteFalseDefaults(value, ["optional"]);
-			deleteNullDefaults(value, ["typeAnnotation", "value"]);
-			break;
-		case "FunctionDeclaration":
-		case "FunctionExpression":
-			deleteFalseDefaults(value, ["declare"]);
-			deleteNullDefaults(value, ["returnType", "typeParameters"]);
-			break;
-		case "ArrowFunctionExpression":
-			deleteNullDefaults(value, ["returnType", "typeParameters"]);
-			break;
-		case "VariableDeclaration":
-			deleteFalseDefaults(value, ["declare"]);
-			break;
-		case "VariableDeclarator":
-			deleteFalseDefaults(value, ["definite"]);
-			break;
-		case "ImportDeclaration":
-			deleteNullDefaults(value, ["phase"]);
-			deleteEmptyArrayDefaults(value, ["attributes"]);
-			break;
-		case "ExportNamedDeclaration":
-		case "ExportAllDeclaration":
-			deleteEmptyArrayDefaults(value, ["attributes"]);
-			break;
-		case "ExpressionStatement":
-			deleteNullDefaults(value, ["directive"]);
-			break;
-		case "JSXOpeningElement":
-		case "CallExpression":
-		case "NewExpression":
-		case "TaggedTemplateExpression":
-		case "TSTypeReference":
-		case "TSTypeQuery":
-			deleteNullDefaults(value, ["typeArguments"]);
-			break;
-		case "Property":
-			deleteFalseDefaults(value, ["optional"]);
-			break;
-		case "TSPropertySignature":
-		case "TSMethodSignature":
-			deleteFalseDefaults(value, [
-				"optional",
-				"readonly",
-				"static"
-			]);
-			deleteNullDefaults(value, ["accessibility"]);
-			break;
-		case "TSTypeParameter":
-			deleteFalseDefaults(value, [
-				"const",
-				"in",
-				"out"
-			]);
-			break;
-		case "TSTypeAliasDeclaration":
-		case "TSInterfaceDeclaration":
-			deleteFalseDefaults(value, ["declare"]);
-			break;
-		case "MethodDefinition":
-			deleteEmptyArrayDefaults(value, ["decorators"]);
-			deleteFalseDefaults(value, ["optional", "override"]);
-			deleteNullDefaults(value, ["accessibility"]);
-			break;
-		case "PropertyDefinition":
-			deleteEmptyArrayDefaults(value, ["decorators"]);
-			deleteFalseDefaults(value, [
-				"declare",
-				"definite",
-				"optional",
-				"override",
-				"readonly"
-			]);
-			deleteNullDefaults(value, ["accessibility", "typeAnnotation"]);
-			break;
-		case "ClassDeclaration":
-		case "ClassExpression":
-			deleteEmptyArrayDefaults(value, ["decorators", "implements"]);
-			deleteFalseDefaults(value, ["abstract", "declare"]);
-			deleteNullDefaults(value, ["superTypeArguments", "typeParameters"]);
-			break;
-		case "TSIndexSignature":
-			deleteFalseDefaults(value, ["readonly", "static"]);
-			deleteNullDefaults(value, ["accessibility"]);
-			break;
-		case "ImportExpression": deleteNullDefaults(value, ["options", "phase"]);
-	}
+	for (const key in value) if (omitTsrxCoreCompatDefault(value.type, key, value[key])) delete value[key];
 }
 function materializeCompatibilityProgram(program, source, filename, loose, positionAt) {
 	if (typeof source !== "string") return;
@@ -1223,12 +1084,26 @@ function createTsrxCoreCompat(parser) {
 			const resolvedFilename = filename || "module.tsrx";
 			const collecting = Boolean(options?.collect || options?.loose);
 			const wantsComments = Array.isArray(options?.comments);
-			const selectedParserOptions = parserOptions(resolvedFilename, source, !options?.loose && !wantsComments);
+			const eagerTsrx = !options?.loose && !wantsComments;
+			let selectedParserOptions = parserOptions(resolvedFilename, eagerTsrx);
 			let positionAt;
 			const positions = () => positionAt ??= positionLookup(source);
 			let result;
 			try {
-				result = parser.parseSync(resolvedFilename, source, selectedParserOptions);
+				try {
+					result = parser.parseSync(resolvedFilename, source, selectedParserOptions);
+				} catch (ordinaryError) {
+					if (selectedParserOptions !== TYPESCRIPT_REACT_PARSER_OPTIONS || typeof source !== "string" || !source.includes("@{")) throw ordinaryError;
+					const tsrxOptions = eagerTsrx ? EAGER_PARSER_OPTIONS : PARSER_OPTIONS;
+					try {
+						const tsrxResult = parser.parseSync(resolvedFilename, source, tsrxOptions);
+						if (parserResultProgram(tsrxResult) === null || parserResultErrors(tsrxResult).length > 0) throw ordinaryError;
+						result = tsrxResult;
+						selectedParserOptions = tsrxOptions;
+					} catch {
+						throw ordinaryError;
+					}
+				}
 			} catch (error) {
 				if (options?.loose && typeof source === "string" && isRecoverableLooseShapeFailure(error)) {
 					const recovered = looseRecovery(parser, resolvedFilename, source);
@@ -1240,6 +1115,16 @@ function createTsrxCoreCompat(parser) {
 					if (collecting && Array.isArray(options?.errors)) options.errors.push(toCompileError(error, resolvedFilename, positions(), "usage", source));
 					throw translated;
 				}
+			}
+			if (selectedParserOptions === TYPESCRIPT_REACT_PARSER_OPTIONS && typeof source === "string" && source.includes("@{") && (parserResultProgram(result) === null || parserResultErrors(result).length > 0)) {
+				const tsrxOptions = eagerTsrx ? EAGER_PARSER_OPTIONS : PARSER_OPTIONS;
+				try {
+					const tsrxResult = parser.parseSync(resolvedFilename, source, tsrxOptions);
+					if (parserResultProgram(tsrxResult) !== null && parserResultErrors(tsrxResult).length === 0) {
+						result = tsrxResult;
+						selectedParserOptions = tsrxOptions;
+					}
+				} catch {}
 			}
 			let program;
 			let comments;

@@ -107,6 +107,11 @@ impl FlatTape {
 
     /// Consumes an engine-origin Program into the compatibility facade's private binary graph,
     /// omitting OXC defaults that the reference parser does not expose.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TapeBuildError`] for an invalid tape or a transfer above
+    /// [`PROGRAM_TRANSFER_MAX_BYTES`].
     #[doc(hidden)]
     pub fn program_transfer_tsrx_core_compat_binary_owned(
         self,

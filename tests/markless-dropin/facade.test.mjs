@@ -71,6 +71,10 @@ test("parseModule preserves ordinary JSX lanes and enables JSX for object TypeSc
     '// `@{}` is documentation\nconst example = "@{"; function App() { return <main/>; }',
     "src/Documented.tsx",
   );
+  api.parseModule(
+    "const marker = /@{/; function App() { return <main>{marker.source}</main>; }",
+    "src/Regex.tsx",
+  );
 
   for (const [filename, _source, options] of calls) {
     assert.match(filename, /(?:\.[jt]sx|\.object\.ts)$/u);
@@ -84,22 +88,29 @@ test("parseModule preserves ordinary JSX lanes and enables JSX for object TypeSc
   }
 });
 
-test("parseModule enables TSRX parsing for authored template bodies in TSX", () => {
+test("parseModule retries authored TSX template bodies without misreading JSX apostrophes", () => {
   const calls = [];
   const api = createTsrxCoreCompat({
     parseSync(...args) {
       calls.push(args);
+      if (args[2].lang === "tsx") {
+        return { program: null, comments: [], errors: [makeNativeError()] };
+      }
       return { program: makeProgram(), comments: [], errors: [] };
     },
   });
 
-  api.parseModule("export function App() @{ <main/> }", "src/App.tsx");
+  api.parseModule(
+    "function Label() { return <p>don't</p>; } export function App() @{ <main/> }",
+    "src/App.tsx",
+  );
 
-  assert.equal(calls.length, 1);
-  assert.equal(calls[0][2].lang, "tsrx");
-  assert.equal(calls[0][2].preserveParens, true);
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0][2].lang, "tsx");
+  assert.equal(calls[1][2].lang, "tsrx");
+  assert.equal(calls[1][2].preserveParens, true);
   assert.equal(
-    calls[0][2][Symbol.for("@oxc-tsrx/parser/tsrx-core-compat-eager")],
+    calls[1][2][Symbol.for("@oxc-tsrx/parser/tsrx-core-compat-eager")],
     true,
   );
 });

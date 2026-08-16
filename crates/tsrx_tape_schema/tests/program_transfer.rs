@@ -253,6 +253,39 @@ fn transfer_is_versioned_and_records_oxc_special_value_paths() {
 }
 
 #[test]
+fn compatibility_transfer_finds_node_types_after_default_fields() {
+    let mut tape = FlatTape::default();
+    let identifier = object(&mut tape);
+    let optional = tape.push_scalar("false").expect("optional default");
+    tape.append_field(identifier, "optional", optional).expect("identifier optional");
+    let identifier_type = json_string(&mut tape, "Identifier");
+    tape.append_field(identifier, "type", identifier_type).expect("identifier type");
+
+    let body_value = tape
+        .push_list_value_record(ListValueRecord {
+            value: ValueRef::object(identifier),
+            next: RecordIndex::NONE,
+        })
+        .expect("body value");
+    let body = tape
+        .push_list_record(ListRecord { first_value: body_value, length: 1 })
+        .expect("body list");
+    let program = object(&mut tape);
+    let hashbang = tape.push_scalar("null").expect("hashbang default");
+    tape.append_field(program, "hashbang", hashbang).expect("program hashbang");
+    let program_type = json_string(&mut tape, "Program");
+    tape.append_field(program, "type", program_type).expect("program type");
+    tape.append_field(program, "body", ValueRef::list(body)).expect("program body");
+    tape.set_root(ValueRef::object(program));
+
+    let binary = tape
+        .program_transfer_tsrx_core_compat_binary_owned()
+        .expect("compatibility binary transfer");
+    assert_eq!(binary.metadata, r#"[[],["Program","Identifier"],[]]"#);
+    assert_eq!(binary.words[3], 3, "only retained fields cross the binary boundary");
+}
+
+#[test]
 fn binary_transfer_rejects_non_program_roots_and_shared_containers() {
     let mut scalar_root = FlatTape::default();
     let scalar = scalar_root.push_json_string_scalar("Program").expect("scalar root");
