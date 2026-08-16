@@ -181,7 +181,7 @@ jobs:
           set -euo pipefail
           # Fetch the Guessless docs from compiled-run/guessless via tarball
           # (faster than full git clone) and copy them into docs/dist/guessless/
-          # so they ship in the same Vercel deploy.
+          # so they ship in the same artifact.
           echo "Fetching Guessless docs from compiled-run/guessless..."
           TEMP_DIR="$(mktemp -d)"
           curl -fsSL "https://github.com/compiled-run/guessless/archive/refs/heads/main.tar.gz" \
