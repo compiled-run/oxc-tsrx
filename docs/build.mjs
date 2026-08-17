@@ -2644,13 +2644,23 @@ async function build() {
       // README published in oxc-tsrx@0.1.5 links that path, and an npm tarball
       // is immutable, so the path itself has to keep resolving.
       redirects: [],
-      // Guessless docs are now embedded as static files under /guessless/ during
-      // the site build (see .github/workflows/site-artifact.yml), so no rewrites
-      // are needed. Vercel's cleanUrls handles /guessless -> /guessless/index.html.
-      rewrites: [],
+      // Guessless docs are embedded as static files under /guessless/ during the
+      // site build (see .github/workflows/site-artifact.yml), so they need no
+      // rewrite: Vercel's cleanUrls handles /guessless -> /guessless/index.html.
+      // The yuku-tsrx docs are a separate Vercel project (yuku-tsrx-docs) served
+      // under this domain at /yuku-tsrx, so they are proxied instead. Both sources
+      // are needed because ':path*' does not match the bare path.
+      rewrites: [
+        { source: '/yuku-tsrx', destination: 'https://yuku-tsrx-docs.vercel.app/yuku-tsrx' },
+        {
+          source: '/yuku-tsrx/:path*',
+          destination: 'https://yuku-tsrx-docs.vercel.app/yuku-tsrx/:path*',
+        },
+      ],
       headers: [
         {
-          source: '/(.*)',
+          // The proxied yuku-tsrx pages need no cross-origin isolation.
+          source: '/((?!yuku-tsrx).*)',
           headers: [
             { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
             { key: 'Cross-Origin-Embedder-Policy', value: 'require-corp' },
@@ -2705,6 +2715,7 @@ a:hover { border-color: #888; }
 <main>
 <h1>${host}</h1>
 <a href="${trimmedBase}">${escapeHtml(config.title)} &rarr;</a>
+<a href="/yuku-tsrx">yuku-tsrx &rarr;</a>
 </main>
 </body>
 </html>

@@ -226,17 +226,23 @@ test("static launch build has a scoped base, crawl metadata, and no internal des
   assert.equal(vercel.trailingSlash, false);
   assert.deepEqual(vercel.headers, [
     {
-      source: "/(.*)",
+      source: "/((?!yuku-tsrx).*)",
       headers: [
         { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
         { key: "Cross-Origin-Embedder-Policy", value: "require-corp" },
       ],
     },
   ]);
-  // Guessless docs are now embedded as static files during the build, so no
-  // external rewrite is needed. Verify the rewrites array is empty.
-  assert.ok(Array.isArray(vercel.rewrites), "vercel.json should have rewrites array");
-  assert.equal(vercel.rewrites.length, 0, "vercel.json should have no rewrites");
+  // Guessless docs are embedded as static files during the build, so they need
+  // no external rewrite; the yuku-tsrx docs are a separate Vercel project proxied
+  // under /yuku-tsrx, which takes one rewrite per source shape.
+  assert.deepEqual(vercel.rewrites, [
+    { source: "/yuku-tsrx", destination: "https://yuku-tsrx-docs.vercel.app/yuku-tsrx" },
+    {
+      source: "/yuku-tsrx/:path*",
+      destination: "https://yuku-tsrx-docs.vercel.app/yuku-tsrx/:path*",
+    },
+  ]);
 });
 
 test("launch build fails closed when the browser WebAssembly artifact is required", async () => {
